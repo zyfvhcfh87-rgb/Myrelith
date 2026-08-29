@@ -50,6 +50,7 @@ vi.mock('mediabunny', () => {
       }
       return {
         getCodec: async () => 'aac',
+        getSampleRate: async () => AUDIO_BUDGET.sampleRate,
         getDecoderConfig: async (): Promise<AudioDecoderConfig> => ({
           codec: 'mp4a.40.2',
           numberOfChannels: 2,

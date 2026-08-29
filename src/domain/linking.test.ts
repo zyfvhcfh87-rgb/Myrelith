@@ -13,7 +13,9 @@ import {
   getLinkClipsEligibility,
   linkClips,
   linkedMoveClip,
+  linkedPartnerTrackAfterMove,
   linkedPartners,
+  linkedRetimeClips,
   linkedClearClipSpeedRamp,
   linkedRemoveClipSpeedPoint,
   linkedRetimeClip,
@@ -38,8 +40,10 @@ import {
 import type { Clip, MediaAsset, TimelineDoc, Track } from './schema'
 import {
   sourceTimeMapUsesSpeedCurve,
+  sourceTimeMapWithSpeedPoint,
   sourceTimeRateFromPercent,
   sourceTimeSpeedPointsAtClip,
+  timelineFramesWithinSourceMap,
 } from './sourceTimeMap'
 
 /* ------------------------------------------------------------------ */
@@ -168,6 +172,272 @@ function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
     ],
   })
 }
+
+describe('linkedRetimeClips', () => {
+  test('retimes every selected timed clip in one edit', () => {
+    const doc = deepFreeze({
+      schemaVersion: 14,
+      id: 'doc-multi-retime',
+      name: 'multi retime',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48000,
+      tracks: [
+        makeTrack('V1', 'video', [makeClip('vA', 0, 20), makeClip('vB', 200, 20)]),
+      ],
+    })
+    const out = linkedRetimeClips(doc, ['vA', 'vB'], sourceTimeRateFromPercent(400))
+    expect(out).not.toBe(doc)
+    expect(clipIn(out, 'V1', 'vA').timelineRange.durationFrames).toBe(5)
+    expect(clipIn(out, 'V1', 'vB').timelineRange.durationFrames).toBe(5)
+    expect(clipIn(out, 'V1', 'vA').sourceTimeMap?.rate).toEqual({
+      numerator: 4,
+      denominator: 1,
+    })
+    expect(clipIn(out, 'V1', 'vB').sourceTimeMap?.rate).toEqual({
+      numerator: 4,
+      denominator: 1,
+    })
+  })
+
+  test('restores two playhead-authored 400% clips to 100%', () => {
+    const withHold400 = (clip: Clip): Clip => {
+      const map = sourceTimeMapWithSpeedPoint(
+        {
+          sourceStartTicks: clip.sourceRange.startFrame * 1_000_000,
+          sourceDurationTicks: clip.sourceRange.durationFrames * 1_000_000,
+          rate: { numerator: 1, denominator: 1 },
+        },
+        0,
+        sourceTimeRateFromPercent(400),
+        'hold',
+      )
+      return {
+        ...clip,
+        sourceTimeMap: map,
+        timelineRange: {
+          ...clip.timelineRange,
+          durationFrames: timelineFramesWithinSourceMap(map),
+        },
+      }
+    }
+    const doc = deepFreeze({
+      schemaVersion: 14,
+      id: 'doc-restore-100',
+      name: 'restore 100',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48000,
+      tracks: [
+        makeTrack('V1', 'video', [
+          withHold400(makeClip('vA', 0, 40)),
+          withHold400(makeClip('vB', 200, 40)),
+        ]),
+      ],
+    })
+    expect(clipIn(doc, 'V1', 'vA').timelineRange.durationFrames).toBe(10)
+    expect(clipIn(doc, 'V1', 'vA').sourceTimeMap?.rate).toEqual({
+      numerator: 1,
+      denominator: 1,
+    })
+    const out = linkedRetimeClips(doc, ['vA', 'vB'], sourceTimeRateFromPercent(100))
+    expect(out).not.toBe(doc)
+    expect(clipIn(out, 'V1', 'vA').timelineRange.durationFrames).toBe(40)
+    expect(clipIn(out, 'V1', 'vB').timelineRange.durationFrames).toBe(40)
+    expect(clipIn(out, 'V1', 'vA').sourceTimeMap?.rate).toEqual({
+      numerator: 1,
+      denominator: 1,
+    })
+    expect(sourceTimeMapUsesSpeedCurve(clipIn(out, 'V1', 'vA').sourceTimeMap!)).toBe(false)
+  })
+
+  test('slowing a 400% clip pushes a blocking neighbor just far enough', () => {
+    const withHold400 = (clip: Clip): Clip => {
+      const map = sourceTimeMapWithSpeedPoint(
+        {
+          sourceStartTicks: clip.sourceRange.startFrame * 1_000_000,
+          sourceDurationTicks: clip.sourceRange.durationFrames * 1_000_000,
+          rate: { numerator: 1, denominator: 1 },
+        },
+        0,
+        sourceTimeRateFromPercent(400),
+        'hold',
+      )
+      return {
+        ...clip,
+        sourceTimeMap: map,
+        timelineRange: {
+          ...clip.timelineRange,
+          durationFrames: timelineFramesWithinSourceMap(map),
+        },
+      }
+    }
+    const doc = deepFreeze({
+      schemaVersion: 14,
+      id: 'doc-retime-push',
+      name: 'retime push',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48000,
+      tracks: [
+        makeTrack('V1', 'video', [
+          withHold400(makeClip('vA', 0, 40)),
+          withHold400(makeClip('vB', 10, 40)),
+        ]),
+      ],
+    })
+    expect(clipIn(doc, 'V1', 'vA').timelineRange).toEqual({
+      startFrame: 0,
+      durationFrames: 10,
+    })
+    expect(clipIn(doc, 'V1', 'vB').timelineRange).toEqual({
+      startFrame: 10,
+      durationFrames: 10,
+    })
+
+    const out = linkedRetimeClip(doc, 'vA', sourceTimeRateFromPercent(100))
+    expect(out).not.toBe(doc)
+    expect(clipIn(out, 'V1', 'vA').timelineRange).toEqual({
+      startFrame: 0,
+      durationFrames: 40,
+    })
+    expect(clipIn(out, 'V1', 'vB').timelineRange.startFrame).toBe(40)
+    expect(clipIn(out, 'V1', 'vB').timelineRange.durationFrames).toBe(10)
+  })
+
+  test('leaves a later clip put when it already clears the restored end', () => {
+    const withHold400 = (clip: Clip): Clip => {
+      const map = sourceTimeMapWithSpeedPoint(
+        {
+          sourceStartTicks: clip.sourceRange.startFrame * 1_000_000,
+          sourceDurationTicks: clip.sourceRange.durationFrames * 1_000_000,
+          rate: { numerator: 1, denominator: 1 },
+        },
+        0,
+        sourceTimeRateFromPercent(400),
+        'hold',
+      )
+      return {
+        ...clip,
+        sourceTimeMap: map,
+        timelineRange: {
+          ...clip.timelineRange,
+          durationFrames: timelineFramesWithinSourceMap(map),
+        },
+      }
+    }
+    const doc = deepFreeze({
+      schemaVersion: 14,
+      id: 'doc-retime-clear',
+      name: 'retime clear',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48000,
+      tracks: [
+        makeTrack('V1', 'video', [
+          withHold400(makeClip('vA', 0, 40)),
+          withHold400(makeClip('vB', 40, 40)),
+        ]),
+      ],
+    })
+    const out = linkedRetimeClip(doc, 'vA', sourceTimeRateFromPercent(100))
+    expect(clipIn(out, 'V1', 'vA').timelineRange.durationFrames).toBe(40)
+    expect(clipIn(out, 'V1', 'vB').timelineRange.startFrame).toBe(40)
+  })
+
+  test('pushes a later linked audio partner when the video neighbor must move', () => {
+    const withHold400 = (clip: Clip, start: number): Clip => {
+      const map = sourceTimeMapWithSpeedPoint(
+        {
+          sourceStartTicks: 0,
+          sourceDurationTicks: 40_000_000,
+          rate: { numerator: 1, denominator: 1 },
+        },
+        0,
+        sourceTimeRateFromPercent(400),
+        'hold',
+      )
+      return {
+        ...clip,
+        sourceTimeMap: map,
+        timelineRange: { startFrame: start, durationFrames: 10 },
+        sourceRange: { startFrame: 0, durationFrames: 40 },
+      }
+    }
+    const doc = deepFreeze({
+      schemaVersion: 14,
+      id: 'doc-retime-push-link',
+      name: 'retime push link',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48000,
+      tracks: [
+        makeTrack('V1', 'video', [
+          withHold400(makeClip('vA', 0, 40), 0),
+          withHold400(makeClip('vB', 10, 40, 0, PAIR1), 10),
+        ]),
+        makeTrack('A1', 'audio', [
+          withHold400(makeClip('aB', 10, 40, 0, PAIR1), 10),
+        ]),
+      ],
+    })
+    const out = linkedRetimeClip(doc, 'vA', sourceTimeRateFromPercent(100))
+    expect(clipIn(out, 'V1', 'vB').timelineRange.startFrame).toBe(40)
+    expect(clipIn(out, 'A1', 'aB').timelineRange.startFrame).toBe(40)
+  })
+
+  test('expands a selected linked pair once and skips a still root', () => {
+    const still: Clip = {
+      ...makeClip('stillA', 400, 30),
+      sourceMode: 'still',
+      sourceRange: { startFrame: 0, durationFrames: 1 },
+    }
+    const doc = deepFreeze({
+      ...makePairedLaneDoc(),
+      tracks: [
+        makeTrack('V1', 'video', [makeClip('vClip', 0, 100, 10, PAIR1), still]),
+        makeTrack('V2', 'video', []),
+        makeTrack('A1', 'audio', [makeClip('aClip', 0, 100, 0, PAIR1)]),
+        makeTrack('A2', 'audio', []),
+      ],
+    })
+    const out = linkedRetimeClips(
+      doc,
+      ['vClip', 'stillA'],
+      sourceTimeRateFromPercent(200),
+    )
+    expect(clipIn(out, 'V1', 'vClip').timelineRange.durationFrames).toBe(50)
+    expect(clipIn(out, 'A1', 'aClip').timelineRange.durationFrames).toBe(50)
+    expect(clipIn(out, 'V1', 'stillA').timelineRange.durationFrames).toBe(30)
+  })
+
+  test('rolls back when a later linked partner sits on a locked track', () => {
+    const doc = deepFreeze({
+      schemaVersion: 14,
+      id: 'doc-multi-retime-locked',
+      name: 'multi retime locked',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48000,
+      tracks: [
+        makeTrack('V1', 'video', [
+          makeClip('vA', 0, 10),
+          makeClip('vB', 12, 10, 0, PAIR1),
+        ]),
+        makeTrack('AL', 'audio', [makeClip('aB', 12, 10, 0, PAIR1)], true),
+        makeTrack('V2', 'video', [makeClip('vC', 0, 10)]),
+      ],
+    })
+    const out = linkedRetimeClips(doc, ['vA', 'vC'], sourceTimeRateFromPercent(25))
+    expect(out).toBe(doc)
+  })
+})
 
 describe('linked constant-speed retiming', () => {
   test('synchronizes a mixed-rate pair while accepting an idempotent member', () => {
@@ -905,8 +1175,28 @@ describe('unlinkClip', () => {
 /* linkedMoveClip                                                       */
 /* ------------------------------------------------------------------ */
 
+function makePairedLaneDoc(audioLocked = false): TimelineDoc {
+  return deepFreeze({
+    schemaVersion: 14,
+    id: 'doc-paired-lanes',
+    name: 'Paired lanes',
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48000,
+    tracks: [
+      makeTrack('V1', 'video', [makeClip('vClip', 0, 100, 10, PAIR1)]),
+      makeTrack('V2', 'video', []),
+      makeTrack('V3', 'video', []),
+      makeTrack('A1', 'audio', [makeClip('aClip', 0, 100, 0, PAIR1)]),
+      makeTrack('A2', 'audio', []),
+      makeTrack('A3', 'audio', [makeClip('aBlock', 0, 40)], audioLocked),
+    ],
+  })
+}
+
 describe('linkedMoveClip', () => {
-  test('target moves to the given track/frame; partner shifts by the same delta on its OWN track', () => {
+  test('target moves to the given track/frame; partner stays put when no matching lane exists', () => {
     const doc = makeDoc()
     const out = linkedMoveClip(doc, 'vClip', 'V5', 20)
 
@@ -916,9 +1206,51 @@ describe('linkedMoveClip', () => {
     expect(clipIn(out, 'V5', 'vClip').sourceRange).toEqual({ startFrame: 10, durationFrames: 100 })
     expect(clipIn(out, 'V5', 'vClip').linkGroupId).toBe(PAIR1)
 
-    // Partner never changes tracks — it stays on A1 — but shifts by the same delta.
+    // V1→V5 is video index +3; makeDoc has no audio index 3, so A1 stays.
     expect(clipIn(out, 'A1', 'aClip').timelineRange).toEqual({ startFrame: 20, durationFrames: 100 })
     expect(clipIn(out, 'A1', 'aClip').linkGroupId).toBe(PAIR1)
+  })
+
+  test('V1→V2 also moves the linked audio from A1 to A2', () => {
+    const doc = makePairedLaneDoc()
+    const out = linkedMoveClip(doc, 'vClip', 'V2', 20)
+
+    expect(clipsOf(out, 'V1')).toEqual([])
+    expect(clipIn(out, 'V2', 'vClip').timelineRange).toEqual({ startFrame: 20, durationFrames: 100 })
+    expect(clipsOf(out, 'A1')).toEqual([])
+    expect(clipIn(out, 'A2', 'aClip').timelineRange).toEqual({ startFrame: 20, durationFrames: 100 })
+    expect(clipIn(out, 'A2', 'aClip').linkGroupId).toBe(PAIR1)
+  })
+
+  test('A1→A2 also moves the linked video from V1 to V2', () => {
+    const doc = makePairedLaneDoc()
+    const out = linkedMoveClip(doc, 'aClip', 'A2', 8)
+
+    expect(clipsOf(out, 'A1')).toEqual([])
+    expect(clipIn(out, 'A2', 'aClip').timelineRange).toEqual({ startFrame: 8, durationFrames: 100 })
+    expect(clipsOf(out, 'V1')).toEqual([])
+    expect(clipIn(out, 'V2', 'vClip').timelineRange).toEqual({ startFrame: 8, durationFrames: 100 })
+  })
+
+  test('atomic: a blocked partner destination lane rolls back the whole move', () => {
+    const doc = makePairedLaneDoc()
+    const out = linkedMoveClip(doc, 'vClip', 'V3', 0)
+    expect(out).toBe(doc)
+    expect(warnSpy).toHaveBeenCalled()
+  })
+
+  test('atomic: a locked partner destination lane rolls back the whole move', () => {
+    const doc = makePairedLaneDoc(true)
+    const out = linkedMoveClip(doc, 'vClip', 'V3', 50)
+    expect(out).toBe(doc)
+    expect(warnSpy).toHaveBeenCalled()
+  })
+
+  test('linkedPartnerTrackAfterMove maps V1→V2 onto A1→A2', () => {
+    const doc = makePairedLaneDoc()
+    expect(linkedPartnerTrackAfterMove(doc, 'V1', 'V2', 'A1')?.id).toBe('A2')
+    expect(linkedPartnerTrackAfterMove(doc, 'A1', 'A2', 'V1')?.id).toBe('V2')
+    expect(linkedPartnerTrackAfterMove(doc, 'V1', 'V1', 'A1')?.id).toBe('A1')
   })
 
   test('atomic: partner blocked by an overlap on its own track rolls back the whole move', () => {

@@ -555,9 +555,11 @@ function audioPlan(
       maximumDurationFrames: null,
     }
   }
+  const fromPolicy = sourceTimeAudioPolicy(fromPartner.clip)
+  const toPolicy = sourceTimeAudioPolicy(toPartner.clip)
   if (
-    sourceTimeAudioPolicy(fromPartner.clip).status === 'muted'
-    || sourceTimeAudioPolicy(toPartner.clip).status === 'muted'
+    fromPolicy.status === 'muted'
+    || toPolicy.status === 'muted'
   ) {
     return {
       status: 'unavailable',

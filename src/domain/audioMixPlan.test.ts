@@ -9,9 +9,12 @@ import type {
 } from './schema'
 import type { SourceBoundsCatalog } from './crossfadePlan'
 import {
+  createConstantRateAudioStretch,
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
+  isStretchedAudioClipPlan,
 } from './audioMixPlan'
+import { sourceTimeAudioPolicy } from './sourceTimeMap'
 
 function clip(
   id: string,
@@ -140,27 +143,101 @@ function fixture(options: {
   }
 }
 
+function setDoubleSpeed(target: Clip): void {
+  target.sourceRange = {
+    startFrame: target.sourceRange.startFrame,
+    durationFrames: target.timelineRange.durationFrames * 2,
+  }
+  target.sourceTimeMap = {
+    sourceStartTicks: target.sourceRange.startFrame * 1_000_000,
+    sourceDurationTicks: target.sourceRange.durationFrames * 1_000_000,
+    rate: { numerator: 2, denominator: 1 },
+  }
+}
+
 describe('timeline audio mix plan', () => {
-  test('omits retimed audio with an explicit shared preview/export policy', () => {
+  test('plans a stretched 2x outgoing handle after envelope expansion', () => {
     const input = fixture()
-    input.doc.tracks[1].clips[0].sourceRange = {
-      startFrame: 30,
-      durationFrames: 20,
-    }
-    input.doc.tracks[1].clips[0].sourceTimeMap = {
-      sourceStartTicks: 30_000_000,
-      sourceDurationTicks: 20_000_000,
-      rate: { numerator: 2, denominator: 1 },
-    }
+    setDoubleSpeed(input.doc.tracks[1].clips[0])
 
     const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+    const stretched = plan.clips.find((item) => item.clipId === 'audio-from')
 
-    expect(plan.clips.map((item) => item.clipId)).not.toContain('audio-from')
-    expect(plan.mutedClips).toContainEqual({
+    expect(stretched).toEqual({
       clipId: 'audio-from',
       trackId: 'A-from',
-      reason: 'constant-speed-audio-unsupported',
+      assetId: 'audio-from-asset',
+      timelineStartFrame: 10,
+      timelineEndFrame: 23,
+      sourceStartFrame: 30,
+      sourceEndFrame: 56,
+      volume: 1,
+      balance: 0,
+      leftGain: 1,
+      rightGain: 1,
+      fadeInFrames: 0,
+      fadeOutFrames: 0,
+      envelopes: [{
+        transitionId: 'crossfade',
+        startFrame: 18,
+        endFrame: 23,
+        role: 'from',
+        curve: 'equal-power',
+      }],
+      stretch: {
+        rate: { numerator: 2, denominator: 1 },
+        sourceStartTicks: 30_000_000,
+        sourceEndTicks: 56_000_000,
+      },
     })
+    expect(stretched && isStretchedAudioClipPlan(stretched)).toBe(true)
+    expect(plan.mutedClips.map((item) => item.clipId)).not.toContain('audio-from')
+  })
+
+  test('maps an isolated 2x clip window into its exact stretch descriptor', () => {
+    const input = fixture()
+    input.doc.tracks[0].transitions = []
+    setDoubleSpeed(input.doc.tracks[1].clips[0])
+
+    const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+    const stretched = plan.clips.find((item) => item.clipId === 'audio-from')
+
+    expect(stretched).toMatchObject({
+      timelineStartFrame: 10,
+      timelineEndFrame: 20,
+      sourceStartFrame: 30,
+      sourceEndFrame: 50,
+      stretch: {
+        rate: { numerator: 2, denominator: 1 },
+        sourceStartTicks: 30_000_000,
+        sourceEndTicks: 50_000_000,
+      },
+    })
+  })
+
+  test('rejects invalid constant-rate stretch descriptors', () => {
+    const input = fixture()
+    const target = input.doc.tracks[1].clips[0]
+    setDoubleSpeed(target)
+    const policy = sourceTimeAudioPolicy(target)
+    if (policy.status !== 'supported' || policy.kind !== 'stretched') {
+      throw new Error('Expected a constant stretch policy')
+    }
+    const rate = policy.rate
+
+    expect(() => createConstantRateAudioStretch(
+      { ...rate, numerator: rate.denominator },
+      0,
+      1,
+    )).toThrow(/unity/)
+    expect(() => createConstantRateAudioStretch(rate, 5, 5)).toThrow(/non-empty/)
+    expect(() => createConstantRateAudioStretch(rate, 6, 5)).toThrow(/ordered/)
+    expect(() => createConstantRateAudioStretch(rate, -1, 5)).toThrow(/non-negative/)
+    expect(() => createConstantRateAudioStretch(
+      rate,
+      0,
+      Number.MAX_SAFE_INTEGER + 1,
+    )).toThrow(/safe integers/)
   })
 
   test('omits variable-speed and freeze audio with the ramp-specific policy', () => {
@@ -187,6 +264,31 @@ describe('timeline audio mix plan', () => {
       clipId: 'audio-from',
       trackId: 'A-from',
       reason: 'speed-ramp-audio-unsupported',
+    })
+  })
+
+  test('omits freeze audio with its explicit silence policy', () => {
+    const input = fixture()
+    input.doc.tracks[1].clips[0].sourceTimeMap = {
+      sourceStartTicks: 30_000_000,
+      sourceDurationTicks: 10_000_000,
+      rate: { numerator: 1, denominator: 1 },
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+          { frame: 4, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+        ],
+      },
+    }
+
+    const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+
+    expect(plan.clips.map((item) => item.clipId)).not.toContain('audio-from')
+    expect(plan.mutedClips).toContainEqual({
+      clipId: 'audio-from',
+      trackId: 'A-from',
+      reason: 'freeze-audio-silence',
     })
   })
 

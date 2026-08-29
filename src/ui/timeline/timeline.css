@@ -23,6 +23,8 @@
   z-index: 20;
   flex: 0 0 200px;
   width: 200px;
+  min-width: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: #1c1c1c;
@@ -96,8 +98,13 @@
 }
 
 .track-header-toggles {
-  display: flex;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: repeat(3, 18px);
+  grid-auto-rows: 18px;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  align-content: center;
 }
 
 /* Inline rename editor — swaps in for the info block on double-click. */
@@ -129,10 +136,14 @@
 }
 
 .track-toggle {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
   padding: 0;
-  font-size: 11px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
   line-height: 1;
   color: #999;
   background: #232323;
@@ -1125,6 +1136,7 @@
 .timeline-headers {
   flex-basis: 178px;
   width: 178px;
+  overflow: hidden;
   background: #101c2a;
   border-right-color: #31465f;
 }
@@ -1145,6 +1157,8 @@
 .track-header {
   gap: 6px;
   padding: 0 7px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .track-header-audio,
@@ -1165,6 +1179,18 @@
   border-color: #438b60;
 }
 
+.track-header-info {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.track-header-kind,
+.track-header-count {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .track-header-kind {
   color: #d9e3ef;
   font-size: 10px;
@@ -1176,10 +1202,6 @@
 }
 
 .track-toggle {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
   color: #8292a6;
   background: #162334;
   border-color: #304258;

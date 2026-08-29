@@ -366,7 +366,16 @@ function makePlaybackHarness(options: PlaybackHarnessOptions = {}): {
   timers: TimerHarness
   deps: PlaybackAudioDeps
 } {
-  const context = {} as AudioContext
+  const context = {
+    createBuffer: (
+      numberOfChannels: number,
+      length: number,
+      sampleRate: number,
+    ) => makePlanarAudioBuffer(
+      Array.from({ length: numberOfChannels }, () => new Float32Array(length)),
+      sampleRate,
+    ),
+  } as AudioContext
   const resolveAsset: PlaybackAssetResolver = async () => ({
     blob: new Blob(),
     budget: {
@@ -528,7 +537,7 @@ function makeWebAudioHarness(state: AudioContextState): {
 }
 
 describe('startTimelineAudioPlayback scheduling', () => {
-  test('does not resolve or schedule a retimed audio source', async () => {
+  test('resolves and schedules a constant-rate retimed audio source', async () => {
     const clip = makeClip('retimed', 0, 10)
     clip.sourceRange = { startFrame: 0, durationFrames: 20 }
     clip.sourceTimeMap = {
@@ -538,6 +547,15 @@ describe('startTimelineAudioPlayback scheduling', () => {
     }
     const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 10)
     const h = makePlaybackHarness()
+    const source = new Float32Array(96_000).fill(1)
+    h.media.enqueue(
+      'asset-retimed',
+      makeCursor([{
+        buffer: makePlanarAudioBuffer([source, source.slice()], 48_000),
+        timestamp: 0,
+        duration: 2,
+      }]).cursor,
+    )
 
     const session = await startTimelineAudioPlayback(
       h.context,
@@ -548,9 +566,173 @@ describe('startTimelineAudioPlayback scheduling', () => {
       h.deps,
     )
 
-    expect(audioPlaybackAssetIds(doc, 0)).toEqual([])
-    expect(h.media.requests).toEqual([])
+    expect(audioPlaybackAssetIds(doc, 0)).toEqual(['asset-retimed'])
+    expect(h.media.requests).toEqual([{
+      assetId: 'asset-retimed',
+      startTime: 0,
+      endTime: 2,
+      stretchLead: true,
+    }])
+    expect(h.output.scheduled).toHaveLength(1)
+    expect(h.output.scheduled[0]).toMatchObject({
+      clipId: 'retimed',
+      timelineStartTime: 0,
+      offset: 0,
+      duration: 0.5,
+    })
+    expect(h.output.scheduled[0].buffer.duration).toBe(0.5)
+    await session.stop()
+  })
+
+  test('marks a ninth overlapping live stretch session unavailable', async () => {
+    const clips = Array.from({ length: 9 }, (_value, index) => {
+      const clip = makeClip(`retimed-${index}`, 0, 10)
+      clip.sourceRange = { startFrame: 0, durationFrames: 20 }
+      clip.sourceTimeMap = {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 20_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      }
+      return clip
+    })
+    const doc = makeDoc(
+      clips.map((clip, index) => makeTrack(`A${index + 1}`, 'audio', [clip])),
+      10,
+    )
+    const h = makePlaybackHarness({ lookaheadSeconds: 0.05 })
+    for (const clip of clips) {
+      const source = new Float32Array(16_384).fill(1)
+      h.media.enqueue(
+        clip.assetId,
+        makeCursor([{
+          buffer: makePlanarAudioBuffer([source, source.slice()], 48_000),
+          timestamp: 0,
+          duration: source.length / 48_000,
+        }]).cursor,
+      )
+    }
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.media.requests).toHaveLength(8)
+    expect(h.output.scheduled).toHaveLength(8)
+    expect(h.output.scheduled.map((event) => event.clipId))
+      .not.toContain('retimed-8')
+    await session.stop()
+  })
+
+  test('admits a denied stretch clip after an earlier session slot frees', async () => {
+    const shortClips = Array.from({ length: 8 }, (_value, index) => {
+      const clip = makeClip(`retimed-${index}`, 0, 2)
+      clip.sourceRange = { startFrame: 0, durationFrames: 4 }
+      clip.sourceTimeMap = {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 4_000_000,
+        rate: { numerator: 2, denominator: 1 },
+      }
+      return clip
+    })
+    const lateClip = makeClip('retimed-8', 0, 20)
+    lateClip.sourceRange = { startFrame: 0, durationFrames: 40 }
+    lateClip.sourceTimeMap = {
+      sourceStartTicks: 0,
+      sourceDurationTicks: 40_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+    const clips = [...shortClips, lateClip]
+    const doc = makeDoc(
+      clips.map((clip, index) => makeTrack(`A${index + 1}`, 'audio', [clip])),
+      20,
+    )
+    const h = makePlaybackHarness({ lookaheadSeconds: 0.05 })
+    for (const clip of clips) {
+      const source = new Float32Array(96_000).fill(1)
+      h.media.enqueue(
+        clip.assetId,
+        makeCursor([{
+          buffer: makePlanarAudioBuffer([source, source.slice()], 48_000),
+          timestamp: 0,
+          duration: source.length / 48_000,
+        }]).cursor,
+      )
+    }
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.media.requests.map((request) => request.assetId))
+      .not.toContain('asset-retimed-8')
+    expect(h.output.scheduled.map((event) => event.clipId))
+      .not.toContain('retimed-8')
+
+    h.output.setTime(session.anchorTime + 0.2)
+    h.timers.runNext()
+    await vi.waitFor(() =>
+      expect(session.diagnostics().scheduledThroughTimelineTime)
+        .toBeCloseTo(0.25),
+    )
+
+    h.output.setTime(session.anchorTime + 0.25)
+    h.timers.runNext()
+    await vi.waitFor(() =>
+      expect(h.output.scheduled.map((event) => event.clipId))
+        .toContain('retimed-8'),
+    )
+    expect(h.media.requests.map((request) => request.assetId))
+      .toContain('asset-retimed-8')
+    await session.stop()
+  })
+
+  test('warns and silences a stretch source at an unsupported sample rate', async () => {
+    const clip = makeClip('unsupported-rate', 0, 10)
+    clip.sourceRange = { startFrame: 0, durationFrames: 20 }
+    clip.sourceTimeMap = {
+      sourceStartTicks: 0,
+      sourceDurationTicks: 20_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 10)
+    const h = makePlaybackHarness()
+    const source = new Float32Array(64_000).fill(1)
+    h.media.enqueue(
+      clip.assetId,
+      makeCursor([{
+        buffer: makePlanarAudioBuffer([source, source.slice()], 32_000),
+        timestamp: 0,
+        duration: 2,
+      }]).cursor,
+    )
+    const onWarning = vi.fn()
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      { onWarning },
+      h.deps,
+    )
+
     expect(h.output.scheduled).toEqual([])
+    expect(onWarning).toHaveBeenCalledWith(expect.objectContaining({
+      scope: 'media',
+      stage: 'decode',
+      clipId: clip.id,
+      reason: 'decode-failed',
+    }))
     await session.stop()
   })
 

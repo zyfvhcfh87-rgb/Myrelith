@@ -18,7 +18,7 @@ import type {
   TrackId,
   TrackKind,
 } from '../../domain/schema'
-import { linkedPartners } from '../../domain/linking'
+import { linkedPartnerTrackAfterMove, linkedPartners } from '../../domain/linking'
 import { findClip, trackOfClip } from '../../domain/selectors'
 import { microsecondsDurationToFrames } from '../../domain/time'
 import {
@@ -99,6 +99,56 @@ function gestureMembers(
     }
   }
   return members
+}
+
+function laneOffsetY(
+  laneContainer: Element,
+  fromTrackId: TrackId,
+  toTrackId: TrackId,
+): number | null {
+  let fromTop: number | null = null
+  let toTop: number | null = null
+  const lanes = laneContainer.querySelectorAll<HTMLElement>('[data-track-id]')
+  for (const lane of lanes) {
+    if (lane.dataset.trackId === fromTrackId) {
+      fromTop = lane.getBoundingClientRect().top
+    }
+    if (lane.dataset.trackId === toTrackId) {
+      toTop = lane.getBoundingClientRect().top
+    }
+  }
+  if (fromTop === null || toTop === null) return null
+  return toTop - fromTop
+}
+
+function linkedPartnerPreviewOffsets(args: {
+  doc: TimelineDoc
+  ownerClipId: ClipId
+  ownerSourceTrackId: TrackId
+  ownerDestTrackId: TrackId
+  memberClipIds: readonly ClipId[]
+  laneContainer: Element | null
+}): Readonly<Record<ClipId, number>> | undefined {
+  if (!args.laneContainer || args.ownerDestTrackId === args.ownerSourceTrackId) {
+    return undefined
+  }
+  const offsets: Record<ClipId, number> = {}
+  for (const memberId of args.memberClipIds) {
+    if (memberId === args.ownerClipId) continue
+    const partnerTrack = trackOfClip(args.doc, memberId)
+    if (!partnerTrack) continue
+    const dest = linkedPartnerTrackAfterMove(
+      args.doc,
+      args.ownerSourceTrackId,
+      args.ownerDestTrackId,
+      partnerTrack.id,
+    )
+    if (!dest || dest.id === partnerTrack.id) continue
+    const offsetY = laneOffsetY(args.laneContainer, partnerTrack.id, dest.id)
+    if (offsetY === null || offsetY === 0) continue
+    offsets[memberId] = offsetY
+  }
+  return Object.keys(offsets).length > 0 ? offsets : undefined
 }
 
 /** Exact timeline points changed by one signed edit delta. */
@@ -211,6 +261,17 @@ export function useClipGestureSession({
     const active = session.current
     if (active?.mode === 'move') {
       const crossTrack = active.targetTrackId !== trackId
+      const laneContainer = rootRef.current?.closest('[data-track-id]')?.parentElement ?? null
+      const partnerTrackOffsets = crossTrack
+        ? linkedPartnerPreviewOffsets({
+            doc: active.document,
+            ownerClipId: clipId,
+            ownerSourceTrackId: trackId,
+            ownerDestTrackId: active.targetTrackId,
+            memberClipIds: active.memberClipIds,
+            laneContainer,
+          })
+        : undefined
       setDragPreview({
         clipId,
         deltaFrames: update.deltaFrames,
@@ -224,6 +285,7 @@ export function useClipGestureSession({
               trackOffsetY: active.trackOffsetY,
             }
           : {}),
+        ...(partnerTrackOffsets ? { partnerTrackOffsets } : {}),
       })
       setSnapGuide(update.guide)
     }

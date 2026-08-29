@@ -274,8 +274,8 @@ describe('outputMediaAssetIds', () => {
     ])
   })
 
-  test('excludes muted retimed audio but keeps the same asset when it contributes video', () => {
-    const mutedAudio = {
+  test('includes constant stretch audio and still excludes muted speed ramps', () => {
+    const stretchedAudio = {
       ...makeClip('retimed-audio', 0, 5),
       assetId: 'shared-retimed',
       sourceRange: { startFrame: 0, durationFrames: 10 },
@@ -285,14 +285,40 @@ describe('outputMediaAssetIds', () => {
         rate: { numerator: 2, denominator: 1 },
       },
     }
-    const audioOnly = makeDoc([makeTrack('A1', 'audio', [mutedAudio])])
-    expect([...outputMediaAssetIds(audioOnly)]).toEqual([])
+    const audioOnly = makeDoc([makeTrack('A1', 'audio', [stretchedAudio])])
+    expect([...outputMediaAssetIds(audioOnly)]).toEqual(['shared-retimed'])
 
     const audiovisual = makeDoc([
-      makeTrack('V1', 'video', [{ ...mutedAudio, id: 'retimed-video' }]),
-      makeTrack('A1', 'audio', [mutedAudio]),
+      makeTrack('V1', 'video', [{ ...stretchedAudio, id: 'retimed-video' }]),
+      makeTrack('A1', 'audio', [stretchedAudio]),
     ])
     expect([...outputMediaAssetIds(audiovisual)]).toEqual(['shared-retimed'])
+
+    const rampAudio = {
+      ...stretchedAudio,
+      id: 'ramped-audio',
+      assetId: 'ramped-audio-asset',
+      sourceTimeMap: {
+        ...stretchedAudio.sourceTimeMap,
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            {
+              frame: 0,
+              rate: { numerator: 1, denominator: 1 },
+              easing: 'hold' as const,
+            },
+            {
+              frame: 5,
+              rate: { numerator: 2, denominator: 1 },
+              easing: 'linear' as const,
+            },
+          ],
+        },
+      },
+    }
+    const rampOnly = makeDoc([makeTrack('A1', 'audio', [rampAudio])])
+    expect([...outputMediaAssetIds(rampOnly)]).toEqual([])
   })
 
   test('includes a zero-opacity clip when its opacity animation becomes visible', () => {

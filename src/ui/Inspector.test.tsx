@@ -63,6 +63,27 @@ function makeDoc(): TimelineDoc {
   }
 }
 
+function makeBlockedRetimeFixture(): TimelineDoc {
+  const blockerGroupId = 'link_blocker'
+  return {
+    ...makeDoc(),
+    tracks: [
+      makeTrack('V1', [
+        makeClip('clipA', 0, 100),
+        { ...makeClip('clipB', 100, 50), linkGroupId: blockerGroupId },
+      ]),
+      {
+        ...makeTrack(
+          'A1',
+          [{ ...makeClip('clipD', 100, 50), linkGroupId: blockerGroupId }],
+          'audio',
+        ),
+        locked: true,
+      },
+    ],
+  }
+}
+
 function makeLinkedFixture(): TimelineDoc {
   return {
     ...makeDoc(),
@@ -152,7 +173,9 @@ describe('Inspector', () => {
       speedCurve: { originFrame: 0, points: [] },
     })
     expect(screen.getByText('Timeline 50 frames · source 100 frames.')).toBeInTheDocument()
-    expect(screen.getByText(/Audio is muted for this timing map in preview and export/)).toBeInTheDocument()
+    expect(screen.getByText(
+      'Audio plays time-stretched at 200%. Quality is limited at this speed.',
+    )).toBeInTheDocument()
     expect(doc().past).toHaveLength(1)
 
     act(() => doc().undo())
@@ -244,7 +267,9 @@ describe('Inspector', () => {
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Point speed' }), '200')
     expect(clipA().timelineRange.durationFrames).toBe(70)
-    expect(screen.getByText(/pitch-safe time-stretch is not available/)).toBeInTheDocument()
+    expect(screen.getByText(
+      'Audio is muted because variable speed ramps are not supported for audio.',
+    )).toBeInTheDocument()
 
     act(() => transport().setPlayheadFrame(20))
     await user.click(screen.getByRole('button', { name: 'Add boundary at playhead' }))
@@ -269,7 +294,10 @@ describe('Inspector', () => {
 
   test('explains rejected speed changes and updates linked clips atomically', async () => {
     const user = userEvent.setup()
-    transport().setSelectedClip('clipA')
+    act(() => {
+      doc().setDoc(makeBlockedRetimeFixture())
+      transport().setSelectedClip('clipA')
+    })
     const { unmount } = render(<Inspector />)
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Whole clip speed' }), '50')

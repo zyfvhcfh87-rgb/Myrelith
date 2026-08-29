@@ -2,7 +2,10 @@ import { describe, expect, test } from 'vitest'
 import type { Clip } from './schema'
 import {
   canonicalSourceTimeRate,
+  audioSampleFromSourceTicks,
+  clipAudioPresentation,
   defaultSourceTimeMap,
+  sourceTicksToSeconds,
   retimeClipAnimation,
   sourceFrameAtTimelineFrame,
   sourceRangeForMap,
@@ -11,9 +14,12 @@ import {
   sourceTimeMapAtOffset,
   sourceTimeMapForTimelineDuration,
   sourceTimeMapValidationError,
+  sourceTimeMapWholeClipSpeed,
+  sourceTimeMapWithSpeedPoint,
   sourceTimeRateFromPercent,
   sourceTimeRatePercent,
   sourceTimeSpeedRateFromPercent,
+  stretchQualityBand,
   timelineFramesWithinSourceMap,
   timelineOffsetAtSourceTicks,
   timelineFramesWithinSourceTicks,
@@ -101,21 +107,147 @@ describe('SourceTimeMap', () => {
     expect(timelineFramesWithinSourceTicks(1_000_000, { numerator: 1, denominator: 2 })).toBe(2)
   })
 
-  test('keeps legacy 1x clips byte-behavior compatible and mutes unsupported audio maps', () => {
+  test('keeps legacy 1x clips byte-behavior compatible and classifies constant stretch', () => {
     const legacy = clip()
     delete legacy.sourceTimeMap
     legacy.sourceRange = { startFrame: 10, durationFrames: 13 }
     expect(sourceFrameAtTimelineFrame(legacy, 55)).toBe(15)
-    expect(sourceTimeAudioPolicy(legacy)).toEqual({ status: 'supported' })
+    expect(sourceTimeAudioPolicy(legacy)).toEqual({
+      status: 'supported',
+      kind: 'direct',
+    })
     expect(sourceTimeAudioPolicy(clip())).toEqual({
-      status: 'muted',
-      reason: 'constant-speed-audio-unsupported',
+      status: 'supported',
+      kind: 'stretched',
+      rate: { numerator: 3, denominator: 2 },
     })
     expect(defaultSourceTimeMap(10)).toEqual({
       sourceStartTicks: 10_000_000,
       sourceDurationTicks: 1_000_000,
       rate: { numerator: 1, denominator: 1 },
       speedCurve: { originFrame: 0, points: [] },
+    })
+  })
+
+  test('classifies an all-constant non-unity curve as stretch', () => {
+    const stretched = clip()
+    stretched.sourceTimeMap = {
+      ...defaultSourceTimeMap(0, 20),
+      rate: sourceTimeRateFromPercent(100),
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: sourceTimeSpeedRateFromPercent(200), easing: 'hold' },
+          { frame: 10, rate: sourceTimeSpeedRateFromPercent(200), easing: 'linear' },
+        ],
+      },
+    }
+
+    expect(sourceTimeAudioPolicy(stretched)).toEqual({
+      status: 'supported',
+      kind: 'stretched',
+      rate: { numerator: 2, denominator: 1 },
+    })
+  })
+
+  test('mutes mixed positive ramps before freeze maps', () => {
+    const ramp = clip()
+    ramp.sourceTimeMap = {
+      ...defaultSourceTimeMap(0, 20),
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: sourceTimeSpeedRateFromPercent(100), easing: 'linear' },
+          { frame: 10, rate: sourceTimeSpeedRateFromPercent(200), easing: 'hold' },
+        ],
+      },
+    }
+    const freeze = clip()
+    freeze.sourceTimeMap = {
+      ...defaultSourceTimeMap(0, 20),
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: sourceTimeSpeedRateFromPercent(0), easing: 'hold' },
+          { frame: 10, rate: sourceTimeSpeedRateFromPercent(100), easing: 'hold' },
+        ],
+      },
+    }
+
+    expect(sourceTimeAudioPolicy(ramp)).toEqual({
+      status: 'muted',
+      reason: 'speed-ramp-audio-unsupported',
+    })
+    expect(sourceTimeAudioPolicy(freeze)).toEqual({
+      status: 'muted',
+      reason: 'freeze-audio-silence',
+    })
+  })
+
+  test('requires an integer source origin only for direct 1x audio', () => {
+    const subFrame = clip()
+    subFrame.sourceTimeMap = {
+      ...defaultSourceTimeMap(0, 20),
+      sourceStartTicks: 500_000,
+    }
+    const allUnity = clip()
+    allUnity.sourceTimeMap = {
+      ...defaultSourceTimeMap(0, 20),
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: sourceTimeSpeedRateFromPercent(100), easing: 'linear' },
+          { frame: 10, rate: sourceTimeSpeedRateFromPercent(100), easing: 'hold' },
+        ],
+      },
+    }
+
+    expect(sourceTimeAudioPolicy(subFrame)).toEqual({
+      status: 'muted',
+      reason: 'sub-frame-origin-audio-unsupported',
+    })
+    expect(sourceTimeAudioPolicy(allUnity)).toEqual({
+      status: 'supported',
+      kind: 'direct',
+    })
+  })
+
+  test('reports stretch quality and clip audio presentation', () => {
+    expect(stretchQualityBand(sourceTimeRateFromPercent(75))).toBe('nominal')
+    expect(stretchQualityBand(sourceTimeRateFromPercent(150))).toBe('nominal')
+    expect(stretchQualityBand(sourceTimeRateFromPercent(50))).toBe('edge')
+    expect(stretchQualityBand(sourceTimeRateFromPercent(175))).toBe('edge')
+    expect(clipAudioPresentation(clip())).toEqual({
+      state: 'ready',
+      kind: 'stretched',
+      rate: { numerator: 3, denominator: 2 },
+      quality: 'nominal',
+    })
+    const edge = clip()
+    edge.sourceTimeMap = {
+      ...defaultSourceTimeMap(0, 20),
+      rate: sourceTimeRateFromPercent(200),
+    }
+    expect(clipAudioPresentation(edge)).toEqual({
+      state: 'fallback',
+      kind: 'stretched',
+      rate: { numerator: 2, denominator: 1 },
+      quality: 'edge',
+    })
+    const direct = clip()
+    delete direct.sourceTimeMap
+    expect(clipAudioPresentation(direct)).toEqual({
+      state: 'ready',
+      kind: 'direct',
+    })
+    const silence = clip()
+    silence.sourceTimeMap = {
+      ...defaultSourceTimeMap(0, 20),
+      sourceStartTicks: 500_000,
+    }
+    expect(clipAudioPresentation(silence)).toEqual({
+      state: 'silence',
+      reason: 'sub-frame-origin-audio-unsupported',
     })
   })
 
@@ -280,5 +412,49 @@ describe('SourceTimeMap', () => {
       frame: 1,
       sourceTimeTicks: 11_000_000,
     })
+  })
+
+  test('whole-clip speed reads a constant playhead curve instead of the 100% fallback', () => {
+    const unity = defaultSourceTimeMap(0, 40)
+    expect(sourceTimeMapWholeClipSpeed(unity)).toEqual({
+      kind: 'constant',
+      percent: 100,
+    })
+    const curved = sourceTimeMapWithSpeedPoint(
+      unity,
+      0,
+      sourceTimeRateFromPercent(400),
+      'hold',
+    )
+    expect(curved.rate).toEqual({ numerator: 1, denominator: 1 })
+    expect(sourceTimeMapWholeClipSpeed(curved)).toEqual({
+      kind: 'constant',
+      percent: 400,
+    })
+  })
+
+  test('whole-clip speed reports mixed when ramp points disagree', () => {
+    const unity = defaultSourceTimeMap(0, 40)
+    const first = sourceTimeMapWithSpeedPoint(
+      unity,
+      0,
+      sourceTimeRateFromPercent(25),
+      'hold',
+    )
+    const mixed = sourceTimeMapWithSpeedPoint(
+      first,
+      10,
+      sourceTimeRateFromPercent(100),
+      'hold',
+    )
+    expect(sourceTimeMapWholeClipSpeed(mixed)).toEqual({ kind: 'mixed' })
+  })
+
+  test('maps source ticks onto decoder seconds and the audio sample grid', () => {
+    expect(sourceTicksToSeconds(30_000_000, { num: 30, den: 1 })).toBe(1)
+    expect(audioSampleFromSourceTicks(30_000_000, { num: 30, den: 1 }, 48_000))
+      .toBe(48_000)
+    expect(audioSampleFromSourceTicks(-500_000, { num: 30, den: 1 }, 48_000))
+      .toBe(-800)
   })
 })

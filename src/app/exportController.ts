@@ -268,11 +268,11 @@ function partialTrackConflict(
     for (const clip of track.clips) {
       if (track.kind === 'video') {
         if (!clipContributesVisualOutput(clip)) continue
-      } else if (
-        clip.text
-        || clip.volume <= 0
-        || sourceTimeAudioPolicy(clip).status === 'muted'
-      ) continue
+      } else {
+        if (clip.text || clip.volume <= 0) continue
+        const audioPolicy = sourceTimeAudioPolicy(clip)
+        if (audioPolicy.status !== 'supported') continue
+      }
       const asset = assets.get(clip.assetId)
       if (!asset) continue
       if (track.kind === 'audio' && !asset.hasAudio) {

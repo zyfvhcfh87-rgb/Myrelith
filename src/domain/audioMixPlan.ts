@@ -2,6 +2,7 @@
 
 import type {
   AssetId,
+  Clip,
   ClipId,
   TimelineDoc,
   TrackId,
@@ -23,7 +24,10 @@ import {
 import {
   clipSourceTimeMap,
   sourceFrameAtTimelineOffset,
+  sourceTicksAtTimelineOffset,
   sourceTimeAudioPolicy,
+  SOURCE_TIME_TICKS_PER_FRAME,
+  type ConstantAudioStretchRate,
   type SourceTimeAudioPolicy,
 } from './sourceTimeMap'
 
@@ -35,7 +39,7 @@ export interface TimelineAudioEnvelope {
   curve: TransitionAudioCurve
 }
 
-export interface TimelineAudioClipPlan {
+export interface TimelineAudioClipFields {
   clipId: ClipId
   trackId: TrackId
   assetId: AssetId
@@ -51,6 +55,24 @@ export interface TimelineAudioClipPlan {
   fadeOutFrames: number
   envelopes: TimelineAudioEnvelope[]
 }
+
+export interface ConstantRateAudioStretch {
+  readonly rate: ConstantAudioStretchRate
+  readonly sourceStartTicks: number
+  readonly sourceEndTicks: number
+}
+
+export interface TimelineAudioDirectClipPlan extends TimelineAudioClipFields {
+  stretch?: never
+}
+
+export interface TimelineAudioStretchedClipPlan extends TimelineAudioClipFields {
+  stretch: ConstantRateAudioStretch
+}
+
+export type TimelineAudioClipPlan =
+  | TimelineAudioDirectClipPlan
+  | TimelineAudioStretchedClipPlan
 
 export interface TimelineAudioMixPlan {
   clips: TimelineAudioClipPlan[]
@@ -70,6 +92,103 @@ interface PlannedCrossfadeAudio {
   curve: TransitionAudioCurve
   fromClipId: ClipId
   toClipId: ClipId
+}
+
+type AudioContributorDraft =
+  | {
+      kind: 'direct'
+      clip: Clip
+      plan: TimelineAudioClipFields
+    }
+  | {
+      kind: 'stretched'
+      clip: Clip
+      rate: ConstantAudioStretchRate
+      plan: TimelineAudioClipFields
+    }
+
+export function createConstantRateAudioStretch(
+  rate: ConstantAudioStretchRate,
+  sourceStartTicks: number,
+  sourceEndTicks: number,
+): ConstantRateAudioStretch {
+  if (rate.numerator === rate.denominator) {
+    throw new RangeError('Constant audio stretch rate must not be unity')
+  }
+  if (
+    !Number.isSafeInteger(sourceStartTicks)
+    || !Number.isSafeInteger(sourceEndTicks)
+  ) {
+    throw new RangeError('Constant audio stretch ticks must be safe integers')
+  }
+  if (sourceStartTicks < 0) {
+    throw new RangeError('Constant audio stretch start must be non-negative')
+  }
+  if (sourceEndTicks <= sourceStartTicks) {
+    throw new RangeError('Constant audio stretch range must be non-empty and ordered')
+  }
+  return { rate, sourceStartTicks, sourceEndTicks }
+}
+
+export function isStretchedAudioClipPlan(
+  plan: TimelineAudioClipPlan,
+): plan is TimelineAudioStretchedClipPlan {
+  return plan.stretch !== undefined
+}
+
+function assertVirtualSourceRange(plan: TimelineAudioClipFields): void {
+  if (
+    !Number.isSafeInteger(plan.sourceStartFrame)
+    || plan.sourceStartFrame < 0
+    || !Number.isSafeInteger(plan.sourceEndFrame)
+    || plan.sourceEndFrame <= plan.sourceStartFrame
+  ) {
+    throw new RangeError(
+      `Audio clip "${plan.clipId}" has an invalid virtual source range`,
+    )
+  }
+}
+
+function finishDirectContributor(
+  draft: TimelineAudioClipFields,
+  clip: Clip,
+): TimelineAudioDirectClipPlan {
+  const timelinePhase = sourceFrameAtTimelineOffset(clipSourceTimeMap(clip), 0)
+    - clip.timelineRange.startFrame
+  const plan: TimelineAudioDirectClipPlan = {
+    ...draft,
+    sourceStartFrame: draft.timelineStartFrame + timelinePhase,
+    sourceEndFrame: draft.timelineEndFrame + timelinePhase,
+  }
+  assertVirtualSourceRange(plan)
+  return plan
+}
+
+function finishStretchedContributor(
+  draft: TimelineAudioClipFields,
+  clip: Clip,
+  rate: ConstantAudioStretchRate,
+): TimelineAudioStretchedClipPlan {
+  const map = clipSourceTimeMap(clip)
+  const localStart = draft.timelineStartFrame - clip.timelineRange.startFrame
+  const localEnd = draft.timelineEndFrame - clip.timelineRange.startFrame
+  const sourceStartTicks = sourceTicksAtTimelineOffset(map, localStart)
+  const sourceEndTicks = sourceTicksAtTimelineOffset(map, localEnd)
+  const ticksPerFrame = BigInt(SOURCE_TIME_TICKS_PER_FRAME)
+  const plan: TimelineAudioStretchedClipPlan = {
+    ...draft,
+    sourceStartFrame: Number(BigInt(sourceStartTicks) / ticksPerFrame),
+    sourceEndFrame: Number(
+      (BigInt(sourceEndTicks) + ticksPerFrame - 1n) / ticksPerFrame,
+    ),
+    stretch: createConstantRateAudioStretch(
+      rate,
+      sourceStartTicks,
+      sourceEndTicks,
+    ),
+  }
+  assertVirtualSourceRange(plan)
+  return plan
 }
 
 function windowsOverlap(
@@ -107,9 +226,8 @@ export function createTimelineAudioMixPlan(
   catalog: SourceBoundsCatalog,
 ): TimelineAudioMixPlan {
   const audible = audibleTracks(doc)
-  const plans = new Map<ClipId, TimelineAudioClipPlan>()
+  const plans = new Map<ClipId, AudioContributorDraft>()
   const mutedClips: TimelineAudioMutedClip[] = []
-  const sourceTimelinePhases = new Map<ClipId, number>()
   for (const track of audible) {
     for (const clip of track.clips) {
       const timelineEndFrame = rangeEnd(clip.timelineRange)
@@ -148,12 +266,7 @@ export function createTimelineAudioMixPlan(
       }
       if (clip.volume <= 0 || !audio.enabled) continue
       const [leftGain, rightGain] = stereoBalanceGains(audio.balance)
-      sourceTimelinePhases.set(
-        clip.id,
-        sourceFrameAtTimelineOffset(clipSourceTimeMap(clip), 0)
-          - clip.timelineRange.startFrame,
-      )
-      plans.set(clip.id, {
+      const plan: TimelineAudioClipFields = {
         clipId: clip.id,
         trackId: track.id,
         assetId: clip.assetId,
@@ -168,7 +281,10 @@ export function createTimelineAudioMixPlan(
         fadeInFrames: audio.fadeInFrames,
         fadeOutFrames: audio.fadeOutFrames,
         envelopes: [],
-      })
+      }
+      plans.set(clip.id, retimePolicy.kind === 'direct'
+        ? { kind: 'direct', clip, plan }
+        : { kind: 'stretched', clip, rate: retimePolicy.rate, plan })
     }
   }
 
@@ -228,8 +344,9 @@ export function createTimelineAudioMixPlan(
       { clipId: candidate.toClipId, role: 'to' as const },
     ]
     for (const leg of legs) {
-      const plan = plans.get(leg.clipId)
-      if (!plan) continue
+      const draft = plans.get(leg.clipId)
+      if (!draft) continue
+      const { plan } = draft
       plan.timelineStartFrame = Math.min(
         plan.timelineStartFrame,
         candidate.startFrame,
@@ -248,32 +365,19 @@ export function createTimelineAudioMixPlan(
     }
   }
 
-  for (const plan of plans.values()) {
-    const timelinePhase = sourceTimelinePhases.get(plan.clipId)
-    if (timelinePhase === undefined) {
-      throw new Error(`Audio clip "${plan.clipId}" lost its source phase`)
-    }
-    plan.sourceStartFrame = plan.timelineStartFrame + timelinePhase
-    plan.sourceEndFrame = plan.timelineEndFrame + timelinePhase
-    if (
-      !Number.isSafeInteger(plan.sourceStartFrame)
-      || plan.sourceStartFrame < 0
-      || !Number.isSafeInteger(plan.sourceEndFrame)
-      || plan.sourceEndFrame <= plan.sourceStartFrame
-    ) {
-      throw new RangeError(
-        `Audio clip "${plan.clipId}" has an invalid virtual source range`,
-      )
-    }
-    plan.envelopes.sort((left, right) =>
+  const finishedPlans = [...plans.values()].map((draft) => {
+    draft.plan.envelopes.sort((left, right) =>
       left.startFrame - right.startFrame
       || left.endFrame - right.endFrame
       || left.transitionId.localeCompare(right.transitionId),
     )
-  }
+    return draft.kind === 'direct'
+      ? finishDirectContributor(draft.plan, draft.clip)
+      : finishStretchedContributor(draft.plan, draft.clip, draft.rate)
+  })
 
   return {
-    clips: [...plans.values()].sort((left, right) =>
+    clips: finishedPlans.sort((left, right) =>
       left.timelineStartFrame - right.timelineStartFrame
       || left.trackId.localeCompare(right.trackId)
       || left.clipId.localeCompare(right.clipId),

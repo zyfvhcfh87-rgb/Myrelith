@@ -157,11 +157,9 @@ export function outputMediaAssetIds(
   if (includeAudio) {
     for (const track of audibleTracks(doc)) {
       for (const clip of track.clips) {
-        if (
-          !clip.text
-          && clip.volume > 0
-          && sourceTimeAudioPolicy(clip).status === 'supported'
-        ) ids.add(clip.assetId)
+        if (clip.text || clip.volume <= 0) continue
+        const audioPolicy = sourceTimeAudioPolicy(clip)
+        if (audioPolicy.status === 'supported') ids.add(clip.assetId)
       }
     }
   }

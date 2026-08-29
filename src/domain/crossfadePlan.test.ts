@@ -479,6 +479,84 @@ describe('canonical crossfade planner', () => {
     })
   })
 
+  test('makes stretched linked audio available to the crossfade plan', () => {
+    const from = clip('video-from', 'asset-a', 0, 10, 10, { linkGroupId: 'g-a' })
+    const to = clip('video-to', 'asset-b', 10, 10, 30, { linkGroupId: 'g-b' })
+    const audioFrom = clip('audio-from', 'asset-a', 0, 10, 10, { linkGroupId: 'g-a' })
+    const audioTo = clip('audio-to', 'asset-b', 10, 10, 30, { linkGroupId: 'g-b' })
+    audioFrom.sourceRange = { startFrame: 10, durationFrames: 20 }
+    audioFrom.sourceTimeMap = {
+      sourceStartTicks: 10_000_000,
+      sourceDurationTicks: 20_000_000,
+      rate: { numerator: 2, denominator: 1 },
+    }
+    const dissolve = transition('av', from.id, to.id, 5)
+    const project = doc([
+      track('V1', 'video', [from, to], [dissolve]),
+      track('A1', 'audio', [audioFrom, audioTo]),
+    ])
+    const bounds = catalog([
+      ['asset-a', exact([0, 10_000_000], [0, 10_000_000])],
+      ['asset-b', exact([0, 10_000_000], [0, 10_000_000])],
+    ])
+
+    const resolved = resolveCrossfadePlan(project, 'V1', dissolve.id, bounds)
+
+    expect(resolved.status).toBe('available')
+    if (resolved.status !== 'available') return
+    expect(resolved.plan.audio).toMatchObject({
+      status: 'available',
+      from: {
+        clip: { id: 'audio-from' },
+        sourceFrameAtCut: 30,
+      },
+      to: {
+        clip: { id: 'audio-to' },
+        sourceFrameAtCut: 30,
+      },
+    })
+  })
+
+  test('keeps speed-ramped linked audio unavailable', () => {
+    const from = clip('video-from', 'asset-a', 0, 10, 10, { linkGroupId: 'g-a' })
+    const to = clip('video-to', 'asset-b', 10, 10, 30, { linkGroupId: 'g-b' })
+    const audioFrom = clip('audio-from', 'asset-a', 0, 10, 10, { linkGroupId: 'g-a' })
+    const audioTo = clip('audio-to', 'asset-b', 10, 10, 30, { linkGroupId: 'g-b' })
+    audioFrom.sourceRange = { startFrame: 10, durationFrames: 20 }
+    audioFrom.sourceTimeMap = {
+      sourceStartTicks: 10_000_000,
+      sourceDurationTicks: 20_000_000,
+      rate: { numerator: 2, denominator: 1 },
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+          { frame: 10, rate: { numerator: 2, denominator: 1 }, easing: 'linear' },
+        ],
+      },
+    }
+    const dissolve = transition('av', from.id, to.id, 5)
+    const project = doc([
+      track('V1', 'video', [from, to], [dissolve]),
+      track('A1', 'audio', [audioFrom, audioTo]),
+    ])
+    const bounds = catalog([
+      ['asset-a', exact([0, 10_000_000], [0, 10_000_000])],
+      ['asset-b', exact([0, 10_000_000], [0, 10_000_000])],
+    ])
+
+    const resolved = resolveCrossfadePlan(project, 'V1', dissolve.id, bounds)
+
+    expect(resolved.status).toBe('available')
+    if (resolved.status !== 'available') return
+    expect(resolved.plan.audio).toEqual({
+      status: 'unavailable',
+      reason: 'retimed-audio-unsupported',
+      leg: null,
+      maximumDurationFrames: null,
+    })
+  })
+
   test.each([
     {
       name: 'missing partner',

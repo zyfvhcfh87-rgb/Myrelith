@@ -26,7 +26,10 @@ import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
 import {
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
+  isStretchedAudioClipPlan,
+  type TimelineAudioDirectClipPlan,
   type TimelineAudioEnvelope,
+  type TimelineAudioStretchedClipPlan,
 } from '../domain/audioMixPlan'
 import type {
   CrossfadeLegRole,
@@ -39,6 +42,15 @@ import {
   measureAudioMeterSample,
 } from '../domain/audioMeter'
 import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
+import { sourceTicksToSeconds } from '../domain/sourceTimeMap'
+import {
+  AUDIO_STRETCH_MAX_SESSIONS,
+  AUDIO_STRETCH_RECHUNK_FRAMES,
+  audioStretchSourceLeadSamples,
+  createConstantRateAudioStretcher,
+  type ConstantRateAudioStretcher,
+  type StereoPcm,
+} from './audioStretch'
 
 export const PLAYBACK_AUDIO_LOOKAHEAD_SECONDS = 0.75
 export const PLAYBACK_AUDIO_START_LEAD_SECONDS = 0.05
@@ -97,6 +109,7 @@ export interface PlaybackAudioClipRequest {
   assetId: AssetId
   startTime: number
   endTime: number
+  stretchLead?: true
 }
 
 export interface PlaybackAudioMediaSource {
@@ -197,16 +210,13 @@ export interface StartTimelineAudioOptions {
   sourceBoundsCatalog?: SourceBoundsCatalog
 }
 
-interface AudioClipPlan {
-  clipId: ClipId
-  assetId: AssetId
-  timelineStartFrame: number
-  timelineEndFrame: number
-  sourceStartFrame: number
+interface PlaybackAudioClipFields {
   timelineStartTime: number
   timelineEndTime: number
   sourceStartTime: number
   sourceEndTime: number
+  decodeStartTime: number
+  decodeEndTime: number
   volume: number
   balance: number
   leftGain: number
@@ -216,10 +226,28 @@ interface AudioClipPlan {
   envelopes: PlaybackAudioEnvelope[]
 }
 
+type DirectAudioClipPlan =
+  Omit<TimelineAudioDirectClipPlan, 'envelopes'> & PlaybackAudioClipFields
+type StretchedAudioClipPlan =
+  Omit<TimelineAudioStretchedClipPlan, 'envelopes'> & PlaybackAudioClipFields
+type AudioClipPlan = DirectAudioClipPlan | StretchedAudioClipPlan
+
+function isStretchedPlaybackPlan(
+  plan: AudioClipPlan,
+): plan is StretchedAudioClipPlan {
+  return plan.stretch !== undefined
+}
+
 interface ClipCursorState {
   plan: AudioClipPlan
   cursor: PlaybackAudioCursor
   pending: PlaybackAudioBuffer | null
+  stretchSession: ConstantRateAudioStretcher | null
+  stretchSampleRate: number | null
+  stretchChunk: StereoPcm | null
+  stretchChunkOffset: number
+  stretchSourceTime: number
+  pendingFrameOffset: number
   done: boolean
 }
 
@@ -324,35 +352,50 @@ function buildAudioClipPlans(
   for (const track of audibleTracks(doc)) {
     for (const clip of track.clips) assertClipRange(clip)
   }
-  return createTimelineAudioMixPlan(doc, catalog).clips.map((plan) => ({
-    clipId: plan.clipId,
-    assetId: plan.assetId,
-    timelineStartFrame: plan.timelineStartFrame,
-    timelineEndFrame: plan.timelineEndFrame,
-    sourceStartFrame: plan.sourceStartFrame,
-    timelineStartTime: framesToSeconds(plan.timelineStartFrame, doc.frameRate),
-    timelineEndTime: framesToSeconds(plan.timelineEndFrame, doc.frameRate),
-    sourceStartTime: framesToSeconds(plan.sourceStartFrame, doc.frameRate),
-    sourceEndTime: framesToSeconds(plan.sourceEndFrame, doc.frameRate),
-    volume: plan.volume,
-    balance: plan.balance,
-    leftGain: plan.leftGain,
-    rightGain: plan.rightGain,
-    fadeInEndTime: framesToSeconds(
-      plan.timelineStartFrame + plan.fadeInFrames,
-      doc.frameRate,
-    ),
-    fadeOutStartTime: framesToSeconds(
-      plan.timelineEndFrame - plan.fadeOutFrames,
-      doc.frameRate,
-    ),
-    envelopes: plan.envelopes.map((envelope) => ({
-      startTime: framesToSeconds(envelope.startFrame, doc.frameRate),
-      endTime: framesToSeconds(envelope.endFrame, doc.frameRate),
-      role: envelope.role,
-      curve: envelope.curve,
-    })),
-  }))
+  return createTimelineAudioMixPlan(doc, catalog).clips
+    .map((plan) => {
+      const timelineStartTime = framesToSeconds(
+        plan.timelineStartFrame,
+        doc.frameRate,
+      )
+      const timelineEndTime = framesToSeconds(
+        plan.timelineEndFrame,
+        doc.frameRate,
+      )
+      const decodeStartTime = isStretchedAudioClipPlan(plan)
+        ? sourceTicksToSeconds(plan.stretch.sourceStartTicks, doc.frameRate)
+        : framesToSeconds(plan.sourceStartFrame, doc.frameRate)
+      const decodeEndTime = isStretchedAudioClipPlan(plan)
+        ? sourceTicksToSeconds(plan.stretch.sourceEndTicks, doc.frameRate)
+        : framesToSeconds(plan.sourceEndFrame, doc.frameRate)
+      return {
+        ...plan,
+        timelineStartTime,
+        timelineEndTime,
+        sourceStartTime: isStretchedAudioClipPlan(plan)
+          ? timelineStartTime
+          : decodeStartTime,
+        sourceEndTime: isStretchedAudioClipPlan(plan)
+          ? timelineEndTime
+          : decodeEndTime,
+        decodeStartTime,
+        decodeEndTime,
+        fadeInEndTime: framesToSeconds(
+          plan.timelineStartFrame + plan.fadeInFrames,
+          doc.frameRate,
+        ),
+        fadeOutStartTime: framesToSeconds(
+          plan.timelineEndFrame - plan.fadeOutFrames,
+          doc.frameRate,
+        ),
+        envelopes: plan.envelopes.map((envelope) => ({
+          startTime: framesToSeconds(envelope.startFrame, doc.frameRate),
+          endTime: framesToSeconds(envelope.endFrame, doc.frameRate),
+          role: envelope.role,
+          curve: envelope.curve,
+        })),
+      }
+    })
 }
 
 /** Stable fingerprint for changes that require a live audio re-prime. */
@@ -430,6 +473,7 @@ export function hasAudioPlaybackContent(
 interface DecodedAudioAsset {
   input: Input
   sink: AudioBufferSink
+  sampleRate: number
   activeCursors: number
   disposed: boolean
 }
@@ -531,6 +575,7 @@ export function createMediabunnyPlaybackAudioSource(
         const asset: DecodedAudioAsset = {
           input,
           sink: new AudioBufferSink(track),
+          sampleRate: await track.getSampleRate(),
           activeCursors: 0,
           disposed: false,
         }
@@ -580,8 +625,17 @@ export function createMediabunnyPlaybackAudioSource(
     }
     let iterator: AsyncIterator<PlaybackAudioBuffer, void>
     try {
+      const supportedStretchRate = [44_100, 48_000, 96_000]
+        .includes(asset.sampleRate)
+      const startTime = request.stretchLead && supportedStretchRate
+        ? Math.max(
+            0,
+            request.startTime
+              - audioStretchSourceLeadSamples(asset.sampleRate) / asset.sampleRate,
+          )
+        : request.startTime
       iterator = asset.sink.buffers(
-        request.startTime,
+        startTime,
         request.endTime,
       )[Symbol.asyncIterator]()
     } catch (cause) {
@@ -1069,6 +1123,7 @@ export async function startTimelineAudioPlayback(
   const cursorStates = new Map<ClipId, ClipCursorState>()
   const failedClips = new Set<ClipId>()
   const exhaustedClips = new Set<ClipId>()
+  const admittedStretchClips = new Set<ClipId>()
 
   let anchorTime = output.currentTime()
   let scheduledThroughTime = fromTime
@@ -1106,6 +1161,9 @@ export async function startTimelineAudioPlayback(
     const state = cursorStates.get(clipId)
     if (!state) return
     cursorStates.delete(clipId)
+    admittedStretchClips.delete(clipId)
+    state.stretchSession?.close()
+    state.stretchChunk = null
     await state.cursor.close()
   }
 
@@ -1121,17 +1179,28 @@ export async function startTimelineAudioPlayback(
       || stopped
     ) return null
 
-    const sourceStartTime =
-      plan.sourceStartTime
-      + (Math.max(timelineStartTime, plan.timelineStartTime)
-        - plan.timelineStartTime)
+    const timelineOffset = Math.max(timelineStartTime, plan.timelineStartTime)
+      - plan.timelineStartTime
+    const sourceStartTime = isStretchedPlaybackPlan(plan)
+      ? plan.decodeStartTime
+        + timelineOffset * plan.stretch.rate.numerator
+          / plan.stretch.rate.denominator
+      : plan.sourceStartTime + timelineOffset
+    if (isStretchedPlaybackPlan(plan)) {
+      if (admittedStretchClips.size >= AUDIO_STRETCH_MAX_SESSIONS) {
+        return null
+      }
+      admittedStretchClips.add(plan.clipId)
+    }
     try {
       const cursor = await media.openClip({
         assetId: plan.assetId,
         startTime: sourceStartTime,
-        endTime: plan.sourceEndTime,
+        endTime: plan.decodeEndTime,
+        ...(isStretchedPlaybackPlan(plan) ? { stretchLead: true as const } : {}),
       })
       if (stopped) {
+        admittedStretchClips.delete(plan.clipId)
         await cursor.close()
         return null
       }
@@ -1139,11 +1208,18 @@ export async function startTimelineAudioPlayback(
         plan,
         cursor,
         pending: null,
+        stretchSession: null,
+        stretchSampleRate: null,
+        stretchChunk: null,
+        stretchChunkOffset: 0,
+        stretchSourceTime: sourceStartTime,
+        pendingFrameOffset: 0,
         done: false,
       }
       cursorStates.set(plan.clipId, state)
       return state
     } catch (cause) {
+      admittedStretchClips.delete(plan.clipId)
       if (stopped) return null
       failedClips.add(plan.clipId)
       const reason =
@@ -1163,6 +1239,122 @@ export async function startTimelineAudioPlayback(
     }
   }
 
+  const fillStretchChunk = async (
+    state: ClipCursorState,
+  ): Promise<void> => {
+    const left = new Float32Array(AUDIO_STRETCH_RECHUNK_FRAMES)
+    const right = new Float32Array(AUDIO_STRETCH_RECHUNK_FRAMES)
+    let written = 0
+    while (written < AUDIO_STRETCH_RECHUNK_FRAMES && !state.done) {
+      if (!state.pending) {
+        const step = await state.cursor.next()
+        if (step.done) {
+          state.done = true
+          exhaustedClips.add(state.plan.clipId)
+          break
+        }
+        state.pending = step.value
+        state.pendingFrameOffset = 0
+      }
+      const wrapped = state.pending
+      const buffer = wrapped.buffer
+      const sampleRate = buffer.sampleRate
+      if (
+        !Number.isSafeInteger(sampleRate)
+        || ![44_100, 48_000, 96_000].includes(sampleRate)
+      ) {
+        throw new RangeError(
+          'Audio stretch sample rate must be 44100, 48000, or 96000',
+        )
+      }
+      if (
+        !Number.isSafeInteger(buffer.length)
+        || buffer.length < 1
+        || !Number.isSafeInteger(buffer.numberOfChannels)
+        || buffer.numberOfChannels < 1
+        || buffer.numberOfChannels > 32
+      ) throw new Error('Decoded audio buffer has invalid PCM geometry')
+      if (
+        state.stretchSampleRate !== null
+        && state.stretchSampleRate !== sampleRate
+      ) throw new Error('Decoded audio sample rate changed during a stretch session')
+      state.stretchSampleRate = sampleRate
+
+      const sourceFrame = Math.max(
+        state.pendingFrameOffset,
+        Math.ceil(
+          (state.stretchSourceTime - wrapped.timestamp) * sampleRate
+          - TIME_EPSILON,
+        ),
+      )
+      if (sourceFrame >= buffer.length) {
+        state.pending = null
+        state.pendingFrameOffset = 0
+        continue
+      }
+      const copied = Math.min(
+        buffer.length - sourceFrame,
+        AUDIO_STRETCH_RECHUNK_FRAMES - written,
+      )
+      const planes = Array.from(
+        { length: buffer.numberOfChannels },
+        (_value, channel) => buffer.getChannelData(channel),
+      )
+      for (let index = 0; index < copied; index++) {
+        const folded = foldDecodedFrameToStereo(planes, sourceFrame + index)
+        left[written + index] = folded[0]
+        right[written + index] = folded[1]
+      }
+      written += copied
+      state.pendingFrameOffset = sourceFrame + copied
+      state.stretchSourceTime =
+        wrapped.timestamp + state.pendingFrameOffset / sampleRate
+      if (state.pendingFrameOffset >= buffer.length) {
+        state.pending = null
+        state.pendingFrameOffset = 0
+      }
+    }
+    state.stretchChunk = { left, right }
+    state.stretchChunkOffset = 0
+  }
+
+  const readStretchSource = async (
+    state: ClipCursorState,
+    sampleCount: number,
+  ): Promise<StereoPcm> => {
+    const left = new Float32Array(sampleCount)
+    const right = new Float32Array(sampleCount)
+    let written = 0
+    while (written < sampleCount) {
+      if (
+        !state.stretchChunk
+        || state.stretchChunkOffset === state.stretchChunk.left.length
+      ) await fillStretchChunk(state)
+      const chunk = state.stretchChunk!
+      const copied = Math.min(
+        chunk.left.length - state.stretchChunkOffset,
+        sampleCount - written,
+      )
+      left.set(
+        chunk.left.subarray(
+          state.stretchChunkOffset,
+          state.stretchChunkOffset + copied,
+        ),
+        written,
+      )
+      right.set(
+        chunk.right.subarray(
+          state.stretchChunkOffset,
+          state.stretchChunkOffset + copied,
+        ),
+        written,
+      )
+      state.stretchChunkOffset += copied
+      written += copied
+    }
+    return { left, right }
+  }
+
   const readPlanInterval = async (
     plan: AudioClipPlan,
     intervalStart: number,
@@ -1174,6 +1366,78 @@ export async function startTimelineAudioPlayback(
 
     const cursorState = await openCursor(plan, timelineStart)
     if (!cursorState || stopped) return []
+    if (isStretchedPlaybackPlan(plan)) {
+      try {
+        if (!cursorState.pending) {
+          const step = await cursorState.cursor.next()
+          if (step.done) {
+            cursorState.done = true
+            exhaustedClips.add(plan.clipId)
+            await closeCursor(plan.clipId)
+            return []
+          }
+          cursorState.pending = step.value
+          cursorState.pendingFrameOffset = 0
+        }
+        const sampleRate = cursorState.pending.buffer.sampleRate
+        if (
+          !Number.isSafeInteger(sampleRate)
+          || ![44_100, 48_000, 96_000].includes(sampleRate)
+        ) {
+          throw new RangeError(
+            'Audio stretch sample rate must be 44100, 48000, or 96000',
+          )
+        }
+        const outputStartSample = Math.round(
+          (timelineStart - plan.timelineStartTime) * sampleRate,
+        )
+        const outputEndSample = Math.round(
+          (timelineEnd - plan.timelineStartTime) * sampleRate,
+        )
+        const sampleCount = outputEndSample - outputStartSample
+        if (sampleCount < 1) return []
+        cursorState.stretchSampleRate = sampleRate
+        cursorState.stretchSession ??= createConstantRateAudioStretcher({
+          stretch: plan.stretch,
+          sampleRate,
+          outputStartSample,
+        })
+        const stretched = await cursorState.stretchSession.pull(
+          sampleCount,
+          (count) => readStretchSource(cursorState, count),
+        )
+        const buffer = context.createBuffer(2, sampleCount, sampleRate)
+        buffer.getChannelData(0).set(stretched.left)
+        buffer.getChannelData(1).set(stretched.right)
+        const wrapped: PlaybackAudioBuffer = {
+          buffer,
+          timestamp: timelineStart,
+          duration: sampleCount / sampleRate,
+        }
+        const events = preparedEventsForOverlap(
+          plan,
+          wrapped,
+          timelineStart,
+          timelineStart,
+          timelineStart + wrapped.duration,
+        )
+        if (timelineEnd >= plan.timelineEndTime - TIME_EPSILON) {
+          await closeCursor(plan.clipId)
+        }
+        return events
+      } catch (cause) {
+        if (!stopped) {
+          failedClips.add(plan.clipId)
+          warnMedia(plan, 'decode', cause)
+          try {
+            await closeCursor(plan.clipId)
+          } catch (cleanupCause) {
+            warnGlobal('cleanup', cleanupCause)
+          }
+        }
+        return []
+      }
+    }
     const sourceStart =
       plan.sourceStartTime + (timelineStart - plan.timelineStartTime)
     const sourceEnd =

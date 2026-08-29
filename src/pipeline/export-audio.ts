@@ -11,11 +11,21 @@ import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import {
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
+  isStretchedAudioClipPlan,
   type TimelineAudioClipPlan,
   type TimelineAudioEnvelope,
 } from '../domain/audioMixPlan'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
+import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import { docDurationFrames } from '../domain/selectors'
+import { audioSampleFromSourceTicks } from '../domain/sourceTimeMap'
+import {
+  AUDIO_STRETCH_MAX_SESSIONS,
+  AUDIO_STRETCH_RECHUNK_FRAMES,
+  audioStretchSourceLeadSamples,
+  createConstantRateAudioStretcher,
+  type StereoPcm,
+} from './audioStretch'
 
 export const EXPORT_AUDIO_CHANNELS = 2
 export const EXPORT_AUDIO_BLOCK_SAMPLES = 1024
@@ -318,7 +328,7 @@ interface SampleAudioEnvelope extends TimelineAudioEnvelope {
   endSample: number
 }
 
-interface SampleAudioClipPlan extends TimelineAudioClipPlan {
+type SampleAudioClipPlan = TimelineAudioClipPlan & {
   timelineStartSample: number
   timelineEndSample: number
   fadeInEndSample: number
@@ -358,6 +368,107 @@ async function closeReaders(
   if (failure !== undefined) throw failure
 }
 
+function assertStretchSessionLimit(plans: readonly SampleAudioClipPlan[]): void {
+  const events = plans
+    .filter(isStretchedAudioClipPlan)
+    .flatMap((plan) => [
+      { frame: plan.timelineStartFrame, delta: 1 },
+      { frame: plan.timelineEndFrame, delta: -1 },
+    ])
+    .sort((left, right) => left.frame - right.frame || left.delta - right.delta)
+  let active = 0
+  for (const event of events) {
+    active += event.delta
+    if (active > AUDIO_STRETCH_MAX_SESSIONS) {
+      throw new Error(
+        `Export supports at most ${AUDIO_STRETCH_MAX_SESSIONS} concurrent audio stretch sessions`,
+      )
+    }
+  }
+}
+
+function createStretchedExportReader(
+  inner: ExportAudioClipReader,
+  plan: Extract<SampleAudioClipPlan, { stretch: object }>,
+  sampleRate: number,
+  preRollSamples: number,
+): ExportAudioClipReader {
+  const session = createConstantRateAudioStretcher({
+    stretch: plan.stretch,
+    sampleRate,
+    outputStartSample: 0,
+  })
+  let chunk: StereoPcm | null = null
+  let chunkOffset = 0
+  let remainingPreRoll = preRollSamples
+  let closePromise: Promise<void> | null = null
+
+  const fillChunk = async (): Promise<void> => {
+    const channels = await inner.read(AUDIO_STRETCH_RECHUNK_FRAMES)
+    if (
+      channels.length < 1
+      || channels.some((plane) =>
+        !(plane instanceof Float32Array)
+        || plane.length !== AUDIO_STRETCH_RECHUNK_FRAMES
+      )
+    ) {
+      throw new Error(
+        `Audio reader for clip "${plan.clipId}" returned an invalid stretch block`,
+      )
+    }
+    const left = new Float32Array(AUDIO_STRETCH_RECHUNK_FRAMES)
+    const right = new Float32Array(AUDIO_STRETCH_RECHUNK_FRAMES)
+    if (channels.length === EXPORT_AUDIO_CHANNELS) {
+      left.set(channels[0])
+      right.set(channels[1])
+    } else {
+      for (let frame = 0; frame < AUDIO_STRETCH_RECHUNK_FRAMES; frame++) {
+        const folded = foldDecodedFrameToStereo(channels, frame)
+        left[frame] = folded[0]
+        right[frame] = folded[1]
+      }
+    }
+    chunk = { left, right }
+    chunkOffset = 0
+  }
+
+  const readSource = async (sampleCount: number): Promise<StereoPcm> => {
+    const left = new Float32Array(sampleCount)
+    const right = new Float32Array(sampleCount)
+    let written = 0
+    while (written < sampleCount) {
+      if (!chunk || chunkOffset === chunk.left.length) await fillChunk()
+      const available = chunk!.left.length - chunkOffset
+      if (remainingPreRoll > 0) {
+        const skipped = Math.min(available, remainingPreRoll)
+        chunkOffset += skipped
+        remainingPreRoll -= skipped
+        continue
+      }
+      const copied = Math.min(available, sampleCount - written)
+      left.set(chunk!.left.subarray(chunkOffset, chunkOffset + copied), written)
+      right.set(chunk!.right.subarray(chunkOffset, chunkOffset + copied), written)
+      chunkOffset += copied
+      written += copied
+    }
+    return { left, right }
+  }
+
+  return {
+    read: async (sampleCount) => {
+      const output = await session.pull(sampleCount, readSource)
+      return [output.left, output.right]
+    },
+    close: () => {
+      if (closePromise) return closePromise
+      session.close()
+      chunk = null
+      closePromise = Promise.resolve(inner.close())
+      return closePromise
+    },
+  }
+}
+
 /**
  * Stateful sequential mixer. Its retained decoded state is bounded by the
  * number of simultaneously audible tracks; emitted PCM is capped at one
@@ -382,8 +493,8 @@ export class TimelineAudioMixer {
     this.doc = doc
     this.source = source
     this.durationFrames = docDurationFrames(doc)
-    this.mixPlans = createTimelineAudioMixPlan(doc, catalog).clips.map(
-      (plan) => ({
+    this.mixPlans = createTimelineAudioMixPlan(doc, catalog).clips
+      .map((plan) => ({
         ...plan,
         timelineStartSample: audioSampleBoundary(plan.timelineStartFrame, doc),
         timelineEndSample: audioSampleBoundary(plan.timelineEndFrame, doc),
@@ -400,8 +511,8 @@ export class TimelineAudioMixer {
           startSample: audioSampleBoundary(envelope.startFrame, doc),
           endSample: audioSampleBoundary(envelope.endFrame, doc),
         })),
-      }),
-    )
+      }))
+    assertStretchSessionLimit(this.mixPlans)
     this.hasAudio = doc.tracks.some(
       (track) => track.kind === 'audio' && track.clips.length > 0,
     )
@@ -431,6 +542,16 @@ export class TimelineAudioMixer {
 
     for (const plan of plans) {
       if (this.readers.has(plan.clipId)) continue
+      if (
+        isStretchedAudioClipPlan(plan)
+        && [...this.readers.values()].filter((active) =>
+          isStretchedAudioClipPlan(active.plan)
+        ).length >= AUDIO_STRETCH_MAX_SESSIONS
+      ) {
+        throw new Error(
+          `Export supports at most ${AUDIO_STRETCH_MAX_SESSIONS} concurrent audio stretch sessions`,
+        )
+      }
       const timelineStartSample = audioSampleBoundary(
         plan.timelineStartFrame,
         this.doc,
@@ -439,29 +560,42 @@ export class TimelineAudioMixer {
         plan.timelineEndFrame,
         this.doc,
       )
-      const sourceStartSample =
-        timelineStartSample +
-        audioSamplePhaseOffset(
-          plan.sourceStartFrame,
-          plan.timelineStartFrame,
-          this.doc,
-        )
+      const sourceStartSample = isStretchedAudioClipPlan(plan)
+        ? audioSampleFromSourceTicks(
+            plan.stretch.sourceStartTicks,
+            this.doc.frameRate,
+            this.doc.audioSampleRate,
+          )
+        : timelineStartSample + audioSamplePhaseOffset(
+            plan.sourceStartFrame,
+            plan.timelineStartFrame,
+            this.doc,
+          )
       if (!Number.isSafeInteger(sourceStartSample) || sourceStartSample < 0) {
         throw new RangeError(
           `Clip "${plan.clipId}" has an invalid audio in-point`,
         )
       }
-      const sourceEndSample =
-        sourceStartSample + (timelineEndSample - timelineStartSample)
+      const sourceEndSample = isStretchedAudioClipPlan(plan)
+        ? audioSampleFromSourceTicks(
+            plan.stretch.sourceEndTicks,
+            this.doc.frameRate,
+            this.doc.audioSampleRate,
+          )
+        : sourceStartSample + (timelineEndSample - timelineStartSample)
       if (!Number.isSafeInteger(sourceEndSample)) {
         throw new RangeError(
           `Clip "${plan.clipId}" audio range is too large`,
         )
       }
-      const reader = await this.source.openClip({
+      const lead = isStretchedAudioClipPlan(plan)
+        ? audioStretchSourceLeadSamples(this.doc.audioSampleRate)
+        : 0
+      const openStartSample = Math.max(0, sourceStartSample - lead)
+      const inner = await this.source.openClip({
         clipId: plan.clipId,
         assetId: plan.assetId,
-        startSample: sourceStartSample,
+        startSample: openStartSample,
         endSample: sourceEndSample,
         sampleRate: this.doc.audioSampleRate,
         channelCount: EXPORT_AUDIO_CHANNELS,
@@ -469,6 +603,20 @@ export class TimelineAudioMixer {
           ? { requireComplete: true as const }
           : {}),
       })
+      let reader: ExportAudioClipReader
+      try {
+        reader = isStretchedAudioClipPlan(plan)
+          ? createStretchedExportReader(
+              inner,
+              plan,
+              this.doc.audioSampleRate,
+              sourceStartSample - openStartSample,
+            )
+          : inner
+      } catch (cause) {
+        await inner.close()
+        throw cause
+      }
       this.readers.set(plan.clipId, { plan, reader })
     }
   }

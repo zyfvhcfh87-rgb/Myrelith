@@ -594,13 +594,12 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   discrete channels fold alternately at -6 dB. The live graph must never drop
   channels 2+ or a valid mono source at a two-output ChannelSplitter; mono is
   duplicated into both stereo legs before meter or balance routing.
-- Timing audio is deliberately supported only for an exact integer-origin 1×
-  mapping; an explicit all-1× curve is equivalent and remains supported. Any
-  constant non-1× speed, variable-speed ramp, or freeze is omitted from the
-  shared live/export mix plan and produces silence with an explicit reason;
-  preview and export therefore agree. Pitch-safe time stretching is a separate
-  future capability and must not be approximated with divergent browser
-  `playbackRate` behavior. The Inspector exposes this policy for every map.
+- Timing audio keeps exact integer-origin 1×, including an all-1× curve, on
+  the existing decode path. Constant 0.25×–4× maps other than 1× share one
+  first-party WSOLA session for live playback and export. Pitch stays put.
+  Do not approximate stretch with browser `playbackRate`. Variable-speed
+  ramps, freezes, invalid curves, and sub-frame 1× origins stay silent with a
+  named reason. The Inspector prints `clipAudioPresentation` for every map.
 
 ## Editing-proxy representation and cache
 

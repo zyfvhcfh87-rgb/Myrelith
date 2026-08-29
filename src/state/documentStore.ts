@@ -128,6 +128,7 @@ import {
   linkedClearClipSpeedRamp,
   linkedRemoveClipSpeedPoint,
   linkedRetimeClip,
+  linkedRetimeClips,
   linkedSetClipSpeedPoint,
   linkedSlideClip,
   linkedSlipClip,
@@ -199,6 +200,8 @@ export interface DocumentState {
   rippleTrim: (clipId: ClipId, edge: TrimEdge, deltaFrames: number) => void
   /** Change constant speed for a timed clip and every linked partner. */
   retimeClip: (clipId: ClipId, rate: SourceTimeRate) => void
+  /** Change constant speed for a selection; each root expands its link group. */
+  retimeClips: (clipIds: readonly ClipId[], rate: SourceTimeRate) => void
   /** Add or replace one clip-local speed-ramp point across linked partners. */
   setClipSpeedPoint: (
     clipId: ClipId,
@@ -559,6 +562,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   retimeClip: (clipId, rate) =>
     set((state) => commit(state, linkedRetimeClip(state.doc, clipId, rate))),
+
+  retimeClips: (clipIds, rate) =>
+    set((state) => commit(state, linkedRetimeClips(state.doc, clipIds, rate))),
 
   setClipSpeedPoint: (clipId, frame, rate, easing) =>
     set((state) => commit(
