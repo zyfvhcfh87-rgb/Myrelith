@@ -412,6 +412,46 @@ describe('portable project file', () => {
     )).toEqual(parsed.document.tracks.flatMap((track) => track.clips).map(() => null))
   })
 
+  test('migrates schema-14 documents to schema 15 without rewriting clips', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 14
+    const before = JSON.stringify(legacy.document.tracks)
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(JSON.stringify(parsed.document.tracks)).toBe(before)
+  })
+
+  test('round-trips volume and balance animation tracks on audio clips', () => {
+    const project = makeProject()
+    project.document.tracks[1].clips[0].animation = {
+      tracks: [{
+        property: 'volume',
+        keyframes: [
+          {
+            frame: 0,
+            sourceTimeTicks: 0,
+            value: 0,
+            easing: { type: 'linear' },
+          },
+          {
+            frame: 4,
+            sourceTimeTicks: 4_000_000,
+            value: 1,
+            easing: { type: 'linear' },
+          },
+        ],
+      }],
+      effectTracks: [],
+    }
+
+    const parsed = parseProjectFile(serializeProjectFile(project))
+    expect(parsed.document.tracks[1].clips[0].animation).toEqual(
+      project.document.tracks[1].clips[0].animation,
+    )
+  })
+
   test('round-trips supported and bounded future lens intent without substitution', () => {
     const supported = makeProject()
     supported.document.tracks[0].clips[0].lensCorrection = {

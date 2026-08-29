@@ -283,6 +283,84 @@ export function secondsToFrames(seconds: number, rate: FrameRate): number {
   return Math.round((seconds * rate.num) / rate.den)
 }
 
+function assertPositiveSafeInteger(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive safe integer`)
+  }
+}
+
+export interface AudioSampleDocument {
+  readonly frameRate: FrameRate
+  readonly audioSampleRate: number
+}
+
+/**
+ * Map one absolute document-frame boundary onto the document audio grid.
+ * Positive half-sample ties round upward, matching Math.round without ever
+ * introducing floating-point accumulation.
+ */
+export function audioSampleBoundary(
+  frame: number,
+  doc: AudioSampleDocument,
+): number {
+  if (!Number.isSafeInteger(frame) || frame < 0) {
+    throw new RangeError('Audio boundary frame must be a non-negative safe integer')
+  }
+  assertValidRate(doc.frameRate)
+  assertPositiveSafeInteger(doc.audioSampleRate, 'Audio sample rate')
+
+  const divisor = BigInt(doc.frameRate.num)
+  const numerator =
+    BigInt(frame) *
+    BigInt(doc.frameRate.den) *
+    BigInt(doc.audioSampleRate)
+  const rounded = (numerator + divisor / 2n) / divisor
+  if (rounded > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RangeError('Audio sample boundary exceeds the safe integer range')
+  }
+  return Number(rounded)
+}
+
+/**
+ * Clip-local frame at one mix-grid sample inside a known document frame.
+ * The containing frame comes from the mixer so this stays exact on NTSC
+ * frames whose sample length is not constant.
+ */
+export function clipLocalFrameAtSample(
+  clipStartFrame: number,
+  sample: number,
+  documentFrame: number,
+  doc: AudioSampleDocument,
+): number {
+  if (!Number.isSafeInteger(clipStartFrame)) {
+    throw new RangeError('Clip start frame must be a safe integer')
+  }
+  if (!Number.isSafeInteger(sample) || sample < 0) {
+    throw new RangeError('Sample index must be a non-negative safe integer')
+  }
+  const start = audioSampleBoundary(documentFrame, doc)
+  const end = audioSampleBoundary(documentFrame + 1, doc)
+  const span = end - start
+  const fraction = span <= 0 ? 0 : (sample - start) / span
+  return documentFrame - clipStartFrame + fraction
+}
+
+/** Clip-local frame at a timeline time in seconds. Integer frame times round-trip. */
+export function clipLocalFrameAtSeconds(
+  clipStartFrame: number,
+  timelineSeconds: number,
+  rate: FrameRate,
+): number {
+  assertValidRate(rate)
+  if (!Number.isSafeInteger(clipStartFrame)) {
+    throw new TypeError('clip start frame must be a safe integer')
+  }
+  if (!Number.isFinite(timelineSeconds)) {
+    throw new TypeError(`timeline seconds must be finite, got ${timelineSeconds}`)
+  }
+  return (timelineSeconds * rate.num) / rate.den - clipStartFrame
+}
+
 /* ------------------------------------------------------------------ */
 /* RationalTime arithmetic                                              */
 /* ------------------------------------------------------------------ */

@@ -3,6 +3,7 @@
 import type {
   AssetId,
   Clip,
+  ClipAnimationTrack,
   ClipId,
   TimelineDoc,
   TrackId,
@@ -14,7 +15,8 @@ import {
   type CrossfadeLegRole,
   type SourceBoundsCatalog,
 } from './crossfadePlan'
-import { audibleTracks } from './selectors'
+import { clipAnimationTrack, evaluateAnimationTrack } from './clipAnimation'
+import { audibleTracks, clipContributesAudioOutput } from './selectors'
 import { rangeEnd } from './time'
 import {
   clipAudioSettings,
@@ -45,15 +47,43 @@ export interface TimelineAudioClipFields {
   assetId: AssetId
   timelineStartFrame: number
   timelineEndFrame: number
+  /** Authored clip start; animation origin even after crossfade handle expansion. */
+  clipTimelineStartFrame: number
   sourceStartFrame: number
   sourceEndFrame: number
   volume: number
   balance: number
   leftGain: number
   rightGain: number
+  volumeAnimation: ClipAnimationTrack | null
+  balanceAnimation: ClipAnimationTrack | null
   fadeInFrames: number
   fadeOutFrames: number
   envelopes: TimelineAudioEnvelope[]
+}
+
+export interface ClipAudioGains {
+  readonly volume: number
+  readonly balance: number
+  readonly leftGain: number
+  readonly rightGain: number
+}
+
+export function clipAudioGainsAtLocalFrame(
+  plan: Pick<
+    TimelineAudioClipFields,
+    'volume' | 'balance' | 'volumeAnimation' | 'balanceAnimation'
+  >,
+  localFrame: number,
+): ClipAudioGains {
+  const volume = plan.volumeAnimation
+    ? evaluateAnimationTrack(plan.volumeAnimation, localFrame, plan.volume)
+    : plan.volume
+  const balance = plan.balanceAnimation
+    ? evaluateAnimationTrack(plan.balanceAnimation, localFrame, plan.balance)
+    : plan.balance
+  const [leftGain, rightGain] = stereoBalanceGains(balance)
+  return { volume, balance, leftGain, rightGain }
 }
 
 export interface ConstantRateAudioStretch {
@@ -264,7 +294,7 @@ export function createTimelineAudioMixPlan(
       if (audioError) {
         throw new RangeError(`Audio clip "${clip.id}" ${audioError}`)
       }
-      if (clip.volume <= 0 || !audio.enabled) continue
+      if (!clipContributesAudioOutput(clip)) continue
       const [leftGain, rightGain] = stereoBalanceGains(audio.balance)
       const plan: TimelineAudioClipFields = {
         clipId: clip.id,
@@ -272,12 +302,15 @@ export function createTimelineAudioMixPlan(
         assetId: clip.assetId,
         timelineStartFrame: clip.timelineRange.startFrame,
         timelineEndFrame,
+        clipTimelineStartFrame: clip.timelineRange.startFrame,
         sourceStartFrame: sourceFrameAtTimelineOffset(clipSourceTimeMap(clip), 0),
         sourceEndFrame,
         volume: clip.volume,
         balance: audio.balance,
         leftGain,
         rightGain,
+        volumeAnimation: clipAnimationTrack(clip, 'volume'),
+        balanceAnimation: clipAnimationTrack(clip, 'balance'),
         fadeInFrames: audio.fadeInFrames,
         fadeOutFrames: audio.fadeOutFrames,
         envelopes: [],

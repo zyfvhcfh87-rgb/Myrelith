@@ -66,7 +66,7 @@ export type {
   ClipAudioSettingsPatch,
   TextPropsPatch,
 } from './operations/audioText'
-export { updateClipAudio, updateTextClip } from './operations/audioText'
+export { updateClipAudio, updateClipAudioAtFrame, updateTextClip } from './operations/audioText'
 export type { TrackFlagsPatch } from './operations/tracks'
 export {
   MAX_CLIP_VOLUME,

@@ -64,6 +64,41 @@ describe('clip animation evaluator', () => {
     expect(evaluateAnimationTrack(track, 15, -10)).toBe(100)
   })
 
+  test('interpolates finite fractional frames for audio-rate evaluation', () => {
+    const track = positionTrack()
+
+    expect(evaluateAnimationTrack(track, 2.5, -10)).toBe(25)
+    expect(evaluateAnimationTrack(track, Number.NaN, -10)).toBe(-10)
+  })
+
+  test('resolves volume and balance without mutating the durable clip', () => {
+    const clip = mediaClip({
+      tracks: [
+        {
+          property: 'volume',
+          keyframes: [
+            { frame: 0, value: 0, easing: linear },
+            { frame: 10, value: 2, easing: linear },
+          ],
+        },
+        {
+          property: 'balance',
+          keyframes: [
+            { frame: 0, value: -1, easing: linear },
+            { frame: 10, value: 1, easing: linear },
+          ],
+        },
+      ],
+    })
+
+    const resolved = resolveClipAnimationAtFrame(clip, 105)
+
+    expect(resolved.volume).toBe(1)
+    expect(resolved.audio?.balance).toBe(0)
+    expect(clip.volume).toBe(1)
+    expect(clip.audio).toBeUndefined()
+  })
+
   test('supports hold and deterministic cubic-bezier easing', () => {
     expect(evaluateAnimationTrack(positionTrack({ type: 'hold' }), 9, -10)).toBe(0)
     expect(evaluateAnimationTrack(positionTrack({

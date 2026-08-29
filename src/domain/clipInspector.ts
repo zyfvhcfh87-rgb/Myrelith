@@ -15,6 +15,10 @@ export const MIN_CLIP_SCALE = 0
 export const MAX_CLIP_SCALE = 100
 export const MIN_AUDIO_BALANCE = -1
 export const MAX_AUDIO_BALANCE = 1
+/** Linear clip gain floor. Zero is valid and silent. */
+export const MIN_CLIP_VOLUME = 0
+/** Upper clip-volume bound: 200% gain, the usual NLE headroom. */
+export const MAX_CLIP_VOLUME = 2
 
 export const DEFAULT_CLIP_VISUAL_SETTINGS: Readonly<ClipVisualSettings> =
   Object.freeze({

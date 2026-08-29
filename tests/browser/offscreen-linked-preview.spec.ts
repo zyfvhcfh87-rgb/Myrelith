@@ -85,7 +85,7 @@ function linkedProjectFixture(hiddenVideoPartner = false): string {
     format: 'myrelith-project',
     formatVersion: 5,
     document: {
-      schemaVersion: 14,
+      schemaVersion: 15,
       id: 'offscreen-linked-preview-doc',
       name: 'Offscreen linked preview',
       frameRate: { num: 30, den: 1 },

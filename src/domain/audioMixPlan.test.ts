@@ -175,6 +175,9 @@ describe('timeline audio mix plan', () => {
       balance: 0,
       leftGain: 1,
       rightGain: 1,
+      clipTimelineStartFrame: 10,
+      volumeAnimation: null,
+      balanceAnimation: null,
       fadeInFrames: 0,
       fadeOutFrames: 0,
       envelopes: [{
@@ -304,12 +307,15 @@ describe('timeline audio mix plan', () => {
         assetId: 'audio-from-asset',
         timelineStartFrame: 10,
         timelineEndFrame: 23,
+        clipTimelineStartFrame: 10,
         sourceStartFrame: 30,
         sourceEndFrame: 43,
         volume: 1,
         balance: 0,
         leftGain: 1,
         rightGain: 1,
+        volumeAnimation: null,
+        balanceAnimation: null,
         fadeInFrames: 0,
         fadeOutFrames: 0,
         envelopes: [{
@@ -326,12 +332,15 @@ describe('timeline audio mix plan', () => {
         assetId: 'audio-to-asset',
         timelineStartFrame: 18,
         timelineEndFrame: 30,
+        clipTimelineStartFrame: 20,
         sourceStartFrame: 48,
         sourceEndFrame: 60,
         volume: 1,
         balance: 0,
         leftGain: 1,
         rightGain: 1,
+        volumeAnimation: null,
+        balanceAnimation: null,
         fadeInFrames: 0,
         fadeOutFrames: 0,
         envelopes: [{
@@ -414,6 +423,26 @@ describe('timeline audio mix plan', () => {
         fadeOutFrames: 4,
       }),
     ])
+  })
+
+  test('includes a silent clip when volume keys become audible', () => {
+    const input = fixture({ fromVolume: 0 })
+    input.doc.tracks[1].clips[0].animation = {
+      tracks: [{
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 0, easing: { type: 'linear' } },
+          { frame: 8, value: 1, easing: { type: 'linear' } },
+        ],
+      }],
+      effectTracks: [],
+    }
+
+    const planned = createTimelineAudioMixPlan(input.doc, input.catalog).clips
+      .find((item) => item.clipId === 'audio-from')
+
+    expect(planned?.volume).toBe(0)
+    expect(planned?.volumeAnimation?.keyframes).toHaveLength(2)
   })
 })
 

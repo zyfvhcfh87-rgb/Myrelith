@@ -1,5 +1,8 @@
 import type { ClipId, TimelineDoc, Track, TrackId, TrackKind } from '../schema';
+import { MAX_CLIP_VOLUME } from '../clipInspector';
 import { locateClip, reject, withoutLinkGroupId, withTrack } from './operationInternals';
+
+export { MAX_CLIP_VOLUME }
 
 /** Per-track toggle flags (timeline header buttons). */
 export interface TrackFlagsPatch {
@@ -196,9 +199,6 @@ export function removeTrack(doc: TimelineDoc, trackId: TrackId): TimelineDoc {
   }
   return { ...doc, tracks }
 }
-
-/** Upper clip-volume bound: 200% gain, the usual NLE headroom. */
-export const MAX_CLIP_VOLUME = 2
 
 /**
  * Set a clip's audio volume (linear gain, clamped to [0, MAX_CLIP_VOLUME]

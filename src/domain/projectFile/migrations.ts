@@ -447,6 +447,12 @@ function migrateAdjustmentItems(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 15, tracks }
 }
 
+/** Upgrade schema-15 documents so volume/balance keys are legal animation properties. */
+function migrateClipAudioAutomation(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  return { ...document, schemaVersion: 16 }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -507,6 +513,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 14) {
     migrated = migrateAdjustmentItems(migrated)
+  }
+  if (migrated.schemaVersion === 15) {
+    migrated = migrateClipAudioAutomation(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {

@@ -46,6 +46,8 @@ import {
   splitClipAtFrame,
   trimClip,
   updateClipAudio,
+  updateClipAudioAtFrame,
+  setClipKeyframe,
   updateClipTransform,
   updateClipVisual,
   updateEffectParams,
@@ -2071,6 +2073,30 @@ describe('updateClipAudio', () => {
     expect(left.audio).toMatchObject({ fadeInFrames: 40, fadeOutFrames: 40 })
     expect(right.timelineRange.durationFrames).toBe(60)
     expect(right.audio).toMatchObject({ fadeInFrames: 60, fadeOutFrames: 60 })
+  })
+
+  test('keys volume at the playhead once that track is animated', () => {
+    const doc = makeDoc()
+    const animated = setClipKeyframe(doc, 'clipD', 'volume', {
+      frame: 0,
+      value: 1,
+      easing: { type: 'linear' },
+    })
+    const keyed = updateClipAudioAtFrame(animated, 'clipD', 10, { volume: 0.25 })
+    const clip = clipIn(keyed, 'A1', 'clipD')
+
+    expect(clip.volume).toBe(1)
+    expect(clip.animation?.tracks).toEqual([
+      expect.objectContaining({
+        property: 'volume',
+        keyframes: expect.arrayContaining([
+          expect.objectContaining({ frame: 0, value: 1 }),
+          expect.objectContaining({ frame: 10, value: 0.25 }),
+        ]),
+      }),
+    ])
+    expect(updateClipAudioAtFrame(animated, 'clipD', 10_000, { volume: 0.5 }))
+      .toBe(animated)
   })
 })
 

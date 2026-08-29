@@ -106,6 +106,7 @@ import {
   setCrossfadeSettingsWithSourceBounds,
   setTrackFlags,
   updateClipAudio,
+  updateClipAudioAtFrame,
   updateClipTransform,
   updateClipVisual,
   updateClipVisualAtFrame,
@@ -451,6 +452,12 @@ export interface DocumentState {
   setClipVolume: (clipId: ClipId, volume: number) => void
   /** Atomically edit/reset the complete static audio Inspector surface. */
   updateClipAudio: (clipId: ClipId, patch: ClipAudioPatch) => void
+  /** Edit static audio fields or upsert active volume/balance keys at one playhead frame. */
+  updateClipAudioAtFrame: (
+    clipId: ClipId,
+    timelineFrame: number,
+    patch: ClipAudioPatch,
+  ) => void
   /**
    * Add a new empty V#/A# track (timeline header "+ track" buttons). One
    * history entry — an added track is undoable like any other edit.
@@ -1011,6 +1018,12 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   updateClipAudio: (clipId, patch) =>
     set((state) => commit(state, updateClipAudio(state.doc, clipId, patch))),
+
+  updateClipAudioAtFrame: (clipId, timelineFrame, patch) =>
+    set((state) => commit(
+      state,
+      updateClipAudioAtFrame(state.doc, clipId, timelineFrame, patch),
+    )),
 
   addTrack: (kind) => set((state) => commit(state, addTrack(state.doc, kind))),
 

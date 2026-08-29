@@ -821,6 +821,45 @@ describe('TimelineAudioMixer selection and mapping', () => {
     )
     await mixer.close()
   })
+
+  test('applies linear volume automation on the sample grid', async () => {
+    const clip = makeClip('ramped', 0, 2, { volume: 0 })
+    clip.animation = {
+      tracks: [{
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 0, easing: { type: 'linear' } },
+          { frame: 2, value: 1, easing: { type: 'linear' } },
+        ],
+      }],
+      effectTracks: [],
+    }
+    const doc = makeDoc(
+      [makeTrack('A1', 'audio', [clip])],
+      { num: 1, den: 1 },
+      8,
+    )
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    const samples: number[] = []
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        samples.push(...block.channels[0])
+      })
+      await mixer.writeFrame(1, async (block) => {
+        samples.push(...block.channels[0])
+      })
+    } finally {
+      await mixer.close()
+    }
+
+    expect(samples[0]).toBeCloseTo(0)
+    expect(samples[4]).toBeCloseTo(0.25, 5)
+    expect(samples[8]).toBeCloseTo(0.5, 5)
+  })
 })
 
 describe('TimelineAudioMixer streaming and ownership', () => {

@@ -1,6 +1,24 @@
 import type { Clip, ClipAnimation, ClipAnimationEasing, ClipAnimationProperty, ClipAudioSettings, ClipVisualSettings, Effect, FrameRate, SourceTimeMap, SourceTimeSpeedCurve, TextProps, Track, Transform } from '../schema';
-import { ANIMATABLE_CLIP_PROPERTIES, clipAnimationValidationError, defaultClipAnimation, MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP, MAX_ANIMATED_FINITE_MAGNITUDE, MAX_KEYFRAME_FRAME, MAX_KEYFRAMES_PER_TRACK } from '../clipAnimation';
-import { clipAudioSettingsValidationError, clipVisualSettingsValidationError, MAX_CLIP_SCALE, MIN_CLIP_SCALE } from '../clipInspector';
+import {
+  ANIMATABLE_CLIP_PROPERTIES,
+  clipAnimationKindError,
+  clipAnimationValidationError,
+  defaultClipAnimation,
+  MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP,
+  MAX_ANIMATED_FINITE_MAGNITUDE,
+  MAX_KEYFRAME_FRAME,
+  MAX_KEYFRAMES_PER_TRACK,
+} from '../clipAnimation';
+import {
+  clipAudioSettingsValidationError,
+  clipVisualSettingsValidationError,
+  MAX_AUDIO_BALANCE,
+  MAX_CLIP_SCALE,
+  MAX_CLIP_VOLUME,
+  MIN_AUDIO_BALANCE,
+  MIN_CLIP_SCALE,
+  MIN_CLIP_VOLUME,
+} from '../clipInspector';
 import { microsecondsDurationToFrames } from '../time';
 import { isProceduralTextAssetId, isSupportedTextColor, isSupportedTextFontFamily, TEXT_OVERLAY_LIMITS, textPropsValidationError, proceduralTextAssetId } from '../textOverlay';
 import { blendModeIntentValidationError } from '../blendModes';
@@ -166,11 +184,15 @@ export function validateClipAnimation(
         fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
       }
       const minimum = property === 'opacity' ? 0
-        : property === 'scale-x' || property === 'scale-y' ? MIN_CLIP_SCALE
-          : -MAX_ANIMATED_FINITE_MAGNITUDE
+        : property === 'volume' ? MIN_CLIP_VOLUME
+          : property === 'balance' ? MIN_AUDIO_BALANCE
+            : property === 'scale-x' || property === 'scale-y' ? MIN_CLIP_SCALE
+              : -MAX_ANIMATED_FINITE_MAGNITUDE
       const maximum = property === 'opacity' ? 1
-        : property === 'scale-x' || property === 'scale-y' ? MAX_CLIP_SCALE
-          : MAX_ANIMATED_FINITE_MAGNITUDE
+        : property === 'volume' ? MAX_CLIP_VOLUME
+          : property === 'balance' ? MAX_AUDIO_BALANCE
+            : property === 'scale-x' || property === 'scale-y' ? MAX_CLIP_SCALE
+              : MAX_ANIMATED_FINITE_MAGNITUDE
       finiteNumber(keyframe.value, `${keyframePath}.value`, minimum, maximum)
       validateAnimationEasing(keyframe.easing, `${keyframePath}.easing`)
       previousFrame = keyframe.frame
@@ -570,12 +592,12 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   )
   const animation = clip.animation ?? defaultClipAnimation()
   validateClipAnimation(animation, `${path}.animation`, context)
-  if (
-    (animation.tracks.length > 0 || (animation.effectTracks?.length ?? 0) > 0)
-    && (trackKind !== 'video' || clip.text !== undefined)
-  ) {
-    fail(`${path}.animation`, 'keyframes are supported only on visual media clips')
-  }
+  const animationKindError = clipAnimationKindError(
+    trackKind,
+    clip.text !== undefined,
+    animation,
+  )
+  if (animationKindError) fail(`${path}.animation`, animationKindError)
   boundedArray(clip.effects, `${path}.effects`, PROJECT_FILE_LIMITS.maxEffectsPerClip)
   context.effectCount += clip.effects.length
   if (context.effectCount > PROJECT_FILE_LIMITS.maxTotalEffects) {

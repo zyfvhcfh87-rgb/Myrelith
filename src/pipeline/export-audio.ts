@@ -9,6 +9,7 @@
 
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import {
+  clipAudioGainsAtLocalFrame,
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
   isStretchedAudioClipPlan,
@@ -18,6 +19,7 @@ import {
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import { docDurationFrames } from '../domain/selectors'
+import { audioSampleBoundary, clipLocalFrameAtSample } from '../domain/time'
 import { audioSampleFromSourceTicks } from '../domain/sourceTimeMap'
 import {
   AUDIO_STRETCH_MAX_SESSIONS,
@@ -26,6 +28,8 @@ import {
   createConstantRateAudioStretcher,
   type StereoPcm,
 } from './audioStretch'
+
+export { audioSampleBoundary }
 
 export const EXPORT_AUDIO_CHANNELS = 2
 export const EXPORT_AUDIO_BLOCK_SAMPLES = 1024
@@ -249,34 +253,6 @@ export function resampleMixedAudioBlock(
     encoded: { startSample, sampleCount, channels: [left, right] },
     carry: nextCarry,
   }
-}
-
-/**
- * Map one absolute document-frame boundary onto the document audio grid.
- * Positive half-sample ties round upward, matching Math.round without ever
- * introducing floating-point accumulation.
- */
-export function audioSampleBoundary(
-  frame: number,
-  doc: TimelineDoc,
-): number {
-  if (!Number.isSafeInteger(frame) || frame < 0) {
-    throw new RangeError('Audio boundary frame must be a non-negative safe integer')
-  }
-  assertPositiveSafeInteger(doc.frameRate.num, 'Frame-rate numerator')
-  assertPositiveSafeInteger(doc.frameRate.den, 'Frame-rate denominator')
-  assertPositiveSafeInteger(doc.audioSampleRate, 'Audio sample rate')
-
-  const divisor = BigInt(doc.frameRate.num)
-  const numerator =
-    BigInt(frame) *
-    BigInt(doc.frameRate.den) *
-    BigInt(doc.audioSampleRate)
-  const rounded = (numerator + divisor / 2n) / divisor
-  if (rounded > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new RangeError('Audio sample boundary exceeds the safe integer range')
-  }
-  return Number(rounded)
 }
 
 /**
@@ -621,8 +597,8 @@ export class TimelineAudioMixer {
     }
   }
 
-  private gainAtSample(plan: SampleAudioClipPlan, sample: number): number {
-    let gain = plan.volume
+  private envelopeAtSample(plan: SampleAudioClipPlan, sample: number): number {
+    let gain = 1
     if (plan.fadeInFrames > 0) {
       const duration = plan.fadeInEndSample - plan.timelineStartSample
       if (duration <= 0) throw new RangeError('Audio fade-in sample window must be non-empty')
@@ -716,9 +692,17 @@ export class TimelineAudioMixer {
           if (!Number.isFinite(l) || !Number.isFinite(r)) {
             throw new Error('Decoded audio contains a non-finite sample')
           }
-          const gain = this.gainAtSample(input.plan, blockStart + i)
-          left[i] += l * gain * input.plan.leftGain
-          right[i] += r * gain * input.plan.rightGain
+          const sample = blockStart + i
+          const localFrame = clipLocalFrameAtSample(
+            input.plan.clipTimelineStartFrame,
+            sample,
+            docFrame,
+            this.doc,
+          )
+          const gains = clipAudioGainsAtLocalFrame(input.plan, localFrame)
+          const envelope = this.envelopeAtSample(input.plan, sample)
+          left[i] += l * envelope * gains.volume * gains.leftGain
+          right[i] += r * envelope * gains.volume * gains.rightGain
         }
       }
       for (let i = 0; i < sampleCount; i++) {

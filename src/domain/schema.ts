@@ -281,6 +281,8 @@ export type ClipAnimationProperty =
   | 'scale-y'
   | 'rotation'
   | 'opacity'
+  | 'volume'
+  | 'balance'
 
 /** Outgoing interpolation from one keyframe to the next. */
 export type ClipAnimationEasing =
@@ -484,7 +486,7 @@ export interface Clip {
    * Optional typing keeps pre-schema-9 pure fixtures source compatible.
    */
   blendMode?: string
-  /** Linear audio gain, 0..1 (1 = unity). Ignored for silent assets. */
+  /** Linear audio gain, 0..2 (1 = unity, 2 = +6 dB headroom). Ignored for silent assets. */
   volume: number
   /**
    * Versioned manual source-geometry intent, evaluated after decoded source
@@ -683,7 +685,7 @@ export interface CaptionTrack {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 8. */
+  /** Schema version for forward-compatible project files. Currently 15. */
   schemaVersion: number
   /** Unique document id. */
   id: string

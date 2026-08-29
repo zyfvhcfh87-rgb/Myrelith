@@ -1,8 +1,13 @@
 /** Pure, bounded scalar clip-keyframe model and evaluator. */
 
 import {
+  clipAudioSettings,
+  MAX_AUDIO_BALANCE,
   MAX_CLIP_SCALE,
+  MAX_CLIP_VOLUME,
+  MIN_AUDIO_BALANCE,
   MIN_CLIP_SCALE,
+  MIN_CLIP_VOLUME,
 } from './clipInspector'
 import type {
   Clip,
@@ -11,9 +16,11 @@ import type {
   ClipAnimationKeyframe,
   ClipAnimationProperty,
   ClipAnimationTrack,
+  ClipAudioSettings,
   EffectAnimationTrack,
   EffectDescriptor,
   TimelineDoc,
+  TrackKind,
   Transform,
 } from './schema'
 import {
@@ -22,13 +29,23 @@ import {
 } from './effectStack'
 import { EFFECT_STACK_LIMITS } from './effectBounds'
 
-export const ANIMATABLE_CLIP_PROPERTIES = [
+export const ANIMATABLE_VISUAL_PROPERTIES = [
   'position-x',
   'position-y',
   'scale-x',
   'scale-y',
   'rotation',
   'opacity',
+] as const satisfies readonly ClipAnimationProperty[]
+
+export const ANIMATABLE_AUDIO_PROPERTIES = [
+  'volume',
+  'balance',
+] as const satisfies readonly ClipAnimationProperty[]
+
+export const ANIMATABLE_CLIP_PROPERTIES = [
+  ...ANIMATABLE_VISUAL_PROPERTIES,
+  ...ANIMATABLE_AUDIO_PROPERTIES,
 ] as const satisfies readonly ClipAnimationProperty[]
 
 export const MAX_KEYFRAMES_PER_TRACK = 1_024
@@ -138,6 +155,12 @@ export function isClipPropertyAnimated(
   return clipAnimationTrack(clip, property) !== null
 }
 
+export function isAudioAnimationProperty(
+  property: ClipAnimationProperty,
+): property is (typeof ANIMATABLE_AUDIO_PROPERTIES)[number] {
+  return property === 'volume' || property === 'balance'
+}
+
 export function clipAnimationPropertyLabel(property: ClipAnimationProperty): string {
   switch (property) {
     case 'position-x': return 'Position X'
@@ -146,6 +169,8 @@ export function clipAnimationPropertyLabel(property: ClipAnimationProperty): str
     case 'scale-y': return 'Scale Y'
     case 'rotation': return 'Rotation'
     case 'opacity': return 'Opacity'
+    case 'volume': return 'Volume'
+    case 'balance': return 'Balance'
   }
 }
 
@@ -160,6 +185,8 @@ export function readClipAnimationProperty(
     case 'scale-y': return clip.transform.scaleY
     case 'rotation': return clip.transform.rotation
     case 'opacity': return clip.opacity
+    case 'volume': return clip.volume
+    case 'balance': return clipAudioSettings(clip).balance
   }
 }
 
@@ -170,6 +197,18 @@ export function animationPropertyValueError(
   if (!Number.isFinite(value)) return `${property} value must be finite`
   if (property === 'opacity' && (value < 0 || value > 1)) {
     return 'opacity keyframe value must be from 0 to 1'
+  }
+  if (
+    property === 'volume'
+    && (value < MIN_CLIP_VOLUME || value > MAX_CLIP_VOLUME)
+  ) {
+    return `volume keyframe value must be from ${MIN_CLIP_VOLUME} to ${MAX_CLIP_VOLUME}`
+  }
+  if (
+    property === 'balance'
+    && (value < MIN_AUDIO_BALANCE || value > MAX_AUDIO_BALANCE)
+  ) {
+    return `balance keyframe value must be from ${MIN_AUDIO_BALANCE} to ${MAX_AUDIO_BALANCE}`
   }
   if (
     (property === 'scale-x' || property === 'scale-y')
@@ -260,6 +299,29 @@ export function effectAnimationTrackValidationError(
   )
 }
 
+/** Placement rules for durable animation on video vs audio vs text clips. */
+export function clipAnimationKindError(
+  trackKind: TrackKind,
+  isText: boolean,
+  animation: ClipAnimation,
+): string | null {
+  const hasTracks = animation.tracks.length > 0
+    || effectAnimationTracks(animation).length > 0
+  if (!hasTracks) return null
+  if (isText) return 'keyframes are supported only on visual media clips'
+  if (trackKind === 'video') return null
+  if (trackKind !== 'audio') return 'keyframes are supported only on visual media clips'
+  if (effectAnimationTracks(animation).length > 0) {
+    return 'effect keyframes are supported only on visual media clips'
+  }
+  for (const track of animation.tracks) {
+    if (!isAudioAnimationProperty(track.property)) {
+      return 'audio clips support only volume and balance keyframes'
+    }
+  }
+  return null
+}
+
 export function clipAnimationValidationError(animation: ClipAnimation): string | null {
   if (animation.tracks.length > ANIMATABLE_CLIP_PROPERTIES.length) {
     return `clip animation exceeds ${ANIMATABLE_CLIP_PROPERTIES.length} property tracks`
@@ -318,7 +380,9 @@ export function animationEasingProgress(
 }
 
 /**
- * Evaluate one canonical track at an exact clip-local integer frame.
+ * Evaluate one canonical track at a clip-local frame. Persisted keys stay
+ * integer; finite fractional frames interpolate with the same easing so
+ * audio-rate evaluation shares the visual curve.
  * Boundaries hold the nearest value; an exact duplicate time is impossible in
  * persisted data and edit operations deterministically replace the target.
  * Invalid in-memory tracks return the supplied static fallback.
@@ -329,7 +393,7 @@ export function evaluateAnimationTrack(
   fallback: number,
 ): number {
   if (
-    !Number.isSafeInteger(frame)
+    !Number.isFinite(frame)
     || keyframesValidationError(track.keyframes, (value) =>
       !Number.isFinite(value) || Math.abs(value) > MAX_ANIMATED_FINITE_MAGNITUDE
         ? 'animated value exceeds the finite project bound'
@@ -362,20 +426,55 @@ function applyAnimatedValues(
 ): Clip {
   let transform: Transform | null = null
   let opacity = clip.opacity
+  let volume = clip.volume
+  let audio: ClipAudioSettings | undefined
   for (const [property, value] of values) {
-    if (property === 'opacity') {
-      opacity = value
-      continue
+    switch (property) {
+      case 'opacity':
+        opacity = value
+        break
+      case 'volume':
+        volume = value
+        break
+      case 'balance':
+        audio ??= { ...clipAudioSettings(clip) }
+        audio.balance = value
+        break
+      case 'position-x':
+        transform ??= { ...clip.transform }
+        transform.x = value
+        break
+      case 'position-y':
+        transform ??= { ...clip.transform }
+        transform.y = value
+        break
+      case 'scale-x':
+        transform ??= { ...clip.transform }
+        transform.scaleX = value
+        break
+      case 'scale-y':
+        transform ??= { ...clip.transform }
+        transform.scaleY = value
+        break
+      case 'rotation':
+        transform ??= { ...clip.transform }
+        transform.rotation = value
+        break
     }
-    transform ??= { ...clip.transform }
-    if (property === 'position-x') transform.x = value
-    else if (property === 'position-y') transform.y = value
-    else if (property === 'scale-x') transform.scaleX = value
-    else if (property === 'scale-y') transform.scaleY = value
-    else transform.rotation = value
   }
-  if (transform === null && opacity === clip.opacity) return clip
-  return { ...clip, transform: transform ?? clip.transform, opacity }
+  if (
+    transform === null
+    && opacity === clip.opacity
+    && volume === clip.volume
+    && audio === undefined
+  ) return clip
+  return {
+    ...clip,
+    transform: transform ?? clip.transform,
+    opacity,
+    volume,
+    ...(audio === undefined ? {} : { audio }),
+  }
 }
 
 function applyAnimatedEffectValues(

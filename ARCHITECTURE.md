@@ -606,11 +606,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   preview/export composition, state, project data, or the production default.
 - `domain/audioMixPlan.ts` is the shared live/export audible-contributor and
   envelope contract. Valid linked fades open real virtual handle ranges and
-  apply clip volume with an absolute linear or equal-power envelope. Web Audio
-  schedules that plan against the shared audio anchor; export evaluates it on
-  the exact BigInt-derived sample grid before one final sum/clamp. Invalid or
+  apply clip volume/balance, including integer-frame automation, then an
+  absolute linear or equal-power envelope. Web Audio schedules that plan
+  against the shared audio anchor; export evaluates it on the exact
+  BigInt-derived sample grid before one final sum/clamp. Invalid or
   unavailable audio falls back to the ordinary hard cut without weakening a
-  valid visual crossfade.
+  valid visual crossfade. The ordered stages live in
+  `docs/AUDIO_SIGNAL_FLOW.md`.
 - `domain/audioChannelMix.ts` is the one browser-free decoded-channel fold-down
   authority. Preview and export fold 1–32 channels into stereo with the same
   canonical Web Audio layouts before applying clip `stereoBalanceGains`:

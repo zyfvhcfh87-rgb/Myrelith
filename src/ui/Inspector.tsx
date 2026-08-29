@@ -4,7 +4,11 @@
  */
 import { lazy, useEffect, useState, type KeyboardEvent } from 'react'
 import { FileAudio, FileVideo } from '@phosphor-icons/react'
-import { resolveClipAnimationAtFrame } from '../domain/clipAnimation'
+import {
+  ANIMATABLE_AUDIO_PROPERTIES,
+  ANIMATABLE_VISUAL_PROPERTIES,
+  resolveClipAnimationAtFrame,
+} from '../domain/clipAnimation'
 import { linkedPartners } from '../domain/linking'
 import type { Clip } from '../domain/schema'
 import { findClip, trackOfClip } from '../domain/selectors'
@@ -192,6 +196,9 @@ export default function Inspector() {
                     clip={videoClip}
                     locked={videoLocked}
                     playheadFrame={playheadFrame}
+                    properties={audioClip
+                      ? ANIMATABLE_VISUAL_PROPERTIES
+                      : [...ANIMATABLE_VISUAL_PROPERTIES, ...ANIMATABLE_AUDIO_PROPERTIES]}
                   />
                 </LazySurfaceBoundary>
               )}
@@ -199,6 +206,19 @@ export default function Inspector() {
       )}
       {audioClip && (
         <AudioInspectorSection clip={audioClip} locked={audioLocked} />
+      )}
+      {audioClip && (
+        <LazySurfaceBoundary
+          loadingLabel="Loading animation curves…"
+          failureTitle="Animation curves could not load"
+        >
+          <AnimationCurveEditor
+            clip={audioClip}
+            locked={audioLocked}
+            playheadFrame={playheadFrame}
+            properties={ANIMATABLE_AUDIO_PROPERTIES}
+          />
+        </LazySurfaceBoundary>
       )}
     </div>
   )

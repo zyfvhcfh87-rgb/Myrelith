@@ -22,8 +22,16 @@ import {
   refineAudioDecoderBudget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
-import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
+import type {
+  AssetId,
+  Clip,
+  ClipAnimationTrack,
+  ClipId,
+  FrameRate,
+  TimelineDoc,
+} from '../domain/schema'
 import {
+  clipAudioGainsAtLocalFrame,
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
   isStretchedAudioClipPlan,
@@ -36,7 +44,7 @@ import type {
   SourceBoundsCatalog,
 } from '../domain/crossfadePlan'
 import { audibleTracks, docDurationFrames } from '../domain/selectors'
-import { framesToSeconds, rangeEnd } from '../domain/time'
+import { clipLocalFrameAtSeconds, framesToSeconds, rangeEnd } from '../domain/time'
 import {
   AUDIO_METER_FFT_SIZE,
   measureAudioMeterSample,
@@ -134,6 +142,10 @@ export interface ScheduledPlaybackAudio {
   balance?: number
   leftGain?: number
   rightGain?: number
+  clipTimelineStartFrame?: number
+  frameRate?: FrameRate
+  volumeAnimation?: ClipAnimationTrack | null
+  balanceAnimation?: ClipAnimationTrack | null
 }
 
 export interface PlaybackAudioEnvelope {
@@ -224,6 +236,7 @@ interface PlaybackAudioClipFields {
   fadeInEndTime: number
   fadeOutStartTime: number
   envelopes: PlaybackAudioEnvelope[]
+  frameRate: FrameRate
 }
 
 type DirectAudioClipPlan =
@@ -314,6 +327,10 @@ function preparedEventsForOverlap(
       balance: plan.balance,
       leftGain: plan.leftGain,
       rightGain: plan.rightGain,
+      clipTimelineStartFrame: plan.clipTimelineStartFrame,
+      frameRate: plan.frameRate,
+      volumeAnimation: plan.volumeAnimation,
+      balanceAnimation: plan.balanceAnimation,
     })
   }
   return events
@@ -388,6 +405,7 @@ function buildAudioClipPlans(
           plan.timelineEndFrame - plan.fadeOutFrames,
           doc.frameRate,
         ),
+        frameRate: doc.frameRate,
         envelopes: plan.envelopes.map((envelope) => ({
           startTime: framesToSeconds(envelope.startFrame, doc.frameRate),
           endTime: framesToSeconds(envelope.endFrame, doc.frameRate),
@@ -426,6 +444,7 @@ export function audioPlaybackPlanKey(
           timelineRange: clip.timelineRange,
           volume: clip.volume,
           audio: clip.audio ?? null,
+          animation: clip.animation ?? null,
           linkGroupId: clip.linkGroupId ?? null,
         })),
         transitions: track.transitions.map((transition) => ({
@@ -749,56 +768,120 @@ export function createEqualPowerPlaybackCurve(
   return values
 }
 
-function scheduleNodeGain(
-  gain: AudioParam,
+function playbackClipGainsAtTime(
   request: ScheduledPlaybackAudio,
-): void {
+  timelineTime: number,
+): ReturnType<typeof clipAudioGainsAtLocalFrame> {
+  if (
+    request.clipTimelineStartFrame === undefined
+    || request.frameRate === undefined
+    || (request.volumeAnimation == null && request.balanceAnimation == null)
+  ) {
+    return {
+      volume: request.volume,
+      balance: request.balance ?? 0,
+      leftGain: request.leftGain ?? 1,
+      rightGain: request.rightGain ?? 1,
+    }
+  }
+  return clipAudioGainsAtLocalFrame(
+    {
+      volume: request.volume,
+      balance: request.balance ?? 0,
+      volumeAnimation: request.volumeAnimation ?? null,
+      balanceAnimation: request.balanceAnimation ?? null,
+    },
+    clipLocalFrameAtSeconds(
+      request.clipTimelineStartFrame,
+      timelineTime,
+      request.frameRate,
+    ),
+  )
+}
+
+function playbackEnvelopeAtTime(
+  request: ScheduledPlaybackAudio,
+  timelineTime: number,
+): number {
   const envelope = request.envelope
   const clipStart = request.clipTimelineStartTime
   const clipEnd = request.clipTimelineEndTime
   const fadeInEnd = request.fadeInEndTime
   const fadeOutStart = request.fadeOutStartTime
-  const hasFade = clipStart !== undefined
+  let shaped = 1
+  if (
+    clipStart !== undefined
+    && clipEnd !== undefined
+    && fadeInEnd !== undefined
+    && fadeOutStart !== undefined
+  ) {
+    if (fadeInEnd > clipStart) {
+      shaped *= Math.min(1, Math.max(
+        0,
+        (timelineTime - clipStart) / (fadeInEnd - clipStart),
+      ))
+    }
+    if (fadeOutStart < clipEnd) {
+      shaped *= Math.min(1, Math.max(
+        0,
+        (clipEnd - timelineTime) / (clipEnd - fadeOutStart),
+      ))
+    }
+  }
+  if (!envelope) return shaped
+  const envelopeDuration = envelope.endTime - envelope.startTime
+  if (!Number.isFinite(envelopeDuration) || envelopeDuration <= 0) {
+    throw new RangeError('Playback audio envelope has an invalid duration')
+  }
+  return shaped * crossfadeAudioGain(
+    envelope.curve,
+    envelope.role,
+    (timelineTime - envelope.startTime) / envelopeDuration,
+  )
+}
+
+function playbackHasFade(request: ScheduledPlaybackAudio): boolean {
+  const clipStart = request.clipTimelineStartTime
+  const clipEnd = request.clipTimelineEndTime
+  const fadeInEnd = request.fadeInEndTime
+  const fadeOutStart = request.fadeOutStartTime
+  return clipStart !== undefined
     && clipEnd !== undefined
     && fadeInEnd !== undefined
     && fadeOutStart !== undefined
     && (fadeInEnd > clipStart + TIME_EPSILON || fadeOutStart < clipEnd - TIME_EPSILON)
-  if (hasFade) {
-    const values = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
-    const envelopeDuration = envelope
-      ? envelope.endTime - envelope.startTime
-      : 0
-    if (envelope && (!Number.isFinite(envelopeDuration) || envelopeDuration <= 0)) {
-      throw new RangeError('Playback audio envelope has an invalid duration')
-    }
-    for (let index = 0; index < values.length; index++) {
-      const timelineTime = request.timelineStartTime
-        + request.duration * index / (values.length - 1)
-      let shaped = request.volume
-      if (fadeInEnd > clipStart) {
-        shaped *= Math.min(1, Math.max(
-          0,
-          (timelineTime - clipStart) / (fadeInEnd - clipStart),
-        ))
-      }
-      if (fadeOutStart < clipEnd) {
-        shaped *= Math.min(1, Math.max(
-          0,
-          (clipEnd - timelineTime) / (clipEnd - fadeOutStart),
-        ))
-      }
-      if (envelope) {
-        shaped *= crossfadeAudioGain(
-          envelope.curve,
-          envelope.role,
-          (timelineTime - envelope.startTime) / envelopeDuration,
-        )
-      }
-      values[index] = shaped
-    }
-    gain.setValueCurveAtTime(values, request.when, request.duration)
+}
+
+function playbackHasShapedGain(request: ScheduledPlaybackAudio): boolean {
+  return playbackHasFade(request)
+    || request.volumeAnimation != null
+    || request.envelope?.curve === 'equal-power'
+}
+
+function samplePlaybackGainCurve(request: ScheduledPlaybackAudio): Float32Array {
+  const values = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+  for (let index = 0; index < values.length; index++) {
+    const timelineTime = request.timelineStartTime
+      + request.duration * index / (values.length - 1)
+    values[index] = playbackClipGainsAtTime(request, timelineTime).volume
+      * playbackEnvelopeAtTime(request, timelineTime)
+  }
+  return values
+}
+
+function scheduleNodeGain(
+  gain: AudioParam,
+  request: ScheduledPlaybackAudio,
+): void {
+  if (playbackHasShapedGain(request)) {
+    gain.setValueCurveAtTime(
+      samplePlaybackGainCurve(request),
+      request.when,
+      request.duration,
+    )
     return
   }
+  const envelope = request.envelope
   if (!envelope) {
     gain.value = request.volume
     return
@@ -939,16 +1022,35 @@ export function createWebAudioPlaybackOutput(
     source.connect(gain)
     const balanceNodes: AudioNode[] = []
     if (
-      request.balance !== undefined
-      && request.balance !== 0
-      && playbackBuffer.numberOfChannels >= 2
+      playbackBuffer.numberOfChannels >= 2
+      && (
+        request.balanceAnimation != null
+        || (
+          request.balance !== undefined
+          && request.balance !== 0
+        )
+      )
     ) {
       const splitter = context.createChannelSplitter(2)
       const left = context.createGain()
       const right = context.createGain()
       const merger = context.createChannelMerger(2)
-      left.gain.value = request.leftGain ?? 1
-      right.gain.value = request.rightGain ?? 1
+      if (request.balanceAnimation != null) {
+        const leftCurve = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+        const rightCurve = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+        for (let index = 0; index < leftCurve.length; index++) {
+          const timelineTime = request.timelineStartTime
+            + request.duration * index / (leftCurve.length - 1)
+          const gains = playbackClipGainsAtTime(request, timelineTime)
+          leftCurve[index] = gains.leftGain
+          rightCurve[index] = gains.rightGain
+        }
+        left.gain.setValueCurveAtTime(leftCurve, request.when, request.duration)
+        right.gain.setValueCurveAtTime(rightCurve, request.when, request.duration)
+      } else {
+        left.gain.value = request.leftGain ?? 1
+        right.gain.value = request.rightGain ?? 1
+      }
       gain.connect(splitter)
       splitter.connect(left, 0)
       splitter.connect(right, 1)

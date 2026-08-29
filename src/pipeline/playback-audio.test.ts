@@ -1012,6 +1012,18 @@ describe('startTimelineAudioPlayback scheduling', () => {
     mutate((doc) => { delete doc.tracks[1].clips[0].linkGroupId })
     mutate((doc) => { doc.tracks[1].clips[0].volume = 0.5 })
     mutate((doc) => {
+      doc.tracks[1].clips[0].animation = {
+        tracks: [{
+          property: 'volume',
+          keyframes: [
+            { frame: 0, value: 0, easing: { type: 'linear' } },
+            { frame: 8, value: 1, easing: { type: 'linear' } },
+          ],
+        }],
+        effectTracks: [],
+      }
+    })
+    mutate((doc) => {
       doc.tracks[1].clips[0].audio = {
         enabled: true,
         balance: 0.25,

@@ -21,6 +21,7 @@ import type { PluginVideoEffectContributionSnapshot } from '../domain/pluginVide
 import { selectMediaRepresentation } from '../domain/proxyCache'
 import {
   audibleTracks,
+  clipContributesAudioOutput,
   clipContributesVisualOutput,
   documentHasOutputPluginEffects,
   outputMediaAssetIds,
@@ -269,7 +270,7 @@ function partialTrackConflict(
       if (track.kind === 'video') {
         if (!clipContributesVisualOutput(clip)) continue
       } else {
-        if (clip.text || clip.volume <= 0) continue
+        if (!clipContributesAudioOutput(clip)) continue
         const audioPolicy = sourceTimeAudioPolicy(clip)
         if (audioPolicy.status !== 'supported') continue
       }
