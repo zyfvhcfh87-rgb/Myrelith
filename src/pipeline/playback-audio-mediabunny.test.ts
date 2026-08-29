@@ -18,6 +18,7 @@ const resolvedAudio = (blob: Blob) => ({ blob, budget: AUDIO_BUDGET })
 const harness = vi.hoisted(() => ({
   track: null as null | {
     getCodec(): Promise<string | null>
+    getSampleRate(): Promise<number>
     getDecoderConfig(): Promise<AudioDecoderConfig | null>
     canDecode(): Promise<boolean>
   },
@@ -92,6 +93,7 @@ describe('Mediabunny live-audio fallback wiring', () => {
     }
     const track = {
       getCodec: vi.fn(async () => 'eac3'),
+      getSampleRate: vi.fn(async () => 48_000),
       getDecoderConfig: vi.fn(async () => configuration),
       canDecode: vi.fn(async () => false),
     }
@@ -146,6 +148,7 @@ describe('Mediabunny live-audio fallback wiring', () => {
   test('disposes the Input when the fallback seam rejects the track', async () => {
     harness.track = {
       getCodec: vi.fn(async () => 'eac3'),
+      getSampleRate: vi.fn(async () => 48_000),
       getDecoderConfig: vi.fn(async () => ({
         codec: 'ec-3',
         numberOfChannels: 6,
@@ -180,6 +183,7 @@ describe('Mediabunny live-audio fallback wiring', () => {
   test('preserves a resource-limit rejection and allocates no audio sink', async () => {
     harness.track = {
       getCodec: vi.fn(async () => 'eac3'),
+      getSampleRate: vi.fn(async () => 48_000),
       getDecoderConfig: vi.fn(async () => ({
         codec: 'ec-3',
         numberOfChannels: 6,

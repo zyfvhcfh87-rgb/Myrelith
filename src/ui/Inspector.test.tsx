@@ -63,6 +63,27 @@ function makeDoc(): TimelineDoc {
   }
 }
 
+function makeBlockedRetimeFixture(): TimelineDoc {
+  const blockerGroupId = 'link_blocker'
+  return {
+    ...makeDoc(),
+    tracks: [
+      makeTrack('V1', [
+        makeClip('clipA', 0, 100),
+        { ...makeClip('clipB', 100, 50), linkGroupId: blockerGroupId },
+      ]),
+      {
+        ...makeTrack(
+          'A1',
+          [{ ...makeClip('clipD', 100, 50), linkGroupId: blockerGroupId }],
+          'audio',
+        ),
+        locked: true,
+      },
+    ],
+  }
+}
+
 function makeLinkedFixture(): TimelineDoc {
   return {
     ...makeDoc(),
@@ -273,7 +294,10 @@ describe('Inspector', () => {
 
   test('explains rejected speed changes and updates linked clips atomically', async () => {
     const user = userEvent.setup()
-    transport().setSelectedClip('clipA')
+    act(() => {
+      doc().setDoc(makeBlockedRetimeFixture())
+      transport().setSelectedClip('clipA')
+    })
     const { unmount } = render(<Inspector />)
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Whole clip speed' }), '50')
