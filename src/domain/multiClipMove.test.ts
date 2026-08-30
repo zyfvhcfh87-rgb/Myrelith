@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
+import { createAdjustmentItem } from './adjustmentItems'
 import type { Clip, TimelineDoc, Track } from './schema'
 import { moveClipsByDelta } from './operations'
 import { linkedMoveClips } from './linking'
@@ -53,7 +54,7 @@ function track(
 
 function documentWith(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'multi-move-doc',
     name: 'multi move fixture',
     frameRate: { num: 30, den: 1 },
@@ -116,6 +117,12 @@ describe('moveClipsByDelta', () => {
     expect(moveClipsByDelta(collision, ['A', 'B'], 10)).toBe(collision)
     expect(moveClipsByDelta(locked, ['A', 'B'], 10)).toBe(locked)
     expect(starts(collision, 'V1')).toEqual([0, 20, 35])
+
+    const adjustmentBlock = documentWith([{
+      ...track('V1', 'video', [clip('A', 0), clip('B', 20)]),
+      adjustments: [createAdjustmentItem(35, 10)],
+    }])
+    expect(moveClipsByDelta(adjustmentBlock, ['A', 'B'], 10)).toBe(adjustmentBlock)
     warn.mockRestore()
   })
 

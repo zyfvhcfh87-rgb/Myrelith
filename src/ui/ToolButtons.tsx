@@ -14,6 +14,7 @@ import {
   CursorClick,
   Magnet,
   Scissors,
+  StackSimple,
   TextT,
 } from '@phosphor-icons/react'
 import { useProjectSessionStore } from '../state/projectSessionStore'
@@ -24,6 +25,7 @@ import { shortcutForCommand, type EditorCommandId } from '../app/editorCommands'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
 
 const TextOverlayDialog = lazy(() => import('./TextOverlayDialog'))
+const AdjustmentDialog = lazy(() => import('./AdjustmentDialog'))
 
 const TOOLS = [
   { id: 'select', commandId: 'tool.select', icon: CursorClick, label: 'Select — move clips, drag edges to trim (A)' },
@@ -35,7 +37,9 @@ const TOOLS = [
 
 export default function ToolButtons() {
   const [textOpen, setTextOpen] = useState(false)
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false)
   const textButtonRef = useRef<HTMLButtonElement | null>(null)
+  const adjustmentButtonRef = useRef<HTMLButtonElement | null>(null)
   const tool = useTransportStore((s) => s.tool)
   const setTool = useTransportStore((s) => s.setTool)
   const snappingEnabled = usePreferencesStore((s) => s.snappingEnabled)
@@ -45,6 +49,11 @@ export default function ToolButtons() {
   const closeText = (): void => {
     setTextOpen(false)
     requestAnimationFrame(() => textButtonRef.current?.focus())
+  }
+
+  const closeAdjustment = (): void => {
+    setAdjustmentOpen(false)
+    requestAnimationFrame(() => adjustmentButtonRef.current?.focus())
   }
 
   return (
@@ -82,6 +91,19 @@ export default function ToolButtons() {
           <TextT aria-hidden="true" size={17} weight="bold" />
         </button>
         <button
+          ref={adjustmentButtonRef}
+          type="button"
+          className="tool-button tool-button-add-adjustment"
+          title="Add adjustment layer"
+          aria-label="Add adjustment layer"
+          aria-haspopup="dialog"
+          aria-expanded={adjustmentOpen}
+          disabled={closing}
+          onClick={() => setAdjustmentOpen(true)}
+        >
+          <StackSimple aria-hidden="true" size={17} weight="bold" />
+        </button>
+        <button
           type="button"
           className={`tool-button tool-button-snap${snappingEnabled ? ' active' : ''}`}
           title={`${snappingEnabled ? 'Snapping on' : 'Snapping off'} — hold Alt to bypass while editing`}
@@ -100,6 +122,16 @@ export default function ToolButtons() {
           onClose={closeText}
         >
           <TextOverlayDialog onClose={closeText} />
+        </LazySurfaceBoundary>
+      )}
+      {adjustmentOpen && (
+        <LazySurfaceBoundary
+          variant="dialog"
+          loadingLabel="Loading adjustment tools…"
+          failureTitle="Adjustment tools could not load"
+          onClose={closeAdjustment}
+        >
+          <AdjustmentDialog onClose={closeAdjustment} />
         </LazySurfaceBoundary>
       )}
     </>

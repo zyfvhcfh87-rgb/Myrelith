@@ -11,6 +11,7 @@ import { CURRENT_PROJECT_FORMAT_VERSION, CURRENT_TIMELINE_SCHEMA_VERSION, PROJEC
 import { fail, type JsonRecord } from './validationPrimitives';
 import { validateProjectFile } from './documentValidation';
 import { migrateProjectFile } from './migrations';
+import { cloneAdjustmentAnimation } from '../adjustmentItems';
 
 function cloneEffectParams(params: Effect['params']): Effect['params'] {
   const copy: Effect['params'] = {}
@@ -99,6 +100,22 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           })),
           ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
           ...(clip.linkGroupId === undefined ? {} : { linkGroupId: clip.linkGroupId }),
+        })),
+        adjustments: (track.adjustments ?? []).map((adjustment) => ({
+          kind: adjustment.kind,
+          id: adjustment.id,
+          name: adjustment.name,
+          timelineRange: { ...adjustment.timelineRange },
+          enabled: adjustment.enabled,
+          opacity: adjustment.opacity,
+          animation: cloneAdjustmentAnimation(adjustment.animation),
+          effects: adjustment.effects.map((effect) => ({
+            id: effect.id,
+            type: effect.type,
+            version: effect.version,
+            enabled: effect.enabled,
+            params: cloneEffectParams(effect.params),
+          })),
         })),
         transitions: track.transitions.map((transition) => ({
           ...transition,

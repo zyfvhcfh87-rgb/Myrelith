@@ -35,6 +35,7 @@ export function addTrack(doc: TimelineDoc, kind: TrackKind): TimelineDoc {
     kind,
     name: label,
     clips: [],
+    adjustments: [],
     transitions: [],
     hidden: false,
     muted: false,

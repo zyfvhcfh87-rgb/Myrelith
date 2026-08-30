@@ -12,6 +12,7 @@ import {
   createCaptionTrack,
 } from './captions'
 import { createSourceBoundsCatalog, resolveCrossfadePlan } from './crossfadePlan'
+import { createAdjustmentItem } from './adjustmentItems'
 import { addCrossfade, createTextClip } from './operations'
 import type { Clip, MediaAsset, MediaSourceBounds, TimelineDoc, Track } from './schema'
 import type { SourceMonitorSession } from './sourceMonitor'
@@ -83,7 +84,7 @@ function makeTrack(
 
 function makeDoc(tracks?: Track[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'doc-three-point',
     name: 'three-point fixture',
     frameRate: { num: 30, den: 1 },
@@ -453,6 +454,62 @@ describe('insert', () => {
     ])
   })
 
+  test('ripples later adjustments with later clips', () => {
+    const v1 = makeTrack('V1', 'video')
+    const doc = makeDoc([
+      { ...v1, adjustments: [createAdjustmentItem(80, 20)] },
+      makeTrack('V2', 'video', [makeClip('later', 80, 40)]),
+      makeTrack('A1', 'audio'),
+    ])
+    const start = input({
+      doc,
+      playheadFrame: 50,
+      videoTargetTrackId: 'V1',
+      patchAudio: false,
+      sourceSession: session({ inFrame: 0, outFrameExclusive: 20 }),
+    })
+    const plan = planSequenceEdit(start)
+    expect(plan.status).toBe('ok')
+    if (plan.status !== 'ok') return
+    const next = applySequenceEdit(doc, plan, start.asset)
+    expect(clipsOf(next, 'V1').map((clip) => clip.timelineRange)).toEqual([
+      { startFrame: 50, durationFrames: 20 },
+    ])
+    expect(next.tracks.find((track) => track.id === 'V1')!.adjustments![0]!
+      .timelineRange).toEqual({ startFrame: 100, durationFrames: 20 })
+    expect(clipsOf(next, 'V2').map((clip) => clip.timelineRange)).toEqual([
+      { startFrame: 100, durationFrames: 40 },
+    ])
+  })
+
+  test('splits a covering adjustment so insert can occupy the playhead', () => {
+    const v1 = makeTrack('V1', 'video')
+    const doc = makeDoc([
+      { ...v1, adjustments: [createAdjustmentItem(0, 100)] },
+      makeTrack('A1', 'audio'),
+    ])
+    const start = input({
+      doc,
+      playheadFrame: 50,
+      videoTargetTrackId: 'V1',
+      patchAudio: false,
+      sourceSession: session({ inFrame: 0, outFrameExclusive: 20 }),
+    })
+    const plan = planSequenceEdit(start)
+    expect(plan.status).toBe('ok')
+    if (plan.status !== 'ok') return
+    const next = applySequenceEdit(doc, plan, start.asset)
+    expect(next).not.toBe(doc)
+    expect(clipsOf(next, 'V1').map((clip) => clip.timelineRange)).toEqual([
+      { startFrame: 50, durationFrames: 20 },
+    ])
+    expect(next.tracks.find((track) => track.id === 'V1')!.adjustments!
+      .map((item) => item.timelineRange)).toEqual([
+      { startFrame: 0, durationFrames: 50 },
+      { startFrame: 70, durationFrames: 50 },
+    ])
+  })
+
   test('linked A/V insert is one apply with a shared group id', () => {
     const emptyAudio = makeDoc([
       makeTrack('V1', 'video'),
@@ -525,6 +582,31 @@ describe('overwrite', () => {
       { startFrame: 60, durationFrames: 140 },
     ])
     expect(clipsOf(next, 'V1')[1]!.assetId).toBe('asset-1')
+  })
+
+  test('punches an adjustment in the targeted range', () => {
+    const v1 = makeTrack('V1', 'video')
+    const doc = makeDoc([{
+      ...v1,
+      adjustments: [createAdjustmentItem(40, 20)],
+    }, makeTrack('A1', 'audio')])
+    const start = input({
+      kind: 'overwrite',
+      doc,
+      playheadFrame: 40,
+      videoTargetTrackId: 'V1',
+      patchAudio: false,
+      sourceSession: session({ inFrame: 0, outFrameExclusive: 20 }),
+    })
+    const plan = planSequenceEdit(start)
+    expect(plan.status).toBe('ok')
+    if (plan.status !== 'ok') return
+    const next = applySequenceEdit(doc, plan, start.asset)
+    expect(next).not.toBe(doc)
+    expect(clipsOf(next, 'V1').map((clip) => clip.timelineRange)).toEqual([
+      { startFrame: 40, durationFrames: 20 },
+    ])
+    expect(next.tracks.find((track) => track.id === 'V1')!.adjustments).toEqual([])
   })
 })
 
@@ -665,6 +747,34 @@ describe('lift and extract', () => {
       { startFrame: 40, durationFrames: 140 },
     ])
     expect(clipsOf(next, 'A1')[0]!.timelineRange).toEqual({ startFrame: 80, durationFrames: 40 })
+  })
+
+  test('extract punches an in-range adjustment so later clips can close the gap', () => {
+    const v1 = makeTrack('V1', 'video', [makeClip('later', 80, 40)])
+    const doc = makeDoc([
+      { ...v1, adjustments: [createAdjustmentItem(40, 30)] },
+      makeTrack('A1', 'audio'),
+    ])
+    const start = input({
+      kind: 'extract',
+      doc,
+      timelineInFrame: 40,
+      timelineOutExclusive: 60,
+      videoTargetTrackId: 'V1',
+      audioTargetTrackId: null,
+    })
+    const plan = planSequenceEdit(start)
+    expect(plan.status).toBe('ok')
+    if (plan.status !== 'ok') return
+    const next = applySequenceEdit(doc, plan, null)
+    expect(next).not.toBe(doc)
+    expect(next.tracks.find((track) => track.id === 'V1')!.adjustments!
+      .map((item) => item.timelineRange)).toEqual([
+      { startFrame: 40, durationFrames: 10 },
+    ])
+    expect(clipsOf(next, 'V1').map((clip) => clip.timelineRange)).toEqual([
+      { startFrame: 60, durationFrames: 40 },
+    ])
   })
 })
 

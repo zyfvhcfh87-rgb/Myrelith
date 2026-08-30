@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type {
+  AdjustmentItem,
   Clip,
   MediaSourceBounds,
   TimelineDoc,
@@ -9,6 +10,7 @@ import type {
 import type { SourceBoundsCatalog } from './crossfadePlan'
 import { defaultTextProps } from './textOverlay'
 import { createPluginVideoEffectContributionSnapshot } from './pluginVideoEffectStagePlan'
+import { createColorAdjustEffect } from './effectStack'
 import {
   createVideoCompositionPlanner,
   videoCompositionRequests,
@@ -82,9 +84,28 @@ function track(
   }
 }
 
+function adjustment(
+  id: string,
+  startFrame = 0,
+  durationFrames = 10,
+): AdjustmentItem {
+  const effect = createColorAdjustEffect(`${id}-color`)
+  effect.params.exposure = 1
+  return {
+    kind: 'adjustment',
+    id,
+    name: id,
+    timelineRange: { startFrame, durationFrames },
+    enabled: true,
+    opacity: 0.8,
+    animation: { tracks: [], effectTracks: [] },
+    effects: [effect],
+  }
+}
+
 function doc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'visual-plan',
     name: 'Visual plan',
     frameRate: { num: 30, den: 1 },
@@ -193,6 +214,71 @@ describe('video composition plan', () => {
     expect(plan.items.map((item) => item.kind === 'clip'
       ? `${item.trackId}:${item.request.clip.id}@${item.request.sourceFrame}`
       : item.kind)).toEqual(['V1:lower@34', 'V2:upper@84'])
+  })
+
+  test('places adjustments at their track boundary below upper tracks and captions', () => {
+    const lower = track('V1', [clip('lower', 'lower-asset', 0, 0)])
+    const grade = track('V2', [])
+    grade.adjustments = [adjustment('grade')]
+    const upper = track('V3', [clip('upper', 'upper-asset', 0, 0)])
+    const document = doc([lower, grade, upper])
+    document.captionTracks = [{
+      id: 'captions-en',
+      name: 'English',
+      language: 'en',
+      role: 'captions',
+      stylePreset: 'boxed',
+      hidden: false,
+      items: [{ id: 'cue', range: { startFrame: 0, durationFrames: 10 }, text: 'Hi' }],
+    }]
+
+    const active = createVideoCompositionPlanner(document, new Map()).planFrame(4)
+    expect(active.items.map((item) => item.kind)).toEqual([
+      'clip',
+      'adjustment',
+      'clip',
+      'caption',
+    ])
+    expect(active.items[1]).toMatchObject({
+      kind: 'adjustment',
+      trackId: 'V2',
+      frame: 4,
+      adjustment: { id: 'grade', opacity: 0.8 },
+    })
+    expect(videoCompositionRequests(active).map((request) => request.clip.id))
+      .toEqual(['lower', 'upper'])
+  })
+
+  test('resolves bounded animation and bypasses disabled adjustments', () => {
+    const grade = track('V1', [])
+    const item = adjustment('animated')
+    item.opacity = 0
+    item.animation.tracks = [{
+      property: 'opacity',
+      keyframes: [
+        { frame: 0, value: 0, easing: { type: 'linear' } },
+        { frame: 8, value: 1, easing: { type: 'linear' } },
+      ],
+    }]
+    item.animation.effectTracks = [{
+      effectId: 'animated-color',
+      parameter: 'exposure',
+      keyframes: [
+        { frame: 0, value: 0, easing: { type: 'linear' } },
+        { frame: 8, value: 2, easing: { type: 'linear' } },
+      ],
+    }]
+    grade.adjustments = [item]
+    const planner = createVideoCompositionPlanner(doc([grade]), new Map())
+
+    expect(planner.planFrame(0).items).toEqual([])
+    expect(planner.planFrame(4).items[0]).toMatchObject({
+      kind: 'adjustment',
+      adjustment: { opacity: 0.5, effects: [{ params: { exposure: 1 } }] },
+    })
+    item.enabled = false
+    const disabled = createVideoCompositionPlanner(doc([grade]), new Map())
+    expect(disabled.planFrame(4).items).toEqual([])
   })
 
   test('uses the shared rational source-time map for ordinary frame requests', () => {

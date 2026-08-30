@@ -4,6 +4,8 @@ export const MAX_RENDER_SURFACE_DIMENSION = 16_384
 export const MAX_RENDER_SURFACE_PIXELS = 16 * 1024 * 1024
 export const RENDER_SURFACE_BYTES_PER_PIXEL = 4
 export const RENDER_COMPOSITOR_SURFACE_COUNT = 4
+/** Adjustments borrow the compositor leg scratch surface, so this stays zero. */
+export const ADJUSTMENT_ADDITIONAL_SURFACE_COUNT = 0
 export const LENS_REMAP_REUSABLE_SURFACE_COUNT = 2
 export const EXPORT_READBACK_SURFACE_COUNT = 1
 export const MAX_RENDER_AGGREGATE_SURFACE_BYTES = 256 * 1024 * 1024

@@ -282,6 +282,7 @@ function track(
     kind,
     name: id,
     clips,
+    adjustments: [],
     transitions,
     hidden: false,
     muted: false,

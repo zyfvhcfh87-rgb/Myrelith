@@ -109,6 +109,7 @@ function track(
     kind,
     name: `${id} lane`,
     clips,
+    adjustments: [],
     transitions: [],
     hidden: kind === 'video',
     muted: kind === 'audio',

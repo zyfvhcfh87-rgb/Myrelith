@@ -122,6 +122,9 @@ export type EffectCapability =
   | typeof CANVAS_FILTER_EFFECT_CAPABILITY
   | typeof CANVAS_PIXEL_EFFECT_CAPABILITY
 
+/** The authored surface on which an effect is semantically valid. */
+export type EffectSurface = 'source-layer' | 'post-composite'
+
 /** Structural probe shared by the compositor and worker capability report. */
 export function supportsCanvasEffectFilter(
   surface: { readonly filter?: unknown },
@@ -140,6 +143,7 @@ export interface EffectRegistration {
   readonly type: string
   readonly version: number
   readonly label: string
+  readonly surfaces: readonly EffectSurface[]
   readonly capabilities: (effect: EffectDescriptor) => readonly EffectCapability[]
   readonly defaultParams: Readonly<Record<string, EffectParamValue>>
   readonly validateParams: (params: Readonly<Record<string, EffectParamValue>>) => string | null
@@ -153,6 +157,7 @@ const COLOR_ADJUST_REGISTRATION: EffectRegistration = Object.freeze({
   type: COLOR_ADJUST_EFFECT_TYPE,
   version: COLOR_ADJUST_EFFECT_VERSION,
   label: 'Color adjustment',
+  surfaces: Object.freeze(['source-layer', 'post-composite'] as const),
   capabilities: colorAdjustCapabilities,
   defaultParams: DEFAULT_COLOR_ADJUST_PARAMS,
   validateParams: validateColorAdjustParams,
@@ -161,13 +166,20 @@ const COLOR_ADJUST_REGISTRATION: EffectRegistration = Object.freeze({
   pixelEffect: (effect: EffectDescriptor) => colorAdjustIsIdentity(effect)
     ? null
     : { kind: 'color-adjust' as const, params: colorAdjustParams(effect) },
-  animatableParams: {},
+  animatableParams: Object.freeze({
+    exposure: Object.freeze({ ...COLOR_ADJUST_LIMITS.exposure, label: 'Exposure' }),
+    contrast: Object.freeze({ ...COLOR_ADJUST_LIMITS.contrast, label: 'Contrast' }),
+    saturation: Object.freeze({ ...COLOR_ADJUST_LIMITS.saturation, label: 'Saturation' }),
+    temperature: Object.freeze({ ...COLOR_ADJUST_LIMITS.temperature, label: 'Temperature' }),
+    tint: Object.freeze({ ...COLOR_ADJUST_LIMITS.tint, label: 'Tint' }),
+  }),
 })
 
 const MASK_REGISTRATION: EffectRegistration = Object.freeze({
   type: MASK_EFFECT_TYPE,
   version: MASK_EFFECT_VERSION,
   label: 'Mask',
+  surfaces: Object.freeze(['source-layer'] as const),
   capabilities: (effect: EffectDescriptor) => maskIsIdentity(effect)
     ? []
     : [CANVAS_PIXEL_EFFECT_CAPABILITY],
@@ -185,6 +197,7 @@ const CHROMA_KEY_REGISTRATION: EffectRegistration = Object.freeze({
   type: CHROMA_KEY_EFFECT_TYPE,
   version: CHROMA_KEY_EFFECT_VERSION,
   label: 'Chroma key',
+  surfaces: Object.freeze(['source-layer'] as const),
   capabilities: () => [CANVAS_PIXEL_EFFECT_CAPABILITY],
   defaultParams: DEFAULT_CHROMA_KEY_PARAMS,
   validateParams: validateChromaKeyParams,
@@ -209,6 +222,15 @@ export function registeredEffects(): readonly EffectRegistration[] {
 
 export function effectRegistration(type: string): EffectRegistration | null {
   return EFFECT_REGISTRY.get(type) ?? null
+}
+
+export function effectSupportsSurface(
+  effect: EffectDescriptor,
+  surface: EffectSurface,
+): boolean {
+  const registration = effectRegistration(effect.type)
+  return registration?.version === effect.version
+    && registration.surfaces.includes(surface)
 }
 
 export function cloneEffectDescriptor(effect: EffectDescriptor): EffectDescriptor {
@@ -535,6 +557,50 @@ export interface CanvasEffectStackResolution {
   /** Backward-compatible color-only projection for existing callers/tests. */
   readonly pixelCorrections: readonly ColorCorrectionParameters[]
   readonly effects: readonly EffectResolution[]
+}
+
+/**
+ * Resolve the bounded full-frame adjustment vocabulary. Unknown, future, and
+ * source-layer-only descriptors stay ordered and portable but are explicitly
+ * bypassed. Every executable post-composite contribution uses the existing
+ * pixel evaluator, which makes opacity mixing and preview/export parity exact.
+ */
+export function resolvePostCompositeEffectStack(
+  effects: readonly EffectDescriptor[],
+  supportsPixelAccess: boolean,
+): CanvasEffectStackResolution {
+  const capabilities = new Set<EffectCapability>([
+    CANVAS_FILTER_EFFECT_CAPABILITY,
+    ...(supportsPixelAccess ? [CANVAS_PIXEL_EFFECT_CAPABILITY] : []),
+  ])
+  const effectsResolution = resolveEffectStack(effects, capabilities).map((resolution) => {
+    if (effectSupportsSurface(resolution.effect, 'post-composite')) return resolution
+    const registration = effectRegistration(resolution.effect.type)
+    return {
+      ...resolution,
+      label: registration?.label ?? resolution.label,
+      status: 'unsupported' as const,
+      detail: registration
+        ? 'This effect requires a source layer and is visibly bypassed on an adjustment item.'
+        : resolution.detail,
+      canvasFilter: null,
+    }
+  })
+  const pixelEffects = supportsPixelAccess
+    ? effectsResolution.flatMap((resolution) => (
+        resolution.status === 'ready'
+          ? effectRegistration(resolution.effect.type)?.pixelEffect(resolution.effect) ?? []
+          : []
+      ))
+    : []
+  return {
+    filter: null,
+    pixelEffects,
+    pixelCorrections: pixelEffects.flatMap((effect) => (
+      effect.kind === 'color-adjust' ? [effect.params] : []
+    )),
+    effects: effectsResolution,
+  }
 }
 
 /** Concatenate Canvas2D filters in authored order; null is an exact no-op path. */

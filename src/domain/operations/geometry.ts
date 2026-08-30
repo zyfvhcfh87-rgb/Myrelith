@@ -3,7 +3,7 @@ import { clipAnimation, clipAnimationKeyframeCount, cloneClipAnimation, document
 import { rangeEnd, rangeOverlap } from '../time';
 import { effectCollectionAppendBudgetError } from '../effectBounds';
 import { clipSourceTimeMap, cloneSourceTimeMap, defaultSourceTimeMap, retimeClipAnimation, shiftClipAnimationSourceTimeIntent, sourceRangeForMap, sourceTimeMapAtOffset, sourceTimeMapForTimelineDuration, sourceTimeMapUsesSpeedCurve, sourceTimeMapValidationError, sourceTimeMapWithSpeedPoint, sourceTimeMapWithoutSpeedCurve, sourceTimeMapWithoutSpeedPoint, sourceTimeRateValidationError, timelineFramesWithinSourceMap, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
-import { byStart, locateClip, newId, overlapsAny, reconcileTransitions, reject, withClampedAudioFades, withTrack, type ClipLocation } from './operationInternals';
+import { byStart, clipsOverlapAdjustments, locateClip, newId, overlapsAny, reconcileTransitions, reject, shiftLaterAdjustments, withClampedAudioFades, withTrack, type ClipLocation } from './operationInternals';
 import type { TrimEdge } from './operationTypes';
 
 /**
@@ -175,7 +175,7 @@ export function trimClip(
   if (newTl.startFrame < 0) {
     return reject(doc, op, 'clip cannot start before timeline frame 0')
   }
-  if (overlapsAny(loc.track.clips, newTl, clipId)) {
+  if (overlapsAny(loc.track, newTl, clipId)) {
     return reject(doc, op, 'trim would overlap a neighboring clip')
   }
 
@@ -243,7 +243,7 @@ function replaceTimedClipSourceTimeMap(
     return reject(doc, op, 'retimed timeline range must stay within safe integer frames')
   }
   const newTimelineRange = { startFrame, durationFrames: newDurationFrames }
-  if (overlapsAny(loc.track.clips, newTimelineRange, loc.clip.id)) {
+  if (overlapsAny(loc.track, newTimelineRange, loc.clip.id)) {
     return reject(doc, op, 'retime would overlap a neighboring clip')
   }
   const oldMap = clipSourceTimeMap(loc.clip)
@@ -414,7 +414,7 @@ export function moveClip(
     startFrame: toFrame,
     durationFrames: loc.clip.timelineRange.durationFrames,
   }
-  if (overlapsAny(target.clips, newRange, clipId)) {
+  if (overlapsAny(target, newRange, clipId)) {
     return reject(doc, op, 'move would overlap a clip on the target track')
   }
 
@@ -503,6 +503,9 @@ export function moveClipsByDelta(
         return reject(doc, op, 'move would overlap a clip on an affected track')
       }
     }
+    if (clipsOverlapAdjustments(clips, before.adjustments)) {
+      return reject(doc, op, 'move would overlap a clip on an affected track')
+    }
     tracks[trackIndex] = reconcileTransitions(before, { ...before, clips })
   }
 
@@ -552,8 +555,23 @@ export function rippleDelete(doc: TimelineDoc, clipId: ClipId): TimelineDoc {
           }
         : c,
     )
+  const adjustments = shiftLaterAdjustments(
+    loc.track.adjustments,
+    removedEnd,
+    -removedDur,
+  )
+  if (adjustments === null) {
+    return reject(doc, op, 'ripple would move an adjustment outside safe timeline bounds')
+  }
+  if (clipsOverlapAdjustments(clips, adjustments)) {
+    return reject(doc, op, 'ripple would overlap an adjustment on the track')
+  }
 
-  const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
+  const nextTrack = reconcileTransitions(loc.track, {
+    ...loc.track,
+    clips,
+    ...(adjustments === undefined ? {} : { adjustments }),
+  })
   return withTrack(doc, loc.trackIndex, nextTrack)
 }
 
@@ -749,6 +767,9 @@ export function slideClip(
       return reject(doc, op, 'slide would overlap another clip')
     }
   }
+  if (clipsOverlapAdjustments(clips, track.adjustments)) {
+    return reject(doc, op, 'slide would overlap another clip')
+  }
 
   const nextTrack = reconcileTransitions(track, { ...track, clips })
   return withTrack(doc, loc.trackIndex, nextTrack)
@@ -845,7 +866,18 @@ export function rippleTrim(
     }
     return c
   })
+  const adjustments = shiftLaterAdjustments(loc.track.adjustments, oldEnd, shiftBy)
+  if (adjustments === null) {
+    return reject(doc, op, 'ripple would move an adjustment outside safe timeline bounds')
+  }
+  if (clipsOverlapAdjustments(clips, adjustments)) {
+    return reject(doc, op, 'ripple would overlap an adjustment on the track')
+  }
 
-  const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
+  const nextTrack = reconcileTransitions(loc.track, {
+    ...loc.track,
+    clips,
+    ...(adjustments === undefined ? {} : { adjustments }),
+  })
   return withTrack(doc, loc.trackIndex, nextTrack)
 }

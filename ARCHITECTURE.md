@@ -175,8 +175,8 @@ move, while the persistent preference remains unchanged.
 
 `domain/schema.ts` defines the authoritative interfaces every phase
 references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
-`TimelineDoc`, `Track`, `Clip`, `Transform`, `Effect`, `Transition`,
-`TextProps`. Read that file for field-level docs. Key invariants:
+`TimelineDoc`, `Track`, `Clip`, `AdjustmentItem`, `Transform`, `Effect`,
+`Transition`, `TextProps`. Read that file for field-level docs. Key invariants:
 
 - `TimeRange` is **half-open** `[startFrame, startFrame + durationFrames)`;
   ranges that merely touch do not overlap. All ranges are integer frames at
@@ -261,6 +261,18 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   their current version. Unknown types, versions, and parameter keys must remain
   ordered and serializable, while evaluation reports and bypasses anything it
   cannot safely execute. The normative contract is in `docs/EFFECTS.md`.
+- `Track.adjustments` is the resource-free full-frame video-only adjustment
+  lane added by timeline schema 15. Each `AdjustmentItem` owns a stable id,
+  bounded name and half-open timeline range, enabled flag, opacity, bounded
+  adjustment-local opacity/effect animation, and an ordered portable effect
+  stack. It owns no asset id, source-time map, audio intent, proxy/cache input,
+  decoder, file handle, or relink state. `domain/adjustmentItems.ts` is the one
+  browser-free validation/edit/evaluation authority; schema-14 migration adds
+  empty arrays without changing existing output. Adjustment effects must be
+  declared safe for the `post-composite` surface. Source geometry, masks,
+  chroma keys, and current plugin contributions are source-layer-only and are
+  rejected at authoring; bounded unknown/future descriptors remain ordered and
+  serializable but are visibly bypassed.
 - `Clip.lensCorrection` is the nullable versioned source-geometry intent in
   timeline schema 14. The current version-1 Brown-Conrady record stores
   normalized principal point/focal values, radial `k1`/`k2`/`k3`, tangential
@@ -487,8 +499,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   created. Creation presets stay inside that envelope; hostile portable files
   fail closed instead of reaching a browser allocation. A source-space lens
   remap adds exactly two reusable RGBA source surfaces; finite export adds one
-  output-sized readback surface. The reviewed 4K peak is therefore seven
-  surfaces / 232,243,200 bytes, still below the shared 256 MiB ceiling.
+  output-sized readback surface. Adjustment evaluation borrows an existing
+  compositor leg and adds zero surfaces. The reviewed 4K peak is therefore
+  still seven surfaces / 232,243,200 bytes, below the shared 256 MiB ceiling.
 - `domain/presentationProfile.ts` is the browser-free authority for disposable
   Program Monitor presentation. It resolves Auto/Full/Half/Quarter into one
   uniform project-to-output scale plus an explainable reason and device-pixel
@@ -504,18 +517,29 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   source requests, unique aligned linked-audio partners, and typed fallback
   reasons. Preview, live playback, and export receive the same immutable
   document plus source-bounds facts and do not reconstruct seam geometry.
-- `domain/videoCompositionPlan.ts` carries ordinary paint items and grouped
-  crossfade items plus procedural text items through the preview bridge,
-  worker protocol, and export. It resolves clip animation at the requested
-  timeline frame before emitting every ordinary or crossfade leg, so scrub,
-  playback, and export cannot choose different interpolation paths. Text layout
-  is one bounded shared Canvas2D path
+- `domain/videoCompositionPlan.ts` carries ordinary paint items, grouped
+  crossfade items, procedural text items, and resource-free adjustment items
+  through the preview bridge, worker protocol, and export. For each visible
+  video track it emits that track's clips and adjustments at the same stack
+  position: completed lower tracks are composited first, then the adjustment,
+  then upper tracks; captions remain topmost. Multiple adjustments therefore
+  stack deterministically in document track order. It resolves clip and
+  adjustment animation at the requested timeline frame before emitting every
+  item, so scrub, playback, and export cannot choose different interpolation
+  paths. Text layout is one bounded shared Canvas2D path
   for preview and export; it never emits a media request. The compositor
   renders each complete transformed/effected/opacity-adjusted leg
   to a reusable transparent surface, combines premultiplied weighted pixels in
   declared Canvas2D sRGB, then composites the isolated group over lower tracks
   exactly once. Scratch surfaces, cached text layouts, and borrowed frames
   retain explicit bounded owners.
+- `pipeline/render.ts` evaluates each active adjustment in the same shared
+  compositor used by preview and export. It borrows the existing transition-leg
+  surface, copies the completed destination, applies only registry-approved
+  post-composite pixel effects, and mixes the result back exactly once at the
+  resolved adjustment opacity. Unknown/unavailable effects are stable no-ops;
+  adjustment items never enter source-request, audio, offline, or export-media
+  ownership sets, and the borrowed surface is cleared/reused on every path.
 - `domain/sourceTimeMap.ts` is the browser-free authority for constant and
   piecewise-speed retiming. It maps integer timeline offsets to exact source
   ticks and only

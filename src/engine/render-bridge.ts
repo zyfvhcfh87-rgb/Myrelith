@@ -198,7 +198,7 @@ function matchingPlannedExecution(
     } else if (item.kind === 'text') {
       const execution = inspect(item.effectStagePlan)
       if (execution) return execution
-    } else if (item.kind !== 'caption') {
+    } else if (item.kind === 'crossfade') {
       for (const request of item.requests) {
         const execution = inspect(request.effectStagePlan)
         if (execution) return execution

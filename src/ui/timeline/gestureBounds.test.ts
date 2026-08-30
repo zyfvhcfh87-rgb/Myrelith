@@ -57,7 +57,7 @@ function linkedDoc(
   audio = clip('audio', 'audio-asset', 35, 40, 2, 'link_bounds'),
 ): TimelineDoc {
   return {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'gesture-bounds',
     name: 'Gesture bounds',
     frameRate: { num: 30, den: 1 },

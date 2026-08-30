@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  ADJUSTMENT_ADDITIONAL_SURFACE_COUNT,
   EXPORT_READBACK_SURFACE_COUNT,
   LENS_REMAP_REUSABLE_SURFACE_COUNT,
   MAX_RENDER_SURFACE_DIMENSION,
@@ -30,6 +31,13 @@ describe('render surface budget', () => {
     const budget = renderSurfaceBudget(3_840, 2_160)
     expect(budget.surfaceCount).toBe(4)
     expect(budget.aggregateBytes).toBe(3_840 * 2_160 * 4 * 4)
+  })
+
+  test('reuses compositor scratch for adjustment layers without raising the 4K peak', () => {
+    const budget = renderSurfaceBudget(3_840, 2_160)
+    expect(ADJUSTMENT_ADDITIONAL_SURFACE_COUNT).toBe(0)
+    expect(budget.surfaceCount + ADJUSTMENT_ADDITIONAL_SURFACE_COUNT).toBe(4)
+    expect(budget.aggregateBytes).toBe(132_710_400)
   })
 
   test('keeps the reviewed 4K lens-remap export peak at seven RGBA surfaces', () => {

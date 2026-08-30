@@ -15,9 +15,10 @@ import { clipAnimation } from './clipAnimation'
 import { resolveCrossfadeGeometry } from './crossfadePlan'
 import { sourceFrameAtTimelineFrame, sourceTimeAudioPolicy } from './sourceTimeMap'
 import { rangeContains, rangeEnd } from './time'
+import { adjustmentItems } from './adjustmentItems'
 
 /**
- * Total document length in frames: the end of the last clip across all
+ * Total document length in frames: the end of the last timeline item across all
  * tracks (0 for an empty project). Derived on demand — never stored on the
  * doc, so it can never go stale (see schema.ts).
  */
@@ -26,6 +27,10 @@ export function docDurationFrames(doc: TimelineDoc): number {
   for (const track of doc.tracks) {
     for (const clip of track.clips) {
       const end = rangeEnd(clip.timelineRange)
+      if (end > last) last = end
+    }
+    for (const adjustment of adjustmentItems(track)) {
+      const end = rangeEnd(adjustment.timelineRange)
       if (end > last) last = end
     }
   }
@@ -39,8 +44,8 @@ export function docDurationFrames(doc: TimelineDoc): number {
 }
 
 /**
- * UI-only extent: a marker beyond the last clip remains scrollable and fits
- * Full Extent Zoom, while render/export duration continues to use clips only.
+ * UI-only extent: a marker beyond the last timeline item remains scrollable
+ * and fits Full Extent Zoom, while render/export duration ignores markers.
  */
 export function timelineDisplayDurationFrames(doc: TimelineDoc): number {
   let last = docDurationFrames(doc)

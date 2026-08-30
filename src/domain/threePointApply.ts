@@ -6,6 +6,11 @@
  * unique. This module is browser-free.
  */
 
+import {
+  locateAdjustment,
+  removeAdjustment,
+  splitAdjustmentAtFrame,
+} from './adjustmentItems'
 import { clipAnimation, shiftClipAnimation } from './clipAnimation'
 import {
   removeCaptionItem,
@@ -19,8 +24,10 @@ import {
   splitClipAtFrame,
 } from './operations'
 import {
+  clipsOverlapAdjustments,
   locateClip,
   reconcileTransitions,
+  shiftLaterAdjustments,
   withClampedAudioFades,
   withoutLinkGroupId,
   withTrack,
@@ -76,6 +83,10 @@ function clipIdsOnTracks(
   return clips
 }
 
+function rangeContainsFrame(range: TimeRange, frame: number): boolean {
+  return frame > range.startFrame && frame < rangeEnd(range)
+}
+
 function splitStrictlyInside(
   doc: TimelineDoc,
   clipId: string,
@@ -84,8 +95,20 @@ function splitStrictlyInside(
   const loc = locateClip(doc, clipId)
   if (!loc) return null
   const tl = loc.clip.timelineRange
-  if (frame <= tl.startFrame || frame >= rangeEnd(tl)) return doc
+  if (!rangeContainsFrame(tl, frame)) return doc
   const next = splitClipAtFrame(doc, clipId, frame)
+  return next === doc ? null : next
+}
+
+function splitAdjustmentStrictlyInside(
+  doc: TimelineDoc,
+  adjustmentId: string,
+  frame: number,
+): TimelineDoc | null {
+  const loc = locateAdjustment(doc, adjustmentId)
+  if (!loc) return null
+  if (!rangeContainsFrame(loc.adjustment.timelineRange, frame)) return doc
+  const next = splitAdjustmentAtFrame(doc, adjustmentId, frame)
   return next === doc ? null : next
 }
 
@@ -102,10 +125,18 @@ function punchTrackRange(
   if (track.locked) return null
 
   const startIds = track.clips
-    .filter((clip) => start > clip.timelineRange.startFrame && start < rangeEnd(clip.timelineRange))
+    .filter((clip) => rangeContainsFrame(clip.timelineRange, start))
     .map((clip) => clip.id)
+  const startAdjustmentIds = (track.adjustments ?? [])
+    .filter((item) => rangeContainsFrame(item.timelineRange, start))
+    .map((item) => item.id)
   for (const clipId of startIds) {
     const next = splitStrictlyInside(current, clipId, start)
+    if (next === null) return null
+    current = next
+  }
+  for (const adjustmentId of startAdjustmentIds) {
+    const next = splitAdjustmentStrictlyInside(current, adjustmentId, start)
     if (next === null) return null
     current = next
   }
@@ -113,10 +144,18 @@ function punchTrackRange(
   const afterStart = current.tracks.find((candidate) => candidate.id === trackId)
   if (!afterStart) return null
   const endIds = afterStart.clips
-    .filter((clip) => end > clip.timelineRange.startFrame && end < rangeEnd(clip.timelineRange))
+    .filter((clip) => rangeContainsFrame(clip.timelineRange, end))
     .map((clip) => clip.id)
+  const endAdjustmentIds = (afterStart.adjustments ?? [])
+    .filter((item) => rangeContainsFrame(item.timelineRange, end))
+    .map((item) => item.id)
   for (const clipId of endIds) {
     const next = splitStrictlyInside(current, clipId, end)
+    if (next === null) return null
+    current = next
+  }
+  for (const adjustmentId of endAdjustmentIds) {
+    const next = splitAdjustmentStrictlyInside(current, adjustmentId, end)
     if (next === null) return null
     current = next
   }
@@ -129,8 +168,19 @@ function punchTrackRange(
       && rangeEnd(clip.timelineRange) <= end
     ))
     .map((clip) => clip.id)
+  const removeAdjustmentIds = (afterSplits.adjustments ?? [])
+    .filter((item) => (
+      item.timelineRange.startFrame >= start
+      && rangeEnd(item.timelineRange) <= end
+    ))
+    .map((item) => item.id)
   for (const clipId of removeIds) {
     const next = deleteClip(current, clipId)
+    if (next === current) return null
+    current = next
+  }
+  for (const adjustmentId of removeAdjustmentIds) {
+    const next = removeAdjustment(current, adjustmentId)
     if (next === current) return null
     current = next
   }
@@ -146,18 +196,26 @@ function splitUnlockedAt(
   for (const track of original.tracks) {
     if (track.locked) {
       const spanning = track.clips.some((clip) => (
-        frame > clip.timelineRange.startFrame && frame < rangeEnd(clip.timelineRange)
+        rangeContainsFrame(clip.timelineRange, frame)
+      )) || (track.adjustments ?? []).some((item) => (
+        rangeContainsFrame(item.timelineRange, frame)
       ))
       if (spanning) return null
       continue
     }
     const ids = track.clips
-      .filter((clip) => (
-        frame > clip.timelineRange.startFrame && frame < rangeEnd(clip.timelineRange)
-      ))
+      .filter((clip) => rangeContainsFrame(clip.timelineRange, frame))
       .map((clip) => clip.id)
+    const adjustmentIds = (track.adjustments ?? [])
+      .filter((item) => rangeContainsFrame(item.timelineRange, frame))
+      .map((item) => item.id)
     for (const clipId of ids) {
       const next = splitStrictlyInside(current, clipId, frame)
+      if (next === null) return null
+      current = next
+    }
+    for (const adjustmentId of adjustmentIds) {
+      const next = splitAdjustmentStrictlyInside(current, adjustmentId, frame)
       if (next === null) return null
       current = next
     }
@@ -202,9 +260,19 @@ function shiftTracksFrom(
     })
     if (clips.some((clip) => clip.timelineRange.startFrame < 0)) return null
     if (trackClipsOverlap(clips)) return null
+    const adjustments = shiftLaterAdjustments(track.adjustments, fromFrame, deltaFrames)
+    if (adjustments === null) return null
+    if (clipsOverlapAdjustments(clips, adjustments)) return null
     const changed = clips.some((clip, index) => clip !== track.clips[index])
+      || adjustments !== track.adjustments
     tracks.push(
-      changed ? reconcileTransitions(track, { ...track, clips }) : track,
+      changed
+        ? reconcileTransitions(track, {
+            ...track,
+            clips,
+            ...(adjustments === undefined ? {} : { adjustments }),
+          })
+        : track,
     )
   }
   const unchanged = tracks.every((track, index) => track === doc.tracks[index])

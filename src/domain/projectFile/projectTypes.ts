@@ -18,7 +18,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 14 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 15 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -30,6 +30,7 @@ export const PROJECT_FILE_LIMITS = {
   maxCollectionNameCharacters: MEDIA_COLLECTION_LIMITS.maxNameCharacters,
   maxTracks: 256,
   maxClips: 100_000,
+  maxAdjustments: 100_000,
   maxEffectsPerClip: EFFECT_STACK_LIMITS.maxEffectsPerClip,
   maxEffectParams: EFFECT_STACK_LIMITS.maxEffectParams,
   maxTotalEffects: EFFECT_STACK_LIMITS.maxTotalEffects,

@@ -50,6 +50,7 @@ import {
   updateClipVisual,
   updateEffectParams,
 } from './operations'
+import { createAdjustmentItem } from './adjustmentItems'
 import { rangeEnd } from './time'
 import {
   defaultSourceTimeMap,
@@ -105,7 +106,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -140,7 +141,7 @@ function makeStillClip(
 
 function makeVideoDoc(clips: Clip[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'doc-stills',
     name: 'Still source tests',
     frameRate: { num: 30, den: 1 },
@@ -653,6 +654,67 @@ describe('rippleDelete', () => {
     const doc = makeDoc()
     expect(rippleDelete(doc, 'nope')).toBe(doc)
     expect(rippleDelete(doc, 'clipE')).toBe(doc)
+  })
+})
+
+describe('clip edits respect adjustment occupancy', () => {
+  function withGapAdjustment(): TimelineDoc {
+    // V1: clipA [0,100) clipB [100,150) gap [150,200) clipC [200,260)
+    const start = makeDoc()
+    return deepFreeze({
+      ...start,
+      tracks: start.tracks.map((track) => (
+        track.id === 'V1'
+          ? { ...track, adjustments: [createAdjustmentItem(150, 50)] }
+          : track
+      )),
+    })
+  }
+
+  test('insert, move, and trim reject a range already held by an adjustment', () => {
+    const doc = withGapAdjustment()
+    expect(insertClip(doc, 'V1', makeClip('into-adj', 150, 50))).toBe(doc)
+    expect(moveClip(doc, 'clipC', 'V1', 150)).toBe(doc)
+    expect(trimClip(doc, 'clipC', 'start', -5)).toBe(doc)
+  })
+
+  test('ripple-delete and ripple-trim shift later adjustments with later clips', () => {
+    const doc = withGapAdjustment()
+    const deleted = rippleDelete(doc, 'clipB')
+    expect(deleted).not.toBe(doc)
+    expect(clipIn(deleted, 'V1', 'clipC').timelineRange.startFrame).toBe(150)
+    expect(deleted.tracks.find((track) => track.id === 'V1')!.adjustments![0]!
+      .timelineRange).toEqual({ startFrame: 100, durationFrames: 50 })
+
+    const trimmed = rippleTrim(doc, 'clipB', 'end', 20)
+    expect(trimmed).not.toBe(doc)
+    expect(clipIn(trimmed, 'V1', 'clipC').timelineRange.startFrame).toBe(220)
+    expect(trimmed.tracks.find((track) => track.id === 'V1')!.adjustments![0]!
+      .timelineRange).toEqual({ startFrame: 170, durationFrames: 50 })
+  })
+
+  test('slide and retime reject growing or sliding into an adjustment', () => {
+    const doc = withGapAdjustment()
+    expect(slideClip(doc, 'clipB', 10)).toBe(doc)
+
+    const isolated = deepFreeze({
+      schemaVersion: 15,
+      id: 'doc-retime-adj',
+      name: 'retime vs adjustment',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48000,
+      tracks: [makeTrack('V1', 'video', [makeClip('solo', 0, 20)])],
+    })
+    const withAdj = deepFreeze({
+      ...isolated,
+      tracks: isolated.tracks.map((track) => ({
+        ...track,
+        adjustments: [createAdjustmentItem(20, 10)],
+      })),
+    })
+    expect(retimeClip(withAdj, 'solo', sourceTimeRateFromPercent(50))).toBe(withAdj)
   })
 })
 
@@ -1333,7 +1395,7 @@ function makeCrossfadeDoc(
   locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'crossfade-doc',
     name: 'Crossfade lifecycle',
     frameRate: { num: 30, den: 1 },
@@ -2030,6 +2092,7 @@ describe('addTrack', () => {
       kind: 'video',
       name: 'V3',
       clips: [],
+      adjustments: [],
       transitions: [],
       hidden: false,
       muted: false,

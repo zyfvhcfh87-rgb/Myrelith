@@ -20,6 +20,9 @@
 
 import { create } from 'zustand'
 import type {
+  AdjustmentAnimationKeyframe,
+  AdjustmentItem,
+  AdjustmentItemId,
   CaptionItem,
   CaptionItemId,
   CaptionTrack,
@@ -143,6 +146,27 @@ import {
 } from '../domain/projectSettings'
 import type { ManualLensCorrectionModel } from '../domain/lensCorrection'
 import { setManualLensCorrection } from '../domain/lensCorrectionOperations'
+import {
+  addAdjustmentEffect as addAdjustmentEffectToDocument,
+  clearAdjustmentEffectAnimation as clearAdjustmentEffectAnimationInDocument,
+  clearAdjustmentOpacityAnimation as clearAdjustmentOpacityAnimationInDocument,
+  duplicateAdjustment as duplicateAdjustmentInDocument,
+  insertAdjustment as insertAdjustmentIntoDocument,
+  moveAdjustment as moveAdjustmentInDocument,
+  removeAdjustment as removeAdjustmentFromDocument,
+  removeAdjustmentEffect as removeAdjustmentEffectFromDocument,
+  renameAdjustment as renameAdjustmentInDocument,
+  reorderAdjustmentEffect as reorderAdjustmentEffectInDocument,
+  resetAdjustmentEffect as resetAdjustmentEffectInDocument,
+  setAdjustmentEffectEnabled as setAdjustmentEffectEnabledInDocument,
+  setAdjustmentEffectKeyframe as setAdjustmentEffectKeyframeInDocument,
+  setAdjustmentEnabled as setAdjustmentEnabledInDocument,
+  setAdjustmentOpacityAtFrame as setAdjustmentOpacityAtFrameInDocument,
+  setAdjustmentOpacityKeyframe as setAdjustmentOpacityKeyframeInDocument,
+  splitAdjustmentAtFrame as splitAdjustmentAtFrameInDocument,
+  trimAdjustment as trimAdjustmentInDocument,
+  updateAdjustmentEffectParamsAtFrame as updateAdjustmentEffectParamsAtFrameInDocument,
+} from '../domain/adjustmentItems'
 
 /** Max undo levels; snapshots beyond this fall off the old end. */
 const HISTORY_LIMIT = 100
@@ -181,6 +205,63 @@ export interface DocumentState {
    * entry, so a single undo removes the whole pair.
    */
   insertClips: (inserts: ReadonlyArray<{ trackId: TrackId; clip: Clip }>) => void
+  /** Add and edit explicit resource-free full-frame adjustment items. */
+  insertAdjustment: (trackId: TrackId, item: AdjustmentItem) => void
+  moveAdjustment: (
+    adjustmentId: AdjustmentItemId,
+    toTrackId: TrackId,
+    toFrame: number,
+  ) => void
+  trimAdjustment: (
+    adjustmentId: AdjustmentItemId,
+    edge: TrimEdge,
+    deltaFrames: number,
+  ) => void
+  splitAdjustmentAt: (adjustmentId: AdjustmentItemId, frame: number) => void
+  duplicateAdjustment: (adjustmentId: AdjustmentItemId, toFrame?: number) => void
+  removeAdjustment: (adjustmentId: AdjustmentItemId) => void
+  setAdjustmentEnabled: (adjustmentId: AdjustmentItemId, enabled: boolean) => void
+  renameAdjustment: (adjustmentId: AdjustmentItemId, name: string) => void
+  setAdjustmentOpacityAtFrame: (
+    adjustmentId: AdjustmentItemId,
+    timelineFrame: number,
+    opacity: number,
+  ) => void
+  setAdjustmentOpacityKeyframe: (
+    adjustmentId: AdjustmentItemId,
+    keyframe: AdjustmentAnimationKeyframe,
+  ) => void
+  clearAdjustmentOpacityAnimation: (adjustmentId: AdjustmentItemId) => void
+  addAdjustmentEffect: (adjustmentId: AdjustmentItemId, effect: Effect) => void
+  setAdjustmentEffectEnabled: (
+    adjustmentId: AdjustmentItemId,
+    effectId: EffectId,
+    enabled: boolean,
+  ) => void
+  updateAdjustmentEffectParamsAtFrame: (
+    adjustmentId: AdjustmentItemId,
+    effectId: EffectId,
+    timelineFrame: number,
+    patch: Readonly<Record<string, EffectParamValue>>,
+  ) => void
+  setAdjustmentEffectKeyframe: (
+    adjustmentId: AdjustmentItemId,
+    effectId: EffectId,
+    parameter: string,
+    keyframe: AdjustmentAnimationKeyframe,
+  ) => void
+  clearAdjustmentEffectAnimation: (
+    adjustmentId: AdjustmentItemId,
+    effectId: EffectId,
+    parameter?: string,
+  ) => void
+  reorderAdjustmentEffect: (
+    adjustmentId: AdjustmentItemId,
+    effectId: EffectId,
+    targetIndex: number,
+  ) => void
+  resetAdjustmentEffect: (adjustmentId: AdjustmentItemId, effectId: EffectId) => void
+  removeAdjustmentEffect: (adjustmentId: AdjustmentItemId, effectId: EffectId) => void
   /**
    * Split ONE clip at a timeline frame strictly inside it (the razor tool;
    * splitClipAtPlayhead is the split-everything keyboard variant). Linked
@@ -550,6 +631,160 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       }
       return commit(state, next)
     }),
+
+  insertAdjustment: (trackId, item) =>
+    set((state) => commit(
+      state,
+      insertAdjustmentIntoDocument(state.doc, trackId, item),
+    )),
+
+  moveAdjustment: (adjustmentId, toTrackId, toFrame) =>
+    set((state) => commit(
+      state,
+      moveAdjustmentInDocument(state.doc, adjustmentId, toTrackId, toFrame),
+    )),
+
+  trimAdjustment: (adjustmentId, edge, deltaFrames) =>
+    set((state) => commit(
+      state,
+      trimAdjustmentInDocument(state.doc, adjustmentId, edge, deltaFrames),
+    )),
+
+  splitAdjustmentAt: (adjustmentId, frame) =>
+    set((state) => commit(
+      state,
+      splitAdjustmentAtFrameInDocument(state.doc, adjustmentId, frame),
+    )),
+
+  duplicateAdjustment: (adjustmentId, toFrame) =>
+    set((state) => commit(
+      state,
+      duplicateAdjustmentInDocument(state.doc, adjustmentId, toFrame),
+    )),
+
+  removeAdjustment: (adjustmentId) =>
+    set((state) => commit(
+      state,
+      removeAdjustmentFromDocument(state.doc, adjustmentId),
+    )),
+
+  setAdjustmentEnabled: (adjustmentId, enabled) =>
+    set((state) => commit(
+      state,
+      setAdjustmentEnabledInDocument(state.doc, adjustmentId, enabled),
+    )),
+
+  renameAdjustment: (adjustmentId, name) =>
+    set((state) => commit(
+      state,
+      renameAdjustmentInDocument(state.doc, adjustmentId, name),
+    )),
+
+  setAdjustmentOpacityAtFrame: (adjustmentId, timelineFrame, opacity) =>
+    set((state) => commit(
+      state,
+      setAdjustmentOpacityAtFrameInDocument(
+        state.doc,
+        adjustmentId,
+        timelineFrame,
+        opacity,
+      ),
+    )),
+
+  setAdjustmentOpacityKeyframe: (adjustmentId, keyframe) =>
+    set((state) => commit(
+      state,
+      setAdjustmentOpacityKeyframeInDocument(state.doc, adjustmentId, keyframe),
+    )),
+
+  clearAdjustmentOpacityAnimation: (adjustmentId) =>
+    set((state) => commit(
+      state,
+      clearAdjustmentOpacityAnimationInDocument(state.doc, adjustmentId),
+    )),
+
+  addAdjustmentEffect: (adjustmentId, effect) =>
+    set((state) => commit(
+      state,
+      addAdjustmentEffectToDocument(state.doc, adjustmentId, effect),
+    )),
+
+  setAdjustmentEffectEnabled: (adjustmentId, effectId, enabled) =>
+    set((state) => commit(
+      state,
+      setAdjustmentEffectEnabledInDocument(
+        state.doc,
+        adjustmentId,
+        effectId,
+        enabled,
+      ),
+    )),
+
+  updateAdjustmentEffectParamsAtFrame: (
+    adjustmentId,
+    effectId,
+    timelineFrame,
+    patch,
+  ) => set((state) => commit(
+    state,
+    updateAdjustmentEffectParamsAtFrameInDocument(
+      state.doc,
+      adjustmentId,
+      effectId,
+      timelineFrame,
+      patch,
+    ),
+  )),
+
+  setAdjustmentEffectKeyframe: (
+    adjustmentId,
+    effectId,
+    parameter,
+    keyframe,
+  ) => set((state) => commit(
+    state,
+    setAdjustmentEffectKeyframeInDocument(
+      state.doc,
+      adjustmentId,
+      effectId,
+      parameter,
+      keyframe,
+    ),
+  )),
+
+  clearAdjustmentEffectAnimation: (adjustmentId, effectId, parameter) =>
+    set((state) => commit(
+      state,
+      clearAdjustmentEffectAnimationInDocument(
+        state.doc,
+        adjustmentId,
+        effectId,
+        parameter,
+      ),
+    )),
+
+  reorderAdjustmentEffect: (adjustmentId, effectId, targetIndex) =>
+    set((state) => commit(
+      state,
+      reorderAdjustmentEffectInDocument(
+        state.doc,
+        adjustmentId,
+        effectId,
+        targetIndex,
+      ),
+    )),
+
+  resetAdjustmentEffect: (adjustmentId, effectId) =>
+    set((state) => commit(
+      state,
+      resetAdjustmentEffectInDocument(state.doc, adjustmentId, effectId),
+    )),
+
+  removeAdjustmentEffect: (adjustmentId, effectId) =>
+    set((state) => commit(
+      state,
+      removeAdjustmentEffectFromDocument(state.doc, adjustmentId, effectId),
+    )),
 
   splitClipAt: (clipId, frame) =>
     set((state) => commit(state, linkedSplitClipAtFrame(state.doc, clipId, frame))),

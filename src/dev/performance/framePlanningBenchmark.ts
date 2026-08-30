@@ -352,6 +352,9 @@ function planChecksum(plan: VideoCompositionPlan): number {
     if (item.kind === 'clip') checksum += item.request.sourceFrame + item.request.opacity
     else if (item.kind === 'text') checksum += item.opacity + item.clip.id.length
     else if (item.kind === 'caption') checksum += item.paint.opacity + item.paint.id.length
+    else if (item.kind === 'adjustment') {
+      checksum += item.adjustment.opacity + item.adjustment.id.length
+    }
     else {
       checksum += item.requests[0].sourceFrame + item.requests[0].weight
         + item.requests[1].sourceFrame + item.requests[1].weight

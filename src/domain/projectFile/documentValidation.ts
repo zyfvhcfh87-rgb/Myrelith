@@ -1,11 +1,108 @@
-import type { CaptionItem, CaptionTrack, TimelineDoc, TimelineMarker, Track } from '../schema';
+import type { AdjustmentAnimationKeyframe, AdjustmentItem, CaptionItem, CaptionTrack, Clip, TimelineDoc, TimelineMarker, Track } from '../schema';
+import { adjustmentAnimationValidationError, adjustmentItemValidationError } from '../adjustmentItems';
+import { MAX_ANIMATED_FINITE_MAGNITUDE, MAX_KEYFRAME_FRAME, MAX_KEYFRAMES_PER_TRACK } from '../clipAnimation';
 import { CAPTION_LIMITS, CAPTION_STYLE_PRESETS, CAPTION_TRACK_ROLES, captionDocumentValidationError, captionTrackValidationError, compareCaptionItems } from '../captions';
 import { compareTimelineMarkers, MAX_TIMELINE_MARKER_FRAME, MAX_TIMELINE_MARKER_ID_CHARACTERS, MAX_TIMELINE_MARKER_LABEL_CHARACTERS, MAX_TIMELINE_MARKER_NOTE_CHARACTERS, TIMELINE_MARKER_COLORS } from '../timelineMarkers';
 import { renderSurfaceBudget } from '../renderSurfaceBudget';
 import { CURRENT_PROJECT_FORMAT_VERSION, CURRENT_TIMELINE_SCHEMA_VERSION, PROJECT_FILE_FORMAT, PROJECT_FILE_LIMITS, type PortableAssetDescriptor, type ProjectFile } from './projectTypes';
-import { booleanValue, boundedArray, exactKeys, fail, record, safeInteger, stringValue, validateFrameRate } from './validationPrimitives';
+import { booleanValue, boundedArray, exactKeys, fail, finiteNumber, record, safeInteger, stringValue, validateFrameRate } from './validationPrimitives';
 import { validateAsset, validateMediaCollections } from './assetValidation';
-import { validateClip, type ValidationContext } from './clipValidation';
+import { validateAnimationEasing, validateClip, validateEffect, validateRange, type ValidationContext } from './clipValidation';
+
+function validateAdjustmentKeyframes(
+  value: unknown,
+  path: string,
+  context: ValidationContext,
+): AdjustmentAnimationKeyframe[] {
+  boundedArray(value, path, MAX_KEYFRAMES_PER_TRACK)
+  if (value.length === 0) fail(path, 'must not be empty')
+  context.keyframeCount += value.length
+  if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
+    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`)
+  }
+  let previousFrame: number | null = null
+  for (let index = 0; index < value.length; index++) {
+    const keyframePath = `${path}[${index}]`
+    const keyframe = record(value[index], keyframePath)
+    exactKeys(keyframe, ['frame', 'value', 'easing'], [], keyframePath)
+    safeInteger(keyframe.frame, `${keyframePath}.frame`, -MAX_KEYFRAME_FRAME, MAX_KEYFRAME_FRAME)
+    if (previousFrame !== null && keyframe.frame <= previousFrame) {
+      fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
+    }
+    finiteNumber(
+      keyframe.value,
+      `${keyframePath}.value`,
+      -MAX_ANIMATED_FINITE_MAGNITUDE,
+      MAX_ANIMATED_FINITE_MAGNITUDE,
+    )
+    validateAnimationEasing(keyframe.easing, `${keyframePath}.easing`)
+    previousFrame = Number(keyframe.frame)
+  }
+  return value as AdjustmentAnimationKeyframe[]
+}
+
+function validateAdjustment(
+  value: unknown,
+  path: string,
+  trackKind: Track['kind'],
+  context: ValidationContext,
+): AdjustmentItem {
+  const item = record(value, path)
+  exactKeys(
+    item,
+    ['kind', 'id', 'name', 'timelineRange', 'enabled', 'opacity', 'animation', 'effects'],
+    [],
+    path,
+  )
+  if (item.kind !== 'adjustment') fail(`${path}.kind`, 'expected adjustment')
+  if (trackKind !== 'video') fail(path, 'adjustments require a video track')
+  stringValue(item.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (context.timelineItemIds.has(item.id)) fail(`${path}.id`, 'duplicate timeline item id')
+  context.timelineItemIds.add(item.id)
+  stringValue(item.name, `${path}.name`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  validateRange(item.timelineRange, `${path}.timelineRange`, 1)
+  booleanValue(item.enabled, `${path}.enabled`)
+  finiteNumber(item.opacity, `${path}.opacity`, 0, 1)
+
+  const animation = record(item.animation, `${path}.animation`)
+  exactKeys(animation, ['tracks', 'effectTracks'], [], `${path}.animation`)
+  boundedArray(animation.tracks, `${path}.animation.tracks`, 1)
+  for (let index = 0; index < animation.tracks.length; index++) {
+    const trackPath = `${path}.animation.tracks[${index}]`
+    const track = record(animation.tracks[index], trackPath)
+    exactKeys(track, ['property', 'keyframes'], [], trackPath)
+    if (track.property !== 'opacity') fail(`${trackPath}.property`, 'expected opacity')
+    validateAdjustmentKeyframes(track.keyframes, `${trackPath}.keyframes`, context)
+  }
+  boundedArray(animation.effectTracks, `${path}.animation.effectTracks`, 1_280)
+  const targets = new Set<string>()
+  for (let index = 0; index < animation.effectTracks.length; index++) {
+    const trackPath = `${path}.animation.effectTracks[${index}]`
+    const track = record(animation.effectTracks[index], trackPath)
+    exactKeys(track, ['effectId', 'parameter', 'keyframes'], [], trackPath)
+    stringValue(track.effectId, `${trackPath}.effectId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+    stringValue(track.parameter, `${trackPath}.parameter`, PROJECT_FILE_LIMITS.maxNameCharacters)
+    const target = `${track.effectId}\u0000${track.parameter}`
+    if (targets.has(target)) fail(trackPath, 'duplicate adjustment effect animation target')
+    targets.add(target)
+    validateAdjustmentKeyframes(track.keyframes, `${trackPath}.keyframes`, context)
+  }
+
+  boundedArray(item.effects, `${path}.effects`, PROJECT_FILE_LIMITS.maxEffectsPerClip)
+  context.effectCount += item.effects.length
+  if (context.effectCount > PROJECT_FILE_LIMITS.maxTotalEffects) {
+    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffects} effects in total`)
+  }
+  for (let index = 0; index < item.effects.length; index++) {
+    validateEffect(item.effects[index], `${path}.effects[${index}]`, context)
+  }
+  const typed = item as unknown as AdjustmentItem
+  const animationError = adjustmentAnimationValidationError(typed.animation)
+  if (animationError) fail(`${path}.animation`, animationError)
+  const error = adjustmentItemValidationError(typed)
+  if (error) fail(path, error)
+  return typed
+}
 
 function validateTimelineMarker(
   value: unknown,
@@ -163,7 +260,7 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   const track = record(value, path)
   exactKeys(
     track,
-    ['id', 'kind', 'name', 'clips', 'transitions', 'hidden', 'muted', 'solo', 'locked'],
+    ['id', 'kind', 'name', 'clips', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked'],
     [],
     path,
   )
@@ -190,6 +287,26 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
     }
     previousEnd = clip.timelineRange.startFrame + clip.timelineRange.durationFrames
     clipIndexById.set(clip.id, index)
+  }
+  boundedArray(track.adjustments, `${path}.adjustments`, PROJECT_FILE_LIMITS.maxAdjustments)
+  context.adjustmentCount += track.adjustments.length
+  if (context.adjustmentCount > PROJECT_FILE_LIMITS.maxAdjustments) {
+    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxAdjustments} adjustments in total`)
+  }
+  let previousAdjustmentEnd = -1
+  const allItemRanges = (track.clips as Clip[]).map((clip) => clip.timelineRange)
+  for (let index = 0; index < track.adjustments.length; index++) {
+    const itemPath = `${path}.adjustments[${index}]`
+    const item = validateAdjustment(track.adjustments[index], itemPath, track.kind, context)
+    if (item.timelineRange.startFrame < previousAdjustmentEnd) {
+      fail(itemPath, 'adjustments must be sorted and non-overlapping')
+    }
+    if (allItemRanges.some((range) => (
+      item.timelineRange.startFrame < range.startFrame + range.durationFrames
+      && range.startFrame < item.timelineRange.startFrame + item.timelineRange.durationFrames
+    ))) fail(itemPath, 'adjustment overlaps a clip on the owning track')
+    previousAdjustmentEnd = item.timelineRange.startFrame + item.timelineRange.durationFrames
+    allItemRanges.push(item.timelineRange)
   }
   boundedArray(track.transitions, `${path}.transitions`, PROJECT_FILE_LIMITS.maxTransitions)
   context.transitionCount += track.transitions.length
@@ -322,10 +439,12 @@ export function validateProjectFile(value: unknown): ProjectFile {
     assetsById,
     documentFrameRate: null,
     clipIds: new Set(),
+    timelineItemIds: new Set(),
     effectIds: new Set(),
     transitionIds: new Set(),
     linkGroupCounts: new Map(),
     clipCount: 0,
+    adjustmentCount: 0,
     effectCount: 0,
     effectParamCount: 0,
     effectStringCharacterCount: 0,

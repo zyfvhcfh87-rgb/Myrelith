@@ -37,6 +37,7 @@
 
 import type {
   AssetId,
+  AdjustmentItem,
   Clip,
   ClipId,
   ClipVisualSettings,
@@ -68,6 +69,7 @@ import {
 import { probeCanvasBlendMode } from './blendModeCapabilities'
 import {
   resolveCanvasEffectStack,
+  resolvePostCompositeEffectStack,
   supportsCanvasEffectFilter,
   supportsCanvasEffectPixels,
 } from '../domain/effectStack'
@@ -109,6 +111,8 @@ export interface FrameSource {
  * satisfy this; tests inject a recording fake.
  */
 export interface Composite2D {
+  /** Present on real Canvas2D contexts; optional only for lightweight test fakes. */
+  readonly canvas?: CanvasImageSource
   globalAlpha: number
   globalCompositeOperation: GlobalCompositeOperation
   /** Optional on test fakes; present on modern Canvas2D/OffscreenCanvas contexts. */
@@ -306,6 +310,24 @@ export async function compositeFrame(
     ctx.fillRect(0, 0, doc.width, doc.height)
 
     for (const item of plan.items) {
+      if (item.kind === 'adjustment') {
+        try {
+          compositePostCompositeAdjustment(
+            doc,
+            ctx,
+            transitionSurfaceProvider,
+            item.adjustment,
+            presentationScale,
+          )
+        } catch (e) {
+          console.warn(
+            `[render] applying adjustment "${item.adjustment.id}" failed:`,
+            e instanceof Error ? e.message : e,
+          )
+        }
+        continue
+      }
+
       if (item.kind === 'crossfade') {
         await compositeTransitionGroup(
           doc,
@@ -1160,4 +1182,91 @@ function applyPixelEffectsToSurface(
     projectHeight: doc.height,
   })
   ctx.putImageData(imageData, 0, 0)
+}
+
+/**
+ * Apply one full-frame adjustment by borrowing the existing leg surface.
+ * This adds no persistent 4K allocation: the same scratch surface already
+ * owned by transition, text, lens, and ordered-effect composition is reused.
+ */
+function compositePostCompositeAdjustment(
+  doc: TimelineDoc,
+  destination: Composite2D,
+  surfaceProvider: TransitionSurfaceProvider,
+  adjustment: AdjustmentItem,
+  presentationScale: { readonly x: number; readonly y: number },
+): void {
+  const surfaces = surfaceProvider.get()
+  const resolution = resolvePostCompositeEffectStack(
+    adjustment.effects,
+    supportsCanvasEffectPixels(surfaces.leg.ctx),
+  )
+  if (resolution.pixelEffects.length === 0) return
+  if (!destination.canvas) {
+    throw new Error('destination canvas access is unavailable')
+  }
+  if (
+    !supportsCanvasEffectPixels(surfaces.leg.ctx)
+    || !surfaces.leg.ctx.getImageData
+    || !surfaces.leg.ctx.putImageData
+  ) return
+
+  const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
+  const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
+  try {
+    surfaces.leg.ctx.save()
+    try {
+      surfaces.leg.ctx.globalAlpha = 1
+      surfaces.leg.ctx.globalCompositeOperation = 'source-over'
+      surfaces.leg.ctx.clearRect(0, 0, surfaceWidth, surfaceHeight)
+      surfaces.leg.ctx.drawImage(
+        destination.canvas,
+        0,
+        0,
+        surfaceWidth,
+        surfaceHeight,
+        0,
+        0,
+        surfaceWidth,
+        surfaceHeight,
+      )
+    } finally {
+      surfaces.leg.ctx.restore()
+    }
+
+    const imageData = surfaces.leg.ctx.getImageData(
+      0,
+      0,
+      surfaceWidth,
+      surfaceHeight,
+    )
+    applyOrderedPixelEffectsToRgba(imageData.data, resolution.pixelEffects, {
+      surfaceWidth,
+      surfaceHeight,
+      projectWidth: doc.width,
+      projectHeight: doc.height,
+    })
+    surfaces.leg.ctx.putImageData(imageData, 0, 0)
+
+    destination.save()
+    try {
+      destination.globalAlpha = adjustment.opacity
+      destination.globalCompositeOperation = 'source-over'
+      destination.drawImage(
+        surfaces.leg.canvas,
+        0,
+        0,
+        surfaceWidth,
+        surfaceHeight,
+        0,
+        0,
+        doc.width,
+        doc.height,
+      )
+    } finally {
+      destination.restore()
+    }
+  } finally {
+    releaseSurfacePixels(surfaces.leg.ctx, doc, presentationScale)
+  }
 }

@@ -109,6 +109,8 @@ export type AssetId = string
 export type TrackId = string
 /** Unique id of a clip within a document. */
 export type ClipId = string
+/** Unique id of a full-frame post-composite adjustment item. */
+export type AdjustmentItemId = string
 /** Unique id of an effect instance on a clip. */
 export type EffectId = string
 /** Unique id of a transition instance on a track. */
@@ -529,6 +531,51 @@ export interface Clip {
   linkGroupId?: string
 }
 
+/** Adjustment keyframes are timeline-local only and deliberately own no source time. */
+export interface AdjustmentAnimationKeyframe {
+  frame: number
+  value: number
+  easing: ClipAnimationEasing
+}
+
+export interface AdjustmentOpacityAnimationTrack {
+  property: 'opacity'
+  keyframes: AdjustmentAnimationKeyframe[]
+}
+
+export interface AdjustmentEffectAnimationTrack {
+  effectId: EffectId
+  parameter: string
+  keyframes: AdjustmentAnimationKeyframe[]
+}
+
+export interface AdjustmentAnimation {
+  tracks: AdjustmentOpacityAnimationTrack[]
+  effectTracks: AdjustmentEffectAnimationTrack[]
+}
+
+/**
+ * Serializable edit intent for one full-frame post-composite adjustment.
+ * The discriminator is explicit so this can grow into a wider timeline-item
+ * union without pretending the item owns media, source time, audio, or spatial
+ * source geometry.
+ */
+export interface AdjustmentItem {
+  kind: 'adjustment'
+  id: AdjustmentItemId
+  name: string
+  /** Exact half-open document-rate interval in which the adjustment runs. */
+  timelineRange: TimeRange
+  /** Item-level bypass. Disabled items remain portable and selectable. */
+  enabled: boolean
+  /** Mix between the untouched lower composition and the adjusted result. */
+  opacity: number
+  /** Opacity and supported effect-parameter animation only. */
+  animation: AdjustmentAnimation
+  /** Durable authored order; unsupported/source-stage effects stay bypassed. */
+  effects: EffectDescriptor[]
+}
+
 /** What a track holds; a track only accepts clips compatible with its kind. */
 export type TrackKind = 'video' | 'audio'
 
@@ -548,6 +595,12 @@ export interface Track {
    * non-overlapping (operations.ts rejects edits that would violate this).
    */
   clips: Clip[]
+  /**
+   * Full-frame post-composite items on this lane. Current schema-15 project
+   * files always include the array; optional typing keeps historical pure
+   * fixtures source-compatible until they cross migration/validation.
+   */
+  adjustments?: AdjustmentItem[]
   /** Transitions between adjacent clip pairs on this track. */
   transitions: Transition[]
   /** Video: excluded from compositing when true. */

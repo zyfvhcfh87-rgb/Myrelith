@@ -15,7 +15,7 @@ import type { CaptionItem, TimelineDoc } from './schema'
 
 function doc(): TimelineDoc {
   return {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'doc',
     name: 'Captions',
     frameRate: { num: 30_000, den: 1_001 },

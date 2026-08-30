@@ -4861,3 +4861,37 @@ acceptance claims.
   mux. Verify it in repository Chromium and installed Chrome 151.
 - [x] Pass all 237 Vitest files / 3,370 tests, all 17 repository runner checks,
   all 12 repository Chromium tests, production build/typecheck, and clean lint.
+
+## Post-MVP issue #190 - bounded adjustment layers
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-30); PUBLICATION AND CLOSEOUT NOT AUTHORIZED.**
+
+- [x] Advance timeline schema 14→15 with a bounded, resource-free,
+  video-track-only `AdjustmentItem`; migrate existing tracks to empty arrays and
+  cover portable save, recovery, validation, duration, global ids, animation,
+  and effect budgets.
+- [x] Add pure insert/move/trim/split/duplicate/delete, enable/name/opacity,
+  bounded animation, and effect-stack operations behind canonical one-entry
+  history actions and ephemeral pointer previews.
+- [x] Extend the shared frame planner and preview/export compositor with exact
+  lower tracks → adjustment → upper tracks → captions ordering. Keep
+  adjustments out of media/source/audio/proxy/cache/offline ownership and prove
+  reference pixels, unknown bypass, opacity-once behavior, and zero media
+  requests.
+- [x] Restrict authoring to declared post-composite-safe effects. Preserve and
+  visibly bypass bounded unknown/future descriptors; reject masks, chroma,
+  source geometry, and current plugin contributions.
+- [x] Reuse the existing transition-leg surface so the adjustment path adds
+  zero surfaces. Preserve the 4K four-surface compositor at 132,710,400 bytes
+  and seven-surface lens/export peak at 232,243,200 bytes under 256 MiB.
+- [x] Ship accessible Add/Timeline/Inspector controls with selection, lock,
+  keyboard, edit, animation, effect status, responsive scrolling, and cleanup
+  behavior.
+- [x] Browser-verify a no-media V2 adjustment, ready color effect, opacity and
+  effect keyframes, Undo/Redo, 1024×768 and 720×800 layouts, and a clean Chromium
+  console on strict port 42190.
+- [x] Pass all 250 Vitest files / 3,584 tests plus all 17 repository runner
+  checks, production build/typecheck (4,930 modules), clean lint, and diff
+  hygiene.
+- [ ] Push, publish a PR, pass exact-head CI/review, and close Issue #190 only
+  when explicitly authorized.

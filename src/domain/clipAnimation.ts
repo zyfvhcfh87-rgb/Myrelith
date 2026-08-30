@@ -72,6 +72,9 @@ export function documentAnimationKeyframeCount(doc: TimelineDoc): number {
     for (const clip of track.clips) {
       total += clipAnimationKeyframeCount(clipAnimation(clip))
     }
+    for (const adjustment of track.adjustments ?? []) {
+      total += clipAnimationKeyframeCount(adjustment.animation)
+    }
   }
   return total
 }

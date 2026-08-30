@@ -619,6 +619,68 @@
   border-radius: 7px;
 }
 
+.adjustment-inspector .inspector-section-heading,
+.adjustment-inspector .inspector-effect-header,
+.adjustment-inspector .inspector-effect-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.adjustment-inspector .inspector-section-heading h3 {
+  margin: 0;
+}
+
+.adjustment-inspector .inspector-section-heading > button {
+  min-height: 28px;
+  padding: 4px 8px;
+  color: #d7e7f8;
+  background: #22415e;
+  border: 1px solid #47729a;
+  border-radius: 5px;
+}
+
+.adjustment-inspector .inspector-effect-header {
+  align-items: flex-start;
+}
+
+.adjustment-inspector .inspector-effect-title {
+  justify-content: flex-start;
+  color: #e6eef8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.adjustment-inspector .inspector-effect-status {
+  margin: 0;
+  border-radius: 5px;
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.35;
+  text-transform: none;
+}
+
+.adjustment-inspector .inspector-effect-card[data-effect-status='ready'] .inspector-effect-status {
+  color: #b9eed2;
+  background: #173b2b;
+}
+
+.adjustment-inspector .inspector-effect-card[data-effect-status='unsupported'] .inspector-effect-status,
+.adjustment-inspector .inspector-effect-card[data-effect-status='invalid'] .inspector-effect-status {
+  color: #ffd0a8;
+  background: #4a2d1d;
+}
+
+.adjustment-inspector .adjustment-item-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.adjustment-inspector .adjustment-item-actions .danger {
+  color: #ffc5c5;
+  border-color: #76434a;
+}
+
 .inspector-effect-card-heading {
   display: flex;
   align-items: flex-start;

@@ -12,6 +12,7 @@
 
 import { create } from 'zustand'
 import type {
+  AdjustmentItemId,
   ClipId,
   ClipVisualSettings,
   TextProps,
@@ -82,6 +83,14 @@ export interface EditPreview {
    * partner ClipViews can ghost the same edit; absent for unlinked clips.
    */
   linkGroupId?: string
+}
+
+/** Live move/trim geometry for an adjustment item; committed on pointerup. */
+export interface AdjustmentEditPreview {
+  adjustmentId: AdjustmentItemId
+  kind: 'move' | 'trim-start' | 'trim-end'
+  deltaFrames: number
+  targetTrackId?: TrackId
 }
 
 /** Live preview-only geometry for direct manipulation in the program monitor. */
@@ -175,6 +184,8 @@ export interface TransportState {
    * or null. When present it is always a member of selectedClipIds.
    */
   selectedClipId: ClipId | null
+  /** Primary full-frame adjustment selection; mutually exclusive with clips/markers. */
+  selectedAdjustmentId: AdjustmentItemId | null
   /** Live box-selection rectangle and membership preview, never history. */
   selectionMarquee: SelectionMarqueePreview | null
   /** Primary sequence marker selection; mutually exclusive with clips. */
@@ -183,6 +194,7 @@ export interface TransportState {
   editingMarkerId: TimelineMarkerId | null
   /** Trim/ripple/slip/slide gesture preview, or null when none is live. */
   editPreview: EditPreview | null
+  adjustmentEditPreview: AdjustmentEditPreview | null
   /** Chosen alignment target for the active timeline preview, never history. */
   snapGuide: TimelineSnapGuide | null
   /** Uncommitted text move/resize shown by the shared preview compositor. */
@@ -236,6 +248,12 @@ export interface TransportState {
   setTool: (tool: TimelineTool) => void
   /** Replace the selection with one clip (or clear both fields with null). */
   setSelectedClip: (clipId: ClipId | null) => void
+  /** Replace timeline selection with one adjustment item, or clear it. */
+  setSelectedAdjustment: (adjustmentId: AdjustmentItemId | null) => void
+  /** Clear an adjustment selection removed by history/project replacement. */
+  reconcileAdjustmentSelection: (
+    existingAdjustmentIds: ReadonlySet<AdjustmentItemId>,
+  ) => void
   /** Replace the complete ordered clip selection in one transport update. */
   setClipSelection: (
     clipIds: readonly ClipId[],
@@ -269,6 +287,7 @@ export interface TransportState {
    * integer (negative allowed — deltas are signed).
    */
   setEditPreview: (preview: EditPreview | null) => void
+  setAdjustmentEditPreview: (preview: AdjustmentEditPreview | null) => void
   /** Publish or clear the visible alignment guide for a transient edit. */
   setSnapGuide: (guide: TimelineSnapGuide | null) => void
   /** Update or clear one preview-only text manipulation. */
@@ -324,10 +343,12 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   tool: 'select' as TimelineTool,
   selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
   selectedClipId: null,
+  selectedAdjustmentId: null,
   selectionMarquee: null,
   selectedMarkerId: null,
   editingMarkerId: null,
   editPreview: null,
+  adjustmentEditPreview: null,
   snapGuide: null,
   textOverlayPreview: null,
   clipVisualPreview: null,
@@ -499,12 +520,14 @@ export const useTransportStore = create<TransportState>()((set) => ({
           && state.selectedClipIds.length === 0
           && state.selectedMarkerId === null
           && state.editingMarkerId === null
+          && state.selectedAdjustmentId === null
           ? state
           : {
               selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
               selectedClipId: null,
               selectedMarkerId: null,
               editingMarkerId: null,
+              selectedAdjustmentId: null,
             }
       }
 
@@ -512,15 +535,45 @@ export const useTransportStore = create<TransportState>()((set) => ({
         state.selectedClipIds.length === 1 &&
         state.selectedClipIds[0] === clipId &&
         state.selectedMarkerId === null &&
-        state.editingMarkerId === null
+        state.editingMarkerId === null &&
+        state.selectedAdjustmentId === null
         ? state
         : {
             selectedClipIds: [clipId],
             selectedClipId: clipId,
             selectedMarkerId: null,
             editingMarkerId: null,
+            selectedAdjustmentId: null,
           }
     }),
+  setSelectedAdjustment: (adjustmentId) =>
+    set((state) => {
+      if (adjustmentId === null) {
+        return state.selectedAdjustmentId === null
+          ? state
+          : { selectedAdjustmentId: null }
+      }
+      return state.selectedAdjustmentId === adjustmentId
+        && state.selectedClipIds.length === 0
+        && state.selectedClipId === null
+        && state.selectedMarkerId === null
+        && state.editingMarkerId === null
+        ? state
+        : {
+            selectedAdjustmentId: adjustmentId,
+            selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
+            selectedClipId: null,
+            selectedMarkerId: null,
+            editingMarkerId: null,
+          }
+    }),
+  reconcileAdjustmentSelection: (existingAdjustmentIds) =>
+    set((state) => (
+      state.selectedAdjustmentId !== null
+      && !existingAdjustmentIds.has(state.selectedAdjustmentId)
+        ? { selectedAdjustmentId: null, adjustmentEditPreview: null }
+        : state
+    )),
   setClipSelection: (clipIds, primaryClipId) =>
     set((state) => {
       const selectedClipIds = [...new Set(clipIds)]
@@ -536,6 +589,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
         ))
         && state.selectedMarkerId === null
         && state.editingMarkerId === null
+        && state.selectedAdjustmentId === null
       if (unchanged) return state
       return {
         selectedClipIds: selectedClipIds.length === 0
@@ -544,6 +598,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
         selectedClipId,
         selectedMarkerId: null,
         editingMarkerId: null,
+        selectedAdjustmentId: null,
       }
     }),
   promoteContextClipSelection: (clipId) =>
@@ -554,6 +609,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
           selectedClipId: clipId,
           selectedMarkerId: null,
           editingMarkerId: null,
+          selectedAdjustmentId: null,
         }
       }
       return state.selectedClipId === clipId
@@ -565,6 +621,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
             selectedClipId: clipId,
             selectedMarkerId: null,
             editingMarkerId: null,
+            selectedAdjustmentId: null,
           }
     }),
   toggleClipSelection: (clipId) =>
@@ -575,6 +632,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
           selectedClipId: clipId,
           selectedMarkerId: null,
           editingMarkerId: null,
+          selectedAdjustmentId: null,
         }
       }
 
@@ -647,11 +705,13 @@ export const useTransportStore = create<TransportState>()((set) => ({
       return state.selectedMarkerId === markerId
         && state.selectedClipIds.length === 0
         && state.selectedClipId === null
+        && state.selectedAdjustmentId === null
         ? state
         : {
             selectedMarkerId: markerId,
             selectedClipIds: EMPTY_SELECTED_CLIP_IDS,
             selectedClipId: null,
+            selectedAdjustmentId: null,
           }
     }),
   setEditingMarker: (markerId) =>
@@ -678,6 +738,12 @@ export const useTransportStore = create<TransportState>()((set) => ({
   setEditPreview: (preview) =>
     set({
       editPreview: preview
+        ? { ...preview, deltaFrames: Math.round(preview.deltaFrames) }
+        : null,
+    }),
+  setAdjustmentEditPreview: (preview) =>
+    set({
+      adjustmentEditPreview: preview
         ? { ...preview, deltaFrames: Math.round(preview.deltaFrames) }
         : null,
     }),
