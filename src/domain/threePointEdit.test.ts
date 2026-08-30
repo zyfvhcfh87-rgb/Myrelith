@@ -12,6 +12,7 @@ import {
   createCaptionTrack,
 } from './captions'
 import { createSourceBoundsCatalog, resolveCrossfadePlan } from './crossfadePlan'
+import { createAdjustmentItem } from './adjustmentItems'
 import { addCrossfade, createTextClip } from './operations'
 import type { Clip, MediaAsset, MediaSourceBounds, TimelineDoc, Track } from './schema'
 import type { SourceMonitorSession } from './sourceMonitor'
@@ -453,6 +454,34 @@ describe('insert', () => {
     ])
   })
 
+  test('ripples later adjustments with later clips', () => {
+    const v1 = makeTrack('V1', 'video')
+    const doc = makeDoc([
+      { ...v1, adjustments: [createAdjustmentItem(80, 20)] },
+      makeTrack('V2', 'video', [makeClip('later', 80, 40)]),
+      makeTrack('A1', 'audio'),
+    ])
+    const start = input({
+      doc,
+      playheadFrame: 50,
+      videoTargetTrackId: 'V1',
+      patchAudio: false,
+      sourceSession: session({ inFrame: 0, outFrameExclusive: 20 }),
+    })
+    const plan = planSequenceEdit(start)
+    expect(plan.status).toBe('ok')
+    if (plan.status !== 'ok') return
+    const next = applySequenceEdit(doc, plan, start.asset)
+    expect(clipsOf(next, 'V1').map((clip) => clip.timelineRange)).toEqual([
+      { startFrame: 50, durationFrames: 20 },
+    ])
+    expect(next.tracks.find((track) => track.id === 'V1')!.adjustments![0]!
+      .timelineRange).toEqual({ startFrame: 100, durationFrames: 20 })
+    expect(clipsOf(next, 'V2').map((clip) => clip.timelineRange)).toEqual([
+      { startFrame: 100, durationFrames: 40 },
+    ])
+  })
+
   test('linked A/V insert is one apply with a shared group id', () => {
     const emptyAudio = makeDoc([
       makeTrack('V1', 'video'),
@@ -525,6 +554,26 @@ describe('overwrite', () => {
       { startFrame: 60, durationFrames: 140 },
     ])
     expect(clipsOf(next, 'V1')[1]!.assetId).toBe('asset-1')
+  })
+
+  test('rejects punching a range already held by an adjustment', () => {
+    const v1 = makeTrack('V1', 'video')
+    const doc = makeDoc([{
+      ...v1,
+      adjustments: [createAdjustmentItem(40, 20)],
+    }, makeTrack('A1', 'audio')])
+    const start = input({
+      kind: 'overwrite',
+      doc,
+      playheadFrame: 40,
+      videoTargetTrackId: 'V1',
+      patchAudio: false,
+      sourceSession: session({ inFrame: 0, outFrameExclusive: 20 }),
+    })
+    const plan = planSequenceEdit(start)
+    expect(plan.status).toBe('ok')
+    if (plan.status !== 'ok') return
+    expect(applySequenceEdit(doc, plan, start.asset)).toBe(doc)
   })
 })
 

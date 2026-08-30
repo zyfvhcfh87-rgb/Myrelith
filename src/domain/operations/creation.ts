@@ -260,7 +260,7 @@ export function insertClip(
   if (locateClip(doc, clip.id)) {
     return reject(doc, op, `clip id ${clip.id} already exists in the document`)
   }
-  if (overlapsAny(track.clips, tl)) {
+  if (overlapsAny(track, tl)) {
     return reject(doc, op, 'insert would overlap a clip on the target track')
   }
   const effectBudgetError = effectCollectionAppendBudgetError(doc, clip.effects)

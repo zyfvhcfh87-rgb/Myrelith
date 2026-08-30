@@ -1,4 +1,4 @@
-import type { Clip, ClipId, TimeRange, TimelineDoc, Track, TrackId, Transition, TransitionId } from '../schema';
+import type { AdjustmentItem, Clip, ClipId, TimeRange, TimelineDoc, Track, TrackId, Transition, TransitionId } from '../schema';
 import { crossfadeWindowsOverlap, resolveCrossfade } from '../selectors';
 import { rangeOverlap } from '../time';
 
@@ -79,15 +79,60 @@ export function withoutLinkGroupId(clip: Clip): Clip {
   return rest
 }
 
-/** True when `range` overlaps any clip in `clips` other than `excludeId`. */
+/** True when `range` overlaps any other clip or adjustment on the track. */
 export function overlapsAny(
-  clips: readonly Clip[],
+  track: Pick<Track, 'clips' | 'adjustments'>,
   range: TimeRange,
   excludeId?: ClipId,
 ): boolean {
-  return clips.some(
+  return track.clips.some(
     (c) => c.id !== excludeId && rangeOverlap(c.timelineRange, range),
+  ) || (track.adjustments ?? []).some(
+    (adjustment) => rangeOverlap(adjustment.timelineRange, range),
   )
+}
+
+/** True when any clip occupies the same half-open range as an adjustment. */
+export function clipsOverlapAdjustments(
+  clips: readonly Clip[],
+  adjustments: readonly AdjustmentItem[] | undefined,
+): boolean {
+  const items = adjustments ?? []
+  if (items.length === 0) return false
+  return clips.some((clip) =>
+    items.some((adjustment) => rangeOverlap(clip.timelineRange, adjustment.timelineRange)),
+  )
+}
+
+/**
+ * Shift every adjustment that starts at or after `fromFrame`. Returns the
+ * original array reference when nothing moves, or null when the result would
+ * leave the non-negative safe-integer timeline.
+ */
+export function shiftLaterAdjustments(
+  adjustments: readonly AdjustmentItem[] | undefined,
+  fromFrame: number,
+  deltaFrames: number,
+): AdjustmentItem[] | undefined | null {
+  if (!adjustments || adjustments.length === 0 || deltaFrames === 0) {
+    return adjustments as AdjustmentItem[] | undefined
+  }
+  const next: AdjustmentItem[] = []
+  let changed = false
+  for (const item of adjustments) {
+    if (item.timelineRange.startFrame < fromFrame) {
+      next.push(item)
+      continue
+    }
+    const startFrame = item.timelineRange.startFrame + deltaFrames
+    if (!Number.isSafeInteger(startFrame) || startFrame < 0) return null
+    changed = true
+    next.push({
+      ...item,
+      timelineRange: { ...item.timelineRange, startFrame },
+    })
+  }
+  return changed ? next : adjustments as AdjustmentItem[]
 }
 
 /** New doc with one track replaced (structural sharing everywhere else). */

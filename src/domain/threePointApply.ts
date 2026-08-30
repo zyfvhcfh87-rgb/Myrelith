@@ -19,8 +19,10 @@ import {
   splitClipAtFrame,
 } from './operations'
 import {
+  clipsOverlapAdjustments,
   locateClip,
   reconcileTransitions,
+  shiftLaterAdjustments,
   withClampedAudioFades,
   withoutLinkGroupId,
   withTrack,
@@ -202,9 +204,19 @@ function shiftTracksFrom(
     })
     if (clips.some((clip) => clip.timelineRange.startFrame < 0)) return null
     if (trackClipsOverlap(clips)) return null
+    const adjustments = shiftLaterAdjustments(track.adjustments, fromFrame, deltaFrames)
+    if (adjustments === null) return null
+    if (clipsOverlapAdjustments(clips, adjustments)) return null
     const changed = clips.some((clip, index) => clip !== track.clips[index])
+      || adjustments !== track.adjustments
     tracks.push(
-      changed ? reconcileTransitions(track, { ...track, clips }) : track,
+      changed
+        ? reconcileTransitions(track, {
+            ...track,
+            clips,
+            ...(adjustments === undefined ? {} : { adjustments }),
+          })
+        : track,
     )
   }
   const unchanged = tracks.every((track, index) => track === doc.tracks[index])

@@ -125,7 +125,7 @@ export function planMediaAssetPlacement(input: {
     startFrame,
     durationFrames: input.asset.durationFrames,
   }
-  if (overlapsAny(track.clips, range)) {
+  if (overlapsAny(track, range)) {
     return { status: 'reject', reason: 'overlap' }
   }
 
@@ -139,7 +139,7 @@ export function planMediaAssetPlacement(input: {
       candidate.kind === 'audio' && !candidate.locked
     ))
     const audioLane = unlockedAudioLanes.find((candidate) => (
-      !overlapsAny(candidate.clips, range)
+      !overlapsAny(candidate, range)
     ))
     if (audioLane) {
       return {

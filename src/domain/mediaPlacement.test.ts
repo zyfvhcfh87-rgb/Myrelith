@@ -7,6 +7,7 @@ import {
   trackKindAcceptsAssetKind,
   visiblePlacementPreviewRange,
 } from './mediaPlacement'
+import { createAdjustmentItem } from './adjustmentItems'
 import type { Clip, TimelineDoc, Track } from './schema'
 
 function clip(id: string, startFrame: number, durationFrames = 100): Clip {
@@ -180,6 +181,19 @@ describe('planMediaAssetPlacement', () => {
         track('A1', 'audio', [clip('existingA', 200, 100)]),
         track('A2', 'audio', [clip('existingA2', 200, 100)]),
       ]),
+      asset: videoAsset,
+      trackId: 'V1',
+      startFrame: 240,
+      timelineCompatible: true,
+    })).toEqual({ status: 'reject', reason: 'overlap' })
+  })
+
+  test('rejects a drop onto a range already held by an adjustment', () => {
+    expect(planMediaAssetPlacement({
+      doc: doc([{
+        ...track('V1', 'video'),
+        adjustments: [createAdjustmentItem(200, 80)],
+      }]),
       asset: videoAsset,
       trackId: 'V1',
       startFrame: 240,
