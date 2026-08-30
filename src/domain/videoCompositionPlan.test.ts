@@ -105,7 +105,7 @@ function adjustment(
 
 function doc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'visual-plan',
     name: 'Visual plan',
     frameRate: { num: 30, den: 1 },

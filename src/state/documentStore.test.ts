@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track, Transition } from '../domain/schema'
 import { createColorAdjustEffect, createMaskEffect } from '../domain/effectStack'
+import { createParametricEqEffect } from '../domain/audioEffectStack'
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import { sourceTimeRateFromPercent } from '../domain/sourceTimeMap'
 import { clipWithAnimationKeyframeCount } from '../test/animationBudgetFixtures'
@@ -52,7 +53,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
 /** V1: clipA [0,300), clipB [400,100). A1: clipD [0,300). V2 empty. */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'doc-1',
     name: 'Store test doc',
     frameRate: { num: 30, den: 1 },
@@ -69,7 +70,7 @@ function makeDoc(): TimelineDoc {
 
 function makeStillDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'doc-still-history',
     name: 'Still history test',
     frameRate: { num: 30, den: 1 },
@@ -110,7 +111,7 @@ function makeTransitionDoc(
   v1Locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'doc-transitions',
     name: 'Transition store test',
     frameRate: { num: 30, den: 1 },
@@ -641,6 +642,37 @@ describe('actions delegate to domain operations', () => {
     expect(JSON.stringify(getState().doc)).toBe(afterAdd)
   })
 
+  test('every audio-effect action is one undo snapshot on clip, track, and master', () => {
+    getState().addAudioEffect(
+      { kind: 'clip', clipId: 'clipD' },
+      createParametricEqEffect('afx-clip'),
+    )
+    getState().addAudioEffect(
+      { kind: 'track', trackId: 'A1' },
+      createParametricEqEffect('afx-track'),
+    )
+    getState().addAudioEffect(
+      { kind: 'master' },
+      createParametricEqEffect('afx-master'),
+    )
+    expect(getState().past).toHaveLength(3)
+    getState().setAudioEffectEnabled({ kind: 'clip', clipId: 'clipD' }, 'afx-clip', false)
+    getState().updateAudioEffectParams(
+      { kind: 'track', trackId: 'A1' },
+      'afx-track',
+      { band2Gain: 1.5 },
+    )
+    expect(getState().doc.tracks[2].clips[0].audioEffects?.[0].enabled).toBe(false)
+    expect(getState().doc.tracks[2].audioEffects?.[0].params.band2Gain).toBe(1.5)
+    getState().removeAudioEffect({ kind: 'master' }, 'afx-master')
+    expect(getState().doc.masterAudio?.audioEffects).toEqual([])
+    expect(getState().past).toHaveLength(6)
+    getState().undo()
+    expect(getState().doc.masterAudio?.audioEffects?.map((item) => item.id)).toEqual([
+      'afx-master',
+    ])
+  })
+
   test('effect budget rejections keep the exact document and history references', () => {
     const saturated = JSON.parse(JSON.stringify(makeDoc())) as TimelineDoc
     saturated.tracks[0].clips[0].effects = Array.from(
@@ -1154,6 +1186,7 @@ describe('track actions', () => {
       volume: 0.5,
       balance: 0,
       muted: true,
+      audioEffects: [],
     })
     expect(getState().past).toHaveLength(1)
     getState().undo()
@@ -1216,7 +1249,7 @@ function makeManualLinkStoreDoc(): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'doc-manual-link-store',
     name: 'Manual link store test',
     frameRate: { num: 30, den: 1 },
@@ -1422,7 +1455,7 @@ const PAIR2 = 'link_pair2'
  */
 function makeLinkedDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'doc-linked',
     name: 'Linked test doc',
     frameRate: { num: 30, den: 1 },
@@ -1542,7 +1575,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * well outside it. */
   function makeTwoPairsDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 16,
+      schemaVersion: 17,
       id: 'doc-split-pairs',
       name: 'Split pairs test doc',
       frameRate: { num: 30, den: 1 },
@@ -1562,7 +1595,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * under the playhead. */
   function makeMixedDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 16,
+      schemaVersion: 17,
       id: 'doc-split-mixed',
       name: 'Split mixed test doc',
       frameRate: { num: 30, den: 1 },

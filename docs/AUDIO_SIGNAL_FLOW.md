@@ -1,21 +1,21 @@
 # Audio signal flow
 
-Shared live-playback and export mix contract. Issue #189 Slice 2 owns
-the track and master mixer. Later slices fill the labeled stages below
-without reordering the ones that already exist.
+Shared live-playback and export mix contract. Issue #189 Slice 3 owns
+versioned audio-effect descriptors. Later slices fill DSP and loudness
+without reordering the stages below.
 
 ```
 decode
   → fold-down to stereo
   → clip volume / balance (static or integer-frame keys)
   → clip fades / crossfades
-  → clip audio effects            [later]
+  → clip audio effects            [Slice 3 descriptors; identity DSP]
   → track mute / solo
   → track gain / pan              [Slice 2]
-  → track audio effects           [later]
+  → track audio effects           [Slice 3 descriptors; identity DSP]
   → sum
   → master gain / pan / mute      [Slice 2]
-  → master audio effects          [later]
+  → master audio effects          [Slice 3 descriptors; identity DSP]
   → meters
   → output
 ```
@@ -47,3 +47,18 @@ call the same `clipAudioGainsAtLocalFrame` helper.
   gain/pan/mute multiply after the sum, then the mix clamps.
 - The mixer strip is docked to the timeline. Per-strip meters read the
   10 Hz `audioMeterStore` only.
+
+## Audio effect descriptors (schema 18)
+
+- `AudioEffectDescriptor` is `{ id, type, version, enabled, params }` on
+  `Clip.audioEffects`, `Track.audioEffects`, and
+  `TimelineDoc.masterAudio.audioEffects`. It never lives on `Clip.effects`.
+- `domain/audioEffectStack.ts` is the registry. Unknown types and future
+  versions are preserved, reported, and bypassed. Invalid params and
+  disabled entries are the same. Both live playback and export probe
+  `js-stereo-block`; Inspector reads the app-owned status projection.
+- Version-1 types `builtin.eq`, `builtin.compressor`, and `builtin.limiter`
+  are registered now so Slice 4 can ship DSP without a schema bump. Slice 3
+  processors are identity: ready stages do not change samples.
+- Inspector cards expose bypass, reorder, reset, and remove on clip, track,
+  and master stacks. Reset is refused for unknown types.

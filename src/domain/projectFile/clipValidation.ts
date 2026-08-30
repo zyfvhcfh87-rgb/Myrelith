@@ -1,4 +1,4 @@
-import type { Clip, ClipAnimation, ClipAnimationEasing, ClipAnimationProperty, ClipAudioSettings, ClipVisualSettings, Effect, FrameRate, SourceTimeMap, SourceTimeSpeedCurve, TextProps, Track, Transform } from '../schema';
+import type { AudioEffectDescriptor, Clip, ClipAnimation, ClipAnimationEasing, ClipAnimationProperty, ClipAudioSettings, ClipVisualSettings, Effect, FrameRate, SourceTimeMap, SourceTimeSpeedCurve, TextProps, Track, Transform } from '../schema';
 import {
   ANIMATABLE_CLIP_PROPERTIES,
   clipAnimationKindError,
@@ -23,6 +23,7 @@ import { microsecondsDurationToFrames } from '../time';
 import { isProceduralTextAssetId, isSupportedTextColor, isSupportedTextFontFamily, TEXT_OVERLAY_LIMITS, textPropsValidationError, proceduralTextAssetId } from '../textOverlay';
 import { blendModeIntentValidationError } from '../blendModes';
 import { effectDescriptorBoundsError, effectDescriptorBudget } from '../effectBounds';
+import { audioEffectDescriptorBudget } from '../audioEffectBounds';
 import { sourceRangeForMap, sourceTimeSpeedCurveValidationError, sourceTimeMapValidationError, MAX_SOURCE_TIME_SPEED_FRAME, SOURCE_TIME_SPEED_EASINGS, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
 import { PROJECT_FILE_LIMITS, type PortableAssetDescriptor } from './projectTypes';
 import { booleanValue, boundedArray, exactKeys, fail, finiteNumber, record, safeInteger, stringValue, validateLensCorrectionIntent } from './validationPrimitives';
@@ -293,6 +294,58 @@ export function validateEffect(
   }
 }
 
+export function validateAudioEffect(
+  value: unknown,
+  path: string,
+  context: ValidationContext,
+): asserts value is AudioEffectDescriptor {
+  const effect = record(value, path)
+  exactKeys(effect, ['id', 'type', 'version', 'enabled', 'params'], [], path)
+  const boundsError = effectDescriptorBoundsError(effect)
+  if (boundsError) fail(path, boundsError)
+  const descriptor = effect as unknown as AudioEffectDescriptor
+  if (context.audioEffectIds.has(descriptor.id)) {
+    fail(`${path}.id`, 'duplicate audio effect id')
+  }
+  context.audioEffectIds.add(descriptor.id)
+  const budget = audioEffectDescriptorBudget(descriptor)
+  context.audioEffectParamCount += budget.params
+  if (context.audioEffectParamCount > PROJECT_FILE_LIMITS.maxTotalAudioEffectParams) {
+    fail(
+      '$.document',
+      `exceeds ${PROJECT_FILE_LIMITS.maxTotalAudioEffectParams} audio-effect parameters in total`,
+    )
+  }
+  context.audioEffectStringCharacterCount += budget.stringCharacters
+  if (
+    context.audioEffectStringCharacterCount >
+    PROJECT_FILE_LIMITS.maxTotalAudioEffectStringCharacters
+  ) {
+    fail(
+      '$.document',
+      `exceeds ${PROJECT_FILE_LIMITS.maxTotalAudioEffectStringCharacters} audio-effect-string characters in total`,
+    )
+  }
+}
+
+export function validateAudioEffectStack(
+  value: unknown,
+  path: string,
+  context: ValidationContext,
+): asserts value is AudioEffectDescriptor[] {
+  boundedArray(value, path, PROJECT_FILE_LIMITS.maxAudioEffectsPerStack)
+  context.audioEffectCount += value.length
+  if (context.audioEffectCount > PROJECT_FILE_LIMITS.maxTotalAudioEffects) {
+    fail(
+      '$.document',
+      `exceeds ${PROJECT_FILE_LIMITS.maxTotalAudioEffects} audio effects in total`,
+    )
+  }
+  for (let index = 0; index < value.length; index++) {
+    validateAudioEffect(value[index], `${path}[${index}]`, context)
+  }
+}
+
 export function validateText(value: unknown, path: string): asserts value is TextProps {
   const text = record(value, path)
   exactKeys(
@@ -400,6 +453,7 @@ export interface ValidationContext {
   clipIds: Set<string>
   timelineItemIds: Set<string>
   effectIds: Set<string>
+  audioEffectIds: Set<string>
   transitionIds: Set<string>
   linkGroupCounts: Map<string, number>
   clipCount: number
@@ -407,6 +461,9 @@ export interface ValidationContext {
   effectCount: number
   effectParamCount: number
   effectStringCharacterCount: number
+  audioEffectCount: number
+  audioEffectParamCount: number
+  audioEffectStringCharacterCount: number
   textCharacterCount: number
   transitionCount: number
   keyframeCount: number
@@ -473,7 +530,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   const clip = record(value, path)
   exactKeys(
     clip,
-    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'sourceTimeMap', 'timelineRange', 'transform', 'opacity', 'blendMode', 'volume', 'lensCorrection', 'visual', 'audio', 'effects'],
+    ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'sourceTimeMap', 'timelineRange', 'transform', 'opacity', 'blendMode', 'volume', 'lensCorrection', 'visual', 'audio', 'effects', 'audioEffects'],
     ['animation', 'text', 'linkGroupId'],
     path,
   )
@@ -609,6 +666,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   for (let index = 0; index < clip.effects.length; index++) {
     validateEffect(clip.effects[index], `${path}.effects[${index}]`, context)
   }
+  validateAudioEffectStack(clip.audioEffects, `${path}.audioEffects`, context)
   if (clip.text !== undefined) {
     validateText(clip.text, `${path}.text`)
     context.textCharacterCount += clip.text.content.length

@@ -91,3 +91,12 @@ export {
   updateEffectParams,
   updateEffectParamsAtFrame,
 } from './operations/effects'
+export type { AudioEffectTarget } from './operations/audioEffects'
+export {
+  addAudioEffect,
+  removeAudioEffect,
+  reorderAudioEffect,
+  resetAudioEffect,
+  setAudioEffectEnabled,
+  updateAudioEffectParams,
+} from './operations/audioEffects'

@@ -233,6 +233,7 @@ function mediaClip(
           params: { amount: 1.05 },
         }]
       : [],
+    audioEffects: [],
   }
 }
 
@@ -267,6 +268,7 @@ function textClip(clipIndex: number): Clip {
     audio: defaultClipAudioSettings(),
     animation: defaultClipAnimation(),
     effects: [],
+    audioEffects: [],
     text,
   }
 }
@@ -290,6 +292,7 @@ function track(
     locked: false,
     volume: 1,
     balance: 0,
+    audioEffects: [],
   }
 }
 
@@ -354,7 +357,7 @@ function fixtureDocument(
     ],
     markers: [],
     captionTracks: [],
-    masterAudio: { volume: 1, balance: 0, muted: false },
+    masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
   }
 }
 

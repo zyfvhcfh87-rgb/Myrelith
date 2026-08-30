@@ -113,6 +113,8 @@ export type ClipId = string
 export type AdjustmentItemId = string
 /** Unique id of an effect instance on a clip. */
 export type EffectId = string
+/** Unique id of an audio-effect instance on a clip, track, or master. */
+export type AudioEffectId = string
 /** Unique id of a transition instance on a track. */
 export type TransitionId = string
 /** Unique id of a sequence-level timeline marker. */
@@ -353,6 +355,19 @@ export interface EffectDescriptor {
 export type Effect = EffectDescriptor
 
 /**
+ * A serializable audio-effect instance on a clip, track, or the master bus.
+ * Same five fields as a visual descriptor; a separate type so `Clip.effects`
+ * never carries audio processors. Unknown types stay opaque and ordered.
+ */
+export interface AudioEffectDescriptor {
+  id: AudioEffectId
+  type: string
+  version: number
+  enabled: boolean
+  params: Record<string, EffectParamValue>
+}
+
+/**
  * A transition between two adjacent clips on the same track. MVP supports
  * crossfade only; the union grows as implementations land.
  */
@@ -515,6 +530,11 @@ export interface Clip {
   animation?: ClipAnimation
   /** Effect chain, applied in array order before compositing. */
   effects: Effect[]
+  /**
+   * Ordered clip audio-effect stack. Optional on in-memory fixtures;
+   * portable schema-17 files always write the array, empty when unused.
+   */
+  audioEffects?: AudioEffectDescriptor[]
   /** Present only on text clips; such clips render text instead of media. */
   text?: TextProps
   /**
@@ -629,6 +649,11 @@ export interface Track {
    * Optional on in-memory fixtures; portable schema-16 files always write it.
    */
   balance?: number
+  /**
+   * Ordered track audio-effect stack, after track gain/pan and before the sum.
+   * Optional on in-memory fixtures; portable schema-17 files always write it.
+   */
+  audioEffects?: AudioEffectDescriptor[]
 }
 
 /** Document-level stereo bus after the track sum. */
@@ -639,6 +664,11 @@ export interface MasterAudioSettings {
   balance: number
   /** When true, the mixed output is silence. Track meters still run. */
   muted: boolean
+  /**
+   * Ordered master audio-effect stack, after master gain/pan/mute.
+   * Optional on in-memory fixtures; portable schema-17 files always write it.
+   */
+  audioEffects?: AudioEffectDescriptor[]
 }
 
 /** Deliberately small, portable palette shared by marker files and UI. */
@@ -706,7 +736,7 @@ export interface CaptionTrack {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 16. */
+  /** Schema version for forward-compatible project files. Currently 17. */
   schemaVersion: number
   /** Unique document id. */
   id: string

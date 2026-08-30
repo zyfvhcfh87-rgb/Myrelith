@@ -35,7 +35,7 @@ test('fresh preflight and real AAC export support a 60 fps timeline', async ({
       effects: [],
     }
     const doc = {
-      schemaVersion: 16,
+      schemaVersion: 17,
       id: 'aac-60-fps-probe',
       name: 'AAC 60 fps probe',
       frameRate: { num: 60, den: 1 },

@@ -59,7 +59,7 @@ function track(id: string, clips: Clip[], locked = false): Track {
 
 function documentFixture(tracks: Track[] = [track('V1', [clip('clip-1', 0, 60)])]): TimelineDoc {
   return {
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'doc-commands',
     name: 'Command fixture',
     frameRate: { num: 30, den: 1 },

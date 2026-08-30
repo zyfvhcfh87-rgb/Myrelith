@@ -54,6 +54,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import { EditorContextMenuHost } from '../ui/EditorContextMenu'
 import { initSourceMonitorLifecycle } from './sourceMonitorController'
+import { initAudioEffectStatusProjection } from './audioEffectStatus'
 
 const pluginAppController = getPluginAppController()
 
@@ -91,6 +92,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
   useEffect(() => initMediaCapabilityLifecycle(), [])
   useEffect(() => initSelectionReconciliation(), [])
   useEffect(() => initSourceMonitorLifecycle(), [])
+  useEffect(() => initAudioEffectStatusProjection(), [])
   useEffect(() => {
     let unmounted = false
     let release: (() => Promise<void>) | null = null

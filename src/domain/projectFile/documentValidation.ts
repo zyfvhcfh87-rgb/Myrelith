@@ -7,7 +7,7 @@ import { renderSurfaceBudget } from '../renderSurfaceBudget';
 import { CURRENT_PROJECT_FORMAT_VERSION, CURRENT_TIMELINE_SCHEMA_VERSION, PROJECT_FILE_FORMAT, PROJECT_FILE_LIMITS, type PortableAssetDescriptor, type ProjectFile } from './projectTypes';
 import { booleanValue, boundedArray, exactKeys, fail, finiteNumber, record, safeInteger, stringValue, validateFrameRate } from './validationPrimitives';
 import { validateAsset, validateMediaCollections } from './assetValidation';
-import { validateAnimationEasing, validateClip, validateEffect, validateRange, type ValidationContext } from './clipValidation';
+import { validateAnimationEasing, validateAudioEffectStack, validateClip, validateEffect, validateRange, type ValidationContext } from './clipValidation';
 
 function validateAdjustmentKeyframes(
   value: unknown,
@@ -256,19 +256,24 @@ function validateTransition(
   return { startFrame, endFrame }
 }
 
-function validateMasterAudio(value: unknown, path: string): asserts value is MasterAudioSettings {
+function validateMasterAudio(
+  value: unknown,
+  path: string,
+  context: ValidationContext,
+): asserts value is MasterAudioSettings {
   const master = record(value, path)
-  exactKeys(master, ['volume', 'balance', 'muted'], [], path)
+  exactKeys(master, ['volume', 'balance', 'muted', 'audioEffects'], [], path)
   finiteNumber(master.volume, `${path}.volume`, 0, 2)
   finiteNumber(master.balance, `${path}.balance`, -1, 1)
   booleanValue(master.muted, `${path}.muted`)
+  validateAudioEffectStack(master.audioEffects, `${path}.audioEffects`, context)
 }
 
 function validateTrack(value: unknown, path: string, trackIds: Set<string>, context: ValidationContext): asserts value is Track {
   const track = record(value, path)
   exactKeys(
     track,
-    ['id', 'kind', 'name', 'clips', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked', 'volume', 'balance'],
+    ['id', 'kind', 'name', 'clips', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked', 'volume', 'balance', 'audioEffects'],
     [],
     path,
   )
@@ -344,6 +349,7 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   booleanValue(track.locked, `${path}.locked`)
   finiteNumber(track.volume, `${path}.volume`, 0, 2)
   finiteNumber(track.balance, `${path}.balance`, -1, 1)
+  validateAudioEffectStack(track.audioEffects, `${path}.audioEffects`, context)
 }
 
 function validateDocument(value: unknown, context: ValidationContext): asserts value is TimelineDoc {
@@ -406,7 +412,7 @@ function validateDocument(value: unknown, context: ValidationContext): asserts v
   }
   const captionError = captionDocumentValidationError(document as unknown as TimelineDoc)
   if (captionError) fail('$.document.captionTracks', captionError)
-  validateMasterAudio(document.masterAudio, '$.document.masterAudio')
+  validateMasterAudio(document.masterAudio, '$.document.masterAudio', context)
 }
 
 /**
@@ -452,6 +458,7 @@ export function validateProjectFile(value: unknown): ProjectFile {
     clipIds: new Set(),
     timelineItemIds: new Set(),
     effectIds: new Set(),
+    audioEffectIds: new Set(),
     transitionIds: new Set(),
     linkGroupCounts: new Map(),
     clipCount: 0,
@@ -459,6 +466,9 @@ export function validateProjectFile(value: unknown): ProjectFile {
     effectCount: 0,
     effectParamCount: 0,
     effectStringCharacterCount: 0,
+    audioEffectCount: 0,
+    audioEffectParamCount: 0,
+    audioEffectStringCharacterCount: 0,
     textCharacterCount: 0,
     transitionCount: 0,
     keyframeCount: 0,

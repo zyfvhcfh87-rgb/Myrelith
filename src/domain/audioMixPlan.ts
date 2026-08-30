@@ -2,6 +2,7 @@
 
 import type {
   AssetId,
+  AudioEffectDescriptor,
   Clip,
   ClipAnimationTrack,
   ClipId,
@@ -28,6 +29,7 @@ import {
   clipAudioSettingsValidationError,
   stereoBalanceGains,
 } from './clipInspector'
+import { cloneAudioEffectStack } from './audioEffectStack'
 import {
   clipSourceTimeMap,
   sourceFrameAtTimelineOffset,
@@ -65,6 +67,7 @@ export interface TimelineAudioClipFields {
   fadeInFrames: number
   fadeOutFrames: number
   envelopes: TimelineAudioEnvelope[]
+  audioEffects: readonly AudioEffectDescriptor[]
 }
 
 export interface ClipAudioGains {
@@ -323,6 +326,7 @@ export function createTimelineAudioMixPlan(
         fadeInFrames: audio.fadeInFrames,
         fadeOutFrames: audio.fadeOutFrames,
         envelopes: [],
+        audioEffects: cloneAudioEffectStack(clip.audioEffects),
       }
       plans.set(clip.id, retimePolicy.kind === 'direct'
         ? { kind: 'direct', clip, plan }

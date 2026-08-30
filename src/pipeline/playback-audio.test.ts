@@ -97,7 +97,7 @@ function makeTrack(
 
 function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
   return {
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'doc',
     name: 'Playback audio test',
     frameRate: F10,
@@ -167,7 +167,7 @@ function crossfadePlaybackFixture(
   videoTrack.transitions = [transition]
   return {
     doc: {
-      schemaVersion: 16,
+      schemaVersion: 17,
       id: 'crossfade-playback',
       name: 'Crossfade playback',
       frameRate: F10,
@@ -1038,6 +1038,24 @@ describe('startTimelineAudioPlayback scheduling', () => {
     mutate((doc) => {
       doc.masterAudio = { volume: 0.8, balance: 0, muted: true }
     })
+    mutate((doc) => {
+      doc.tracks[1].audioEffects = [{
+        id: 'afx-track',
+        type: 'builtin.eq',
+        version: 1,
+        enabled: true,
+        params: {},
+      }]
+    })
+    mutate((doc) => {
+      doc.tracks[1].clips[0].audioEffects = [{
+        id: 'afx-clip',
+        type: 'builtin.compressor',
+        version: 1,
+        enabled: true,
+        params: {},
+      }]
+    })
     for (const variant of variants) {
       expect(audioPlaybackPlanKey(variant, fixture.catalog)).not.toBe(baseline)
     }
@@ -1656,6 +1674,7 @@ describe('createWebAudioPlaybackOutput ownership', () => {
         balance: 0,
         leftGain: 1,
         rightGain: 1,
+        audioEffects: [],
       }],
       master: {
         volume: 0.8,
@@ -1663,6 +1682,7 @@ describe('createWebAudioPlaybackOutput ownership', () => {
         leftGain: 1,
         rightGain: 1,
         muted: false,
+        audioEffects: [],
       },
     })
     expect(h.analysers.length).toBeGreaterThan(2)

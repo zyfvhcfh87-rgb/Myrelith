@@ -1,6 +1,13 @@
 /** Track and master mixer gains shared by live playback and export. */
 
-import type { MasterAudioSettings, TimelineDoc, Track, TrackId } from './schema'
+import type {
+  AudioEffectDescriptor,
+  MasterAudioSettings,
+  TimelineDoc,
+  Track,
+  TrackId,
+} from './schema'
+import { cloneAudioEffectStack } from './audioEffectStack'
 import {
   MAX_AUDIO_BALANCE,
   MAX_CLIP_VOLUME,
@@ -12,10 +19,14 @@ import {
 export const DEFAULT_TRACK_VOLUME = 1
 export const DEFAULT_TRACK_BALANCE = 0
 
+const DEFAULT_MASTER_AUDIO_EFFECTS: AudioEffectDescriptor[] = []
+Object.freeze(DEFAULT_MASTER_AUDIO_EFFECTS)
+
 export const DEFAULT_MASTER_AUDIO: Readonly<MasterAudioSettings> = Object.freeze({
   volume: DEFAULT_TRACK_VOLUME,
   balance: DEFAULT_TRACK_BALANCE,
   muted: false,
+  audioEffects: DEFAULT_MASTER_AUDIO_EFFECTS,
 })
 
 export interface MixerGains {
@@ -27,10 +38,12 @@ export interface MixerGains {
 
 export interface TimelineAudioTrackBus extends MixerGains {
   readonly trackId: TrackId
+  readonly audioEffects: readonly AudioEffectDescriptor[]
 }
 
 export interface TimelineAudioMasterBus extends MixerGains {
   readonly muted: boolean
+  readonly audioEffects: readonly AudioEffectDescriptor[]
 }
 
 export function defaultMasterAudio(): MasterAudioSettings {
@@ -38,6 +51,7 @@ export function defaultMasterAudio(): MasterAudioSettings {
     volume: DEFAULT_MASTER_AUDIO.volume,
     balance: DEFAULT_MASTER_AUDIO.balance,
     muted: DEFAULT_MASTER_AUDIO.muted,
+    audioEffects: [],
   }
 }
 
@@ -51,7 +65,13 @@ export function trackBalance(track: Track): number {
 
 export function masterAudioSettings(doc: TimelineDoc): MasterAudioSettings {
   const authored = doc.masterAudio
-  return authored === undefined ? defaultMasterAudio() : { ...authored }
+  if (authored === undefined) return defaultMasterAudio()
+  return {
+    volume: authored.volume,
+    balance: authored.balance,
+    muted: authored.muted,
+    audioEffects: cloneAudioEffectStack(authored.audioEffects),
+  }
 }
 
 function finite(value: number): boolean {
@@ -72,6 +92,7 @@ export function masterMixerGains(doc: TimelineDoc): TimelineAudioMasterBus {
   return {
     ...mixerGains(master.volume, master.balance),
     muted: master.muted,
+    audioEffects: master.audioEffects ?? [],
   }
 }
 
@@ -101,7 +122,7 @@ export function trackMixerValidationError(
 }
 
 export function masterAudioValidationError(
-  settings: MasterAudioSettings,
+  settings: Pick<MasterAudioSettings, 'volume' | 'balance' | 'muted'>,
 ): string | null {
   const gainError = trackMixerValidationError(settings.volume, settings.balance)
   if (gainError) return gainError
@@ -124,7 +145,11 @@ export function timelineAudioMixerGraph(doc: TimelineDoc): {
     if (error) {
       throw new RangeError(`Audio track "${track.id}" ${error}`)
     }
-    return { trackId: track.id, ...gains }
+    return {
+      trackId: track.id,
+      ...gains,
+      audioEffects: cloneAudioEffectStack(track.audioEffects),
+    }
   })
   const master = masterMixerGains(doc)
   const masterError = masterAudioValidationError(master)

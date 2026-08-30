@@ -2,6 +2,8 @@ import type { Clip, ClipId, EffectId, SourceTimeRate, SourceTimeMap, SourceTimeS
 import { clipAnimation, clipAnimationKeyframeCount, cloneClipAnimation, documentAnimationKeyframeGrowthAllowed, shiftClipAnimation, remapEffectAnimationIds } from '../clipAnimation';
 import { rangeEnd, rangeOverlap } from '../time';
 import { effectCollectionAppendBudgetError } from '../effectBounds';
+import { audioEffectCollectionAppendBudgetError, clipAudioEffects } from '../audioEffectBounds';
+import { cloneAudioEffectDescriptor } from '../audioEffectStack';
 import { clipSourceTimeMap, cloneSourceTimeMap, defaultSourceTimeMap, retimeClipAnimation, shiftClipAnimationSourceTimeIntent, sourceRangeForMap, sourceTimeMapAtOffset, sourceTimeMapForTimelineDuration, sourceTimeMapUsesSpeedCurve, sourceTimeMapValidationError, sourceTimeMapWithSpeedPoint, sourceTimeMapWithoutSpeedCurve, sourceTimeMapWithoutSpeedPoint, sourceTimeRateValidationError, timelineFramesWithinSourceMap, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
 import { byStart, clipsOverlapAdjustments, locateClip, newId, overlapsAny, reconcileTransitions, reject, shiftLaterAdjustments, withClampedAudioFades, withTrack, type ClipLocation } from './operationInternals';
 import type { TrimEdge } from './operationTypes';
@@ -36,6 +38,9 @@ export function splitClipAtFrame(
   }
   const effectBudgetError = effectCollectionAppendBudgetError(doc, clip.effects)
   if (effectBudgetError) return reject(doc, op, effectBudgetError)
+  const audioEffects = clipAudioEffects(clip)
+  const audioEffectBudgetError = audioEffectCollectionAppendBudgetError(doc, audioEffects)
+  if (audioEffectBudgetError) return reject(doc, op, audioEffectBudgetError)
   if (!documentAnimationKeyframeGrowthAllowed(
     doc,
     clipAnimationKeyframeCount(clipAnimation(clip)),
@@ -62,6 +67,10 @@ export function splitClipAtFrame(
     effectIdMap.set(effect.id, id)
     return { ...effect, id, params: { ...effect.params } }
   })
+  const rightAudioEffects = audioEffects.map((effect) => ({
+    ...cloneAudioEffectDescriptor(effect),
+    id: newId('afx'),
+  }))
   const rightAnimation = remapEffectAnimationIds(shiftedRightAnimation, effectIdMap)
   const left: Clip = withClampedAudioFades({
     ...clip,
@@ -85,6 +94,7 @@ export function splitClipAtFrame(
     timelineRange: { startFrame: frame, durationFrames: tl.durationFrames - offset },
     animation: rightAnimation,
     effects: rightEffects,
+    audioEffects: rightAudioEffects,
     ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
   })
 

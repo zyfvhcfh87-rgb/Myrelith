@@ -608,7 +608,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   envelope contract. Valid linked fades open real virtual handle ranges and
   apply clip volume/balance, including integer-frame automation, then an
   absolute linear or equal-power envelope. Track gain/pan multiply after
-  those envelopes; the master bus multiplies after the sum. Web Audio
+  those envelopes; the master bus multiplies after the sum. Clip, track, and
+  master audio-effect stacks are ordered descriptors on those same buses;
+  Slice 3 registers EQ, compressor, and limiter as identity
+  `js-stereo-block` processors. Web Audio
   schedules that plan against the shared audio anchor; export evaluates it
   on the exact BigInt-derived sample grid before one final clamp. Invalid or
   unavailable audio falls back to the ordinary hard cut without weakening a

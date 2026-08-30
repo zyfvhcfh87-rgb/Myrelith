@@ -11,6 +11,7 @@ import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
 } from './projectLimits'
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile/projectTypes'
 
 export interface ProjectResolution {
   readonly width: number
@@ -346,6 +347,7 @@ function emptyTrack(id: string, kind: Track['kind']): Track {
     locked: false,
     volume: 1,
     balance: 0,
+    audioEffects: [],
   }
 }
 
@@ -387,9 +389,10 @@ export function createTimelineDoc(
     volume: 1,
     balance: 0,
     muted: false,
+    audioEffects: [],
   }
   const doc: TimelineDoc = {
-    schemaVersion: 16,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id,
     name: projectName,
     frameRate: { ...validated.frameRate },
@@ -407,11 +410,13 @@ export function createTimelineDoc(
     Object.freeze(track.clips)
     Object.freeze(track.adjustments)
     Object.freeze(track.transitions)
+    Object.freeze(track.audioEffects)
     Object.freeze(track)
   }
   Object.freeze(doc.tracks)
   Object.freeze(doc.markers)
   Object.freeze(doc.captionTracks)
+  Object.freeze(doc.masterAudio?.audioEffects)
   Object.freeze(doc.masterAudio)
   return Object.freeze(doc)
 }

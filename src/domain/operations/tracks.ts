@@ -11,6 +11,7 @@ import {
   trackMixerValidationError,
   trackVolume,
 } from '../audioMixer';
+import { cloneAudioEffectStack } from '../audioEffectStack';
 import { locateClip, reject, withoutLinkGroupId, withTrack } from './operationInternals';
 
 export { MAX_CLIP_VOLUME }
@@ -65,6 +66,7 @@ export function addTrack(doc: TimelineDoc, kind: TrackKind): TimelineDoc {
     locked: false,
     volume: 1,
     balance: 0,
+    audioEffects: [],
   }
 
   let lastOfKind = -1
@@ -321,7 +323,12 @@ export function setMasterAudio(
     ? current.balance
     : Math.min(MAX_AUDIO_BALANCE, Math.max(MIN_AUDIO_BALANCE, patch.balance))
   const muted = patch.muted ?? current.muted
-  const next: MasterAudioSettings = { volume, balance, muted }
+  const next: MasterAudioSettings = {
+    volume,
+    balance,
+    muted,
+    audioEffects: cloneAudioEffectStack(current.audioEffects),
+  }
   const error = masterAudioValidationError(next)
   if (error) return reject(doc, op, error)
   if (

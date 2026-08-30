@@ -84,7 +84,7 @@ function makeTrack(
 
 function makeDoc(tracks?: Track[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'doc-three-point',
     name: 'three-point fixture',
     frameRate: { num: 30, den: 1 },

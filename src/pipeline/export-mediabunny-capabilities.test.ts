@@ -233,7 +233,7 @@ function makeDoc({
   height?: number
 } = {}): TimelineDoc {
   return {
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'fresh-probe-doc',
     name: 'Fresh probe',
     frameRate,

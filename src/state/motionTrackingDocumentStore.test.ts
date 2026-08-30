@@ -38,7 +38,7 @@ function track(id: string, item: Clip): Track {
 
 function document(): TimelineDoc {
   return {
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'tracking-store',
     name: 'Tracking store',
     frameRate: { num: 30, den: 1 },

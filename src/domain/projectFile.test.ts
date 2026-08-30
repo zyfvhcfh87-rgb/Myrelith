@@ -96,6 +96,7 @@ function mediaClip(
     },
     animation: defaultClipAnimation(),
     effects: [],
+    audioEffects: [],
   }
 }
 
@@ -117,6 +118,7 @@ function track(
     locked: false,
     volume: 1,
     balance: 0,
+    audioEffects: [],
   }
 }
 
@@ -218,7 +220,7 @@ function makeDocument(): TimelineDoc {
     tracks: [video, audio],
     markers: [],
     captionTracks: [],
-    masterAudio: { volume: 1, balance: 0, muted: false },
+    masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
   }
 }
 
@@ -445,6 +447,7 @@ describe('portable project file', () => {
       volume: 1,
       balance: 0,
       muted: false,
+      audioEffects: [],
     })
     expect(parsed.document.tracks.map((item) => ({
       id: item.id,
@@ -456,11 +459,99 @@ describe('portable project file', () => {
     ])
   })
 
+  test('migrates schema-16 documents to schema 17 with empty audio-effect stacks', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 16
+    for (const item of legacy.document.tracks) {
+      Reflect.deleteProperty(item, 'audioEffects')
+      for (const clip of item.clips) {
+        Reflect.deleteProperty(clip, 'audioEffects')
+      }
+    }
+    if (legacy.document.masterAudio) {
+      Reflect.deleteProperty(legacy.document.masterAudio, 'audioEffects')
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.masterAudio?.audioEffects).toEqual([])
+    expect(parsed.document.tracks.every((item) => item.audioEffects?.length === 0)).toBe(true)
+    expect(
+      parsed.document.tracks.every((item) =>
+        item.clips.every((clip) => clip.audioEffects?.length === 0),
+      ),
+    ).toBe(true)
+  })
+
+  test('round-trips authored clip, track, and master audio-effect stacks including unknown types', () => {
+    const project = makeProject()
+    const unknown = {
+      id: 'afx-future',
+      type: 'future.exciter',
+      version: 9,
+      enabled: false,
+      params: { sparkle: 0.4, keep: true },
+    }
+    project.document.tracks[1].clips[0].audioEffects = [{
+      id: 'afx-clip-eq',
+      type: 'builtin.eq',
+      version: 1,
+      enabled: true,
+      params: {
+        band1Type: 'lowshelf',
+        band1Freq: 80,
+        band1Q: 0.7,
+        band1Gain: -1.5,
+        band2Type: 'peak',
+        band2Freq: 400,
+        band2Q: 1,
+        band2Gain: 0,
+        band3Type: 'peak',
+        band3Freq: 2500,
+        band3Q: 1,
+        band3Gain: 2,
+        band4Type: 'highshelf',
+        band4Freq: 8000,
+        band4Q: 0.7,
+        band4Gain: 0,
+      },
+    }]
+    project.document.tracks[1].audioEffects = [unknown]
+    project.document.masterAudio = {
+      volume: 1,
+      balance: 0,
+      muted: false,
+      audioEffects: [{
+        id: 'afx-master-lim',
+        type: 'builtin.limiter',
+        version: 1,
+        enabled: true,
+        params: { ceilingDb: -1, releaseMs: 80 },
+      }],
+    }
+
+    const parsed = parseProjectFile(serializeProjectFile(project))
+
+    expect(parsed.document.tracks[1].clips[0].audioEffects).toEqual(
+      project.document.tracks[1].clips[0].audioEffects,
+    )
+    expect(parsed.document.tracks[1].audioEffects).toEqual([unknown])
+    expect(parsed.document.masterAudio?.audioEffects).toEqual(
+      project.document.masterAudio.audioEffects,
+    )
+  })
+
   test('round-trips authored track and master mixer fields', () => {
     const project = makeProject()
     project.document.tracks[1].volume = 0.4
     project.document.tracks[1].balance = -0.5
-    project.document.masterAudio = { volume: 1.25, balance: 0.25, muted: true }
+    project.document.masterAudio = {
+      volume: 1.25,
+      balance: 0.25,
+      muted: true,
+      audioEffects: [],
+    }
 
     const parsed = parseProjectFile(serializeProjectFile(project))
 
@@ -470,6 +561,7 @@ describe('portable project file', () => {
       volume: 1.25,
       balance: 0.25,
       muted: true,
+      audioEffects: [],
     })
   })
 

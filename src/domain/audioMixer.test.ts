@@ -26,7 +26,7 @@ function track(id: string, kind: Track['kind'], extra: Partial<Track> = {}): Tra
 
 function doc(tracks: Track[], masterAudio?: TimelineDoc['masterAudio']): TimelineDoc {
   return {
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'mixer-doc',
     name: 'Mixer',
     frameRate: { num: 30, den: 1 },
@@ -71,8 +71,22 @@ describe('audio mixer defaults', () => {
     ], { volume: 1.25, balance: 0, muted: false }))
 
     expect(graph.tracks).toEqual([
-      { trackId: 'A1', volume: 0.5, balance: 0.5, leftGain: 0.5, rightGain: 1 },
-      { trackId: 'A2', volume: 1, balance: 0, leftGain: 1, rightGain: 1 },
+      {
+        trackId: 'A1',
+        volume: 0.5,
+        balance: 0.5,
+        leftGain: 0.5,
+        rightGain: 1,
+        audioEffects: [],
+      },
+      {
+        trackId: 'A2',
+        volume: 1,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        audioEffects: [],
+      },
     ])
     expect(graph.master).toMatchObject({ volume: 1.25, muted: false })
   })

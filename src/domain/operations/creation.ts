@@ -4,6 +4,8 @@ import { clipAudioSettings, clipAudioSettingsValidationError, clipVisualSettings
 import { defaultTextProps, proceduralTextAssetId, textOverlayName, textPropsValidationError } from '../textOverlay';
 import { DEFAULT_BLEND_MODE } from '../blendModes';
 import { effectCollectionAppendBudgetError } from '../effectBounds';
+import { audioEffectCollectionAppendBudgetError, clipAudioEffects } from '../audioEffectBounds';
+import { cloneAudioEffectStack } from '../audioEffectStack';
 import { clipSourceTimeMap, cloneSourceTimeMap, defaultSourceTimeMap, sourceRangeForMap, sourceTimeMapValidationError, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
 import { byStart, locateClip, newId, overlapsAny, reconcileTransitions, reject, withTrack } from './operationInternals';
 
@@ -54,6 +56,7 @@ export function clipFromAssetRange(
     audio: defaultClipAudioSettings(),
     animation: defaultClipAnimation(),
     effects: [],
+    audioEffects: [],
     ...(linkGroupId ? { linkGroupId } : {}),
   }
 }
@@ -120,6 +123,7 @@ export function createTextClip(
     audio: defaultClipAudioSettings(),
     animation: defaultClipAnimation(),
     effects: [],
+    audioEffects: [],
     text,
   }
 }
@@ -265,6 +269,11 @@ export function insertClip(
   }
   const effectBudgetError = effectCollectionAppendBudgetError(doc, clip.effects)
   if (effectBudgetError) return reject(doc, op, effectBudgetError)
+  const audioEffectBudgetError = audioEffectCollectionAppendBudgetError(
+    doc,
+    clipAudioEffects(clip),
+  )
+  if (audioEffectBudgetError) return reject(doc, op, audioEffectBudgetError)
   if (!documentAnimationKeyframeGrowthAllowed(
     doc,
     clipAnimationKeyframeCount(animation),
@@ -283,6 +292,7 @@ export function insertClip(
     audio: { ...clipAudioSettings(clip) },
     animation: cloneClipAnimation(animation),
     effects: clip.effects.map((e) => ({ ...e, params: { ...e.params } })),
+    audioEffects: cloneAudioEffectStack(clip.audioEffects),
     ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
   }
 

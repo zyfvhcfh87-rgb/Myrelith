@@ -21,6 +21,8 @@ import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { useTransportStore } from '../state/transportStore'
 import { initSelectionReconciliation } from '../app/selectionReconciliationController'
 import { projectPreviewEffectStatuses } from '../app/previewEffectStatus'
+import { projectAudioEffectStatuses } from '../app/audioEffectStatus'
+import { useAudioEffectStatusStore } from '../state/audioEffectStatusStore'
 import {
   resetDocumentStoreForTest,
   resetTransportStoreForTest,
@@ -49,7 +51,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 16,
+    schemaVersion: 17,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -101,6 +103,13 @@ function makeLinkedFixture(): TimelineDoc {
 const doc = () => useDocumentStore.getState()
 const transport = () => useTransportStore.getState()
 const clipA = () => doc().doc.tracks[0].clips.find((c) => c.id === 'clipA') as Clip
+const clipAAudio = () => doc().doc.tracks[1].clips.find((c) => c.id === 'clipD') as Clip
+
+function projectAudioEffectStatusesNow(): void {
+  useAudioEffectStatusStore.getState().setStatuses(
+    projectAudioEffectStatuses(doc().doc),
+  )
+}
 
 function projectEffectStatuses(canvasFilter: boolean): void {
   const timeline = doc().doc
@@ -130,6 +139,7 @@ beforeEach(() => {
   resetTransportStoreForTest()
   resetDocumentStoreForTest(makeDoc())
   usePreviewStatusStore.getState().resetPreviewStatus()
+  useAudioEffectStatusStore.getState().resetAudioEffectStatuses()
   useMediaStore.getState().clearAssets()
   warnSpy.mockClear()
 })
@@ -1285,6 +1295,46 @@ describe('manual A/V link controls (Issue 12 Slice 6)', () => {
     expect(doc().doc.tracks[0].clips[0].linkGroupId).toBeDefined()
     expect(doc().doc.tracks[1].clips[0].linkGroupId).toBeDefined()
     expect(doc().past).toHaveLength(1)
+  })
+
+  test('authors clip, track, and master audio-effect stacks from Inspector cards', async () => {
+    const user = userEvent.setup()
+    const uuid = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000a1')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000a2')
+    transport().setSelectedClip('clipD')
+    render(<Inspector />)
+
+    const clipSection = screen.getByRole('heading', { name: 'Clip audio effects' })
+      .closest('section')
+    expect(clipSection).toBeInstanceOf(HTMLElement)
+    if (!(clipSection instanceof HTMLElement)) return
+    await user.click(within(clipSection).getByRole('button', { name: 'Add EQ' }))
+    expect(clipAAudio()?.audioEffects?.map((effect) => effect.id)).toEqual([
+      'afx_00000000-0000-4000-8000-0000000000a1',
+    ])
+
+    act(() => projectAudioEffectStatusesNow())
+    const gain = screen.getByTestId(
+      'inspector-audio-effect-band2Gain-afx_00000000-0000-4000-8000-0000000000a1',
+    )
+    fireEvent.change(gain, { target: { value: '3' } })
+    fireEvent.keyDown(gain, { key: 'Enter' })
+    expect(clipAAudio()?.audioEffects?.[0].params.band2Gain).toBe(3)
+
+    const masterSection = screen.getByRole('heading', { name: 'Master audio effects' })
+      .closest('section')
+    expect(masterSection).toBeInstanceOf(HTMLElement)
+    if (!(masterSection instanceof HTMLElement)) return
+    await user.click(within(masterSection).getByRole('button', { name: 'Add limiter' }))
+    expect(doc().doc.masterAudio?.audioEffects?.map((effect) => effect.id)).toEqual([
+      'afx_00000000-0000-4000-8000-0000000000a2',
+    ])
+    await user.click(screen.getByTestId(
+      'inspector-audio-effect-enabled-afx_00000000-0000-4000-8000-0000000000a1',
+    ))
+    expect(clipAAudio()?.audioEffects?.[0].enabled).toBe(false)
+    uuid.mockRestore()
   })
 
   test('a raced valid selection never links a different pair than the rendered target', () => {

@@ -459,6 +459,7 @@ export function audioPlaybackPlanKey(
         solo: track.solo,
         volume: track.volume ?? null,
         balance: track.balance ?? null,
+        audioEffects: track.audioEffects ?? null,
         clips: track.clips.map((clip) => ({
           id: clip.id,
           assetId: clip.assetId,
@@ -469,6 +470,7 @@ export function audioPlaybackPlanKey(
           volume: clip.volume,
           audio: clip.audio ?? null,
           animation: clip.animation ?? null,
+          audioEffects: clip.audioEffects ?? null,
           linkGroupId: clip.linkGroupId ?? null,
         })),
         transitions: track.transitions.map((transition) => ({
