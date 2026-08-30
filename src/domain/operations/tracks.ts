@@ -12,6 +12,10 @@ import {
   trackVolume,
 } from '../audioMixer';
 import { cloneAudioEffectStack } from '../audioEffectStack';
+import {
+  DEFAULT_NORMALIZE_TARGET_LUFS,
+  normalizeGainFromLufs,
+} from '../audioLoudness';
 import { locateClip, reject, withoutLinkGroupId, withTrack } from './operationInternals';
 
 export { MAX_CLIP_VOLUME }
@@ -338,4 +342,22 @@ export function setMasterAudio(
   ) return doc
 
   return { ...doc, masterAudio: next }
+}
+
+/**
+ * Author an ordinary master-volume change from a complete loudness reading.
+ * Incomplete measurements must not call this.
+ */
+export function normalizeMasterLoudness(
+  doc: TimelineDoc,
+  measuredLufs: number,
+  targetLufs: number = DEFAULT_NORMALIZE_TARGET_LUFS,
+): TimelineDoc {
+  const op = 'normalizeMasterLoudness'
+  if (!Number.isFinite(measuredLufs) || !Number.isFinite(targetLufs)) {
+    return reject(doc, op, 'loudness values must be finite')
+  }
+  const current = masterAudioSettings(doc)
+  const volume = normalizeGainFromLufs(measuredLufs, targetLufs, current.volume)
+  return setMasterAudio(doc, { volume })
 }

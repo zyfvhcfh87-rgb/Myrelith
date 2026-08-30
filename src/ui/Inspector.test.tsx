@@ -1337,6 +1337,31 @@ describe('manual A/V link controls (Issue 12 Slice 6)', () => {
     uuid.mockRestore()
   })
 
+  test('applies a Voice preset and shows derived loudness controls', async () => {
+    const user = userEvent.setup()
+    const uuid = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e1')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e2')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e3')
+    transport().setSelectedClip('clipD')
+    render(<Inspector />)
+
+    const masterSection = screen.getByRole('heading', { name: 'Master audio effects' })
+      .closest('section')
+    expect(masterSection).toBeInstanceOf(HTMLElement)
+    if (!(masterSection instanceof HTMLElement)) return
+    await user.click(within(masterSection).getByRole('button', { name: 'Voice preset' }))
+    expect(doc().doc.masterAudio?.audioEffects?.map((effect) => effect.type)).toEqual([
+      'builtin.eq',
+      'builtin.compressor',
+      'builtin.limiter',
+    ])
+    expect(screen.getByRole('heading', { name: 'Loudness' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Measure' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Normalize master to/ })).toBeDisabled()
+    uuid.mockRestore()
+  })
+
   test('a raced valid selection never links a different pair than the rendered target', () => {
     setMultiSelection(['clipA', 'clipD'], 'clipD')
     let raced = false

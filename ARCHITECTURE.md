@@ -609,9 +609,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   apply clip volume/balance, including integer-frame automation, then an
   absolute linear or equal-power envelope. Track gain/pan multiply after
   those envelopes; the master bus multiplies after the sum. Clip, track, and
-  master audio-effect stacks are ordered descriptors on those same buses;
-  Slice 3 registers EQ, compressor, and limiter as identity
-  `js-stereo-block` processors. Web Audio
+  master audio-effect stacks are ordered descriptors on those same buses.
+  Ready EQ, compressor, and limiter stages share one JS stereo block
+  processor for live playback and export; unknown, invalid, and disabled
+  entries stay preserved and bypassed. Web Audio
   schedules that plan against the shared audio anchor; export evaluates it
   on the exact BigInt-derived sample grid before one final clamp. Invalid or
   unavailable audio falls back to the ordinary hard cut without weakening a

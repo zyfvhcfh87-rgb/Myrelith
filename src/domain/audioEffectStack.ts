@@ -1,6 +1,10 @@
-/** Pure audio-effect descriptor registry, validation, resolution, and identity DSP. */
+/** Pure audio-effect descriptor registry, validation, resolution, and shared stereo-block DSP. */
 
 import type { AudioEffectDescriptor, EffectParamValue } from './schema'
+import {
+  createAudioEffectChainFromReady,
+  type AudioEffectChain,
+} from './audioDsp'
 
 export const PARAMETRIC_EQ_EFFECT_TYPE = 'builtin.eq' as const
 export const PARAMETRIC_EQ_EFFECT_VERSION = 1 as const
@@ -148,18 +152,7 @@ export interface AudioEffectRegistration {
   readonly capabilities: readonly AudioEffectCapability[]
   readonly defaultParams: Readonly<Record<string, EffectParamValue>>
   readonly validateParams: (params: Readonly<Record<string, EffectParamValue>>) => string | null
-  readonly processBlock: (
-    left: Float32Array,
-    right: Float32Array,
-    effect: AudioEffectDescriptor,
-  ) => void
 }
-
-function identityProcessBlock(
-  _left: Float32Array,
-  _right: Float32Array,
-  _effect: AudioEffectDescriptor,
-): void {}
 
 function finiteInRange(value: EffectParamValue | undefined, min: number, max: number): boolean {
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
@@ -232,7 +225,6 @@ const EQ_REGISTRATION: AudioEffectRegistration = Object.freeze({
   capabilities: Object.freeze([JS_STEREO_BLOCK_CAPABILITY]),
   defaultParams: DEFAULT_EQ_PARAMS,
   validateParams: validateEqParams,
-  processBlock: identityProcessBlock,
 })
 
 const COMPRESSOR_REGISTRATION: AudioEffectRegistration = Object.freeze({
@@ -242,7 +234,6 @@ const COMPRESSOR_REGISTRATION: AudioEffectRegistration = Object.freeze({
   capabilities: Object.freeze([JS_STEREO_BLOCK_CAPABILITY]),
   defaultParams: DEFAULT_COMPRESSOR_PARAMS,
   validateParams: validateCompressorParams,
-  processBlock: identityProcessBlock,
 })
 
 const LIMITER_REGISTRATION: AudioEffectRegistration = Object.freeze({
@@ -252,7 +243,6 @@ const LIMITER_REGISTRATION: AudioEffectRegistration = Object.freeze({
   capabilities: Object.freeze([JS_STEREO_BLOCK_CAPABILITY]),
   defaultParams: DEFAULT_LIMITER_PARAMS,
   validateParams: validateLimiterParams,
-  processBlock: identityProcessBlock,
 })
 
 const AUDIO_EFFECT_REGISTRY = new Map<string, AudioEffectRegistration>([
@@ -409,8 +399,8 @@ function resolveOne(
     effect,
     label: registration.label,
     status: 'ready',
-    detail: 'Applied in stack order. Slice 3 processors are identity.',
-    identity: true,
+    detail: 'Applied in stack order.',
+    identity: false,
   }
 }
 
@@ -422,26 +412,34 @@ export function resolveAudioEffectStack(
   return effects.map((effect) => resolveOne(effect, capabilities))
 }
 
+/** Stateful chain used by live playback and export. */
+export function createAudioEffectChain(
+  effects: readonly AudioEffectDescriptor[],
+  sampleRate: number,
+  capabilities: ReadonlySet<AudioEffectCapability> = jsStereoBlockCapabilities(),
+): AudioEffectChain {
+  const ready = resolveAudioEffectStack(effects, capabilities)
+    .filter((resolution) => resolution.status === 'ready')
+    .map((resolution) => resolution.effect)
+  return createAudioEffectChainFromReady(ready, sampleRate)
+}
+
 /**
- * Run the ordered stereo block processor. Slice 3 built-ins are identity:
- * ready stages do not write samples. Disabled, invalid, and unsupported
- * entries are skipped. Both playback and export must call this helper.
+ * Run the ordered stereo block processor. Disabled, invalid, and unsupported
+ * entries are skipped. Both playback and export must call this helper, or
+ * the stateful `createAudioEffectChain` equivalent, so order stays identical.
  */
 export function applyAudioEffectStack(
   left: Float32Array,
   right: Float32Array,
   effects: readonly AudioEffectDescriptor[],
   capabilities: ReadonlySet<AudioEffectCapability>,
+  sampleRate = 48_000,
 ): readonly AudioEffectResolution[] {
   if (left.length !== right.length) {
     throw new RangeError('audio-effect blocks must have matching stereo lengths')
   }
   const resolutions = resolveAudioEffectStack(effects, capabilities)
-  for (const resolution of resolutions) {
-    if (resolution.status !== 'ready') continue
-    const registration = audioEffectRegistration(resolution.effect.type)
-    if (!registration) continue
-    registration.processBlock(left, right, resolution.effect)
-  }
+  createAudioEffectChain(effects, sampleRate, capabilities).process(left, right)
   return resolutions
 }

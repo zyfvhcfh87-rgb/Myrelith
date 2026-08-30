@@ -1,22 +1,24 @@
 # Audio signal flow
 
-Shared live-playback and export mix contract. Issue #189 Slice 3 owns
-versioned audio-effect descriptors. Later slices fill DSP and loudness
-without reordering the stages below.
+Shared live-playback and export mix contract. Issue #189 owns clip
+automation, the track/master mixer, versioned audio-effect descriptors,
+shared EQ/compressor/limiter DSP, derived loudness, and built-in presets.
+The stage order below does not change.
 
 ```
 decode
   → fold-down to stereo
   → clip volume / balance (static or integer-frame keys)
   → clip fades / crossfades
-  → clip audio effects            [Slice 3 descriptors; identity DSP]
+  → clip audio effects            [Slice 3–4]
   → track mute / solo
   → track gain / pan              [Slice 2]
-  → track audio effects           [Slice 3 descriptors; identity DSP]
+  → track audio effects           [Slice 3–4]
   → sum
   → master gain / pan / mute      [Slice 2]
-  → master audio effects          [Slice 3 descriptors; identity DSP]
+  → master audio effects          [Slice 3–4]
   → meters
+  → loudness (derived, off-line)  [Slice 5]
   → output
 ```
 
@@ -58,7 +60,14 @@ call the same `clipAudioGainsAtLocalFrame` helper.
   disabled entries are the same. Both live playback and export probe
   `js-stereo-block`; Inspector reads the app-owned status projection.
 - Version-1 types `builtin.eq`, `builtin.compressor`, and `builtin.limiter`
-  are registered now so Slice 4 can ship DSP without a schema bump. Slice 3
-  processors are identity: ready stages do not change samples.
-- Inspector cards expose bypass, reorder, reset, and remove on clip, track,
-  and master stacks. Reset is refused for unknown types.
+  share one JS stereo block processor for live playback and export. Ready
+  stages run in authored order; missing capability / unknown / invalid
+  entries stay preserved and bypassed.
+- Inspector cards expose bypass, reorder, reset, remove, and built-in
+  Voice / Music / Podcast presets. Reset is refused for unknown types.
+
+## Loudness (derived)
+
+- A cancellable scan mixes the program through the same export mixer.
+- UI reports integrated LUFS and true peak. Incomplete coverage cannot
+  claim complete. Normalize writes an ordinary master-volume change.

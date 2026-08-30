@@ -8,6 +8,7 @@ import type {
 } from '../schema'
 import {
   audioEffectAppendBudgetError,
+  audioEffectCollectionAppendBudgetError,
   audioEffectDescriptorBoundsError,
   audioEffectIdExists,
   audioEffectReplacementBudgetError,
@@ -21,7 +22,8 @@ import {
   cloneAudioEffectDescriptor,
 } from '../audioEffectStack'
 import { masterAudioSettings } from '../audioMixer'
-import { locateClip, reject, withTrack } from './operationInternals'
+import { audioEffectPreset } from '../audioEffectPresets'
+import { locateClip, newId, reject, withTrack } from './operationInternals'
 
 export type AudioEffectTarget =
   | { readonly kind: 'clip'; readonly clipId: ClipId }
@@ -250,6 +252,28 @@ export function resetAudioEffect(
     stack[index] = candidate
     return stack
   })
+}
+
+export function applyAudioEffectPreset(
+  doc: TimelineDoc,
+  target: AudioEffectTarget,
+  presetId: string,
+): TimelineDoc {
+  const op = 'applyAudioEffectPreset'
+  const preset = audioEffectPreset(presetId)
+  if (!preset) return reject(doc, op, `unknown audio-effect preset ${presetId}`)
+  const located = locateAudioEffectStack(doc, target, op)
+  if (!located) return doc
+  if (located.locked) return reject(doc, op, 'target track is locked')
+  const next: AudioEffectDescriptor[] = preset.effects.map((effect) =>
+    cloneAudioEffectDescriptor({ ...effect, id: newId('afx') }),
+  )
+  const emptied = located.write([])
+  const budgetError = audioEffectCollectionAppendBudgetError(emptied, next)
+  if (budgetError) return reject(doc, op, budgetError)
+  const relocated = locateAudioEffectStack(emptied, target, op)
+  if (!relocated) return doc
+  return relocated.write(next)
 }
 
 export function removeAudioEffect(

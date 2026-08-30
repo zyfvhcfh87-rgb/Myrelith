@@ -31,6 +31,7 @@ import {
   useAudioEffectStatusStore,
 } from '../state/audioEffectStatusStore'
 import { useDocumentStore } from '../state/documentStore'
+import { AUDIO_EFFECT_PRESETS } from '../domain/audioEffectPresets'
 import { NumberField } from './inspector/InspectorFields'
 
 function stackForTarget(
@@ -288,11 +289,23 @@ export default function AudioEffectStackInspector({
           >
             Add limiter
           </button>
+          {AUDIO_EFFECT_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              className="inspector-effect-add"
+              disabled={locked}
+              title={preset.detail}
+              onClick={() => store().applyAudioEffectPreset(target, preset.id)}
+            >
+              {preset.label} preset
+            </button>
+          ))}
         </div>
       </div>
       <span className="inspector-note">
-        Audio effects run in authored order at this mix stage. Built-in processors
-        are identity until the DSP slice; bypass, reorder, reset, and unknown
+        Audio effects run in authored order at this mix stage. Live playback and
+        export share the same processors; bypass, reorder, reset, and unknown
         descriptors are preserved.
       </span>
       {addBudgetReasons.map((reason, index) => (

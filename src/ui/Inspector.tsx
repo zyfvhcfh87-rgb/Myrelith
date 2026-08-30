@@ -17,6 +17,7 @@ import { useTransportStore } from '../state/transportStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
 import AudioInspectorSection from './inspector/AudioInspectorSection'
 import AudioEffectStackInspector from './AudioEffectStackInspector'
+import LoudnessInspectorSection from './inspector/LoudnessInspectorSection'
 import LinkSelectionControls from './inspector/LinkSelectionControls'
 import TextOverlayFields from './inspector/TextOverlayFields'
 import TimingInspectorSection from './inspector/TimingInspectorSection'
@@ -91,6 +92,7 @@ export default function Inspector() {
           locked={false}
           heading="Master audio effects"
         />
+        <LoudnessInspectorSection />
       </div>
     )
   }
@@ -254,6 +256,7 @@ export default function Inspector() {
         locked={false}
         heading="Master audio effects"
       />
+      <LoudnessInspectorSection />
     </div>
   )
 }

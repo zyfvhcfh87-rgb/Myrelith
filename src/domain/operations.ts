@@ -79,6 +79,7 @@ export {
   renameTrack,
   setClipVolume,
   setMasterAudio,
+  normalizeMasterLoudness,
   setTrackFlags,
   setTrackMixer,
 } from './operations/tracks'
@@ -94,6 +95,7 @@ export {
 export type { AudioEffectTarget } from './operations/audioEffects'
 export {
   addAudioEffect,
+  applyAudioEffectPreset,
   removeAudioEffect,
   reorderAudioEffect,
   resetAudioEffect,

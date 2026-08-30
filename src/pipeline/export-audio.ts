@@ -18,6 +18,8 @@ import {
   type TimelineAudioMasterBus,
   type TimelineAudioTrackBus,
 } from '../domain/audioMixPlan'
+import { createAudioEffectChain } from '../domain/audioEffectStack'
+import type { AudioEffectChain } from '../domain/audioDsp'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import { docDurationFrames } from '../domain/selectors'
@@ -462,6 +464,11 @@ export class TimelineAudioMixer {
   private readonly trackGains: ReadonlyMap<string, TimelineAudioTrackBus>
   private readonly master: TimelineAudioMasterBus
   private readonly readers = new Map<ClipId, ActiveReader>()
+  private readonly clipChains = new Map<ClipId, AudioEffectChain>()
+  private readonly trackChains = new Map<string, AudioEffectChain>()
+  private readonly masterChain: AudioEffectChain
+  private readonly clipLeft: Float32Array
+  private readonly clipRight: Float32Array
   private nextFrame = 0
   private closePromise: Promise<void> | null = null
 
@@ -478,6 +485,16 @@ export class TimelineAudioMixer {
       mixPlan.tracks.map((track) => [track.trackId, track]),
     )
     this.master = mixPlan.master
+    const sampleRate = doc.audioSampleRate
+    for (const track of mixPlan.tracks) {
+      this.trackChains.set(
+        track.trackId,
+        createAudioEffectChain(track.audioEffects, sampleRate),
+      )
+    }
+    this.masterChain = createAudioEffectChain(mixPlan.master.audioEffects, sampleRate)
+    this.clipLeft = new Float32Array(EXPORT_AUDIO_BLOCK_SAMPLES)
+    this.clipRight = new Float32Array(EXPORT_AUDIO_BLOCK_SAMPLES)
     this.mixPlans = mixPlan.clips
       .map((plan) => ({
         ...plan,
@@ -521,6 +538,7 @@ export class TimelineAudioMixer {
     for (const [clipId, active] of this.readers) {
       if (wanted.has(clipId)) continue
       this.readers.delete(clipId)
+      this.clipChains.delete(clipId)
       stale.push(active.reader)
     }
     await closeReaders(stale)
@@ -694,7 +712,18 @@ export class TimelineAudioMixer {
 
       const left = new Float32Array(sampleCount)
       const right = new Float32Array(sampleCount)
+      const byTrack = new Map<string, { left: Float32Array; right: Float32Array }>()
       for (const input of decoded) {
+        let trackMix = byTrack.get(input.plan.trackId)
+        if (!trackMix) {
+          trackMix = {
+            left: new Float32Array(sampleCount),
+            right: new Float32Array(sampleCount),
+          }
+          byTrack.set(input.plan.trackId, trackMix)
+        }
+        const clipLeft = this.clipLeft.subarray(0, sampleCount)
+        const clipRight = this.clipRight.subarray(0, sampleCount)
         for (let i = 0; i < sampleCount; i++) {
           const l = input.channels[0][i]
           const r = input.channels[1][i]
@@ -710,32 +739,54 @@ export class TimelineAudioMixer {
           )
           const gains = clipAudioGainsAtLocalFrame(input.plan, localFrame)
           const envelope = this.envelopeAtSample(input.plan, sample)
-          const track = this.trackGains.get(input.plan.trackId)
-          if (!track) {
-            throw new Error(
-              `Audio track bus for "${input.plan.trackId}" is missing`,
-            )
-          }
-          left[i] += l * envelope * gains.volume * gains.leftGain
-            * track.volume * track.leftGain
-          right[i] += r * envelope * gains.volume * gains.rightGain
-            * track.volume * track.rightGain
+          clipLeft[i] = l * envelope * gains.volume * gains.leftGain
+          clipRight[i] = r * envelope * gains.volume * gains.rightGain
+        }
+        let clipChain = this.clipChains.get(input.plan.clipId)
+        if (!clipChain) {
+          clipChain = createAudioEffectChain(
+            input.plan.audioEffects,
+            this.doc.audioSampleRate,
+          )
+          this.clipChains.set(input.plan.clipId, clipChain)
+        }
+        clipChain.process(clipLeft, clipRight)
+        for (let i = 0; i < sampleCount; i++) {
+          trackMix.left[i] += clipLeft[i]
+          trackMix.right[i] += clipRight[i]
         }
       }
-      for (let i = 0; i < sampleCount; i++) {
-        if (this.master.muted) {
-          left[i] = 0
-          right[i] = 0
-          continue
+      for (const [trackId, mix] of byTrack) {
+        const track = this.trackGains.get(trackId)
+        if (!track) {
+          throw new Error(`Audio track bus for "${trackId}" is missing`)
         }
-        left[i] = Math.max(
-          -1,
-          Math.min(1, left[i] * this.master.volume * this.master.leftGain),
-        )
-        right[i] = Math.max(
-          -1,
-          Math.min(1, right[i] * this.master.volume * this.master.rightGain),
-        )
+        for (let i = 0; i < sampleCount; i++) {
+          mix.left[i] *= track.volume * track.leftGain
+          mix.right[i] *= track.volume * track.rightGain
+        }
+        const trackChain = this.trackChains.get(trackId)
+          ?? createAudioEffectChain(track.audioEffects, this.doc.audioSampleRate)
+        this.trackChains.set(trackId, trackChain)
+        trackChain.process(mix.left, mix.right)
+        for (let i = 0; i < sampleCount; i++) {
+          left[i] += mix.left[i]
+          right[i] += mix.right[i]
+        }
+      }
+      if (this.master.muted) {
+        left.fill(0)
+        right.fill(0)
+      } else {
+        for (let i = 0; i < sampleCount; i++) {
+          left[i] *= this.master.volume * this.master.leftGain
+          right[i] *= this.master.volume * this.master.rightGain
+        }
+        this.masterChain.process(left, right)
+        for (let i = 0; i < sampleCount; i++) {
+          left[i] = Math.max(-1, Math.min(1, left[i]))
+          right[i] = Math.max(-1, Math.min(1, right[i]))
+        }
       }
 
       await writeBlock({

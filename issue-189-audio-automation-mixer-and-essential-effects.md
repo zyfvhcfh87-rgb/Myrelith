@@ -4,7 +4,9 @@ GitHub: [zyfvhcfh87-rgb/Myrelith#189](https://github.com/zyfvhcfh87-rgb/Myrelith
 
 The issue's "feasible first slice" is the whole feature. Myrelith does not ship that as one PR. This plan splits it the way #43 (keyframes), #45 (effect stack), and #71 (color) were split: one complete, gated slice at a time, with the later slices named so slice 1 does not trap the signal-flow order.
 
-**This session implements Slice 2 only.** Slice 1 is in the tree. Later slices stay on paper until Slice 2 is green.
+**Status:** Slices 1–6 are implemented on this branch. Gate/denoise stays later. Do not close GitHub #189 until after a user pass.
+
+**This session originally implemented Slice 2 only.** Slice 1 is in the tree. Later slices stay on paper until Slice 2 is green.
 
 ## Current state
 

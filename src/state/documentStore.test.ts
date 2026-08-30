@@ -673,6 +673,28 @@ describe('actions delegate to domain operations', () => {
     ])
   })
 
+  test('audio-effect presets and loudness normalize are one undo snapshot', () => {
+    const uuid = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e4')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e5')
+    getState().addAudioEffect(
+      { kind: 'master' },
+      createParametricEqEffect('old'),
+    )
+    getState().applyAudioEffectPreset({ kind: 'master' }, 'music')
+    expect(getState().doc.masterAudio?.audioEffects?.map((item) => item.type)).toEqual([
+      'builtin.eq',
+      'builtin.compressor',
+    ])
+    const afterPreset = getState().past.length
+    getState().normalizeMasterLoudness(-22, -16)
+    expect(getState().doc.masterAudio?.volume).toBeCloseTo(10 ** (6 / 20), 5)
+    expect(getState().past).toHaveLength(afterPreset + 1)
+    getState().undo()
+    expect(getState().doc.masterAudio?.volume).toBe(1)
+    uuid.mockRestore()
+  })
+
   test('effect budget rejections keep the exact document and history references', () => {
     const saturated = JSON.parse(JSON.stringify(makeDoc())) as TimelineDoc
     saturated.tracks[0].clips[0].effects = Array.from(

@@ -912,6 +912,56 @@ describe('TimelineAudioMixer selection and mapping', () => {
     }
     expect(left).toBe(0)
   })
+
+  test('applies clip EQ after envelopes and before the track sum', async () => {
+    const clip = makeClip('tone', 0, 1)
+    clip.audioEffects = [{
+      id: 'afx-eq',
+      type: 'builtin.eq',
+      version: 1,
+      enabled: true,
+      params: {
+        band1Type: 'peak',
+        band1Freq: 1_000,
+        band1Q: 1,
+        band1Gain: 6,
+        band2Type: 'peak',
+        band2Freq: 400,
+        band2Q: 1,
+        band2Gain: 0,
+        band3Type: 'peak',
+        band3Freq: 2_500,
+        band3Q: 1,
+        band3Gain: 0,
+        band4Type: 'peak',
+        band4Freq: 8_000,
+        band4Q: 1,
+        band4Gain: 0,
+      },
+    }]
+    const track = makeTrack('A1', 'audio', [clip])
+    const sampleRate = 8_000
+    const doc = makeDoc([track], { num: 1, den: 1 }, sampleRate)
+    const h = makeSource((_request, sampleCount, offset) => {
+      const left = new Float32Array(sampleCount)
+      const step = 2 * Math.PI * 1_000 / sampleRate
+      for (let i = 0; i < sampleCount; i++) left[i] = Math.sin((offset + i) * step) * 0.2
+      return [left, left.slice()]
+    })
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    const samples: number[] = []
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        samples.push(...block.channels[0])
+      })
+    } finally {
+      await mixer.close()
+    }
+    let peak = 0
+    for (let i = 200; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]))
+    expect(peak).toBeGreaterThan(0.2 * 1.5)
+    expect(peak).toBeLessThan(0.2 * 2.4)
+  })
 })
 
 describe('TimelineAudioMixer streaming and ownership', () => {

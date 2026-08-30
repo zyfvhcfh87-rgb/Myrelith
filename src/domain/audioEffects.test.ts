@@ -2,6 +2,8 @@ import { describe, expect, test, vi } from 'vitest'
 import type { AudioEffectDescriptor, Clip, TimelineDoc, Track } from './schema'
 import {
   addAudioEffect,
+  applyAudioEffectPreset,
+  normalizeMasterLoudness,
   removeAudioEffect,
   reorderAudioEffect,
   resetAudioEffect,
@@ -189,6 +191,46 @@ describe('audio-effect stack operations', () => {
     expect(left.audioEffects?.[0].id).toBe('afx-clip')
     expect(right.audioEffects?.[0].id).not.toBe('afx-clip')
     expect(right.audioEffects?.[0].params).toEqual(left.audioEffects?.[0].params)
+    warn.mockRestore()
+  })
+
+  test('Voice preset replaces the stack and remints ids', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const uuid = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e1')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e2')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e3')
+    const seeded = addAudioEffect(
+      makeDoc(),
+      { kind: 'master' },
+      createParametricEqEffect('old'),
+    )
+    const next = applyAudioEffectPreset(seeded, { kind: 'master' }, 'voice')
+    expect(next.masterAudio?.audioEffects?.map((item) => item.type)).toEqual([
+      'builtin.eq',
+      'builtin.compressor',
+      'builtin.limiter',
+    ])
+    expect(next.masterAudio?.audioEffects?.map((item) => item.id)).toEqual([
+      'afx_00000000-0000-4000-8000-0000000000e1',
+      'afx_00000000-0000-4000-8000-0000000000e2',
+      'afx_00000000-0000-4000-8000-0000000000e3',
+    ])
+    expect(applyAudioEffectPreset(seeded, { kind: 'master' }, 'missing')).toBe(seeded)
+    uuid.mockRestore()
+    warn.mockRestore()
+  })
+
+  test('normalizeMasterLoudness writes an ordinary master volume', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const withFx = addAudioEffect(
+      makeDoc(),
+      { kind: 'master' },
+      createCompressorEffect('afx-master'),
+    )
+    const next = normalizeMasterLoudness(withFx, -22, -16)
+    expect(next.masterAudio?.volume).toBeCloseTo(10 ** (6 / 20), 5)
+    expect(next.masterAudio?.audioEffects?.map((item) => item.id)).toEqual(['afx-master'])
     warn.mockRestore()
   })
 

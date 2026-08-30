@@ -1600,6 +1600,11 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
+- Issue #189 Slices 1–6 are implementation-complete on `t3code/read-issue-189`.
+  Schema 17 descriptors, shared EQ/compressor/limiter DSP for live playback
+  and export, derived LUFS + true-peak, and Voice/Music/Podcast presets.
+  Gate/denoise stays later. Do not tick GitHub #189 unless asked after a
+  user pass.
 - Issue #188 is implementation-complete in this worktree, not yet committed.
   `SourceTimeAudioPolicy` admits constant stretch. `createTimelineAudioMixPlan`
   emits tick windows. `pipeline/audioStretch.ts` is first-party WSOLA. Live

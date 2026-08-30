@@ -15,6 +15,7 @@ import type {
   Track,
   Transition,
 } from '../domain/schema'
+import { createLimiterEffect } from '../domain/audioEffectStack'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import {
@@ -460,12 +461,14 @@ function makeWebAudioHarness(state: AudioContextState): {
   splitters: FakeChannelNode[]
   mergers: FakeChannelNode[]
   analysers: FakeAnalyserNode[]
+  processors: FakeChannelNode[]
 } {
   const gains: FakeGainNode[] = []
   const sources: FakeSourceNode[] = []
   const splitters: FakeChannelNode[] = []
   const mergers: FakeChannelNode[] = []
   const analysers: FakeAnalyserNode[] = []
+  const processors: FakeChannelNode[] = []
   const makeGain = (): FakeGainNode => ({
     gain: {
       value: 1,
@@ -532,8 +535,18 @@ function makeWebAudioHarness(state: AudioContextState): {
       Array.from({ length: numberOfChannels }, () => new Float32Array(length)),
       sampleRate,
     )),
+    createScriptProcessor: vi.fn(() => {
+      const node = {
+        onaudioprocess: null as ((event: AudioProcessingEvent) => void) | null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }
+      processors.push(node)
+      return node
+    }),
+    sampleRate: 48_000,
   } as unknown as AudioContext
-  return { context, gains, sources, splitters, mergers, analysers }
+  return { context, gains, sources, splitters, mergers, analysers, processors }
 }
 
 describe('startTimelineAudioPlayback scheduling', () => {
@@ -1665,6 +1678,32 @@ describe('createWebAudioPlaybackOutput ownership', () => {
     output.stop()
   })
 
+  test('applies master audio effects after master gain', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context, {
+      tracks: [{
+        trackId: 'A1',
+        volume: 1,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        audioEffects: [],
+      }],
+      master: {
+        volume: 0.5,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        muted: false,
+        audioEffects: [createLimiterEffect('afx-master-lim')],
+      },
+    })
+    expect(h.processors).toHaveLength(1)
+    expect(h.gains[0].connect).toHaveBeenCalledWith(h.processors[0])
+    expect(h.processors[0].connect).toHaveBeenCalledWith(h.splitters[0])
+    output.stop()
+  })
+
   test('routes clips through track buses and reports per-strip peaks', () => {
     const h = makeWebAudioHarness('running')
     const output = createWebAudioPlaybackOutput(h.context, {
@@ -1698,6 +1737,7 @@ describe('createWebAudioPlaybackOutput ownership', () => {
       volume: 1,
       envelope: null,
     })
+    expect(h.processors).toHaveLength(0)
     const trackInput = h.gains.find((gain) => gain.gain.value === 0.5)
     expect(trackInput).toBeDefined()
     expect(h.gains.some((gain) =>

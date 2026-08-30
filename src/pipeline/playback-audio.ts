@@ -24,6 +24,7 @@ import {
 } from '../codecs/mediaCodecFallbacks'
 import type {
   AssetId,
+  AudioEffectDescriptor,
   Clip,
   ClipAnimationTrack,
   ClipId,
@@ -43,6 +44,12 @@ import {
   type TimelineAudioTrackBus,
 } from '../domain/audioMixPlan'
 import { timelineAudioMixerGraph } from '../domain/audioMixer'
+import { createAudioEffectChain } from '../domain/audioEffectStack'
+import {
+  PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES,
+  processAudioBufferWithChain,
+  type AudioEffectChain,
+} from '../domain/audioDsp'
 import type {
   CrossfadeLegRole,
   SourceBoundsCatalog,
@@ -151,6 +158,7 @@ export interface ScheduledPlaybackAudio {
   frameRate?: FrameRate
   volumeAnimation?: ClipAnimationTrack | null
   balanceAnimation?: ClipAnimationTrack | null
+  audioEffects?: readonly AudioEffectDescriptor[]
 }
 
 export interface PlaybackAudioEnvelope {
@@ -353,6 +361,7 @@ function preparedEventsForOverlap(
       frameRate: plan.frameRate,
       volumeAnimation: plan.volumeAnimation,
       balanceAnimation: plan.balanceAnimation,
+      audioEffects: plan.audioEffects,
     })
   }
   return events
@@ -1008,6 +1017,62 @@ function createStereoMeterTap(context: AudioContext): StereoMeterTap {
   }
 }
 
+function createEffectStage(
+  context: AudioContext,
+  chain: AudioEffectChain,
+): { input: AudioNode; output: AudioNode; nodes: AudioNode[] } {
+  if (chain.identity || typeof context.createScriptProcessor !== 'function') {
+    const passthrough = context.createGain()
+    passthrough.gain.value = 1
+    return { input: passthrough, output: passthrough, nodes: [passthrough] }
+  }
+  const processor = context.createScriptProcessor(
+    PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES,
+    2,
+    2,
+  )
+  processor.onaudioprocess = (event) => {
+    const input = event.inputBuffer
+    const output = event.outputBuffer
+    const leftIn = input.getChannelData(0)
+    const rightIn = input.numberOfChannels > 1 ? input.getChannelData(1) : leftIn
+    const leftOut = output.getChannelData(0)
+    const rightOut = output.numberOfChannels > 1 ? output.getChannelData(1) : leftOut
+    leftOut.set(leftIn)
+    if (rightOut !== leftOut) rightOut.set(rightIn)
+    chain.process(leftOut, rightOut)
+  }
+  return { input: processor, output: processor, nodes: [processor] }
+}
+
+function processScheduledClipBuffer(
+  context: AudioContext,
+  buffer: AudioBuffer,
+  chain: AudioEffectChain,
+  offset: number,
+  duration: number,
+): { buffer: AudioBuffer; offset: number; duration: number } {
+  if (chain.identity) return { buffer, offset, duration }
+  const rate = buffer.sampleRate
+  const start = Math.max(0, Math.floor(offset * rate))
+  const count = Math.min(
+    buffer.length - start,
+    Math.max(0, Math.round(duration * rate)),
+  )
+  if (count <= 0) return { buffer, offset, duration }
+  const leftSource = buffer.getChannelData(0)
+  const rightSource = buffer.numberOfChannels > 1
+    ? buffer.getChannelData(1)
+    : leftSource
+  const left = leftSource.slice(start, start + count)
+  const right = rightSource.slice(start, start + count)
+  processAudioBufferWithChain(left, right, chain, PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES)
+  const processed = context.createBuffer(2, count, rate)
+  processed.getChannelData(0).set(left)
+  processed.getChannelData(1).set(right)
+  return { buffer: processed, offset: 0, duration: count / rate }
+}
+
 function createBalanceStage(
   context: AudioContext,
   leftGain: number,
@@ -1067,32 +1132,45 @@ export function createWebAudioPlaybackOutput(
       mixer.master.leftGain,
       mixer.master.rightGain,
     )
+    const masterFx = createEffectStage(
+      context,
+      createAudioEffectChain(mixer.master.audioEffects, context.sampleRate || 48_000),
+    )
     masterSum.connect(masterBalance.input)
     masterBalance.output.connect(master)
+    master.connect(masterFx.input)
+    masterFx.output.connect(masterMeter.input)
+    graphNodes.push(...masterFx.nodes)
     graphNodes.push(masterSum, ...masterBalance.nodes)
     for (const track of mixer.tracks) {
       const input = context.createGain()
       input.gain.value = track.volume
       const balance = createBalanceStage(context, track.leftGain, track.rightGain)
+      const fx = createEffectStage(
+        context,
+        createAudioEffectChain(track.audioEffects, context.sampleRate || 48_000),
+      )
       const meter = createStereoMeterTap(context)
       input.connect(balance.input)
-      balance.output.connect(meter.input)
+      balance.output.connect(fx.input)
+      fx.output.connect(meter.input)
       meter.output.connect(masterSum)
       const bus: TrackPlaybackBus = {
         input,
         meter,
-        nodes: [input, ...balance.nodes, ...meter.nodes],
+        nodes: [input, ...balance.nodes, ...fx.nodes, ...meter.nodes],
       }
       trackBuses.set(track.trackId, bus)
       graphNodes.push(...bus.nodes)
     }
     clipDestination = masterSum
+  } else {
+    master.connect(masterMeter.input)
   }
-
-  master.connect(masterMeter.input)
   masterMeter.output.connect(context.destination)
 
   const nodes = new Set<ActiveOutputNode>()
+  const clipChains = new Map<ClipId, AudioEffectChain>()
   let stopped = false
   let graphDisconnected = false
   let armed = false
@@ -1123,7 +1201,31 @@ export function createWebAudioPlaybackOutput(
     const source = context.createBufferSource()
     const gain = context.createGain()
     const playbackBuffer = foldPlaybackBufferToStereo(context, request.buffer)
-    source.buffer = playbackBuffer
+    let scheduledBuffer = playbackBuffer
+    let scheduledOffset = request.offset
+    let scheduledDuration = request.duration
+    const clipEffects = request.audioEffects
+    if (clipEffects && clipEffects.length > 0) {
+      let chain = clipChains.get(request.clipId)
+      if (!chain) {
+        chain = createAudioEffectChain(
+          clipEffects,
+          playbackBuffer.sampleRate || 48_000,
+        )
+        clipChains.set(request.clipId, chain)
+      }
+      const processed = processScheduledClipBuffer(
+        context,
+        playbackBuffer,
+        chain,
+        request.offset,
+        request.duration,
+      )
+      scheduledBuffer = processed.buffer
+      scheduledOffset = processed.offset
+      scheduledDuration = processed.duration
+    }
+    source.buffer = scheduledBuffer
     scheduleNodeGain(gain.gain, request)
     source.connect(gain)
     const balanceNodes: AudioNode[] = []
@@ -1182,7 +1284,7 @@ export function createWebAudioPlaybackOutput(
     nodes.add(record)
     source.onended = () => cleanupNode(record)
     try {
-      source.start(request.when, request.offset, request.duration)
+      source.start(request.when, scheduledOffset, scheduledDuration)
       if (!armed) {
         master.gain.cancelScheduledValues(request.when)
         master.gain.setValueAtTime(0, request.when)

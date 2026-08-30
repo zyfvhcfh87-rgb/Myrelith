@@ -93,6 +93,7 @@ import {
   addCrossfade,
   addCrossfadeWithSourceBounds as addExactCrossfade,
   addAudioEffect,
+  applyAudioEffectPreset,
   addEffect,
   applyDynamicZoomWithResult,
   applyVideoStabilizationWithResult,
@@ -111,6 +112,7 @@ import {
   renameTrack,
   setClipVolume,
   setMasterAudio,
+  normalizeMasterLoudness,
   setAudioEffectEnabled,
   setEffectEnabled,
   setCrossfadeDuration,
@@ -599,6 +601,8 @@ export interface DocumentState {
   ) => void
   resetAudioEffect: (target: AudioEffectTarget, effectId: AudioEffectId) => void
   removeAudioEffect: (target: AudioEffectTarget, effectId: AudioEffectId) => void
+  applyAudioEffectPreset: (target: AudioEffectTarget, presetId: string) => void
+  normalizeMasterLoudness: (measuredLufs: number, targetLufs?: number) => void
   /** Step back one snapshot. No-op when history is empty. */
   undo: () => void
   /** Step forward one undone snapshot. No-op when future is empty. */
@@ -1221,6 +1225,18 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   removeAudioEffect: (target, effectId) =>
     set((state) => commit(state, removeAudioEffect(state.doc, target, effectId))),
+
+  applyAudioEffectPreset: (target, presetId) =>
+    set((state) => commit(
+      state,
+      applyAudioEffectPreset(state.doc, target, presetId),
+    )),
+
+  normalizeMasterLoudness: (measuredLufs, targetLufs) =>
+    set((state) => commit(
+      state,
+      normalizeMasterLoudness(state.doc, measuredLufs, targetLufs),
+    )),
 
   undo: () =>
     set((state) => {
