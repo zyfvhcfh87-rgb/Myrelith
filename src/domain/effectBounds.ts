@@ -1,6 +1,6 @@
 /** Shared portable and live-edit bounds for durable effect descriptors. */
 
-import type { Clip, EffectDescriptor, TimelineDoc } from './schema'
+import type { EffectDescriptor, TimelineDoc } from './schema'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
@@ -139,6 +139,14 @@ export function documentEffectBudgetUsage(doc: TimelineDoc): EffectBudgetUsage {
         stringCharacters += descriptor.stringCharacters
       }
     }
+    for (const adjustment of track.adjustments ?? []) {
+      effects += adjustment.effects.length
+      for (const effect of adjustment.effects) {
+        const descriptor = effectDescriptorBudget(effect)
+        params += descriptor.params
+        stringCharacters += descriptor.stringCharacters
+      }
+    }
   }
   return { effects, params, stringCharacters }
 }
@@ -187,11 +195,12 @@ export function effectCollectionAppendBudgetError(
 /** Explain whether appending one already-bounded descriptor would exceed a budget. */
 export function effectAppendBudgetError(
   doc: TimelineDoc,
-  clip: Clip,
+  owner: Readonly<{ effects: readonly EffectDescriptor[] }>,
   effect: EffectDescriptor,
+  ownerLabel = 'clip',
 ): string | null {
-  if (clip.effects.length + 1 > EFFECT_STACK_LIMITS.maxEffectsPerClip) {
-    return `clip has reached the ${EFFECT_STACK_LIMITS.maxEffectsPerClip}-effect limit`
+  if (owner.effects.length + 1 > EFFECT_STACK_LIMITS.maxEffectsPerClip) {
+    return `${ownerLabel} has reached the ${EFFECT_STACK_LIMITS.maxEffectsPerClip}-effect limit`
   }
   return effectCollectionAppendBudgetError(doc, [effect])
 }

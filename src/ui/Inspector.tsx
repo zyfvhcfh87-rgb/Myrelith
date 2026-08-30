@@ -16,6 +16,8 @@ import LinkSelectionControls from './inspector/LinkSelectionControls'
 import TextOverlayFields from './inspector/TextOverlayFields'
 import TimingInspectorSection from './inspector/TimingInspectorSection'
 import VideoInspectorSections from './inspector/VideoInspectorSections'
+import AdjustmentInspector from './AdjustmentInspector'
+import { findAdjustment } from '../domain/adjustmentItems'
 
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
 const DynamicZoomEditor = lazy(() => import('./DynamicZoomEditor'))
@@ -24,10 +26,14 @@ const MotionTrackingEditor = lazy(() => import('./MotionTrackingEditor'))
 
 export default function Inspector() {
   const selectedClipId = useTransportStore((s) => s.selectedClipId)
+  const selectedAdjustmentId = useTransportStore((s) => s.selectedAdjustmentId)
   const visualPreview = useTransportStore((s) => s.clipVisualPreview)
   const playheadFrame = useTransportStore((s) => s.playheadFrame)
   const timelineDoc = useDocumentStore((s) => s.doc)
   const clip = selectedClipId ? findClip(timelineDoc, selectedClipId) : null
+  const adjustment = selectedAdjustmentId
+    ? findAdjustment(timelineDoc, selectedAdjustmentId)
+    : null
   const [activeVideoTab, setActiveVideoTab] = useState<
     'transform' | 'crop' | 'effects' | 'animation'
   >('transform')
@@ -55,12 +61,25 @@ export default function Inspector() {
     buttons?.[nextIndex]?.focus()
   }
 
+  if (adjustment) {
+    return (
+      <AdjustmentInspector
+        adjustment={adjustment}
+        doc={timelineDoc}
+        playheadFrame={playheadFrame}
+      />
+    )
+  }
+
   if (!clip) {
     return (
       <div className="panel-placeholder">
         <span className="placeholder-title inspector-empty-title">Inspector</span>
         <LinkSelectionControls key="linking-controls" />
-        <span className="placeholder-note">select a clip to edit it</span>
+        <span className="placeholder-note">
+          <span>select a clip to edit it</span>
+          <small> or choose an adjustment layer</small>
+        </span>
       </div>
     )
   }

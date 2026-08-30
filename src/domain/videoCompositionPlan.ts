@@ -1,6 +1,12 @@
 /** Pure, explicit visual composition planning for preview and export. */
 
-import type { CaptionTrackId, Clip, TimelineDoc, TrackId } from './schema'
+import type {
+  AdjustmentItem,
+  CaptionTrackId,
+  Clip,
+  TimelineDoc,
+  TrackId,
+} from './schema'
 import {
   activeCaptionItemsAtFrame,
   captionPaintFor,
@@ -30,6 +36,7 @@ import {
   type BlendModeResolution,
 } from './blendModes'
 import { sourceFrameAtTimelineFrame } from './sourceTimeMap'
+import { adjustmentItems, resolveAdjustmentAtFrame } from './adjustmentItems'
 
 export interface OrdinaryVideoPlanItem {
   kind: 'clip'
@@ -60,6 +67,14 @@ export interface TextOverlayPlanItem {
   effectStagePlan?: VideoEffectStagePlan
 }
 
+/** A full-frame post-composite operation at one exact track boundary. */
+export interface AdjustmentCompositionItem {
+  kind: 'adjustment'
+  trackId: TrackId
+  frame: number
+  adjustment: AdjustmentItem
+}
+
 export interface CrossfadeCompositionItem extends Omit<CrossfadeFrameGroup, 'requests'> {
   requests: readonly [PlannedCrossfadeFrameRequest, PlannedCrossfadeFrameRequest]
   blendMode: BlendModeResolution
@@ -76,6 +91,7 @@ export interface CaptionPlanItem {
 export type VideoCompositionItem =
   | OrdinaryVideoPlanItem
   | TextOverlayPlanItem
+  | AdjustmentCompositionItem
   | CaptionPlanItem
   | CrossfadeCompositionItem
 
@@ -173,6 +189,7 @@ export function createVideoCompositionPlanner(
   const tracks: Array<{
     readonly id: TrackId
     readonly clips: FrameIndex<Clip>
+    readonly adjustments: FrameIndex<AdjustmentItem>
     readonly transitions: FrameIndex<CrossfadePlan>
   }> = []
 
@@ -201,6 +218,11 @@ export function createVideoCompositionPlanner(
         endFrame:
           clip.timelineRange.startFrame + clip.timelineRange.durationFrames,
       })),
+      adjustments: createFrameIndex(adjustmentItems(track), (adjustment) => ({
+        startFrame: adjustment.timelineRange.startFrame,
+        endFrame:
+          adjustment.timelineRange.startFrame + adjustment.timelineRange.durationFrames,
+      })),
       transitions: createFrameIndex(sortedTrackPlans, (plan) => ({
         startFrame: plan.startFrame,
         endFrame: plan.endFrame,
@@ -212,6 +234,19 @@ export function createVideoCompositionPlanner(
     planFrame(frame: number): VideoCompositionPlan {
       const items: VideoCompositionItem[] = []
       for (const track of tracks) {
+        const adjustment = track.adjustments.activeAt(frame)
+        if (adjustment) {
+          const resolved = resolveAdjustmentAtFrame(adjustment, frame)
+          if (resolved.enabled && resolved.opacity > 0) {
+            items.push({
+              kind: 'adjustment',
+              trackId: track.id,
+              frame,
+              adjustment: resolved,
+            })
+          }
+          continue
+        }
         const activeTransition = track.transitions.activeAt(frame)
         if (activeTransition) {
           const rawGroup = crossfadeFrameGroupAt(activeTransition, frame)
@@ -272,7 +307,11 @@ export function videoCompositionRequests(
       }
       continue
     }
-    if (item.kind === 'text' || item.kind === 'caption') continue
+    if (
+      item.kind === 'text'
+      || item.kind === 'caption'
+      || item.kind === 'adjustment'
+    ) continue
     for (const request of item.requests) {
       if (request.opacity <= 0 || request.weight <= 0) continue
       if (!Object.prototype.hasOwnProperty.call(request, 'effectStagePlan')) {

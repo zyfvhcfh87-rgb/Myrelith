@@ -73,7 +73,7 @@ function doc(
     tracks.push(track('audio', durationFrames))
   }
   return {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'export-profile-ui-doc',
     name: 'Export profile UI',
     frameRate,

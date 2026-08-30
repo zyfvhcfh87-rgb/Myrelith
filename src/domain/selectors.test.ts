@@ -56,7 +56,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -98,6 +98,21 @@ describe('docDurationFrames', () => {
       items: [{ id: 'cue', range: { startFrame: 400, durationFrames: 25 }, text: 'End' }],
     }]
     expect(docDurationFrames(doc)).toBe(425)
+  })
+
+  test('a resource-free adjustment extends document duration without becoming media', () => {
+    const video = makeTrack('V1', 'video', [])
+    video.adjustments = [{
+      kind: 'adjustment',
+      id: 'grade',
+      name: 'Grade',
+      timelineRange: { startFrame: 600, durationFrames: 30 },
+      enabled: true,
+      opacity: 1,
+      animation: { tracks: [], effectTracks: [] },
+      effects: [],
+    }]
+    expect(docDurationFrames(makeDoc([video]))).toBe(630)
   })
 })
 
@@ -464,6 +479,8 @@ describe('videoCompositionPlanAtFrame', () => {
                 opacity: item.paint.opacity,
                 weight: null,
               }]
+          : item.kind === 'adjustment'
+            ? []
         : item.requests
             .filter((request) => request.opacity > 0 && request.weight > 0)
             .map((request) => ({

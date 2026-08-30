@@ -9,7 +9,13 @@
  * undo/redo, track removal, or project replacement.
  */
 
-import type { ClipId, TimelineDoc, TimelineMarkerId } from '../domain/schema'
+import type {
+  AdjustmentItemId,
+  ClipId,
+  TimelineDoc,
+  TimelineMarkerId,
+} from '../domain/schema'
+import { adjustmentItems } from '../domain/adjustmentItems'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 
@@ -27,6 +33,12 @@ function collectMarkerIds(document: TimelineDoc): ReadonlySet<TimelineMarkerId> 
   return new Set((document.markers ?? []).map((marker) => marker.id))
 }
 
+function collectAdjustmentIds(document: TimelineDoc): ReadonlySet<AdjustmentItemId> {
+  return new Set(document.tracks.flatMap((track) => (
+    adjustmentItems(track).map((adjustment) => adjustment.id)
+  )))
+}
+
 function reconcileSelection(document: TimelineDoc): void {
   const transport = useTransportStore.getState()
   if (transport.selectedClipIds.length > 0 || transport.selectedClipId !== null) {
@@ -34,6 +46,9 @@ function reconcileSelection(document: TimelineDoc): void {
   }
   if (transport.selectedMarkerId !== null || transport.editingMarkerId !== null) {
     transport.reconcileMarkerSelection(collectMarkerIds(document))
+  }
+  if (transport.selectedAdjustmentId !== null) {
+    transport.reconcileAdjustmentSelection(collectAdjustmentIds(document))
   }
 }
 

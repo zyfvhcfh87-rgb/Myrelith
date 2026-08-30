@@ -35,7 +35,7 @@ function clip(): Clip {
 
 function doc(item = clip(), locked = false): TimelineDoc {
   return {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'doc',
     name: 'Doc',
     frameRate: { num: 30, den: 1 },

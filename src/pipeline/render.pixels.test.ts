@@ -7,7 +7,13 @@
  */
 
 import { describe, expect, test } from 'vitest'
-import type { Clip, EffectDescriptor, TimelineDoc, Track } from '../domain/schema'
+import type {
+  AdjustmentItem,
+  Clip,
+  EffectDescriptor,
+  TimelineDoc,
+  Track,
+} from '../domain/schema'
 import { createColorAdjustEffect } from '../domain/effectStack'
 import {
   createPluginVideoEffectContributionSnapshot,
@@ -96,6 +102,7 @@ class PixelCanvas {
     const currentState = (): CanvasState => this.state
 
     this.context = {
+      canvas: this as unknown as CanvasImageSource,
       get globalAlpha() {
         return currentState().alpha
       },
@@ -539,9 +546,26 @@ function makeTrack(
   }
 }
 
+function makeAdjustment(
+  id: string,
+  effect: EffectDescriptor,
+  opacity = 1,
+): AdjustmentItem {
+  return {
+    kind: 'adjustment',
+    id,
+    name: id,
+    timelineRange: { startFrame: 0, durationFrames: 10 },
+    enabled: true,
+    opacity,
+    animation: { tracks: [], effectTracks: [] },
+    effects: [effect],
+  }
+}
+
 function makeDoc(tracks: Track[], width = 5, height = 5): TimelineDoc {
   return {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id: 'pixel-doc',
     name: 'pixel-doc',
     frameRate: { num: 30, den: 1 },
@@ -679,6 +703,67 @@ describe('compositeFrame pixel goldens', () => {
     )
 
     expect(rendered.output.rgbaAt(0, 0)).toEqual([72, 120, 180, 255])
+  })
+
+  test('adjusts the completed lower composite before painting upper tracks', async () => {
+    const lower = makeClip('lower', 'gray', 0, 1)
+    const upper = makeClip('upper', 'red', 0, 1, { opacity: 0.5 })
+    const exposure = createColorAdjustEffect('exposure')
+    exposure.params.exposure = 1
+    const adjustmentTrack = makeTrack('adjustment-track', [], {
+      adjustments: [makeAdjustment('grade', exposure)],
+    })
+    const rendered = await render(
+      makeDoc([
+        makeTrack('lower-track', [lower]),
+        adjustmentTrack,
+        makeTrack('upper-track', [upper]),
+      ], 1, 1),
+      0,
+      {
+        gray: solid(1, 1, [64, 64, 64, 255]),
+        red: solid(1, 1, [255, 0, 0, 255]),
+      },
+    )
+
+    expect(rendered.output.rgbaAt(0, 0)).toEqual([192, 64, 64, 255])
+    expect(rendered.requests).toEqual(['gray@0', 'red@0'])
+    expect(rendered.result).toEqual({ drawn: ['lower', 'upper'], missing: [] })
+    expect(rendered.surfaces.gets()).toBe(1)
+    expect(rendered.surfaces.group.rgbaAt(0, 0)).toEqual([0, 0, 0, 0])
+  })
+
+  test('mixes adjustment opacity once and visibly bypasses unknown effects', async () => {
+    const lower = makeClip('lower', 'gray', 0, 1)
+    const exposure = createColorAdjustEffect('exposure')
+    exposure.params.exposure = 1
+    const half = makeTrack('half-grade', [], {
+      adjustments: [makeAdjustment('half', exposure, 0.5)],
+    })
+    const halfRendered = await render(
+      makeDoc([makeTrack('lower-track', [lower]), half], 1, 1),
+      0,
+      { gray: solid(1, 1, [64, 64, 64, 255]) },
+    )
+    expect(halfRendered.output.rgbaAt(0, 0)).toEqual([96, 96, 96, 255])
+
+    const unknown: EffectDescriptor = {
+      id: 'future',
+      type: 'future.full-frame-look',
+      version: 9,
+      enabled: true,
+      params: { intent: 'preserve-me' },
+    }
+    const bypass = makeTrack('unknown-grade', [], {
+      adjustments: [makeAdjustment('future-grade', unknown)],
+    })
+    const bypassed = await render(
+      makeDoc([makeTrack('lower-track', [lower]), bypass], 1, 1),
+      0,
+      { gray: solid(1, 1, [64, 64, 64, 255]) },
+    )
+    expect(bypassed.output.rgbaAt(0, 0)).toEqual([64, 64, 64, 255])
+    expect(bypass.adjustments?.[0]?.effects[0]).toEqual(unknown)
   })
 
   test('keeps transformed and cropped blend coverage isolated from uncovered pixels', async () => {

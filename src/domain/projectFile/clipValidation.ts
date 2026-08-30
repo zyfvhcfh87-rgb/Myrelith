@@ -376,10 +376,12 @@ export interface ValidationContext {
   assetsById: Map<string, PortableAssetDescriptor>
   documentFrameRate: FrameRate | null
   clipIds: Set<string>
+  timelineItemIds: Set<string>
   effectIds: Set<string>
   transitionIds: Set<string>
   linkGroupCounts: Map<string, number>
   clipCount: number
+  adjustmentCount: number
   effectCount: number
   effectParamCount: number
   effectStringCharacterCount: number
@@ -456,6 +458,8 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   stringValue(clip.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
   if (context.clipIds.has(clip.id)) fail(`${path}.id`, 'duplicate clip id')
   context.clipIds.add(clip.id)
+  if (context.timelineItemIds.has(clip.id)) fail(`${path}.id`, 'duplicate timeline item id')
+  context.timelineItemIds.add(clip.id)
   stringValue(clip.assetId, `${path}.assetId`, PROJECT_FILE_LIMITS.maxIdCharacters)
   if (
     clip.text !== undefined

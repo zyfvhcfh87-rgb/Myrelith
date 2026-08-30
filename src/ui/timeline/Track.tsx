@@ -44,6 +44,7 @@ import {
 import { extractDroppedFiles, isFileDrag } from '../fileDrag'
 import { isPrimaryEditingPointer } from '../pointerButtons'
 import ClipView from './ClipView'
+import AdjustmentView from './AdjustmentView'
 import TransitionSeam from './TransitionSeam'
 import {
   frameAtTimelineClientX,
@@ -324,6 +325,21 @@ function Track({
           timelineWindowEndFrame={timelineWindowEndFrame}
         />
       ))}
+      {track.kind === 'video' && (track.adjustments ?? [])
+        .filter((adjustment) => (
+          rangeEnd(adjustment.timelineRange) > timelineOriginFrame
+          && adjustment.timelineRange.startFrame < timelineWindowEndFrame
+        ) || useTransportStore.getState().adjustmentEditPreview?.adjustmentId === adjustment.id)
+        .map((adjustment) => (
+          <AdjustmentView
+            key={adjustment.id}
+            adjustment={adjustment}
+            trackId={track.id}
+            locked={track.locked}
+            timelineOriginFrame={timelineOriginFrame}
+            timelineWindowEndFrame={timelineWindowEndFrame}
+          />
+        ))}
       <MediaPlacementGhost
         trackId={track.id}
         timelineOriginFrame={timelineOriginFrame}

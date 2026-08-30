@@ -436,6 +436,17 @@ function migrateManualLensCorrection(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 14, tracks }
 }
 
+/** Upgrade schema-14 tracks with an explicit empty adjustment-item collection. */
+function migrateAdjustmentItems(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => ({
+    ...record(trackValue, `$.document.tracks[${trackIndex}]`),
+    adjustments: [],
+  }))
+  return { ...document, schemaVersion: 15, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -493,6 +504,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 13) {
     migrated = migrateManualLensCorrection(migrated)
+  }
+  if (migrated.schemaVersion === 14) {
+    migrated = migrateAdjustmentItems(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {

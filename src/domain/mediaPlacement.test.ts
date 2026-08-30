@@ -54,7 +54,7 @@ function track(
 
 function doc(tracks: Track[], id = 'doc-place'): TimelineDoc {
   return {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id,
     name: 'placement fixture',
     frameRate: { num: 30, den: 1 },

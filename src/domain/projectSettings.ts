@@ -338,6 +338,7 @@ function emptyTrack(id: string, kind: Track['kind']): Track {
     kind,
     name: id,
     clips: [],
+    adjustments: [],
     transitions: [],
     hidden: false,
     muted: false,
@@ -381,7 +382,7 @@ export function createTimelineDoc(
   const markers: NonNullable<TimelineDoc['markers']> = []
   const captionTracks: NonNullable<TimelineDoc['captionTracks']> = []
   const doc: TimelineDoc = {
-    schemaVersion: 14,
+    schemaVersion: 15,
     id,
     name: projectName,
     frameRate: { ...validated.frameRate },
@@ -396,6 +397,7 @@ export function createTimelineDoc(
   Object.freeze(doc.frameRate)
   for (const track of tracks) {
     Object.freeze(track.clips)
+    Object.freeze(track.adjustments)
     Object.freeze(track.transitions)
     Object.freeze(track)
   }

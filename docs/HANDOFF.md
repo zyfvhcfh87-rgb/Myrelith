@@ -131,6 +131,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #77 — signed sandboxed plugins** | 🚧 PR #123 remediation validated locally | production preview/export/migration wiring; fail-closed render and stale-generation gates; bounded host-acknowledged teardown; safe startup recovery; hostile-package and real Chromium acceptance; full/exact-head publication gates pending |
 | **Post-MVP #179 — marquee selection + grouped move** | ✅ implementation complete | Select-tool left-drag over empty lanes previews and commits box selection; selected/link-expanded clips move horizontally as one collision-safe, one-history edit; 3,364 tests + desktop Chromium interaction/undo/redo gate clean |
 | **Post-MVP #180 — Compatibility/HEVC export flush error** | ✅ fixed locally; native Chrome regression locked | #178's 96→48 kHz mapping remains correct; the remaining 59.94/60 fps failure was Chrome AAC rejecting 800/801-sample frame-aligned startup chunks at flush; one bounded shared assembler now feeds 2,048 startup samples then 1,024-sample blocks without codec/profile substitution; 3,370 tests plus real sink exports in repository Chromium and installed Chrome pass |
+| **Post-MVP #190 — bounded adjustment layers** | ✅ implementation complete locally | schema-15 resource-free video-track items; full history/edit/persistence/recovery; safe post-composite color effects and bounded animation; deterministic shared preview/export order; zero additional compositor surfaces; Chromium interaction/undo/redo/responsive gate clean |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Current public preview — `v0.2.0-alpha.1` First Light** | ✅ published | annotated tag resolves to `2a845c8`; verified 43-file web archive `sha256:aef2445b…`; public Linux AMD64/ARM64 GHCR index `sha256:ee060a7e…`; exact-head PR + master CI, 3,335 Vitest tests, 17 runner tests, and 10 Chromium tests passed |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
@@ -5169,3 +5170,42 @@ surface; it is not a second zoom and never enters document history.
   Program In/Out, lifted and extracted, split and rolled the seam, overwrote
   and replaced, played back, and undid/redid with an empty console.
 - Do not tick GitHub #187 unless asked after a user pass.
+
+## Post-MVP issue #190 - bounded adjustment layers
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-08-30); PUBLICATION AND ISSUE CLOSEOUT NOT AUTHORIZED.**
+
+- Timeline schema 15 adds video-track `AdjustmentItem` records with stable
+  identity, name, range, enabled state, opacity, ordered effects, and bounded
+  opacity/effect animation. They have no media/source/audio/proxy/cache/relink
+  identity. The 14→15 migration installs empty arrays; portable save, recovery,
+  validation, duration, selection reconciliation, and hostile-budget checks all
+  include the new item type.
+- `domain/adjustmentItems.ts` owns insert, move, trim, split, duplicate, delete,
+  enable, rename, opacity, animation, and effect edits. Every accepted store
+  call is one ordinary history entry; pointer move/trim previews remain
+  ephemeral until release. Timeline keyboard and Inspector controls expose the
+  same contracts with lock, range, overlap, and accessibility guards.
+- The shared planner emits completed lower tracks, then the adjustment at its
+  video-track position, then upper tracks; captions remain topmost. The shared
+  preview/export compositor borrows the existing transition leg, applies the
+  post-composite color stack, and blends the resolved opacity once. Pixel
+  regressions cover lower/adjustment/upper ordering, opacity, unknown bypass,
+  transition groups, and zero source requests.
+- Only effects explicitly registered for the post-composite surface may be
+  authored. Masks, chroma keys, lens/source geometry, and current plugin
+  contributions are rejected. Bounded unknown/future descriptors round-trip
+  unchanged and appear as bypassed/unavailable in the Inspector rather than
+  disappearing.
+- Adjustment evaluation adds zero compositor surfaces. The ordinary four-
+  surface 4K compositor remains 132,710,400 bytes and the lens/export seven-
+  surface peak remains 232,243,200 bytes, below the shared 256 MiB ceiling.
+- In Chromium on strict port 42190, a no-media project created `Browser grade`
+  on V2, added a ready color adjustment at exposure 1.25, set 65% opacity,
+  created opacity/effect keys at frames 0 and 1, and proved one-step Undo/Redo.
+  The complete Inspector/timeline remained operable at 1024×768 and 720×800;
+  the console reported zero warnings and errors.
+- The authoritative gate passes all 250 Vitest files / 3,584 tests plus all 17
+  repository runner checks, production build/typecheck (4,930 modules), clean
+  lint, and diff hygiene.
+- Do not tick or close GitHub #190 unless asked after a user pass.
