@@ -288,6 +288,8 @@ function track(
     muted: false,
     solo: false,
     locked: false,
+    volume: 1,
+    balance: 0,
   }
 }
 
@@ -352,6 +354,7 @@ function fixtureDocument(
     ],
     markers: [],
     captionTracks: [],
+    masterAudio: { volume: 1, balance: 0, muted: false },
   }
 }
 

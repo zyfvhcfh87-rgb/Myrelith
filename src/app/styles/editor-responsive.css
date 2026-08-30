@@ -196,6 +196,32 @@
   .audio-meter {
     width: 64px;
   }
+
+  .audio-mixer {
+    min-height: 132px;
+    max-height: 148px;
+    padding: 4px 6px;
+    gap: 4px;
+  }
+
+  .mixer-strip {
+    flex-basis: 80px;
+    width: 80px;
+    min-width: 80px;
+    padding: 4px 3px;
+  }
+
+  .mixer-fader {
+    height: 60px;
+  }
+
+  .mixer-meter-track {
+    height: 60px;
+  }
+
+  .mixer-pan {
+    width: 68px;
+  }
 }
 
 /* Soft Studio responsive refinements. */

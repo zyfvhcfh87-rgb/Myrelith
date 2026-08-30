@@ -23,6 +23,7 @@ import SourceMonitor from '../ui/SourceMonitor'
 import Inspector from '../ui/Inspector'
 import TransportBar from '../ui/TransportBar'
 import Timeline from '../ui/timeline/Timeline'
+import AudioMixer from '../ui/AudioMixer'
 import TimelineZoomControls from '../ui/timeline/TimelineZoomControls'
 import WorkspaceControls from '../ui/WorkspaceControls'
 import WorkspaceResizeHandle from '../ui/WorkspaceResizeHandle'
@@ -332,12 +333,14 @@ export default function EditorShell({ closing }: EditorShellProps) {
       <section
         id="workspace-timeline-panel"
         className="area-timeline"
-        data-timeline-scroll
         data-collapsed={fitted.timelineHeight === 0 ? 'true' : undefined}
         aria-hidden={fitted.timelineHeight === 0 || undefined}
         inert={closing || fitted.timelineHeight === 0}
       >
-        <Timeline />
+        <AudioMixer />
+        <div className="timeline-scroll-host" data-timeline-scroll>
+          <Timeline />
+        </div>
       </section>
       {ProxyBenchmarkPanel ? <ProxyBenchmarkPanel /> : null}
       <MediaDropStatus />

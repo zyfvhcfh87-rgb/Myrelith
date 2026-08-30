@@ -40,7 +40,7 @@ function clip(overrides: Partial<Clip> = {}): Clip {
 
 function doc(item = clip(), width = 1920, height = 1080): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'doc-dynamic-zoom',
     name: 'Dynamic zoom',
     frameRate: { num: 30, den: 1 },

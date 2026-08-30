@@ -1,4 +1,4 @@
-import type { AdjustmentAnimationKeyframe, AdjustmentItem, CaptionItem, CaptionTrack, Clip, TimelineDoc, TimelineMarker, Track } from '../schema';
+import type { AdjustmentAnimationKeyframe, AdjustmentItem, CaptionItem, CaptionTrack, Clip, MasterAudioSettings, TimelineDoc, TimelineMarker, Track } from '../schema';
 import { adjustmentAnimationValidationError, adjustmentItemValidationError } from '../adjustmentItems';
 import { MAX_ANIMATED_FINITE_MAGNITUDE, MAX_KEYFRAME_FRAME, MAX_KEYFRAMES_PER_TRACK } from '../clipAnimation';
 import { CAPTION_LIMITS, CAPTION_STYLE_PRESETS, CAPTION_TRACK_ROLES, captionDocumentValidationError, captionTrackValidationError, compareCaptionItems } from '../captions';
@@ -256,11 +256,19 @@ function validateTransition(
   return { startFrame, endFrame }
 }
 
+function validateMasterAudio(value: unknown, path: string): asserts value is MasterAudioSettings {
+  const master = record(value, path)
+  exactKeys(master, ['volume', 'balance', 'muted'], [], path)
+  finiteNumber(master.volume, `${path}.volume`, 0, 2)
+  finiteNumber(master.balance, `${path}.balance`, -1, 1)
+  booleanValue(master.muted, `${path}.muted`)
+}
+
 function validateTrack(value: unknown, path: string, trackIds: Set<string>, context: ValidationContext): asserts value is Track {
   const track = record(value, path)
   exactKeys(
     track,
-    ['id', 'kind', 'name', 'clips', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked'],
+    ['id', 'kind', 'name', 'clips', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked', 'volume', 'balance'],
     [],
     path,
   )
@@ -334,13 +342,15 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   booleanValue(track.muted, `${path}.muted`)
   booleanValue(track.solo, `${path}.solo`)
   booleanValue(track.locked, `${path}.locked`)
+  finiteNumber(track.volume, `${path}.volume`, 0, 2)
+  finiteNumber(track.balance, `${path}.balance`, -1, 1)
 }
 
 function validateDocument(value: unknown, context: ValidationContext): asserts value is TimelineDoc {
   const document = record(value, '$.document')
   exactKeys(
     document,
-    ['schemaVersion', 'id', 'name', 'frameRate', 'width', 'height', 'audioSampleRate', 'tracks', 'markers', 'captionTracks'],
+    ['schemaVersion', 'id', 'name', 'frameRate', 'width', 'height', 'audioSampleRate', 'tracks', 'markers', 'captionTracks', 'masterAudio'],
     [],
     '$.document',
   )
@@ -396,6 +406,7 @@ function validateDocument(value: unknown, context: ValidationContext): asserts v
   }
   const captionError = captionDocumentValidationError(document as unknown as TimelineDoc)
   if (captionError) fail('$.document.captionTracks', captionError)
+  validateMasterAudio(document.masterAudio, '$.document.masterAudio')
 }
 
 /**

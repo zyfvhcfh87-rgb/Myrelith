@@ -97,7 +97,7 @@ function makeTrack(
 
 function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'doc',
     name: 'Playback audio test',
     frameRate: F10,
@@ -167,7 +167,7 @@ function crossfadePlaybackFixture(
   videoTrack.transitions = [transition]
   return {
     doc: {
-      schemaVersion: 15,
+      schemaVersion: 16,
       id: 'crossfade-playback',
       name: 'Crossfade playback',
       frameRate: F10,
@@ -1033,6 +1033,11 @@ describe('startTimelineAudioPlayback scheduling', () => {
     })
     mutate((doc) => { doc.tracks[1].muted = true })
     mutate((doc) => { doc.tracks[1].solo = true })
+    mutate((doc) => { doc.tracks[1].volume = 0.4 })
+    mutate((doc) => { doc.tracks[1].balance = -0.5 })
+    mutate((doc) => {
+      doc.masterAudio = { volume: 0.8, balance: 0, muted: true }
+    })
     for (const variant of variants) {
       expect(audioPlaybackPlanKey(variant, fixture.catalog)).not.toBe(baseline)
     }
@@ -1639,6 +1644,51 @@ describe('createWebAudioPlaybackOutput ownership', () => {
       1,
     )
 
+    output.stop()
+  })
+
+  test('routes clips through track buses and reports per-strip peaks', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context, {
+      tracks: [{
+        trackId: 'A1',
+        volume: 0.5,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+      }],
+      master: {
+        volume: 0.8,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        muted: false,
+      },
+    })
+    expect(h.analysers.length).toBeGreaterThan(2)
+    const buffer = { duration: 1, numberOfChannels: 2 } as AudioBuffer
+    output.schedule({
+      clipId: 'clip',
+      trackId: 'A1',
+      buffer,
+      timelineStartTime: 0,
+      when: 10,
+      offset: 0,
+      duration: 0.2,
+      volume: 1,
+      envelope: null,
+    })
+    const trackInput = h.gains.find((gain) => gain.gain.value === 0.5)
+    expect(trackInput).toBeDefined()
+    expect(h.gains.some((gain) =>
+      gain.connect.mock.calls.some((args) => args[0] === trackInput),
+    )).toBe(true)
+    h.analysers[0].samples = [0.2]
+    h.analysers[1].samples = [0.1]
+    const diagnostics = output.diagnostics()
+    expect(diagnostics.trackMeters).toEqual([
+      expect.objectContaining({ trackId: 'A1' }),
+    ])
     output.stop()
   })
 

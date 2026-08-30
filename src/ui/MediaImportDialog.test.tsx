@@ -208,7 +208,7 @@ describe('MediaImportDialog', () => {
       locked: false,
     })
     const document: TimelineDoc = {
-      schemaVersion: 15,
+      schemaVersion: 16,
       id: 'doc-import-a11y',
       name: 'import a11y',
       frameRate: { num: 30, den: 1 },

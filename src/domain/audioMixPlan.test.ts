@@ -121,7 +121,7 @@ function fixture(options: {
   }
   return {
     doc: {
-      schemaVersion: 15,
+      schemaVersion: 16,
       id: 'audio-plan-doc',
       name: 'Audio plan',
       frameRate: { num: 30, den: 1 },
@@ -443,6 +443,41 @@ describe('timeline audio mix plan', () => {
 
     expect(planned?.volume).toBe(0)
     expect(planned?.volumeAnimation?.keyframes).toHaveLength(2)
+  })
+
+  test('includes track and master mixer buses with authored gains', () => {
+    const input = fixture()
+    input.doc.tracks[1].volume = 0.5
+    input.doc.tracks[1].balance = -1
+    input.doc.tracks[2].muted = true
+    input.doc.masterAudio = { volume: 0.8, balance: 1, muted: false }
+
+    const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+
+    expect(plan.tracks).toEqual([
+      {
+        trackId: 'A-from',
+        volume: 0.5,
+        balance: -1,
+        leftGain: 1,
+        rightGain: 0,
+      },
+      {
+        trackId: 'A-to',
+        volume: 1,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+      },
+    ])
+    expect(plan.master).toEqual({
+      volume: 0.8,
+      balance: 1,
+      leftGain: 0,
+      rightGain: 1,
+      muted: false,
+    })
+    expect(plan.clips.some((item) => item.trackId === 'A-to')).toBe(false)
   })
 })
 

@@ -96,7 +96,7 @@ function makeDoc(
   audioSampleRate = 48_000,
 ): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'doc',
     name: 'Audio export test',
     frameRate,
@@ -245,7 +245,7 @@ function crossfadeFixture(options: {
         options.frameRate ?? { num: 1, den: 1 },
         options.audioSampleRate ?? 4_096,
       ),
-      schemaVersion: 15,
+      schemaVersion: 16,
     },
     catalog: new Map(
       [...new Set(assetIds)].map((assetId) => [assetId, exactBounds()]),
@@ -859,6 +859,58 @@ describe('TimelineAudioMixer selection and mapping', () => {
     expect(samples[0]).toBeCloseTo(0)
     expect(samples[4]).toBeCloseTo(0.25, 5)
     expect(samples[8]).toBeCloseTo(0.5, 5)
+  })
+
+  test('applies track gain after clip envelopes and master after the sum', async () => {
+    const clip = makeClip('tone', 0, 1, { volume: 0.5 })
+    const track = makeTrack('A1', 'audio', [clip])
+    track.volume = 0.5
+    track.balance = -1
+    const doc = makeDoc(
+      [track],
+      { num: 1, den: 1 },
+      8,
+    )
+    doc.masterAudio = { volume: 0.5, balance: 0, muted: false }
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    let left = 0
+    let right = 0
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        left = block.channels[0][0]
+        right = block.channels[1][0]
+      })
+    } finally {
+      await mixer.close()
+    }
+
+    // clip 0.5 * track 0.5 * master 0.5 = 0.125, full left, silent right
+    expect(left).toBeCloseTo(0.125)
+    expect(right).toBeCloseTo(0)
+  })
+
+  test('master mute zeros the mix after the track sum', async () => {
+    const track = makeTrack('A1', 'audio', [makeClip('tone', 0, 1)])
+    const doc = makeDoc([track], { num: 1, den: 1 }, 8)
+    doc.masterAudio = { volume: 1, balance: 0, muted: true }
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    let left = 1
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        left = block.channels[0][0]
+      })
+    } finally {
+      await mixer.close()
+    }
+    expect(left).toBe(0)
   })
 })
 

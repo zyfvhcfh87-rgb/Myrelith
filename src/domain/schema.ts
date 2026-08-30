@@ -618,6 +618,27 @@ export interface Track {
   solo: boolean
   /** When true, edit operations targeting this track are rejected. */
   locked: boolean
+  /**
+   * Linear track gain 0..2, default 1. Applied after clip envelopes and
+   * before the sum. Optional on in-memory fixtures; portable schema-16
+   * files always write it.
+   */
+  volume?: number
+  /**
+   * Stereo balance -1..1, default 0. Applied with track volume.
+   * Optional on in-memory fixtures; portable schema-16 files always write it.
+   */
+  balance?: number
+}
+
+/** Document-level stereo bus after the track sum. */
+export interface MasterAudioSettings {
+  /** Linear master gain 0..2. */
+  volume: number
+  /** Stereo balance -1..1. */
+  balance: number
+  /** When true, the mixed output is silence. Track meters still run. */
+  muted: boolean
 }
 
 /** Deliberately small, portable palette shared by marker files and UI. */
@@ -685,7 +706,7 @@ export interface CaptionTrack {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 15. */
+  /** Schema version for forward-compatible project files. Currently 16. */
   schemaVersion: number
   /** Unique document id. */
   id: string
@@ -712,4 +733,9 @@ export interface TimelineDoc {
    * current project files validate and serialize an explicit array.
    */
   captionTracks?: CaptionTrack[]
+  /**
+   * Master stereo bus after the track sum. Optional only so in-memory
+   * fixtures stay source-compatible; portable schema-16 files always write it.
+   */
+  masterAudio?: MasterAudioSettings
 }

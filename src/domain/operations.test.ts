@@ -40,7 +40,9 @@ import {
   setCrossfadeDurationWithSourceBounds,
   setCrossfadeSettings,
   setCrossfadeSettingsWithSourceBounds,
+  setMasterAudio,
   setTrackFlags,
+  setTrackMixer,
   slideClip,
   slipClip,
   splitClipAtFrame,
@@ -108,7 +110,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -143,7 +145,7 @@ function makeStillClip(
 
 function makeVideoDoc(clips: Clip[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'doc-stills',
     name: 'Still source tests',
     frameRate: { num: 30, den: 1 },
@@ -1397,7 +1399,7 @@ function makeCrossfadeDoc(
   locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'crossfade-doc',
     name: 'Crossfade lifecycle',
     frameRate: { num: 30, den: 1 },
@@ -2124,6 +2126,8 @@ describe('addTrack', () => {
       muted: false,
       solo: false,
       locked: false,
+      volume: 1,
+      balance: 0,
     })
     // Compositing convention: last video in the array = topmost layer.
   })
@@ -2214,6 +2218,48 @@ describe('setTrackFlags', () => {
     const both = setTrackFlags(doc, 'A1', { solo: true, muted: true })
     expect(both.tracks[2].solo).toBe(true)
     expect(both.tracks[2].muted).toBe(true)
+  })
+})
+
+describe('setTrackMixer', () => {
+  test('sets audio-track volume and balance as one patch', () => {
+    const doc = makeDoc()
+    const out = setTrackMixer(doc, 'A1', { volume: 0.5, balance: -0.25 })
+    expect(out.tracks[2].volume).toBe(0.5)
+    expect(out.tracks[2].balance).toBe(-0.25)
+    expect(out.tracks[0]).toBe(doc.tracks[0])
+  })
+
+  test('clamps volume and balance and no-ops an identical write', () => {
+    const doc = makeDoc()
+    const out = setTrackMixer(doc, 'A1', { volume: 9, balance: -4 })
+    expect(out.tracks[2].volume).toBe(2)
+    expect(out.tracks[2].balance).toBe(-1)
+    expect(setTrackMixer(out, 'A1', { volume: 2, balance: -1 })).toBe(out)
+  })
+
+  test('rejects video tracks, locked tracks, and empty patches', () => {
+    const doc = makeDoc()
+    expect(setTrackMixer(doc, 'V1', { volume: 0.5 })).toBe(doc)
+    const locked = setTrackFlags(doc, 'A1', { locked: true })
+    expect(setTrackMixer(locked, 'A1', { volume: 0.5 })).toBe(locked)
+    expect(setTrackMixer(doc, 'A1', {})).toBe(doc)
+    expect(setTrackMixer(doc, 'missing', { volume: 0.5 })).toBe(doc)
+  })
+})
+
+describe('setMasterAudio', () => {
+  test('writes master volume, balance, and mute', () => {
+    const doc = makeDoc()
+    const out = setMasterAudio(doc, { volume: 0.8, balance: 0.5, muted: true })
+    expect(out.masterAudio).toEqual({ volume: 0.8, balance: 0.5, muted: true })
+    expect(setMasterAudio(out, { muted: true })).toBe(out)
+  })
+
+  test('rejects an empty patch and clamps out-of-range gain', () => {
+    const doc = makeDoc()
+    expect(setMasterAudio(doc, {})).toBe(doc)
+    expect(setMasterAudio(doc, { volume: 4 }).masterAudio?.volume).toBe(2)
   })
 })
 

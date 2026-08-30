@@ -40,6 +40,7 @@ describe('AudioMeter', () => {
         overloadHeld: { left: false, right: false, master: false },
         overloadLatched: { left: false, right: false, master: false },
       },
+      trackReadouts: {},
       sequence: 1,
       updatedAtMs: 100,
       sampleWindowSize: 256,

@@ -1,5 +1,16 @@
-import type { ClipId, TimelineDoc, Track, TrackId, TrackKind } from '../schema';
-import { MAX_CLIP_VOLUME } from '../clipInspector';
+import type { ClipId, MasterAudioSettings, TimelineDoc, Track, TrackId, TrackKind } from '../schema';
+import {
+  MAX_AUDIO_BALANCE,
+  MAX_CLIP_VOLUME,
+  MIN_AUDIO_BALANCE,
+} from '../clipInspector';
+import {
+  masterAudioSettings,
+  masterAudioValidationError,
+  trackBalance,
+  trackMixerValidationError,
+  trackVolume,
+} from '../audioMixer';
 import { locateClip, reject, withoutLinkGroupId, withTrack } from './operationInternals';
 
 export { MAX_CLIP_VOLUME }
@@ -11,6 +22,14 @@ export interface TrackFlagsPatch {
   solo?: boolean
   locked?: boolean
 }
+
+/** Linear track fader and pan. Mute/solo stay on TrackFlagsPatch. */
+export interface TrackMixerPatch {
+  volume?: number
+  balance?: number
+}
+
+export type MasterAudioPatch = Partial<MasterAudioSettings>
 
 /**
  * Add a new empty track of `kind`, named with the NLE convention V2/V3…
@@ -44,6 +63,8 @@ export function addTrack(doc: TimelineDoc, kind: TrackKind): TimelineDoc {
     muted: false,
     solo: false,
     locked: false,
+    volume: 1,
+    balance: 0,
   }
 
   let lastOfKind = -1
@@ -226,4 +247,88 @@ export function setClipVolume(
   const clips = loc.track.clips.slice()
   clips[loc.clipIndex] = { ...loc.clip, volume: clamped }
   return withTrack(doc, loc.trackIndex, { ...loc.track, clips })
+}
+
+/**
+ * Set an audio track's mixer volume/balance. Locked tracks reject — this is
+ * mix content, unlike mute/solo which remain reachable from the header.
+ * Video tracks reject; they are not in the mix bus. Idempotent patches
+ * return the same document reference.
+ */
+export function setTrackMixer(
+  doc: TimelineDoc,
+  trackId: TrackId,
+  patch: TrackMixerPatch,
+): TimelineDoc {
+  const op = 'setTrackMixer'
+  const trackIndex = doc.tracks.findIndex((item) => item.id === trackId)
+  if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
+  const track = doc.tracks[trackIndex]
+  if (track.kind !== 'audio') {
+    return reject(doc, op, `track ${trackId} is not an audio track`)
+  }
+  if (track.locked) return reject(doc, op, `track ${trackId} is locked`)
+
+  const hasVolume = patch.volume !== undefined
+  const hasBalance = patch.balance !== undefined
+  if (!hasVolume && !hasBalance) {
+    return reject(doc, op, 'empty patch — nothing to change')
+  }
+  if (hasVolume && !Number.isFinite(patch.volume)) {
+    return reject(doc, op, `volume must be a finite number, got ${patch.volume}`)
+  }
+  if (hasBalance && !Number.isFinite(patch.balance)) {
+    return reject(doc, op, `balance must be a finite number, got ${patch.balance}`)
+  }
+
+  const volume = patch.volume === undefined
+    ? trackVolume(track)
+    : Math.min(MAX_CLIP_VOLUME, Math.max(0, patch.volume))
+  const balance = patch.balance === undefined
+    ? trackBalance(track)
+    : Math.min(MAX_AUDIO_BALANCE, Math.max(MIN_AUDIO_BALANCE, patch.balance))
+  const error = trackMixerValidationError(volume, balance)
+  if (error) return reject(doc, op, error)
+  if (volume === trackVolume(track) && balance === trackBalance(track)) return doc
+
+  return withTrack(doc, trackIndex, { ...track, volume, balance })
+}
+
+/**
+ * Set the document master bus. Idempotent patches return the same reference.
+ */
+export function setMasterAudio(
+  doc: TimelineDoc,
+  patch: MasterAudioPatch,
+): TimelineDoc {
+  const op = 'setMasterAudio'
+  const keys = (['volume', 'balance', 'muted'] as const).filter(
+    (key) => patch[key] !== undefined,
+  )
+  if (keys.length === 0) return reject(doc, op, 'empty patch — nothing to change')
+  if (patch.volume !== undefined && !Number.isFinite(patch.volume)) {
+    return reject(doc, op, `volume must be a finite number, got ${patch.volume}`)
+  }
+  if (patch.balance !== undefined && !Number.isFinite(patch.balance)) {
+    return reject(doc, op, `balance must be a finite number, got ${patch.balance}`)
+  }
+
+  const current = masterAudioSettings(doc)
+  const volume = patch.volume === undefined
+    ? current.volume
+    : Math.min(MAX_CLIP_VOLUME, Math.max(0, patch.volume))
+  const balance = patch.balance === undefined
+    ? current.balance
+    : Math.min(MAX_AUDIO_BALANCE, Math.max(MIN_AUDIO_BALANCE, patch.balance))
+  const muted = patch.muted ?? current.muted
+  const next: MasterAudioSettings = { volume, balance, muted }
+  const error = masterAudioValidationError(next)
+  if (error) return reject(doc, op, error)
+  if (
+    next.volume === current.volume
+    && next.balance === current.balance
+    && next.muted === current.muted
+  ) return doc
+
+  return { ...doc, masterAudio: next }
 }

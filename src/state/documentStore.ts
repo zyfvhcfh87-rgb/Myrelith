@@ -74,7 +74,9 @@ import type {
   ClipVisualPatch,
   CrossfadeSettings,
   TextPropsPatch,
+  MasterAudioPatch,
   TrackFlagsPatch,
+  TrackMixerPatch,
   TrimEdge,
 } from '../domain/operations'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
@@ -101,10 +103,12 @@ import {
   resetVideoStabilizationWithResult,
   renameTrack,
   setClipVolume,
+  setMasterAudio,
   setEffectEnabled,
   setCrossfadeDuration,
   setCrossfadeSettingsWithSourceBounds,
   setTrackFlags,
+  setTrackMixer,
   updateClipAudio,
   updateClipAudioAtFrame,
   updateClipTransform,
@@ -469,6 +473,10 @@ export interface DocumentState {
    * entry.
    */
   setTrackFlags: (trackId: TrackId, patch: TrackFlagsPatch) => void
+  /** Track fader/pan. One history entry; mute/solo stay on setTrackFlags. */
+  setTrackMixer: (trackId: TrackId, patch: TrackMixerPatch) => void
+  /** Master bus gain/pan/mute. One history entry. */
+  setMasterAudio: (patch: MasterAudioPatch) => void
   /**
    * Rename a track's display name (header double-click). Trimmed by the
    * domain op; renaming to the current name pushes no history entry.
@@ -1029,6 +1037,12 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   setTrackFlags: (trackId, patch) =>
     set((state) => commit(state, setTrackFlags(state.doc, trackId, patch))),
+
+  setTrackMixer: (trackId, patch) =>
+    set((state) => commit(state, setTrackMixer(state.doc, trackId, patch))),
+
+  setMasterAudio: (patch) =>
+    set((state) => commit(state, setMasterAudio(state.doc, patch))),
 
   renameTrack: (trackId, name) =>
     set((state) => commit(state, renameTrack(state.doc, trackId, name))),

@@ -1,4 +1,5 @@
 import type { Effect, TimelineDoc } from '../schema';
+import { masterAudioSettings, trackBalance, trackVolume } from '../audioMixer';
 import { compareTimelineMarkers } from '../timelineMarkers';
 import { clipAnimation, cloneClipAnimation } from '../clipAnimation';
 import { clipAudioSettings, clipVisualSettings } from '../clipInspector';
@@ -125,6 +126,8 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
         muted: track.muted,
         solo: track.solo,
         locked: track.locked,
+        volume: trackVolume(track),
+        balance: trackBalance(track),
       })),
       markers: [...(document.markers ?? [])]
         .sort(compareTimelineMarkers)
@@ -148,6 +151,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           text: item.text,
         })),
       })),
+      masterAudio: masterAudioSettings(document),
     },
     assets: project.assets
       .map((asset) => ({

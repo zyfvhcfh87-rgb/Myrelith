@@ -115,6 +115,8 @@ function track(
     muted: kind === 'audio',
     solo: false,
     locked: false,
+    volume: 1,
+    balance: 0,
   }
 }
 
@@ -216,6 +218,7 @@ function makeDocument(): TimelineDoc {
     tracks: [video, audio],
     markers: [],
     captionTracks: [],
+    masterAudio: { volume: 1, balance: 0, muted: false },
   }
 }
 
@@ -415,12 +418,59 @@ describe('portable project file', () => {
   test('migrates schema-14 documents to schema 15 without rewriting clips', () => {
     const legacy = clone(makeProject())
     legacy.document.schemaVersion = 14
-    const before = JSON.stringify(legacy.document.tracks)
+    const before = JSON.stringify(
+      legacy.document.tracks.flatMap((item) => item.clips),
+    )
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
     expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(JSON.stringify(parsed.document.tracks)).toBe(before)
+    expect(JSON.stringify(parsed.document.tracks.flatMap((item) => item.clips)))
+      .toBe(before)
+  })
+
+  test('migrates schema-15 documents to schema 16 with mixer defaults', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 15
+    for (const item of legacy.document.tracks) {
+      Reflect.deleteProperty(item, 'volume')
+      Reflect.deleteProperty(item, 'balance')
+    }
+    Reflect.deleteProperty(legacy.document, 'masterAudio')
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.masterAudio).toEqual({
+      volume: 1,
+      balance: 0,
+      muted: false,
+    })
+    expect(parsed.document.tracks.map((item) => ({
+      id: item.id,
+      volume: item.volume,
+      balance: item.balance,
+    }))).toEqual([
+      { id: 'V1', volume: 1, balance: 0 },
+      { id: 'A1', volume: 1, balance: 0 },
+    ])
+  })
+
+  test('round-trips authored track and master mixer fields', () => {
+    const project = makeProject()
+    project.document.tracks[1].volume = 0.4
+    project.document.tracks[1].balance = -0.5
+    project.document.masterAudio = { volume: 1.25, balance: 0.25, muted: true }
+
+    const parsed = parseProjectFile(serializeProjectFile(project))
+
+    expect(parsed.document.tracks[1].volume).toBe(0.4)
+    expect(parsed.document.tracks[1].balance).toBe(-0.5)
+    expect(parsed.document.masterAudio).toEqual({
+      volume: 1.25,
+      balance: 0.25,
+      muted: true,
+    })
   })
 
   test('round-trips volume and balance animation tracks on audio clips', () => {

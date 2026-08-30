@@ -344,6 +344,8 @@ function emptyTrack(id: string, kind: Track['kind']): Track {
     muted: false,
     solo: false,
     locked: false,
+    volume: 1,
+    balance: 0,
   }
 }
 
@@ -381,8 +383,13 @@ export function createTimelineDoc(
   ]
   const markers: NonNullable<TimelineDoc['markers']> = []
   const captionTracks: NonNullable<TimelineDoc['captionTracks']> = []
+  const masterAudio: NonNullable<TimelineDoc['masterAudio']> = {
+    volume: 1,
+    balance: 0,
+    muted: false,
+  }
   const doc: TimelineDoc = {
-    schemaVersion: 15,
+    schemaVersion: 16,
     id,
     name: projectName,
     frameRate: { ...validated.frameRate },
@@ -392,6 +399,7 @@ export function createTimelineDoc(
     tracks,
     markers,
     captionTracks,
+    masterAudio,
   }
 
   Object.freeze(doc.frameRate)
@@ -404,5 +412,6 @@ export function createTimelineDoc(
   Object.freeze(doc.tracks)
   Object.freeze(doc.markers)
   Object.freeze(doc.captionTracks)
+  Object.freeze(doc.masterAudio)
   return Object.freeze(doc)
 }

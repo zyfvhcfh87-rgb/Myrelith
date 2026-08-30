@@ -54,7 +54,7 @@ function track(
 
 function documentWith(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'multi-move-doc',
     name: 'multi move fixture',
     frameRate: { num: 30, den: 1 },

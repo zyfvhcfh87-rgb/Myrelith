@@ -607,9 +607,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 - `domain/audioMixPlan.ts` is the shared live/export audible-contributor and
   envelope contract. Valid linked fades open real virtual handle ranges and
   apply clip volume/balance, including integer-frame automation, then an
-  absolute linear or equal-power envelope. Web Audio schedules that plan
-  against the shared audio anchor; export evaluates it on the exact
-  BigInt-derived sample grid before one final sum/clamp. Invalid or
+  absolute linear or equal-power envelope. Track gain/pan multiply after
+  those envelopes; the master bus multiplies after the sum. Web Audio
+  schedules that plan against the shared audio anchor; export evaluates it
+  on the exact BigInt-derived sample grid before one final clamp. Invalid or
   unavailable audio falls back to the ordinary hard cut without weakening a
   valid visual crossfade. The ordered stages live in
   `docs/AUDIO_SIGNAL_FLOW.md`.

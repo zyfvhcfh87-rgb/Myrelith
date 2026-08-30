@@ -29,6 +29,7 @@ import type {
   ClipId,
   FrameRate,
   TimelineDoc,
+  TrackId,
 } from '../domain/schema'
 import {
   clipAudioGainsAtLocalFrame,
@@ -37,8 +38,11 @@ import {
   isStretchedAudioClipPlan,
   type TimelineAudioDirectClipPlan,
   type TimelineAudioEnvelope,
+  type TimelineAudioMasterBus,
   type TimelineAudioStretchedClipPlan,
+  type TimelineAudioTrackBus,
 } from '../domain/audioMixPlan'
+import { timelineAudioMixerGraph } from '../domain/audioMixer'
 import type {
   CrossfadeLegRole,
   SourceBoundsCatalog,
@@ -127,6 +131,7 @@ export interface PlaybackAudioMediaSource {
 
 export interface ScheduledPlaybackAudio {
   clipId: ClipId
+  trackId?: TrackId
   buffer: AudioBuffer
   timelineStartTime: number
   when: number
@@ -155,6 +160,13 @@ export interface PlaybackAudioEnvelope {
   curve: TimelineAudioEnvelope['curve']
 }
 
+export interface PlaybackAudioTrackMeter {
+  trackId: TrackId
+  peakLeft: number
+  peakRight: number
+  peakMaster: number
+}
+
 export interface PlaybackAudioOutputDiagnostics {
   contextTime: number
   activeNodeCount: number
@@ -163,6 +175,12 @@ export interface PlaybackAudioOutputDiagnostics {
   peakRight: number
   peakMaster: number
   meterSampleSize: number
+  trackMeters?: readonly PlaybackAudioTrackMeter[]
+}
+
+export interface PlaybackAudioMixerGraph {
+  tracks: readonly TimelineAudioTrackBus[]
+  master: TimelineAudioMasterBus
 }
 
 export interface PlaybackAudioOutput {
@@ -192,7 +210,10 @@ export interface TimelineAudioPlaybackSession {
 
 export interface PlaybackAudioDeps {
   createMediaSource(resolveAsset: PlaybackAssetResolver): PlaybackAudioMediaSource
-  createOutput(context: AudioContext): PlaybackAudioOutput
+  createOutput(
+    context: AudioContext,
+    mixer?: PlaybackAudioMixerGraph,
+  ): PlaybackAudioOutput
   schedulePump(callback: () => void, delayMs: number): number
   cancelPump(id: number): void
   lookaheadSeconds: number
@@ -313,6 +334,7 @@ function preparedEventsForOverlap(
       overlapStart + (segmentStart - timelineStart)
     events.push({
       clipId: plan.clipId,
+      trackId: plan.trackId,
       buffer: wrapped.buffer,
       timelineStartTime: segmentStart,
       when: 0,
@@ -435,6 +457,8 @@ export function audioPlaybackPlanKey(
         kind: track.kind,
         muted: track.muted,
         solo: track.solo,
+        volume: track.volume ?? null,
+        balance: track.balance ?? null,
         clips: track.clips.map((clip) => ({
           id: clip.id,
           assetId: clip.assetId,
@@ -459,6 +483,7 @@ export function audioPlaybackPlanKey(
       assetId,
       catalog.get(assetId) ?? null,
     ]),
+    masterAudio: doc.masterAudio ?? null,
   })
 }
 
@@ -947,30 +972,125 @@ function foldPlaybackBufferToStereo(
   return stereo
 }
 
+interface StereoMeterTap {
+  input: ChannelSplitterNode
+  output: ChannelMergerNode
+  left: AnalyserNode
+  right: AnalyserNode
+  leftWindow: Float32Array<ArrayBuffer>
+  rightWindow: Float32Array<ArrayBuffer>
+  nodes: AudioNode[]
+}
+
+function createStereoMeterTap(context: AudioContext): StereoMeterTap {
+  const splitter = context.createChannelSplitter(2)
+  const left = context.createAnalyser()
+  const right = context.createAnalyser()
+  const merger = context.createChannelMerger(2)
+  left.fftSize = AUDIO_METER_FFT_SIZE
+  right.fftSize = AUDIO_METER_FFT_SIZE
+  left.smoothingTimeConstant = 0
+  right.smoothingTimeConstant = 0
+  splitter.connect(left, 0)
+  splitter.connect(right, 1)
+  left.connect(merger, 0, 0)
+  right.connect(merger, 0, 1)
+  return {
+    input: splitter,
+    output: merger,
+    left,
+    right,
+    leftWindow: new Float32Array(AUDIO_METER_FFT_SIZE),
+    rightWindow: new Float32Array(AUDIO_METER_FFT_SIZE),
+    nodes: [splitter, left, right, merger],
+  }
+}
+
+function createBalanceStage(
+  context: AudioContext,
+  leftGain: number,
+  rightGain: number,
+): { input: AudioNode; output: AudioNode; nodes: AudioNode[] } {
+  if (leftGain === 1 && rightGain === 1) {
+    const passthrough = context.createGain()
+    passthrough.gain.value = 1
+    return { input: passthrough, output: passthrough, nodes: [passthrough] }
+  }
+  const splitter = context.createChannelSplitter(2)
+  const left = context.createGain()
+  const right = context.createGain()
+  const merger = context.createChannelMerger(2)
+  left.gain.value = leftGain
+  right.gain.value = rightGain
+  splitter.connect(left, 0)
+  splitter.connect(right, 1)
+  left.connect(merger, 0, 0)
+  right.connect(merger, 0, 1)
+  return { input: splitter, output: merger, nodes: [splitter, left, right, merger] }
+}
+
+interface TrackPlaybackBus {
+  input: GainNode
+  meter: StereoMeterTap
+  nodes: AudioNode[]
+}
+
+function readMeterTap(tap: StereoMeterTap): ReturnType<typeof measureAudioMeterSample> {
+  tap.left.getFloatTimeDomainData(tap.leftWindow)
+  tap.right.getFloatTimeDomainData(tap.rightWindow)
+  return measureAudioMeterSample(tap.leftWindow, tap.rightWindow)
+}
+
 /** The only module that turns decoded buffers into an audible Web Audio graph. */
 export function createWebAudioPlaybackOutput(
   context: AudioContext,
+  mixer?: PlaybackAudioMixerGraph,
 ): PlaybackAudioOutput {
+  const graphNodes: AudioNode[] = []
+  const trackBuses = new Map<TrackId, TrackPlaybackBus>()
   const master = context.createGain()
-  const meterSplitter = context.createChannelSplitter(2)
-  const leftAnalyser = context.createAnalyser()
-  const rightAnalyser = context.createAnalyser()
-  const meterMerger = context.createChannelMerger(2)
-  leftAnalyser.fftSize = AUDIO_METER_FFT_SIZE
-  rightAnalyser.fftSize = AUDIO_METER_FFT_SIZE
-  leftAnalyser.smoothingTimeConstant = 0
-  rightAnalyser.smoothingTimeConstant = 0
+  const masterMeter = createStereoMeterTap(context)
+  const masterTargetGain = mixer
+    ? (mixer.master.muted ? 0 : mixer.master.volume)
+    : 1
   master.gain.value = 0
-  master.connect(meterSplitter)
-  meterSplitter.connect(leftAnalyser, 0)
-  meterSplitter.connect(rightAnalyser, 1)
-  leftAnalyser.connect(meterMerger, 0, 0)
-  rightAnalyser.connect(meterMerger, 0, 1)
-  meterMerger.connect(context.destination)
+  graphNodes.push(master, ...masterMeter.nodes)
+
+  let clipDestination: AudioNode = master
+  if (mixer) {
+    const masterSum = context.createGain()
+    masterSum.gain.value = 1
+    const masterBalance = createBalanceStage(
+      context,
+      mixer.master.leftGain,
+      mixer.master.rightGain,
+    )
+    masterSum.connect(masterBalance.input)
+    masterBalance.output.connect(master)
+    graphNodes.push(masterSum, ...masterBalance.nodes)
+    for (const track of mixer.tracks) {
+      const input = context.createGain()
+      input.gain.value = track.volume
+      const balance = createBalanceStage(context, track.leftGain, track.rightGain)
+      const meter = createStereoMeterTap(context)
+      input.connect(balance.input)
+      balance.output.connect(meter.input)
+      meter.output.connect(masterSum)
+      const bus: TrackPlaybackBus = {
+        input,
+        meter,
+        nodes: [input, ...balance.nodes, ...meter.nodes],
+      }
+      trackBuses.set(track.trackId, bus)
+      graphNodes.push(...bus.nodes)
+    }
+    clipDestination = masterSum
+  }
+
+  master.connect(masterMeter.input)
+  masterMeter.output.connect(context.destination)
 
   const nodes = new Set<ActiveOutputNode>()
-  const leftSampleWindow = new Float32Array(leftAnalyser.fftSize)
-  const rightSampleWindow = new Float32Array(rightAnalyser.fftSize)
   let stopped = false
   let graphDisconnected = false
   let armed = false
@@ -978,23 +1098,7 @@ export function createWebAudioPlaybackOutput(
   const disconnectGraph = (): void => {
     if (graphDisconnected) return
     graphDisconnected = true
-    try {
-      master.disconnect()
-    } finally {
-      try {
-        meterSplitter.disconnect()
-      } finally {
-        try {
-          leftAnalyser.disconnect()
-        } finally {
-          try {
-            rightAnalyser.disconnect()
-          } finally {
-            meterMerger.disconnect()
-          }
-        }
-      }
-    }
+    for (const node of graphNodes) node.disconnect()
   }
 
   const cleanupNode = (record: ActiveOutputNode): void => {
@@ -1056,10 +1160,20 @@ export function createWebAudioPlaybackOutput(
       splitter.connect(right, 1)
       left.connect(merger, 0, 0)
       right.connect(merger, 0, 1)
-      merger.connect(master)
+      const destination = (
+        request.trackId !== undefined
+          ? trackBuses.get(request.trackId)?.input
+          : undefined
+      ) ?? clipDestination
+      merger.connect(destination)
       balanceNodes.push(splitter, left, right, merger)
     } else {
-      gain.connect(master)
+      const destination = (
+        request.trackId !== undefined
+          ? trackBuses.get(request.trackId)?.input
+          : undefined
+      ) ?? clipDestination
+      gain.connect(destination)
     }
 
     const record = { source, gain, balanceNodes }
@@ -1070,7 +1184,10 @@ export function createWebAudioPlaybackOutput(
       if (!armed) {
         master.gain.cancelScheduledValues(request.when)
         master.gain.setValueAtTime(0, request.when)
-        master.gain.linearRampToValueAtTime(1, request.when + 0.005)
+        master.gain.linearRampToValueAtTime(
+          masterTargetGain,
+          request.when + 0.005,
+        )
         armed = true
       }
     } catch (cause) {
@@ -1128,6 +1245,16 @@ export function createWebAudioPlaybackOutput(
     }
   }
 
+  const silentTrackMeters = (): PlaybackAudioTrackMeter[] =>
+    mixer === undefined
+      ? []
+      : mixer.tracks.map((track) => ({
+          trackId: track.trackId,
+          peakLeft: 0,
+          peakRight: 0,
+          peakMaster: 0,
+        }))
+
   const diagnostics = (): PlaybackAudioOutputDiagnostics => {
     if (stopped) {
       return {
@@ -1138,11 +1265,25 @@ export function createWebAudioPlaybackOutput(
         peakRight: 0,
         peakMaster: 0,
         meterSampleSize: AUDIO_METER_FFT_SIZE,
+        trackMeters: silentTrackMeters(),
       }
     }
-    leftAnalyser.getFloatTimeDomainData(leftSampleWindow)
-    rightAnalyser.getFloatTimeDomainData(rightSampleWindow)
-    const sample = measureAudioMeterSample(leftSampleWindow, rightSampleWindow)
+    const sample = readMeterTap(masterMeter)
+    const trackMeters: PlaybackAudioTrackMeter[] = []
+    if (mixer) {
+      for (const track of mixer.tracks) {
+        const bus = trackBuses.get(track.trackId)
+        const peaks = bus === undefined
+          ? { left: 0, right: 0, master: 0, rms: 0 }
+          : readMeterTap(bus.meter)
+        trackMeters.push({
+          trackId: track.trackId,
+          peakLeft: peaks.left,
+          peakRight: peaks.right,
+          peakMaster: peaks.master,
+        })
+      }
+    }
     return {
       contextTime: context.currentTime,
       activeNodeCount: nodes.size,
@@ -1151,6 +1292,7 @@ export function createWebAudioPlaybackOutput(
       peakRight: sample.right,
       peakMaster: sample.master,
       meterSampleSize: AUDIO_METER_FFT_SIZE,
+      trackMeters,
     }
   }
 
@@ -1220,7 +1362,7 @@ export async function startTimelineAudioPlayback(
   )
   const fromTime = framesToSeconds(fromFrame, doc.frameRate)
   const durationTime = framesToSeconds(durationFrames, doc.frameRate)
-  const output = deps.createOutput(context)
+  const output = deps.createOutput(context, timelineAudioMixerGraph(doc))
   const media = deps.createMediaSource(resolveAsset)
   const cursorStates = new Map<ClipId, ClipCursorState>()
   const failedClips = new Set<ClipId>()

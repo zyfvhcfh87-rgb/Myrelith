@@ -24,7 +24,7 @@ const FAR_PLAYHEAD_FRAME = 8_000_000
 
 function makeDoc(durationFrames = 6000): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: `doc-zoom-${durationFrames}`,
     name: 'zoom fixture',
     frameRate: RATE,

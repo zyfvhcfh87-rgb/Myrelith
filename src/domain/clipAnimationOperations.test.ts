@@ -53,7 +53,7 @@ function track(clips: Clip[], kind: Track['kind'] = 'video', locked = false): Tr
 
 function doc(clips = [clip()], kind: Track['kind'] = 'video', locked = false): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'doc-1',
     name: 'Animation operations',
     frameRate: { num: 30, den: 1 },

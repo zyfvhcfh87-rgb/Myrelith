@@ -17,6 +17,11 @@ import {
 } from './crossfadePlan'
 import { clipAnimationTrack, evaluateAnimationTrack } from './clipAnimation'
 import { audibleTracks, clipContributesAudioOutput } from './selectors'
+import {
+  timelineAudioMixerGraph,
+  type TimelineAudioMasterBus,
+  type TimelineAudioTrackBus,
+} from './audioMixer'
 import { rangeEnd } from './time'
 import {
   clipAudioSettings,
@@ -107,7 +112,11 @@ export type TimelineAudioClipPlan =
 export interface TimelineAudioMixPlan {
   clips: TimelineAudioClipPlan[]
   mutedClips: TimelineAudioMutedClip[]
+  tracks: TimelineAudioTrackBus[]
+  master: TimelineAudioMasterBus
 }
+
+export type { TimelineAudioMasterBus, TimelineAudioTrackBus } from './audioMixer'
 
 export interface TimelineAudioMutedClip {
   clipId: ClipId
@@ -409,6 +418,7 @@ export function createTimelineAudioMixPlan(
       : finishStretchedContributor(draft.plan, draft.clip, draft.rate)
   })
 
+  const mixer = timelineAudioMixerGraph(doc)
   return {
     clips: finishedPlans.sort((left, right) =>
       left.timelineStartFrame - right.timelineStartFrame
@@ -419,5 +429,7 @@ export function createTimelineAudioMixPlan(
       left.trackId.localeCompare(right.trackId)
       || left.clipId.localeCompare(right.clipId),
     ),
+    tracks: mixer.tracks,
+    master: mixer.master,
   }
 }

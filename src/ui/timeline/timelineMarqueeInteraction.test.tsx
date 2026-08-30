@@ -47,7 +47,7 @@ function track(id: string, clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'marquee-doc',
     name: 'marquee fixture',
     frameRate: { num: 30, den: 1 },

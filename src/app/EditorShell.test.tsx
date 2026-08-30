@@ -53,7 +53,7 @@ function makeClip(id: string, startFrame: number): Clip {
 
 function makeDocument(): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'doc-editor-shell-selection',
     name: 'Editor shell selection fixture',
     frameRate: { num: 30, den: 1 },
@@ -109,6 +109,7 @@ describe('EditorShell', () => {
     expect(screen.getByTestId('preview-canvas')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Insert edit' })).toBeInTheDocument()
     expect(container.querySelector('.inspector-empty-title')).not.toBeNull()
+    expect(screen.getByRole('region', { name: 'Audio mixer' })).toBeInTheDocument()
     expect(screen.getByTestId('timeline-root')).toBeInTheDocument()
     expect(
       screen.getByRole('group', { name: 'Timeline zoom controls' }),

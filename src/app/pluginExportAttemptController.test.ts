@@ -58,7 +58,7 @@ function catalog(
 
 function document(): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 16,
     id: 'plugin-export-doc',
     name: 'Plugin export',
     frameRate: { num: 30, den: 1 },

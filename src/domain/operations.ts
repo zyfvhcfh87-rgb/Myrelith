@@ -67,14 +67,20 @@ export type {
   TextPropsPatch,
 } from './operations/audioText'
 export { updateClipAudio, updateClipAudioAtFrame, updateTextClip } from './operations/audioText'
-export type { TrackFlagsPatch } from './operations/tracks'
+export type {
+  MasterAudioPatch,
+  TrackFlagsPatch,
+  TrackMixerPatch,
+} from './operations/tracks'
 export {
   MAX_CLIP_VOLUME,
   addTrack,
   removeTrack,
   renameTrack,
   setClipVolume,
+  setMasterAudio,
   setTrackFlags,
+  setTrackMixer,
 } from './operations/tracks'
 export {
   addEffect,

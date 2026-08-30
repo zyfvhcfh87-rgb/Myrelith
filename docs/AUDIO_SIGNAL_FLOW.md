@@ -1,8 +1,8 @@
 # Audio signal flow
 
-Shared live-playback and export mix contract. Issue #189 Slice 1 owns
-clip volume/balance automation. Later slices fill the labeled stages
-below without reordering the ones that already exist.
+Shared live-playback and export mix contract. Issue #189 Slice 2 owns
+the track and master mixer. Later slices fill the labeled stages below
+without reordering the ones that already exist.
 
 ```
 decode
@@ -11,10 +11,10 @@ decode
   → clip fades / crossfades
   → clip audio effects            [later]
   → track mute / solo
-  → track gain / pan              [later]
+  → track gain / pan              [Slice 2]
   → track audio effects           [later]
   → sum
-  → master gain / pan / mute      [later]
+  → master gain / pan / mute      [Slice 2]
   → master audio effects          [later]
   → meters
   → output
@@ -34,3 +34,16 @@ decode
 
 Meters and loudness analysis never write gain. Playback and export must
 call the same `clipAudioGainsAtLocalFrame` helper.
+
+## Track and master mixer (schema 17)
+
+- `Track.volume` (0..2, default 1) and `Track.balance` (-1..1, default 0)
+  are constant per lane. Mute and solo stay on the existing track flags
+  and `audibleTracks` rule.
+- `TimelineDoc.masterAudio` is `{ volume, balance, muted }` with the same
+  gain ranges. Master mute silences the summed mix; it does not change
+  track mute/solo.
+- Track gain/pan multiply after clip envelopes, before the sum. Master
+  gain/pan/mute multiply after the sum, then the mix clamps.
+- The mixer strip is docked to the timeline. Per-strip meters read the
+  10 Hz `audioMeterStore` only.

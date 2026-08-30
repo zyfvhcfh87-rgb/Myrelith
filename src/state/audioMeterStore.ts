@@ -4,6 +4,7 @@
  */
 
 import { create } from 'zustand'
+import type { TrackId } from '../domain/schema'
 import {
   AUDIO_METER_FFT_SIZE,
   AUDIO_METER_FLOOR_DB,
@@ -20,6 +21,7 @@ export interface AudioMeterSnapshot {
   readonly status: AudioMeterStatus
   readonly reason: string
   readonly readout: AudioMeterReadout
+  readonly trackReadouts: Readonly<Record<TrackId, AudioMeterReadout>>
   readonly sequence: number
   readonly updatedAtMs: number
   readonly sampleWindowSize: number
@@ -36,7 +38,7 @@ const CLEAR_FLAGS = Object.freeze({
   master: false,
 })
 
-const SILENT_READOUT: AudioMeterReadout = Object.freeze({
+export const SILENT_AUDIO_METER_READOUT: AudioMeterReadout = Object.freeze({
   db: Object.freeze({
     left: AUDIO_METER_FLOOR_DB,
     right: AUDIO_METER_FLOOR_DB,
@@ -49,7 +51,8 @@ const SILENT_READOUT: AudioMeterReadout = Object.freeze({
 export const INITIAL_AUDIO_METER_STATE = Object.freeze({
   status: 'idle' as AudioMeterStatus,
   reason: 'Playback is paused',
-  readout: SILENT_READOUT,
+  readout: SILENT_AUDIO_METER_READOUT,
+  trackReadouts: Object.freeze({}),
   sequence: 0,
   updatedAtMs: 0,
   sampleWindowSize: AUDIO_METER_FFT_SIZE,

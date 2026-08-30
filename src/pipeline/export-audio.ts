@@ -15,6 +15,8 @@ import {
   isStretchedAudioClipPlan,
   type TimelineAudioClipPlan,
   type TimelineAudioEnvelope,
+  type TimelineAudioMasterBus,
+  type TimelineAudioTrackBus,
 } from '../domain/audioMixPlan'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
@@ -457,6 +459,8 @@ export class TimelineAudioMixer {
   private readonly source: ExportAudioMediaSource
   private readonly durationFrames: number
   private readonly mixPlans: SampleAudioClipPlan[]
+  private readonly trackGains: ReadonlyMap<string, TimelineAudioTrackBus>
+  private readonly master: TimelineAudioMasterBus
   private readonly readers = new Map<ClipId, ActiveReader>()
   private nextFrame = 0
   private closePromise: Promise<void> | null = null
@@ -469,7 +473,12 @@ export class TimelineAudioMixer {
     this.doc = doc
     this.source = source
     this.durationFrames = docDurationFrames(doc)
-    this.mixPlans = createTimelineAudioMixPlan(doc, catalog).clips
+    const mixPlan = createTimelineAudioMixPlan(doc, catalog)
+    this.trackGains = new Map(
+      mixPlan.tracks.map((track) => [track.trackId, track]),
+    )
+    this.master = mixPlan.master
+    this.mixPlans = mixPlan.clips
       .map((plan) => ({
         ...plan,
         timelineStartSample: audioSampleBoundary(plan.timelineStartFrame, doc),
@@ -701,13 +710,32 @@ export class TimelineAudioMixer {
           )
           const gains = clipAudioGainsAtLocalFrame(input.plan, localFrame)
           const envelope = this.envelopeAtSample(input.plan, sample)
+          const track = this.trackGains.get(input.plan.trackId)
+          if (!track) {
+            throw new Error(
+              `Audio track bus for "${input.plan.trackId}" is missing`,
+            )
+          }
           left[i] += l * envelope * gains.volume * gains.leftGain
+            * track.volume * track.leftGain
           right[i] += r * envelope * gains.volume * gains.rightGain
+            * track.volume * track.rightGain
         }
       }
       for (let i = 0; i < sampleCount; i++) {
-        left[i] = Math.max(-1, Math.min(1, left[i]))
-        right[i] = Math.max(-1, Math.min(1, right[i]))
+        if (this.master.muted) {
+          left[i] = 0
+          right[i] = 0
+          continue
+        }
+        left[i] = Math.max(
+          -1,
+          Math.min(1, left[i] * this.master.volume * this.master.leftGain),
+        )
+        right[i] = Math.max(
+          -1,
+          Math.min(1, right[i] * this.master.volume * this.master.rightGain),
+        )
       }
 
       await writeBlock({
