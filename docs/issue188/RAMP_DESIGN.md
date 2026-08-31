@@ -1,7 +1,7 @@
 # Issue 188 ramped-audio design
 
 Date: 2026-08-31
-Status: implemented and validated locally; publication is tracked on Issue #188
+Status: implementation/acceptance complete; delivery is tracked by PR #217 and Issue #188
 
 This is the remaining ramp slice after the constant-rate WSOLA implementation
 merged through PR #213. The existing exact 1x direct path and constant-rate

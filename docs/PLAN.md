@@ -4946,8 +4946,8 @@ acceptance claims.
   live freeze; cancellation; zero retained playback resources; and a clean
   console. Pass the full 15-test Chromium suite.
 
-Publication, exact-head CI/review, merge verification, and closure evidence
-remain pending until the closing pull request and Issue #188 contain them.
+Delivery is tracked through PR #217; its exact-head checks, reviews, and merge
+record are the publication evidence for Issue #188.
 
 Validation: 259 Vitest files / 3,702 tests, all 17 repository runner checks,
 production build/typecheck (4,946 modules), clean oxlint, zero-vulnerability
