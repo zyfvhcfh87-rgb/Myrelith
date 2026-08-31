@@ -72,10 +72,13 @@ function trackFixture(
     name: id,
     clips,
     transitions: [],
+    adjustments: [],
     hidden,
     muted: false,
     solo: false,
     locked: false,
+    volume: 1,
+    balance: 0,
   }
 }
 
@@ -85,7 +88,7 @@ function linkedProjectFixture(hiddenVideoPartner = false): string {
     format: 'myrelith-project',
     formatVersion: 5,
     document: {
-      schemaVersion: 14,
+      schemaVersion: 17,
       id: 'offscreen-linked-preview-doc',
       name: 'Offscreen linked preview',
       frameRate: { num: 30, den: 1 },
@@ -115,6 +118,11 @@ function linkedProjectFixture(hiddenVideoPartner = false): string {
       ],
       markers: [],
       captionTracks: [],
+      masterAudio: {
+        volume: 1,
+        balance: 0,
+        muted: false,
+      },
     },
     assets: [{
       id: 'linked-av-source',

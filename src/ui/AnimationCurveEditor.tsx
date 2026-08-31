@@ -11,7 +11,14 @@ import {
   readClipAnimationProperty,
   resolveClipAnimationAtFrame,
 } from '../domain/clipAnimation'
-import { MAX_CLIP_SCALE, MIN_CLIP_SCALE } from '../domain/clipInspector'
+import {
+  MAX_AUDIO_BALANCE,
+  MAX_CLIP_SCALE,
+  MAX_CLIP_VOLUME,
+  MIN_AUDIO_BALANCE,
+  MIN_CLIP_SCALE,
+  MIN_CLIP_VOLUME,
+} from '../domain/clipInspector'
 import type {
   Clip,
   ClipAnimationEasing,
@@ -66,6 +73,12 @@ function propertyBounds(property: ClipAnimationProperty): {
   step: number
 } {
   if (property === 'opacity') return { min: 0, max: 1, step: 0.01 }
+  if (property === 'volume') {
+    return { min: MIN_CLIP_VOLUME, max: MAX_CLIP_VOLUME, step: 0.01 }
+  }
+  if (property === 'balance') {
+    return { min: MIN_AUDIO_BALANCE, max: MAX_AUDIO_BALANCE, step: 0.01 }
+  }
   if (property === 'scale-x' || property === 'scale-y') {
     return { min: MIN_CLIP_SCALE, max: MAX_CLIP_SCALE, step: 0.01 }
   }
@@ -161,14 +174,21 @@ export default function AnimationCurveEditor({
   clip,
   locked,
   playheadFrame,
+  properties = ANIMATABLE_CLIP_PROPERTIES,
 }: {
   clip: Clip
   locked: boolean
   playheadFrame: number
+  properties?: readonly ClipAnimationProperty[]
 }) {
-  const [property, setProperty] = useState<ClipAnimationProperty>('position-x')
+  const [property, setProperty] = useState<ClipAnimationProperty>(properties[0])
   const [selectedFrame, setSelectedFrame] = useState<number | null>(null)
   const [message, setMessage] = useState('')
+  useEffect(() => {
+    if (properties.includes(property)) return
+    setProperty(properties[0])
+    setSelectedFrame(null)
+  }, [clip.id, properties, property])
   const track = clipAnimationTrack(clip, property)
   const keyframes = useMemo(() => track?.keyframes ?? [], [track])
   const localPlayhead = playheadFrame - clip.timelineRange.startFrame
@@ -257,7 +277,7 @@ export default function AnimationCurveEditor({
             setMessage('')
           }}
         >
-          {ANIMATABLE_CLIP_PROPERTIES.map((item) => (
+          {properties.map((item) => (
             <option key={item} value={item}>
               {clipAnimationPropertyLabel(item)}{clipAnimationTrack(clip, item) ? ' • animated' : ''}
             </option>

@@ -22,21 +22,40 @@ import {
   refineAudioDecoderBudget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
-import type { AssetId, Clip, ClipId, TimelineDoc } from '../domain/schema'
+import type {
+  AssetId,
+  AudioEffectDescriptor,
+  Clip,
+  ClipAnimationTrack,
+  ClipId,
+  FrameRate,
+  TimelineDoc,
+  TrackId,
+} from '../domain/schema'
 import {
+  clipAudioGainsAtLocalFrame,
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
   isStretchedAudioClipPlan,
   type TimelineAudioDirectClipPlan,
   type TimelineAudioEnvelope,
+  type TimelineAudioMasterBus,
   type TimelineAudioStretchedClipPlan,
+  type TimelineAudioTrackBus,
 } from '../domain/audioMixPlan'
+import { timelineAudioMixerGraph } from '../domain/audioMixer'
+import { createAudioEffectChain } from '../domain/audioEffectStack'
+import {
+  PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES,
+  processAudioBufferWithChain,
+  type AudioEffectChain,
+} from '../domain/audioDsp'
 import type {
   CrossfadeLegRole,
   SourceBoundsCatalog,
 } from '../domain/crossfadePlan'
 import { audibleTracks, docDurationFrames } from '../domain/selectors'
-import { framesToSeconds, rangeEnd } from '../domain/time'
+import { clipLocalFrameAtSeconds, framesToSeconds, rangeEnd } from '../domain/time'
 import {
   AUDIO_METER_FFT_SIZE,
   measureAudioMeterSample,
@@ -119,6 +138,7 @@ export interface PlaybackAudioMediaSource {
 
 export interface ScheduledPlaybackAudio {
   clipId: ClipId
+  trackId?: TrackId
   buffer: AudioBuffer
   timelineStartTime: number
   when: number
@@ -134,6 +154,11 @@ export interface ScheduledPlaybackAudio {
   balance?: number
   leftGain?: number
   rightGain?: number
+  clipTimelineStartFrame?: number
+  frameRate?: FrameRate
+  volumeAnimation?: ClipAnimationTrack | null
+  balanceAnimation?: ClipAnimationTrack | null
+  audioEffects?: readonly AudioEffectDescriptor[]
 }
 
 export interface PlaybackAudioEnvelope {
@@ -141,6 +166,13 @@ export interface PlaybackAudioEnvelope {
   endTime: number
   role: CrossfadeLegRole
   curve: TimelineAudioEnvelope['curve']
+}
+
+export interface PlaybackAudioTrackMeter {
+  trackId: TrackId
+  peakLeft: number
+  peakRight: number
+  peakMaster: number
 }
 
 export interface PlaybackAudioOutputDiagnostics {
@@ -151,6 +183,12 @@ export interface PlaybackAudioOutputDiagnostics {
   peakRight: number
   peakMaster: number
   meterSampleSize: number
+  trackMeters?: readonly PlaybackAudioTrackMeter[]
+}
+
+export interface PlaybackAudioMixerGraph {
+  tracks: readonly TimelineAudioTrackBus[]
+  master: TimelineAudioMasterBus
 }
 
 export interface PlaybackAudioOutput {
@@ -180,7 +218,10 @@ export interface TimelineAudioPlaybackSession {
 
 export interface PlaybackAudioDeps {
   createMediaSource(resolveAsset: PlaybackAssetResolver): PlaybackAudioMediaSource
-  createOutput(context: AudioContext): PlaybackAudioOutput
+  createOutput(
+    context: AudioContext,
+    mixer?: PlaybackAudioMixerGraph,
+  ): PlaybackAudioOutput
   schedulePump(callback: () => void, delayMs: number): number
   cancelPump(id: number): void
   lookaheadSeconds: number
@@ -224,6 +265,7 @@ interface PlaybackAudioClipFields {
   fadeInEndTime: number
   fadeOutStartTime: number
   envelopes: PlaybackAudioEnvelope[]
+  frameRate: FrameRate
 }
 
 type DirectAudioClipPlan =
@@ -300,6 +342,7 @@ function preparedEventsForOverlap(
       overlapStart + (segmentStart - timelineStart)
     events.push({
       clipId: plan.clipId,
+      trackId: plan.trackId,
       buffer: wrapped.buffer,
       timelineStartTime: segmentStart,
       when: 0,
@@ -314,6 +357,11 @@ function preparedEventsForOverlap(
       balance: plan.balance,
       leftGain: plan.leftGain,
       rightGain: plan.rightGain,
+      clipTimelineStartFrame: plan.clipTimelineStartFrame,
+      frameRate: plan.frameRate,
+      volumeAnimation: plan.volumeAnimation,
+      balanceAnimation: plan.balanceAnimation,
+      audioEffects: plan.audioEffects,
     })
   }
   return events
@@ -388,6 +436,7 @@ function buildAudioClipPlans(
           plan.timelineEndFrame - plan.fadeOutFrames,
           doc.frameRate,
         ),
+        frameRate: doc.frameRate,
         envelopes: plan.envelopes.map((envelope) => ({
           startTime: framesToSeconds(envelope.startFrame, doc.frameRate),
           endTime: framesToSeconds(envelope.endFrame, doc.frameRate),
@@ -417,6 +466,9 @@ export function audioPlaybackPlanKey(
         kind: track.kind,
         muted: track.muted,
         solo: track.solo,
+        volume: track.volume ?? null,
+        balance: track.balance ?? null,
+        audioEffects: track.audioEffects ?? null,
         clips: track.clips.map((clip) => ({
           id: clip.id,
           assetId: clip.assetId,
@@ -426,6 +478,8 @@ export function audioPlaybackPlanKey(
           timelineRange: clip.timelineRange,
           volume: clip.volume,
           audio: clip.audio ?? null,
+          animation: clip.animation ?? null,
+          audioEffects: clip.audioEffects ?? null,
           linkGroupId: clip.linkGroupId ?? null,
         })),
         transitions: track.transitions.map((transition) => ({
@@ -440,6 +494,7 @@ export function audioPlaybackPlanKey(
       assetId,
       catalog.get(assetId) ?? null,
     ]),
+    masterAudio: doc.masterAudio ?? null,
   })
 }
 
@@ -749,56 +804,120 @@ export function createEqualPowerPlaybackCurve(
   return values
 }
 
-function scheduleNodeGain(
-  gain: AudioParam,
+function playbackClipGainsAtTime(
   request: ScheduledPlaybackAudio,
-): void {
+  timelineTime: number,
+): ReturnType<typeof clipAudioGainsAtLocalFrame> {
+  if (
+    request.clipTimelineStartFrame === undefined
+    || request.frameRate === undefined
+    || (request.volumeAnimation == null && request.balanceAnimation == null)
+  ) {
+    return {
+      volume: request.volume,
+      balance: request.balance ?? 0,
+      leftGain: request.leftGain ?? 1,
+      rightGain: request.rightGain ?? 1,
+    }
+  }
+  return clipAudioGainsAtLocalFrame(
+    {
+      volume: request.volume,
+      balance: request.balance ?? 0,
+      volumeAnimation: request.volumeAnimation ?? null,
+      balanceAnimation: request.balanceAnimation ?? null,
+    },
+    clipLocalFrameAtSeconds(
+      request.clipTimelineStartFrame,
+      timelineTime,
+      request.frameRate,
+    ),
+  )
+}
+
+function playbackEnvelopeAtTime(
+  request: ScheduledPlaybackAudio,
+  timelineTime: number,
+): number {
   const envelope = request.envelope
   const clipStart = request.clipTimelineStartTime
   const clipEnd = request.clipTimelineEndTime
   const fadeInEnd = request.fadeInEndTime
   const fadeOutStart = request.fadeOutStartTime
-  const hasFade = clipStart !== undefined
+  let shaped = 1
+  if (
+    clipStart !== undefined
+    && clipEnd !== undefined
+    && fadeInEnd !== undefined
+    && fadeOutStart !== undefined
+  ) {
+    if (fadeInEnd > clipStart) {
+      shaped *= Math.min(1, Math.max(
+        0,
+        (timelineTime - clipStart) / (fadeInEnd - clipStart),
+      ))
+    }
+    if (fadeOutStart < clipEnd) {
+      shaped *= Math.min(1, Math.max(
+        0,
+        (clipEnd - timelineTime) / (clipEnd - fadeOutStart),
+      ))
+    }
+  }
+  if (!envelope) return shaped
+  const envelopeDuration = envelope.endTime - envelope.startTime
+  if (!Number.isFinite(envelopeDuration) || envelopeDuration <= 0) {
+    throw new RangeError('Playback audio envelope has an invalid duration')
+  }
+  return shaped * crossfadeAudioGain(
+    envelope.curve,
+    envelope.role,
+    (timelineTime - envelope.startTime) / envelopeDuration,
+  )
+}
+
+function playbackHasFade(request: ScheduledPlaybackAudio): boolean {
+  const clipStart = request.clipTimelineStartTime
+  const clipEnd = request.clipTimelineEndTime
+  const fadeInEnd = request.fadeInEndTime
+  const fadeOutStart = request.fadeOutStartTime
+  return clipStart !== undefined
     && clipEnd !== undefined
     && fadeInEnd !== undefined
     && fadeOutStart !== undefined
     && (fadeInEnd > clipStart + TIME_EPSILON || fadeOutStart < clipEnd - TIME_EPSILON)
-  if (hasFade) {
-    const values = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
-    const envelopeDuration = envelope
-      ? envelope.endTime - envelope.startTime
-      : 0
-    if (envelope && (!Number.isFinite(envelopeDuration) || envelopeDuration <= 0)) {
-      throw new RangeError('Playback audio envelope has an invalid duration')
-    }
-    for (let index = 0; index < values.length; index++) {
-      const timelineTime = request.timelineStartTime
-        + request.duration * index / (values.length - 1)
-      let shaped = request.volume
-      if (fadeInEnd > clipStart) {
-        shaped *= Math.min(1, Math.max(
-          0,
-          (timelineTime - clipStart) / (fadeInEnd - clipStart),
-        ))
-      }
-      if (fadeOutStart < clipEnd) {
-        shaped *= Math.min(1, Math.max(
-          0,
-          (clipEnd - timelineTime) / (clipEnd - fadeOutStart),
-        ))
-      }
-      if (envelope) {
-        shaped *= crossfadeAudioGain(
-          envelope.curve,
-          envelope.role,
-          (timelineTime - envelope.startTime) / envelopeDuration,
-        )
-      }
-      values[index] = shaped
-    }
-    gain.setValueCurveAtTime(values, request.when, request.duration)
+}
+
+function playbackHasShapedGain(request: ScheduledPlaybackAudio): boolean {
+  return playbackHasFade(request)
+    || request.volumeAnimation != null
+    || request.envelope?.curve === 'equal-power'
+}
+
+function samplePlaybackGainCurve(request: ScheduledPlaybackAudio): Float32Array {
+  const values = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+  for (let index = 0; index < values.length; index++) {
+    const timelineTime = request.timelineStartTime
+      + request.duration * index / (values.length - 1)
+    values[index] = playbackClipGainsAtTime(request, timelineTime).volume
+      * playbackEnvelopeAtTime(request, timelineTime)
+  }
+  return values
+}
+
+function scheduleNodeGain(
+  gain: AudioParam,
+  request: ScheduledPlaybackAudio,
+): void {
+  if (playbackHasShapedGain(request)) {
+    gain.setValueCurveAtTime(
+      samplePlaybackGainCurve(request),
+      request.when,
+      request.duration,
+    )
     return
   }
+  const envelope = request.envelope
   if (!envelope) {
     gain.value = request.volume
     return
@@ -864,30 +983,222 @@ function foldPlaybackBufferToStereo(
   return stereo
 }
 
+interface StereoMeterTap {
+  input: ChannelSplitterNode
+  output: ChannelMergerNode
+  left: AnalyserNode
+  right: AnalyserNode
+  leftWindow: Float32Array<ArrayBuffer>
+  rightWindow: Float32Array<ArrayBuffer>
+  nodes: AudioNode[]
+}
+
+function createStereoMeterTap(context: AudioContext): StereoMeterTap {
+  const splitter = context.createChannelSplitter(2)
+  const left = context.createAnalyser()
+  const right = context.createAnalyser()
+  const merger = context.createChannelMerger(2)
+  left.fftSize = AUDIO_METER_FFT_SIZE
+  right.fftSize = AUDIO_METER_FFT_SIZE
+  left.smoothingTimeConstant = 0
+  right.smoothingTimeConstant = 0
+  splitter.connect(left, 0)
+  splitter.connect(right, 1)
+  left.connect(merger, 0, 0)
+  right.connect(merger, 0, 1)
+  return {
+    input: splitter,
+    output: merger,
+    left,
+    right,
+    leftWindow: new Float32Array(AUDIO_METER_FFT_SIZE),
+    rightWindow: new Float32Array(AUDIO_METER_FFT_SIZE),
+    nodes: [splitter, left, right, merger],
+  }
+}
+
+function createEffectStage(
+  context: AudioContext,
+  chain: AudioEffectChain,
+): { input: AudioNode; output: AudioNode; nodes: AudioNode[] } {
+  if (chain.identity || typeof context.createScriptProcessor !== 'function') {
+    const passthrough = context.createGain()
+    passthrough.gain.value = 1
+    return { input: passthrough, output: passthrough, nodes: [passthrough] }
+  }
+  const processor = context.createScriptProcessor(
+    PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES,
+    2,
+    2,
+  )
+  processor.onaudioprocess = (event) => {
+    const input = event.inputBuffer
+    const output = event.outputBuffer
+    const leftIn = input.getChannelData(0)
+    const rightIn = input.numberOfChannels > 1 ? input.getChannelData(1) : leftIn
+    const leftOut = output.getChannelData(0)
+    const rightOut = output.numberOfChannels > 1 ? output.getChannelData(1) : leftOut
+    leftOut.set(leftIn)
+    if (rightOut !== leftOut) rightOut.set(rightIn)
+    chain.process(leftOut, rightOut)
+  }
+  return { input: processor, output: processor, nodes: [processor] }
+}
+
+function processScheduledClipBuffer(
+  context: AudioContext,
+  buffer: AudioBuffer,
+  chain: AudioEffectChain,
+  request: ScheduledPlaybackAudio,
+): { buffer: AudioBuffer; offset: number; duration: number; preprocessed: boolean } {
+  if (chain.identity) {
+    return {
+      buffer,
+      offset: request.offset,
+      duration: request.duration,
+      preprocessed: false,
+    }
+  }
+  const rate = buffer.sampleRate
+  const start = Math.max(0, Math.floor(request.offset * rate))
+  const count = Math.min(
+    buffer.length - start,
+    Math.max(0, Math.round(request.duration * rate)),
+  )
+  if (count <= 0) {
+    return {
+      buffer,
+      offset: request.offset,
+      duration: request.duration,
+      preprocessed: false,
+    }
+  }
+  const leftSource = buffer.getChannelData(0)
+  const rightSource = buffer.numberOfChannels > 1
+    ? buffer.getChannelData(1)
+    : leftSource
+  const left = leftSource.slice(start, start + count)
+  const right = rightSource.slice(start, start + count)
+  // Clip gain, fades/crossfades, and balance are part of the clip input to
+  // its effect stack. Bake those sample-accurate stages before stateful DSP,
+  // matching TimelineAudioMixer's export order exactly.
+  for (let index = 0; index < count; index++) {
+    const timelineTime = request.timelineStartTime + index / rate
+    const gains = playbackClipGainsAtTime(request, timelineTime)
+    const envelope = playbackEnvelopeAtTime(request, timelineTime)
+    left[index] *= envelope * gains.volume * gains.leftGain
+    right[index] *= envelope * gains.volume * gains.rightGain
+  }
+  processAudioBufferWithChain(left, right, chain, PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES)
+  const processed = context.createBuffer(2, count, rate)
+  processed.getChannelData(0).set(left)
+  processed.getChannelData(1).set(right)
+  return {
+    buffer: processed,
+    offset: 0,
+    duration: count / rate,
+    preprocessed: true,
+  }
+}
+
+function createBalanceStage(
+  context: AudioContext,
+  leftGain: number,
+  rightGain: number,
+): { input: AudioNode; output: AudioNode; nodes: AudioNode[] } {
+  if (leftGain === 1 && rightGain === 1) {
+    const passthrough = context.createGain()
+    passthrough.gain.value = 1
+    return { input: passthrough, output: passthrough, nodes: [passthrough] }
+  }
+  const splitter = context.createChannelSplitter(2)
+  const left = context.createGain()
+  const right = context.createGain()
+  const merger = context.createChannelMerger(2)
+  left.gain.value = leftGain
+  right.gain.value = rightGain
+  splitter.connect(left, 0)
+  splitter.connect(right, 1)
+  left.connect(merger, 0, 0)
+  right.connect(merger, 0, 1)
+  return { input: splitter, output: merger, nodes: [splitter, left, right, merger] }
+}
+
+interface TrackPlaybackBus {
+  input: GainNode
+  meter: StereoMeterTap
+  nodes: AudioNode[]
+}
+
+function readMeterTap(tap: StereoMeterTap): ReturnType<typeof measureAudioMeterSample> {
+  tap.left.getFloatTimeDomainData(tap.leftWindow)
+  tap.right.getFloatTimeDomainData(tap.rightWindow)
+  return measureAudioMeterSample(tap.leftWindow, tap.rightWindow)
+}
+
 /** The only module that turns decoded buffers into an audible Web Audio graph. */
 export function createWebAudioPlaybackOutput(
   context: AudioContext,
+  mixer?: PlaybackAudioMixerGraph,
 ): PlaybackAudioOutput {
+  const graphNodes: AudioNode[] = []
+  const trackBuses = new Map<TrackId, TrackPlaybackBus>()
   const master = context.createGain()
-  const meterSplitter = context.createChannelSplitter(2)
-  const leftAnalyser = context.createAnalyser()
-  const rightAnalyser = context.createAnalyser()
-  const meterMerger = context.createChannelMerger(2)
-  leftAnalyser.fftSize = AUDIO_METER_FFT_SIZE
-  rightAnalyser.fftSize = AUDIO_METER_FFT_SIZE
-  leftAnalyser.smoothingTimeConstant = 0
-  rightAnalyser.smoothingTimeConstant = 0
+  const masterMeter = createStereoMeterTap(context)
+  const masterTargetGain = mixer
+    ? (mixer.master.muted ? 0 : mixer.master.volume)
+    : 1
   master.gain.value = 0
-  master.connect(meterSplitter)
-  meterSplitter.connect(leftAnalyser, 0)
-  meterSplitter.connect(rightAnalyser, 1)
-  leftAnalyser.connect(meterMerger, 0, 0)
-  rightAnalyser.connect(meterMerger, 0, 1)
-  meterMerger.connect(context.destination)
+  graphNodes.push(master, ...masterMeter.nodes)
+
+  let clipDestination: AudioNode = master
+  if (mixer) {
+    const masterSum = context.createGain()
+    masterSum.gain.value = 1
+    const masterBalance = createBalanceStage(
+      context,
+      mixer.master.leftGain,
+      mixer.master.rightGain,
+    )
+    const masterFx = createEffectStage(
+      context,
+      createAudioEffectChain(mixer.master.audioEffects, context.sampleRate || 48_000),
+    )
+    masterSum.connect(masterBalance.input)
+    masterBalance.output.connect(master)
+    master.connect(masterFx.input)
+    masterFx.output.connect(masterMeter.input)
+    graphNodes.push(...masterFx.nodes)
+    graphNodes.push(masterSum, ...masterBalance.nodes)
+    for (const track of mixer.tracks) {
+      const input = context.createGain()
+      input.gain.value = track.volume
+      const balance = createBalanceStage(context, track.leftGain, track.rightGain)
+      const fx = createEffectStage(
+        context,
+        createAudioEffectChain(track.audioEffects, context.sampleRate || 48_000),
+      )
+      const meter = createStereoMeterTap(context)
+      input.connect(balance.input)
+      balance.output.connect(fx.input)
+      fx.output.connect(meter.input)
+      meter.output.connect(masterSum)
+      const bus: TrackPlaybackBus = {
+        input,
+        meter,
+        nodes: [input, ...balance.nodes, ...fx.nodes, ...meter.nodes],
+      }
+      trackBuses.set(track.trackId, bus)
+      graphNodes.push(...bus.nodes)
+    }
+    clipDestination = masterSum
+  } else {
+    master.connect(masterMeter.input)
+  }
+  masterMeter.output.connect(context.destination)
 
   const nodes = new Set<ActiveOutputNode>()
-  const leftSampleWindow = new Float32Array(leftAnalyser.fftSize)
-  const rightSampleWindow = new Float32Array(rightAnalyser.fftSize)
+  const clipChains = new Map<ClipId, AudioEffectChain>()
   let stopped = false
   let graphDisconnected = false
   let armed = false
@@ -895,23 +1206,7 @@ export function createWebAudioPlaybackOutput(
   const disconnectGraph = (): void => {
     if (graphDisconnected) return
     graphDisconnected = true
-    try {
-      master.disconnect()
-    } finally {
-      try {
-        meterSplitter.disconnect()
-      } finally {
-        try {
-          leftAnalyser.disconnect()
-        } finally {
-          try {
-            rightAnalyser.disconnect()
-          } finally {
-            meterMerger.disconnect()
-          }
-        }
-      }
-    }
+    for (const node of graphNodes) node.disconnect()
   }
 
   const cleanupNode = (record: ActiveOutputNode): void => {
@@ -934,41 +1229,100 @@ export function createWebAudioPlaybackOutput(
     const source = context.createBufferSource()
     const gain = context.createGain()
     const playbackBuffer = foldPlaybackBufferToStereo(context, request.buffer)
-    source.buffer = playbackBuffer
-    scheduleNodeGain(gain.gain, request)
+    let scheduledBuffer = playbackBuffer
+    let scheduledOffset = request.offset
+    let scheduledDuration = request.duration
+    let clipInputPreprocessed = false
+    const clipEffects = request.audioEffects
+    if (clipEffects && clipEffects.length > 0) {
+      let chain = clipChains.get(request.clipId)
+      if (!chain) {
+        chain = createAudioEffectChain(
+          clipEffects,
+          playbackBuffer.sampleRate || 48_000,
+        )
+        clipChains.set(request.clipId, chain)
+      }
+      const processed = processScheduledClipBuffer(
+        context,
+        playbackBuffer,
+        chain,
+        request,
+      )
+      scheduledBuffer = processed.buffer
+      scheduledOffset = processed.offset
+      scheduledDuration = processed.duration
+      clipInputPreprocessed = processed.preprocessed
+    }
+    source.buffer = scheduledBuffer
+    if (clipInputPreprocessed) gain.gain.value = 1
+    else scheduleNodeGain(gain.gain, request)
     source.connect(gain)
     const balanceNodes: AudioNode[] = []
     if (
-      request.balance !== undefined
-      && request.balance !== 0
+      !clipInputPreprocessed
       && playbackBuffer.numberOfChannels >= 2
+      && (
+        request.balanceAnimation != null
+        || (
+          request.balance !== undefined
+          && request.balance !== 0
+        )
+      )
     ) {
       const splitter = context.createChannelSplitter(2)
       const left = context.createGain()
       const right = context.createGain()
       const merger = context.createChannelMerger(2)
-      left.gain.value = request.leftGain ?? 1
-      right.gain.value = request.rightGain ?? 1
+      if (request.balanceAnimation != null) {
+        const leftCurve = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+        const rightCurve = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+        for (let index = 0; index < leftCurve.length; index++) {
+          const timelineTime = request.timelineStartTime
+            + request.duration * index / (leftCurve.length - 1)
+          const gains = playbackClipGainsAtTime(request, timelineTime)
+          leftCurve[index] = gains.leftGain
+          rightCurve[index] = gains.rightGain
+        }
+        left.gain.setValueCurveAtTime(leftCurve, request.when, request.duration)
+        right.gain.setValueCurveAtTime(rightCurve, request.when, request.duration)
+      } else {
+        left.gain.value = request.leftGain ?? 1
+        right.gain.value = request.rightGain ?? 1
+      }
       gain.connect(splitter)
       splitter.connect(left, 0)
       splitter.connect(right, 1)
       left.connect(merger, 0, 0)
       right.connect(merger, 0, 1)
-      merger.connect(master)
+      const destination = (
+        request.trackId !== undefined
+          ? trackBuses.get(request.trackId)?.input
+          : undefined
+      ) ?? clipDestination
+      merger.connect(destination)
       balanceNodes.push(splitter, left, right, merger)
     } else {
-      gain.connect(master)
+      const destination = (
+        request.trackId !== undefined
+          ? trackBuses.get(request.trackId)?.input
+          : undefined
+      ) ?? clipDestination
+      gain.connect(destination)
     }
 
     const record = { source, gain, balanceNodes }
     nodes.add(record)
     source.onended = () => cleanupNode(record)
     try {
-      source.start(request.when, request.offset, request.duration)
+      source.start(request.when, scheduledOffset, scheduledDuration)
       if (!armed) {
         master.gain.cancelScheduledValues(request.when)
         master.gain.setValueAtTime(0, request.when)
-        master.gain.linearRampToValueAtTime(1, request.when + 0.005)
+        master.gain.linearRampToValueAtTime(
+          masterTargetGain,
+          request.when + 0.005,
+        )
         armed = true
       }
     } catch (cause) {
@@ -1026,6 +1380,16 @@ export function createWebAudioPlaybackOutput(
     }
   }
 
+  const silentTrackMeters = (): PlaybackAudioTrackMeter[] =>
+    mixer === undefined
+      ? []
+      : mixer.tracks.map((track) => ({
+          trackId: track.trackId,
+          peakLeft: 0,
+          peakRight: 0,
+          peakMaster: 0,
+        }))
+
   const diagnostics = (): PlaybackAudioOutputDiagnostics => {
     if (stopped) {
       return {
@@ -1036,11 +1400,25 @@ export function createWebAudioPlaybackOutput(
         peakRight: 0,
         peakMaster: 0,
         meterSampleSize: AUDIO_METER_FFT_SIZE,
+        trackMeters: silentTrackMeters(),
       }
     }
-    leftAnalyser.getFloatTimeDomainData(leftSampleWindow)
-    rightAnalyser.getFloatTimeDomainData(rightSampleWindow)
-    const sample = measureAudioMeterSample(leftSampleWindow, rightSampleWindow)
+    const sample = readMeterTap(masterMeter)
+    const trackMeters: PlaybackAudioTrackMeter[] = []
+    if (mixer) {
+      for (const track of mixer.tracks) {
+        const bus = trackBuses.get(track.trackId)
+        const peaks = bus === undefined
+          ? { left: 0, right: 0, master: 0, rms: 0 }
+          : readMeterTap(bus.meter)
+        trackMeters.push({
+          trackId: track.trackId,
+          peakLeft: peaks.left,
+          peakRight: peaks.right,
+          peakMaster: peaks.master,
+        })
+      }
+    }
     return {
       contextTime: context.currentTime,
       activeNodeCount: nodes.size,
@@ -1049,6 +1427,7 @@ export function createWebAudioPlaybackOutput(
       peakRight: sample.right,
       peakMaster: sample.master,
       meterSampleSize: AUDIO_METER_FFT_SIZE,
+      trackMeters,
     }
   }
 
@@ -1118,7 +1497,7 @@ export async function startTimelineAudioPlayback(
   )
   const fromTime = framesToSeconds(fromFrame, doc.frameRate)
   const durationTime = framesToSeconds(durationFrames, doc.frameRate)
-  const output = deps.createOutput(context)
+  const output = deps.createOutput(context, timelineAudioMixerGraph(doc))
   const media = deps.createMediaSource(resolveAsset)
   const cursorStates = new Map<ClipId, ClipCursorState>()
   const failedClips = new Set<ClipId>()

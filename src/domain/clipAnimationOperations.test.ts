@@ -53,7 +53,7 @@ function track(clips: Clip[], kind: Track['kind'] = 'video', locked = false): Tr
 
 function doc(clips = [clip()], kind: Track['kind'] = 'video', locked = false): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 18,
     id: 'doc-1',
     name: 'Animation operations',
     frameRate: { num: 30, den: 1 },
@@ -178,5 +178,22 @@ describe('clip animation document operations', () => {
     })).toBe(lockedDocument)
     expect(updateClipVisualAtFrame(animated, 'clip-1', 100, { opacity: 0.5 }))
       .toBe(animated)
+  })
+
+  test('authors volume keys on audio clips and rejects visual keys there', () => {
+    const original = doc([clip()], 'audio')
+    const keyed = setClipKeyframe(original, 'clip-1', 'volume', {
+      frame: 0,
+      value: 0.25,
+      easing: linear,
+    })
+
+    expect(keyed).not.toBe(original)
+    expect(resolveClipAnimationAtFrame(findClip(keyed), 10).volume).toBe(0.25)
+    expect(setClipKeyframe(original, 'clip-1', 'opacity', {
+      frame: 0,
+      value: 1,
+      easing: linear,
+    })).toBe(original)
   })
 })

@@ -120,8 +120,170 @@
 
 .area-timeline {
   grid-area: timeline;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-top: 1px solid #2a2a2a;
+  overflow: hidden;
+}
+
+.timeline-scroll-host {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
+}
+
+.audio-mixer {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: stretch;
+  min-height: 148px;
+  max-height: 168px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #0c1826;
+  border-bottom: 1px solid #26384f;
+}
+
+.mixer-strip {
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 92px;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  width: 92px;
+  min-width: 92px;
+  padding: 6px 4px;
+  background: #101d2b;
+  border: 1px solid #273b52;
+  border-radius: 6px;
+}
+
+.mixer-strip-master {
+  border-color: #3d5a80;
+}
+
+.mixer-strip-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: #c5d3e4;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mixer-strip-body {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 6px;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.mixer-fader {
+  width: 24px;
+  height: 72px;
+  padding: 0;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  accent-color: #76a8ea;
+}
+
+.audio-mixer .mixer-pan {
+  width: 76px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  accent-color: #76a8ea;
+}
+
+.mixer-fader:focus-visible,
+.mixer-pan:focus-visible,
+.mixer-toggle:focus-visible {
+  outline: 2px solid #76a8ea;
+  outline-offset: 1px;
+}
+
+.mixer-meters {
+  display: flex;
+  gap: 3px;
+  align-items: stretch;
+}
+
+.mixer-meter-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+}
+
+.mixer-meter-track {
+  position: relative;
+  width: 7px;
+  height: 72px;
+  overflow: hidden;
+  background: #09121d;
+  border: 1px solid #273b52;
+  border-radius: 999px;
+}
+
+.mixer-meter-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    #e36d69 0%,
+    #e4b75d 18%,
+    #79bd70 40%,
+    #3fa477 100%
+  );
+  transform-origin: center bottom;
+}
+
+.mixer-meter-track[data-overload] {
+  border-color: #ef7e76;
+  box-shadow: 0 0 4px rgb(239 126 118 / 45%);
+}
+
+.mixer-meter-label {
+  color: #8395aa;
+  font-size: 8px;
+  line-height: 1;
+}
+
+.mixer-strip-toggles {
+  display: flex;
+  gap: 4px;
+}
+
+.mixer-toggle {
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: #aeb4bd;
+  font-size: 10px;
+  font-weight: 700;
+  background: #26262b;
+  border: 1px solid #3a3a41;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mixer-toggle.active {
+  color: #fff;
+  background: #3d5a80;
+  border-color: #6b93c4;
+}
+
+.mixer-toggle:hover:not(:disabled) {
+  color: #e1e5eb;
+  background: #303038;
 }
 
 /* Transport bar (Phase 4.0.5) */

@@ -13,6 +13,7 @@ import {
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
   isStretchedAudioClipPlan,
+  writeClipAudioGainsAtLocalFrame,
 } from './audioMixPlan'
 import { sourceTimeAudioPolicy } from './sourceTimeMap'
 
@@ -121,7 +122,7 @@ function fixture(options: {
   }
   return {
     doc: {
-      schemaVersion: 15,
+      schemaVersion: 18,
       id: 'audio-plan-doc',
       name: 'Audio plan',
       frameRate: { num: 30, den: 1 },
@@ -175,6 +176,9 @@ describe('timeline audio mix plan', () => {
       balance: 0,
       leftGain: 1,
       rightGain: 1,
+      clipTimelineStartFrame: 10,
+      volumeAnimation: null,
+      balanceAnimation: null,
       fadeInFrames: 0,
       fadeOutFrames: 0,
       envelopes: [{
@@ -184,6 +188,7 @@ describe('timeline audio mix plan', () => {
         role: 'from',
         curve: 'equal-power',
       }],
+      audioEffects: [],
       stretch: {
         rate: { numerator: 2, denominator: 1 },
         sourceStartTicks: 30_000_000,
@@ -304,12 +309,15 @@ describe('timeline audio mix plan', () => {
         assetId: 'audio-from-asset',
         timelineStartFrame: 10,
         timelineEndFrame: 23,
+        clipTimelineStartFrame: 10,
         sourceStartFrame: 30,
         sourceEndFrame: 43,
         volume: 1,
         balance: 0,
         leftGain: 1,
         rightGain: 1,
+        volumeAnimation: null,
+        balanceAnimation: null,
         fadeInFrames: 0,
         fadeOutFrames: 0,
         envelopes: [{
@@ -319,6 +327,7 @@ describe('timeline audio mix plan', () => {
           role: 'from',
           curve: 'equal-power',
         }],
+        audioEffects: [],
       },
       {
         clipId: 'audio-to',
@@ -326,12 +335,15 @@ describe('timeline audio mix plan', () => {
         assetId: 'audio-to-asset',
         timelineStartFrame: 18,
         timelineEndFrame: 30,
+        clipTimelineStartFrame: 20,
         sourceStartFrame: 48,
         sourceEndFrame: 60,
         volume: 1,
         balance: 0,
         leftGain: 1,
         rightGain: 1,
+        volumeAnimation: null,
+        balanceAnimation: null,
         fadeInFrames: 0,
         fadeOutFrames: 0,
         envelopes: [{
@@ -341,6 +353,7 @@ describe('timeline audio mix plan', () => {
           role: 'to',
           curve: 'equal-power',
         }],
+        audioEffects: [],
       },
     ])
     expect(JSON.stringify(input.doc)).toBe(before)
@@ -414,6 +427,149 @@ describe('timeline audio mix plan', () => {
         fadeOutFrames: 4,
       }),
     ])
+  })
+
+  test('includes a silent clip when volume keys become audible', () => {
+    const input = fixture({ fromVolume: 0 })
+    input.doc.tracks[1].clips[0].animation = {
+      tracks: [{
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 0, easing: { type: 'linear' } },
+          { frame: 8, value: 1, easing: { type: 'linear' } },
+        ],
+      }],
+      effectTracks: [],
+    }
+
+    const planned = createTimelineAudioMixPlan(input.doc, input.catalog).clips
+      .find((item) => item.clipId === 'audio-from')
+
+    expect(planned?.volume).toBe(0)
+    expect(planned?.volumeAnimation?.keyframes).toHaveLength(2)
+  })
+
+  test('writes animated clip gains into caller-owned audio-rate scratch state', () => {
+    const gains = { volume: 0, balance: 0, leftGain: 0, rightGain: 0 }
+    const identity = gains
+    writeClipAudioGainsAtLocalFrame({
+      volume: 0,
+      balance: 0,
+      volumeAnimation: {
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 0, easing: { type: 'linear' } },
+          { frame: 2, value: 1, easing: { type: 'linear' } },
+        ],
+      },
+      balanceAnimation: {
+        property: 'balance',
+        keyframes: [
+          { frame: 0, value: -1, easing: { type: 'linear' } },
+          { frame: 2, value: 1, easing: { type: 'linear' } },
+        ],
+      },
+    }, 1, gains)
+
+    expect(gains).toBe(identity)
+    expect(gains).toEqual({ volume: 0.5, balance: 0, leftGain: 1, rightGain: 1 })
+  })
+
+  test('rejects invalid audio animation once at the planning boundary', () => {
+    const input = fixture()
+    input.doc.tracks[1].clips[0].animation = {
+      tracks: [{
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 1, easing: { type: 'linear' } },
+          { frame: 8, value: 3, easing: { type: 'linear' } },
+        ],
+      }],
+      effectTracks: [],
+    }
+
+    expect(() => createTimelineAudioMixPlan(input.doc, input.catalog))
+      .toThrow(/volume animation: volume keyframe value must be from 0 to 2/)
+  })
+
+  test('includes track and master mixer buses with authored gains', () => {
+    const input = fixture()
+    input.doc.tracks[1].volume = 0.5
+    input.doc.tracks[1].balance = -1
+    input.doc.tracks[2].muted = true
+    input.doc.masterAudio = { volume: 0.8, balance: 1, muted: false }
+
+    const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+
+    expect(plan.tracks).toEqual([
+      {
+        trackId: 'A-from',
+        volume: 0.5,
+        balance: -1,
+        leftGain: 1,
+        rightGain: 0,
+        audioEffects: [],
+      },
+      {
+        trackId: 'A-to',
+        volume: 1,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        audioEffects: [],
+      },
+    ])
+    expect(plan.master).toEqual({
+      volume: 0.8,
+      balance: 1,
+      leftGain: 0,
+      rightGain: 1,
+      muted: false,
+      audioEffects: [],
+    })
+    expect(plan.clips.some((item) => item.trackId === 'A-to')).toBe(false)
+  })
+
+  test('attaches clip, track, and master audio-effect stacks to the mix plan', () => {
+    const input = fixture()
+    const clipEffect = {
+      id: 'afx-clip',
+      type: 'builtin.eq',
+      version: 1,
+      enabled: true,
+      params: { band1Gain: 0 },
+    }
+    const trackEffect = {
+      id: 'afx-track',
+      type: 'builtin.compressor',
+      version: 1,
+      enabled: true,
+      params: { ratio: 1 },
+    }
+    const masterEffect = {
+      id: 'afx-master',
+      type: 'builtin.limiter',
+      version: 1,
+      enabled: true,
+      params: { ceilingDb: 0 },
+    }
+    input.doc.tracks[1].clips[0].audioEffects = [clipEffect]
+    input.doc.tracks[1].audioEffects = [trackEffect]
+    input.doc.masterAudio = {
+      volume: 1,
+      balance: 0,
+      muted: false,
+      audioEffects: [masterEffect],
+    }
+
+    const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+    const clipPlan = plan.clips.find((item) => item.clipId === input.doc.tracks[1].clips[0].id)
+
+    expect(clipPlan?.audioEffects).toEqual([clipEffect])
+    expect(plan.tracks.find((item) => item.trackId === 'A-from')?.audioEffects).toEqual([
+      trackEffect,
+    ])
+    expect(plan.master.audioEffects).toEqual([masterEffect])
   })
 })
 

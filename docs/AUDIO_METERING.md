@@ -23,6 +23,9 @@ audio-rate React subscription and the meter loop never advances playback.
 
 - Sample peak is measured independently for left and right; master is the
   greater channel peak. Stereo RMS remains available to existing diagnostics.
+- Mixer strips add the same peak/ballistics per audio track after that
+  track's fader and pan, before the master bus. React reads
+  `audioMeterStore.trackReadouts`; it never samples Web Audio itself.
 - The display floor is -60 dBFS, the overload boundary is 0 dBFS, and the
   display ceiling is +6 dBFS.
 - Attack is immediate. Release is 18 dB per second.

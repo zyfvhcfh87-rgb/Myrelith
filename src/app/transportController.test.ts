@@ -149,7 +149,7 @@ function makeCrossfadeAudibleDoc(): TimelineDoc {
   }]
   return {
     ...makeDoc(),
-    schemaVersion: 15,
+    schemaVersion: 18,
     tracks: [
       videoTrack,
       makeTrack('A-from', [audioFrom], 'audio'),
@@ -291,7 +291,7 @@ function deferred<T>() {
 /** One 120-frame clip at 30fps → duration 120, last frame 119. */
 function makeDoc(durationFrames = 120): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 18,
     id: 'doc-transport',
     name: 'transport fixture',
     frameRate: { num: 30, den: 1 },

@@ -1,9 +1,11 @@
 import type { Clip, MediaAsset, SourceTimeMap, TimeRange, TimelineDoc, TrackId } from '../schema';
-import { clipAnimation, clipAnimationKeyframeCount, clipAnimationValidationError, cloneClipAnimation, defaultClipAnimation, documentAnimationKeyframeGrowthAllowed, effectAnimationTracks } from '../clipAnimation';
+import { clipAnimation, clipAnimationKeyframeCount, clipAnimationKindError, clipAnimationValidationError, cloneClipAnimation, defaultClipAnimation, documentAnimationKeyframeGrowthAllowed } from '../clipAnimation';
 import { clipAudioSettings, clipAudioSettingsValidationError, clipVisualSettings, clipVisualSettingsValidationError, defaultClipAudioSettings, defaultClipVisualSettings, transformScaleValidationError } from '../clipInspector';
 import { defaultTextProps, proceduralTextAssetId, textOverlayName, textPropsValidationError } from '../textOverlay';
 import { DEFAULT_BLEND_MODE } from '../blendModes';
 import { effectCollectionAppendBudgetError } from '../effectBounds';
+import { audioEffectCollectionAppendBudgetError, clipAudioEffects } from '../audioEffectBounds';
+import { cloneAudioEffectStack } from '../audioEffectStack';
 import { clipSourceTimeMap, cloneSourceTimeMap, defaultSourceTimeMap, sourceRangeForMap, sourceTimeMapValidationError, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
 import { byStart, locateClip, newId, overlapsAny, reconcileTransitions, reject, withTrack } from './operationInternals';
 
@@ -54,6 +56,7 @@ export function clipFromAssetRange(
     audio: defaultClipAudioSettings(),
     animation: defaultClipAnimation(),
     effects: [],
+    audioEffects: [],
     ...(linkGroupId ? { linkGroupId } : {}),
   }
 }
@@ -120,6 +123,7 @@ export function createTextClip(
     audio: defaultClipAudioSettings(),
     animation: defaultClipAnimation(),
     effects: [],
+    audioEffects: [],
     text,
   }
 }
@@ -250,12 +254,12 @@ export function insertClip(
   if (clip.text !== undefined && track.kind !== 'video') {
     return reject(doc, op, 'text clips can only be placed on video tracks')
   }
-  if (
-    (animation.tracks.length > 0 || effectAnimationTracks(animation).length > 0)
-    && (track.kind !== 'video' || clip.text !== undefined)
-  ) {
-    return reject(doc, op, 'keyframes are supported only on visual media clips')
-  }
+  const animationKindError = clipAnimationKindError(
+    track.kind,
+    clip.text !== undefined,
+    animation,
+  )
+  if (animationKindError) return reject(doc, op, animationKindError)
 
   if (locateClip(doc, clip.id)) {
     return reject(doc, op, `clip id ${clip.id} already exists in the document`)
@@ -265,6 +269,11 @@ export function insertClip(
   }
   const effectBudgetError = effectCollectionAppendBudgetError(doc, clip.effects)
   if (effectBudgetError) return reject(doc, op, effectBudgetError)
+  const audioEffectBudgetError = audioEffectCollectionAppendBudgetError(
+    doc,
+    clipAudioEffects(clip),
+  )
+  if (audioEffectBudgetError) return reject(doc, op, audioEffectBudgetError)
   if (!documentAnimationKeyframeGrowthAllowed(
     doc,
     clipAnimationKeyframeCount(animation),
@@ -283,6 +292,7 @@ export function insertClip(
     audio: { ...clipAudioSettings(clip) },
     animation: cloneClipAnimation(animation),
     effects: clip.effects.map((e) => ({ ...e, params: { ...e.params } })),
+    audioEffects: cloneAudioEffectStack(clip.audioEffects),
     ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
   }
 

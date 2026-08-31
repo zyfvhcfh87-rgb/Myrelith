@@ -46,6 +46,52 @@ interface DecodedPcmChunk {
   channels: readonly Float32Array[]
 }
 
+function throwIfRequestAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return
+  if (typeof signal.throwIfAborted === 'function') signal.throwIfAborted()
+  throw new DOMException('Audio decode cancelled', 'AbortError')
+}
+
+function abortable<T>(
+  pending: Promise<T>,
+  signal: AbortSignal | undefined,
+  releaseLateValue?: (value: T) => void,
+): Promise<T> {
+  if (!signal) return pending
+  throwIfRequestAborted(signal)
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const abort = (): void => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', abort)
+      reject(signal.reason ?? new DOMException('Audio decode cancelled', 'AbortError'))
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    pending.then(
+      (value) => {
+        signal.removeEventListener('abort', abort)
+        if (settled) {
+          try {
+            releaseLateValue?.(value)
+          } catch {
+            // Cancellation already won. Best-effort release cannot reclassify it.
+          }
+          return
+        }
+        settled = true
+        resolve(value)
+      },
+      (cause) => {
+        signal.removeEventListener('abort', abort)
+        if (settled) return
+        settled = true
+        reject(cause)
+      },
+    )
+  })
+}
+
 function pcmChunkEnd(chunk: DecodedPcmChunk): number {
   return chunk.timestampSec + chunk.frameCount / chunk.sampleRate
 }
@@ -89,6 +135,12 @@ function copyDecodedSample(sample: AudioSample): DecodedPcmChunk {
   }
 }
 
+function closeDecodedStep(
+  step: IteratorResult<AudioSample, void>,
+): void {
+  if (!step.done) step.value.close()
+}
+
 class MediabunnyAudioClipReader implements ExportAudioClipReader {
   private readonly iterator: AsyncGenerator<AudioSample, void, unknown>
   private readonly request: ExportAudioClipRequest
@@ -100,6 +152,9 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
   private iteratorDone = false
   private heardDecodedPcm = false
   private closePromise: Promise<void> | null = null
+  private readonly onAbort = (): void => {
+    void this.close().catch(() => {})
+  }
 
   private incompleteSource(sample: number, detail: string): MediaAssetRuntimeError {
     return exportAssetError(
@@ -122,13 +177,19 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
     this.request = request
     this.onClosed = onClosed
     this.nextSourceSample = request.startSample
+    request.signal?.addEventListener('abort', this.onAbort, { once: true })
   }
 
   private async pullChunk(): Promise<DecodedPcmChunk | null> {
+    throwIfRequestAborted(this.request.signal)
     if (this.iteratorDone) return null
     let step: Awaited<ReturnType<typeof this.iterator.next>>
     try {
-      step = await this.iterator.next()
+      step = await abortable(
+        this.iterator.next(),
+        this.request.signal,
+        closeDecodedStep,
+      )
     } catch (cause) {
       throw exportAssetError(
         this.request.assetId,
@@ -140,6 +201,13 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
     if (step.done) {
       this.iteratorDone = true
       return null
+    }
+    if (this.request.signal?.aborted) {
+      try {
+        step.value.close()
+      } finally {
+        throwIfRequestAborted(this.request.signal)
+      }
     }
     try {
       return copyDecodedSample(step.value)
@@ -181,6 +249,7 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
   }
 
   async read(sampleCount: number): Promise<readonly Float32Array[]> {
+    throwIfRequestAborted(this.request.signal)
     if (this.closePromise) throw new Error('Audio clip reader is closed')
     if (!Number.isSafeInteger(sampleCount) || sampleCount <= 0) {
       throw new RangeError('Audio read size must be a positive safe integer')
@@ -191,6 +260,7 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
     const epsilon = 1e-10
 
     for (let outputIndex = 0; outputIndex < sampleCount; outputIndex++) {
+      throwIfRequestAborted(this.request.signal)
       const sourceSample = this.nextSourceSample++
       if (sourceSample >= this.request.endSample) {
         this.nextSourceSample += sampleCount - outputIndex - 1
@@ -305,6 +375,7 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
   close(): Promise<void> {
     if (this.closePromise) return this.closePromise
     this.closePromise = (async () => {
+      this.request.signal?.removeEventListener('abort', this.onAbort)
       try {
         if (!this.iteratorDone) {
           this.iteratorDone = true
@@ -460,6 +531,7 @@ export function createMediabunnyExportAudioSource(
   const openClip = async (
     request: ExportAudioClipRequest,
   ): Promise<ExportAudioClipReader> => {
+    throwIfRequestAborted(request.signal)
     if (closed) throw new Error('Export audio source is closed')
     if (
       !Number.isSafeInteger(request.startSample) ||
@@ -477,6 +549,7 @@ export function createMediabunnyExportAudioSource(
     }
 
     const asset = await openAsset(request.assetId)
+    throwIfRequestAborted(request.signal)
     if (closed) throw new Error('Export audio source is closed')
     let iterator: ReturnType<AudioSampleSink['samples']>
     try {

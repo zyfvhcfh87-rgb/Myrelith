@@ -18,6 +18,7 @@ import type {
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { splitClipAtFrame, trimClip } from '../domain/operations'
 import { docDurationFrames } from '../domain/selectors'
+import { createNoiseGateEffect } from '../domain/audioEffectStack'
 import {
   audioSampleBoundary,
   EXPORT_AUDIO_BLOCK_SAMPLES,
@@ -96,7 +97,7 @@ function makeDoc(
   audioSampleRate = 48_000,
 ): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 18,
     id: 'doc',
     name: 'Audio export test',
     frameRate,
@@ -245,7 +246,7 @@ function crossfadeFixture(options: {
         options.frameRate ?? { num: 1, den: 1 },
         options.audioSampleRate ?? 4_096,
       ),
-      schemaVersion: 15,
+      schemaVersion: 18,
     },
     catalog: new Map(
       [...new Set(assetIds)].map((assetId) => [assetId, exactBounds()]),
@@ -820,6 +821,226 @@ describe('TimelineAudioMixer selection and mapping', () => {
       expect.objectContaining({ requireComplete: true }),
     )
     await mixer.close()
+  })
+
+  test('applies linear volume automation on the sample grid', async () => {
+    const clip = makeClip('ramped', 0, 2, { volume: 0 })
+    clip.animation = {
+      tracks: [{
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 0, easing: { type: 'linear' } },
+          { frame: 2, value: 1, easing: { type: 'linear' } },
+        ],
+      }],
+      effectTracks: [],
+    }
+    const doc = makeDoc(
+      [makeTrack('A1', 'audio', [clip])],
+      { num: 1, den: 1 },
+      8,
+    )
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    const samples: number[] = []
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        samples.push(...block.channels[0])
+      })
+      await mixer.writeFrame(1, async (block) => {
+        samples.push(...block.channels[0])
+      })
+    } finally {
+      await mixer.close()
+    }
+
+    expect(samples[0]).toBeCloseTo(0)
+    expect(samples[4]).toBeCloseTo(0.25, 5)
+    expect(samples[8]).toBeCloseTo(0.5, 5)
+  })
+
+  test('maps clip automation across split PCM blocks using the frame sample span', async () => {
+    const clip = makeClip('ramped', 0, 1, { volume: 0 })
+    clip.animation = {
+      tracks: [{
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 0, easing: { type: 'linear' } },
+          { frame: 1, value: 1, easing: { type: 'linear' } },
+        ],
+      }],
+      effectTracks: [],
+    }
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])])
+    const frameSamples = audioSampleBoundary(1, doc)
+    expect(frameSamples).toBeGreaterThan(EXPORT_AUDIO_BLOCK_SAMPLES)
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    const samples: number[] = []
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        samples.push(...block.channels[0])
+      })
+    } finally {
+      await mixer.close()
+    }
+
+    expect(h.readers[0].readCounts).toEqual([
+      EXPORT_AUDIO_BLOCK_SAMPLES,
+      frameSamples - EXPORT_AUDIO_BLOCK_SAMPLES,
+    ])
+    expect(samples).toHaveLength(frameSamples)
+    expect(samples[0]).toBeCloseTo(0)
+    // A block-local i/sampleCount ramp would restart at 0 on the 576-sample tail.
+    expect(samples[EXPORT_AUDIO_BLOCK_SAMPLES]).toBeCloseTo(
+      EXPORT_AUDIO_BLOCK_SAMPLES / frameSamples,
+      5,
+    )
+    expect(samples[frameSamples - 1]).toBeCloseTo(
+      (frameSamples - 1) / frameSamples,
+      5,
+    )
+  })
+
+  test('applies track gain after clip envelopes and master after the sum', async () => {
+    const clip = makeClip('tone', 0, 1, { volume: 0.5 })
+    const track = makeTrack('A1', 'audio', [clip])
+    track.volume = 0.5
+    track.balance = -1
+    const doc = makeDoc(
+      [track],
+      { num: 1, den: 1 },
+      8,
+    )
+    doc.masterAudio = { volume: 0.5, balance: 0, muted: false }
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    let left = 0
+    let right = 0
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        left = block.channels[0][0]
+        right = block.channels[1][0]
+      })
+    } finally {
+      await mixer.close()
+    }
+
+    // clip 0.5 * track 0.5 * master 0.5 = 0.125, full left, silent right
+    expect(left).toBeCloseTo(0.125)
+    expect(right).toBeCloseTo(0)
+  })
+
+  test('master mute zeros the mix after the track sum', async () => {
+    const track = makeTrack('A1', 'audio', [makeClip('tone', 0, 1)])
+    const doc = makeDoc([track], { num: 1, den: 1 }, 8)
+    doc.masterAudio = { volume: 1, balance: 0, muted: true }
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    let left = 1
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        left = block.channels[0][0]
+      })
+    } finally {
+      await mixer.close()
+    }
+    expect(left).toBe(0)
+  })
+
+  test('applies clip EQ after envelopes and before the track sum', async () => {
+    const clip = makeClip('tone', 0, 1)
+    clip.audioEffects = [{
+      id: 'afx-eq',
+      type: 'builtin.eq',
+      version: 1,
+      enabled: true,
+      params: {
+        band1Type: 'peak',
+        band1Freq: 1_000,
+        band1Q: 1,
+        band1Gain: 6,
+        band2Type: 'peak',
+        band2Freq: 400,
+        band2Q: 1,
+        band2Gain: 0,
+        band3Type: 'peak',
+        band3Freq: 2_500,
+        band3Q: 1,
+        band3Gain: 0,
+        band4Type: 'peak',
+        band4Freq: 8_000,
+        band4Q: 1,
+        band4Gain: 0,
+      },
+    }]
+    const track = makeTrack('A1', 'audio', [clip])
+    const sampleRate = 8_000
+    const doc = makeDoc([track], { num: 1, den: 1 }, sampleRate)
+    const h = makeSource((_request, sampleCount, offset) => {
+      const left = new Float32Array(sampleCount)
+      const step = 2 * Math.PI * 1_000 / sampleRate
+      for (let i = 0; i < sampleCount; i++) left[i] = Math.sin((offset + i) * step) * 0.2
+      return [left, left.slice()]
+    })
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    const samples: number[] = []
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        samples.push(...block.channels[0])
+      })
+    } finally {
+      await mixer.close()
+    }
+    let peak = 0
+    for (let i = 200; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]))
+    expect(peak).toBeGreaterThan(0.2 * 1.5)
+    expect(peak).toBeLessThan(0.2 * 2.4)
+  })
+
+  test('advances stateful track effects through a silent timeline gap', async () => {
+    const first = makeClip('first', 0, 1)
+    const second = makeClip('second', 2, 1)
+    const track = makeTrack('A1', 'audio', [first, second])
+    const gate = createNoiseGateEffect('track-gate')
+    gate.params.thresholdDb = -30
+    gate.params.attackMs = 0.1
+    gate.params.holdMs = 0
+    gate.params.releaseMs = 1
+    gate.params.rangeDb = 80
+    track.audioEffects = [gate]
+    const doc = makeDoc([track], { num: 1, den: 1 }, 8_000)
+    const h = makeSource((request, sampleCount) => {
+      const amplitude = request.clipId === 'first' ? 0.5 : 0.001
+      return [filled(sampleCount, amplitude), filled(sampleCount, amplitude)]
+    })
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    let secondStart = 1
+    try {
+      await mixer.writeFrame(0, async () => undefined)
+      await mixer.writeFrame(1, async (block) => {
+        expect(block.channels[0].every((sample) => sample === 0)).toBe(true)
+      })
+      await mixer.writeFrame(2, async (block) => {
+        secondStart = block.channels[0][0]
+      })
+    } finally {
+      await mixer.close()
+    }
+
+    expect(Math.abs(secondStart)).toBeLessThan(0.000001)
   })
 })
 

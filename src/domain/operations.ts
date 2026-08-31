@@ -66,15 +66,22 @@ export type {
   ClipAudioSettingsPatch,
   TextPropsPatch,
 } from './operations/audioText'
-export { updateClipAudio, updateTextClip } from './operations/audioText'
-export type { TrackFlagsPatch } from './operations/tracks'
+export { updateClipAudio, updateClipAudioAtFrame, updateTextClip } from './operations/audioText'
+export type {
+  MasterAudioPatch,
+  TrackFlagsPatch,
+  TrackMixerPatch,
+} from './operations/tracks'
 export {
   MAX_CLIP_VOLUME,
   addTrack,
   removeTrack,
   renameTrack,
   setClipVolume,
+  setMasterAudio,
+  normalizeMasterLoudness,
   setTrackFlags,
+  setTrackMixer,
 } from './operations/tracks'
 export {
   addEffect,
@@ -85,3 +92,13 @@ export {
   updateEffectParams,
   updateEffectParamsAtFrame,
 } from './operations/effects'
+export type { AudioEffectTarget } from './operations/audioEffects'
+export {
+  addAudioEffect,
+  applyAudioEffectPreset,
+  removeAudioEffect,
+  reorderAudioEffect,
+  resetAudioEffect,
+  setAudioEffectEnabled,
+  updateAudioEffectParams,
+} from './operations/audioEffects'

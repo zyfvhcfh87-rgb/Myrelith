@@ -4,7 +4,11 @@
  */
 import { lazy, useEffect, useState, type KeyboardEvent } from 'react'
 import { FileAudio, FileVideo } from '@phosphor-icons/react'
-import { resolveClipAnimationAtFrame } from '../domain/clipAnimation'
+import {
+  ANIMATABLE_AUDIO_PROPERTIES,
+  ANIMATABLE_VISUAL_PROPERTIES,
+  resolveClipAnimationAtFrame,
+} from '../domain/clipAnimation'
 import { linkedPartners } from '../domain/linking'
 import type { Clip } from '../domain/schema'
 import { findClip, trackOfClip } from '../domain/selectors'
@@ -12,6 +16,8 @@ import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
 import AudioInspectorSection from './inspector/AudioInspectorSection'
+import AudioEffectStackInspector from './AudioEffectStackInspector'
+import LoudnessInspectorSection from './inspector/LoudnessInspectorSection'
 import LinkSelectionControls from './inspector/LinkSelectionControls'
 import TextOverlayFields from './inspector/TextOverlayFields'
 import TimingInspectorSection from './inspector/TimingInspectorSection'
@@ -73,13 +79,20 @@ export default function Inspector() {
 
   if (!clip) {
     return (
-      <div className="panel-placeholder">
+      <div className="panel-placeholder inspector-empty-state">
         <span className="placeholder-title inspector-empty-title">Inspector</span>
         <LinkSelectionControls key="linking-controls" />
         <span className="placeholder-note">
           <span>select a clip to edit it</span>
           <small> or choose an adjustment layer</small>
         </span>
+        <AudioEffectStackInspector
+          doc={timelineDoc}
+          target={{ kind: 'master' }}
+          locked={false}
+          heading="Master audio effects"
+        />
+        <LoudnessInspectorSection />
       </div>
     )
   }
@@ -97,6 +110,11 @@ export default function Inspector() {
   const audioLocked = audioClip === null
     ? false
     : (trackOfClip(timelineDoc, audioClip.id)?.locked ?? true)
+  const audioEffectClip = audioClip ?? videoClip
+  const audioEffectTrack = audioEffectClip
+    ? trackOfClip(timelineDoc, audioEffectClip.id) ?? null
+    : null
+  const audioEffectLocked = audioEffectClip === audioClip ? audioLocked : videoLocked
   const resolvedVideoClip = videoClip
     ? resolveClipAnimationAtFrame(videoClip, playheadFrame)
     : null
@@ -192,6 +210,9 @@ export default function Inspector() {
                     clip={videoClip}
                     locked={videoLocked}
                     playheadFrame={playheadFrame}
+                    properties={audioClip
+                      ? ANIMATABLE_VISUAL_PROPERTIES
+                      : [...ANIMATABLE_VISUAL_PROPERTIES, ...ANIMATABLE_AUDIO_PROPERTIES]}
                   />
                 </LazySurfaceBoundary>
               )}
@@ -200,6 +221,42 @@ export default function Inspector() {
       {audioClip && (
         <AudioInspectorSection clip={audioClip} locked={audioLocked} />
       )}
+      {audioClip && (
+        <LazySurfaceBoundary
+          loadingLabel="Loading animation curves…"
+          failureTitle="Animation curves could not load"
+        >
+          <AnimationCurveEditor
+            clip={audioClip}
+            locked={audioLocked}
+            playheadFrame={playheadFrame}
+            properties={ANIMATABLE_AUDIO_PROPERTIES}
+          />
+        </LazySurfaceBoundary>
+      )}
+      {audioEffectClip && (
+        <AudioEffectStackInspector
+          doc={timelineDoc}
+          target={{ kind: 'clip', clipId: audioEffectClip.id }}
+          locked={audioEffectLocked}
+          heading="Clip audio effects"
+        />
+      )}
+      {audioEffectTrack && (
+        <AudioEffectStackInspector
+          doc={timelineDoc}
+          target={{ kind: 'track', trackId: audioEffectTrack.id }}
+          locked={audioEffectTrack.locked}
+          heading={`${audioEffectTrack.name} audio effects`}
+        />
+      )}
+      <AudioEffectStackInspector
+        doc={timelineDoc}
+        target={{ kind: 'master' }}
+        locked={false}
+        heading="Master audio effects"
+      />
+      <LoudnessInspectorSection />
     </div>
   )
 }

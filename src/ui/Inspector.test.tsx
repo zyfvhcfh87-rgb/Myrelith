@@ -21,6 +21,8 @@ import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { useTransportStore } from '../state/transportStore'
 import { initSelectionReconciliation } from '../app/selectionReconciliationController'
 import { projectPreviewEffectStatuses } from '../app/previewEffectStatus'
+import { projectAudioEffectStatuses } from '../app/audioEffectStatus'
+import { useAudioEffectStatusStore } from '../state/audioEffectStatusStore'
 import {
   resetDocumentStoreForTest,
   resetTransportStoreForTest,
@@ -49,7 +51,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 18,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -101,6 +103,13 @@ function makeLinkedFixture(): TimelineDoc {
 const doc = () => useDocumentStore.getState()
 const transport = () => useTransportStore.getState()
 const clipA = () => doc().doc.tracks[0].clips.find((c) => c.id === 'clipA') as Clip
+const clipAAudio = () => doc().doc.tracks[1].clips.find((c) => c.id === 'clipD') as Clip
+
+function projectAudioEffectStatusesNow(): void {
+  useAudioEffectStatusStore.getState().setStatuses(
+    projectAudioEffectStatuses(doc().doc),
+  )
+}
 
 function projectEffectStatuses(canvasFilter: boolean): void {
   const timeline = doc().doc
@@ -130,6 +139,7 @@ beforeEach(() => {
   resetTransportStoreForTest()
   resetDocumentStoreForTest(makeDoc())
   usePreviewStatusStore.getState().resetPreviewStatus()
+  useAudioEffectStatusStore.getState().resetAudioEffectStatuses()
   useMediaStore.getState().clearAssets()
   warnSpy.mockClear()
 })
@@ -1285,6 +1295,79 @@ describe('manual A/V link controls (Issue 12 Slice 6)', () => {
     expect(doc().doc.tracks[0].clips[0].linkGroupId).toBeDefined()
     expect(doc().doc.tracks[1].clips[0].linkGroupId).toBeDefined()
     expect(doc().past).toHaveLength(1)
+  })
+
+  test('authors clip, track, and master audio-effect stacks from Inspector cards', async () => {
+    const user = userEvent.setup()
+    const uuid = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000a1')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000a2')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000a3')
+    transport().setSelectedClip('clipD')
+    render(<Inspector />)
+
+    const clipSection = screen.getByRole('heading', { name: 'Clip audio effects' })
+      .closest('section')
+    expect(clipSection).toBeInstanceOf(HTMLElement)
+    if (!(clipSection instanceof HTMLElement)) return
+    await user.click(within(clipSection).getByRole('button', { name: 'Add EQ' }))
+    expect(clipAAudio()?.audioEffects?.map((effect) => effect.id)).toEqual([
+      'afx_00000000-0000-4000-8000-0000000000a1',
+    ])
+
+    act(() => projectAudioEffectStatusesNow())
+    const gain = screen.getByTestId(
+      'inspector-audio-effect-band2Gain-afx_00000000-0000-4000-8000-0000000000a1',
+    )
+    fireEvent.change(gain, { target: { value: '3' } })
+    fireEvent.keyDown(gain, { key: 'Enter' })
+    expect(clipAAudio()?.audioEffects?.[0].params.band2Gain).toBe(3)
+
+    const masterSection = screen.getByRole('heading', { name: 'Master audio effects' })
+      .closest('section')
+    expect(masterSection).toBeInstanceOf(HTMLElement)
+    if (!(masterSection instanceof HTMLElement)) return
+    await user.click(within(masterSection).getByRole('button', { name: 'Add limiter' }))
+    await user.click(within(masterSection).getByRole('button', { name: 'Add noise gate' }))
+    expect(doc().doc.masterAudio?.audioEffects?.map((effect) => effect.id)).toEqual([
+      'afx_00000000-0000-4000-8000-0000000000a2',
+      'afx_00000000-0000-4000-8000-0000000000a3',
+    ])
+    expect(screen.getByTestId(
+      'inspector-audio-effect-thresholdDb-afx_00000000-0000-4000-8000-0000000000a3',
+    )).toBeEnabled()
+    await user.click(screen.getByTestId(
+      'inspector-audio-effect-enabled-afx_00000000-0000-4000-8000-0000000000a1',
+    ))
+    expect(clipAAudio()?.audioEffects?.[0].enabled).toBe(false)
+    uuid.mockRestore()
+  })
+
+  test('applies a Voice preset and shows derived loudness controls', async () => {
+    const user = userEvent.setup()
+    const uuid = vi.spyOn(crypto, 'randomUUID')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e1')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e2')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000e3')
+    transport().setSelectedClip('clipD')
+    render(<Inspector />)
+
+    const masterSection = screen.getByRole('heading', { name: 'Master audio effects' })
+      .closest('section')
+    expect(masterSection).toBeInstanceOf(HTMLElement)
+    if (!(masterSection instanceof HTMLElement)) return
+    await user.click(within(masterSection).getByRole('button', { name: 'Voice preset' }))
+    expect(doc().doc.masterAudio?.audioEffects?.map((effect) => effect.type)).toEqual([
+      'builtin.eq',
+      'builtin.compressor',
+      'builtin.limiter',
+    ])
+    expect(screen.getByRole('heading', { name: 'Loudness' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Loudness measurement range' }))
+      .toHaveValue('timeline')
+    expect(screen.getByRole('button', { name: 'Measure' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Normalize master to/ })).toBeDisabled()
+    uuid.mockRestore()
   })
 
   test('a raced valid selection never links a different pair than the rendered target', () => {

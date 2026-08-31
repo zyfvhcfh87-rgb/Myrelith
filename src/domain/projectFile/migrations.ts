@@ -447,6 +447,69 @@ function migrateAdjustmentItems(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 15, tracks }
 }
 
+/** Upgrade schema-15 documents so volume/balance keys are legal animation properties. */
+function migrateClipAudioAutomation(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  return { ...document, schemaVersion: 16 }
+}
+
+/** Upgrade schema-16 documents with track/master mixer defaults. */
+function migrateAudioMixer(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    return {
+      ...track,
+      volume: typeof track.volume === 'number' ? track.volume : 1,
+      balance: typeof track.balance === 'number' ? track.balance : 0,
+    }
+  })
+  const authoredMaster = document.masterAudio === undefined
+    ? null
+    : record(document.masterAudio, '$.document.masterAudio')
+  const masterAudio = {
+    volume: typeof authoredMaster?.volume === 'number' ? authoredMaster.volume : 1,
+    balance: typeof authoredMaster?.balance === 'number' ? authoredMaster.balance : 0,
+    muted: typeof authoredMaster?.muted === 'boolean' ? authoredMaster.muted : false,
+  }
+  return { ...document, schemaVersion: 17, tracks, masterAudio }
+}
+
+/** Upgrade schema-17 documents with empty clip/track/master audio-effect stacks. */
+function migrateAudioEffectStacks(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const trackPath = `$.document.tracks[${trackIndex}]`
+    const track = record(trackValue, trackPath)
+    boundedArray(track.clips, `${trackPath}.clips`, PROJECT_FILE_LIMITS.maxClips)
+    return {
+      ...track,
+      audioEffects: Array.isArray(track.audioEffects) ? track.audioEffects : [],
+      clips: track.clips.map((clipValue, clipIndex) => {
+        const clip = record(clipValue, `${trackPath}.clips[${clipIndex}]`)
+        return {
+          ...clip,
+          audioEffects: Array.isArray(clip.audioEffects) ? clip.audioEffects : [],
+        }
+      }),
+    }
+  })
+  const authoredMaster = document.masterAudio === undefined
+    ? null
+    : record(document.masterAudio, '$.document.masterAudio')
+  const masterAudio = {
+    volume: typeof authoredMaster?.volume === 'number' ? authoredMaster.volume : 1,
+    balance: typeof authoredMaster?.balance === 'number' ? authoredMaster.balance : 0,
+    muted: typeof authoredMaster?.muted === 'boolean' ? authoredMaster.muted : false,
+    audioEffects: Array.isArray(authoredMaster?.audioEffects)
+      ? authoredMaster.audioEffects
+      : [],
+  }
+  return { ...document, schemaVersion: 18, tracks, masterAudio }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -507,6 +570,15 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 14) {
     migrated = migrateAdjustmentItems(migrated)
+  }
+  if (migrated.schemaVersion === 15) {
+    migrated = migrateClipAudioAutomation(migrated)
+  }
+  if (migrated.schemaVersion === 16) {
+    migrated = migrateAudioMixer(migrated)
+  }
+  if (migrated.schemaVersion === 17) {
+    migrated = migrateAudioEffectStacks(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {

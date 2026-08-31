@@ -103,8 +103,12 @@ test('recovers an unsaved project after a fresh page and clears it on exit', asy
     name: `Recover ${PROJECT_NAME}`,
     exact: true,
   })).toHaveCount(0)
-  await expect(cleanPage.getByText('No recent projects or recovery copies yet.'))
+  await expect(cleanPage.getByText('No recent project shortcuts yet.', { exact: true }))
     .toBeVisible()
+  await expect(cleanPage.getByRole('tab', {
+    name: 'Recovery copies, 0',
+    exact: true,
+  })).toBeVisible()
 
   expect(pageProblems).toEqual([])
 })

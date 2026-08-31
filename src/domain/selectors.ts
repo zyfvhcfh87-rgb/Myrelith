@@ -12,6 +12,7 @@ import type {
   Transition,
 } from './schema'
 import { clipAnimation } from './clipAnimation'
+import { clipAudioSettings } from './clipInspector'
 import { resolveCrossfadeGeometry } from './crossfadePlan'
 import { sourceFrameAtTimelineFrame, sourceTimeAudioPolicy } from './sourceTimeMap'
 import { rangeContains, rangeEnd } from './time'
@@ -136,6 +137,20 @@ export function clipContributesVisualOutput(clip: Clip): boolean {
   ))
 }
 
+/**
+ * True when this clip can contribute samples: enabled audio, authored gain,
+ * or a volume key that becomes audible.
+ */
+export function clipContributesAudioOutput(clip: Clip): boolean {
+  if (clip.text) return false
+  if (!clipAudioSettings(clip).enabled) return false
+  if (clip.volume > 0) return true
+  return clipAnimation(clip).tracks.some((track) => (
+    track.property === 'volume'
+    && track.keyframes.some((keyframe) => keyframe.value > 0)
+  ))
+}
+
 /** Visible video clips whose stacks contain a plugin-prefixed descriptor. */
 export function documentHasOutputPluginEffects(doc: TimelineDoc): boolean {
   return doc.tracks.some((track) => (
@@ -162,7 +177,7 @@ export function outputMediaAssetIds(
   if (includeAudio) {
     for (const track of audibleTracks(doc)) {
       for (const clip of track.clips) {
-        if (clip.text || clip.volume <= 0) continue
+        if (!clipContributesAudioOutput(clip)) continue
         const audioPolicy = sourceTimeAudioPolicy(clip)
         if (audioPolicy.status === 'supported') ids.add(clip.assetId)
       }

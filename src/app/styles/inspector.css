@@ -714,6 +714,13 @@
   text-transform: uppercase;
 }
 
+.inspector-effect-host-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
 .inspector-effect-status.is-ready {
   color: #b9eed2;
   background: #173b2b;
@@ -728,6 +735,18 @@
 .inspector-effect-params {
   display: grid;
   gap: 8px;
+}
+
+.inspector-audio-eq-band {
+  display: grid;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid #34465c;
+}
+
+.inspector-audio-eq-band:first-child {
+  border-top: 0;
+  padding-top: 0;
 }
 
 .inspector-effect-actions {

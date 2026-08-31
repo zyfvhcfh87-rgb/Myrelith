@@ -17,6 +17,13 @@ describe('audioMeterStore', () => {
         overloadHeld: { left: false, right: false, master: false },
         overloadLatched: { left: false, right: false, master: false },
       },
+      trackReadouts: {
+        A1: {
+          db: { left: -9, right: -12, master: -9 },
+          overloadHeld: { left: false, right: false, master: false },
+          overloadLatched: { left: false, right: false, master: false },
+        },
+      },
       sequence: 7,
       updatedAtMs: 700,
       sampleWindowSize: 256,
@@ -26,6 +33,7 @@ describe('audioMeterStore', () => {
       status: 'active',
       sequence: 7,
       readout: { db: { left: -6, right: -12, master: -6 } },
+      trackReadouts: { A1: { db: { left: -9, right: -12, master: -9 } } },
     })
   })
 

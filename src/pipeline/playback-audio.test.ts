@@ -15,6 +15,7 @@ import type {
   Track,
   Transition,
 } from '../domain/schema'
+import { createLimiterEffect } from '../domain/audioEffectStack'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import {
@@ -97,7 +98,7 @@ function makeTrack(
 
 function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 18,
     id: 'doc',
     name: 'Playback audio test',
     frameRate: F10,
@@ -167,7 +168,7 @@ function crossfadePlaybackFixture(
   videoTrack.transitions = [transition]
   return {
     doc: {
-      schemaVersion: 15,
+      schemaVersion: 18,
       id: 'crossfade-playback',
       name: 'Crossfade playback',
       frameRate: F10,
@@ -460,12 +461,14 @@ function makeWebAudioHarness(state: AudioContextState): {
   splitters: FakeChannelNode[]
   mergers: FakeChannelNode[]
   analysers: FakeAnalyserNode[]
+  processors: FakeChannelNode[]
 } {
   const gains: FakeGainNode[] = []
   const sources: FakeSourceNode[] = []
   const splitters: FakeChannelNode[] = []
   const mergers: FakeChannelNode[] = []
   const analysers: FakeAnalyserNode[] = []
+  const processors: FakeChannelNode[] = []
   const makeGain = (): FakeGainNode => ({
     gain: {
       value: 1,
@@ -532,8 +535,18 @@ function makeWebAudioHarness(state: AudioContextState): {
       Array.from({ length: numberOfChannels }, () => new Float32Array(length)),
       sampleRate,
     )),
+    createScriptProcessor: vi.fn(() => {
+      const node = {
+        onaudioprocess: null as ((event: AudioProcessingEvent) => void) | null,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+      }
+      processors.push(node)
+      return node
+    }),
+    sampleRate: 48_000,
   } as unknown as AudioContext
-  return { context, gains, sources, splitters, mergers, analysers }
+  return { context, gains, sources, splitters, mergers, analysers, processors }
 }
 
 describe('startTimelineAudioPlayback scheduling', () => {
@@ -1012,6 +1025,18 @@ describe('startTimelineAudioPlayback scheduling', () => {
     mutate((doc) => { delete doc.tracks[1].clips[0].linkGroupId })
     mutate((doc) => { doc.tracks[1].clips[0].volume = 0.5 })
     mutate((doc) => {
+      doc.tracks[1].clips[0].animation = {
+        tracks: [{
+          property: 'volume',
+          keyframes: [
+            { frame: 0, value: 0, easing: { type: 'linear' } },
+            { frame: 8, value: 1, easing: { type: 'linear' } },
+          ],
+        }],
+        effectTracks: [],
+      }
+    })
+    mutate((doc) => {
       doc.tracks[1].clips[0].audio = {
         enabled: true,
         balance: 0.25,
@@ -1021,6 +1046,29 @@ describe('startTimelineAudioPlayback scheduling', () => {
     })
     mutate((doc) => { doc.tracks[1].muted = true })
     mutate((doc) => { doc.tracks[1].solo = true })
+    mutate((doc) => { doc.tracks[1].volume = 0.4 })
+    mutate((doc) => { doc.tracks[1].balance = -0.5 })
+    mutate((doc) => {
+      doc.masterAudio = { volume: 0.8, balance: 0, muted: true }
+    })
+    mutate((doc) => {
+      doc.tracks[1].audioEffects = [{
+        id: 'afx-track',
+        type: 'builtin.eq',
+        version: 1,
+        enabled: true,
+        params: {},
+      }]
+    })
+    mutate((doc) => {
+      doc.tracks[1].clips[0].audioEffects = [{
+        id: 'afx-clip',
+        type: 'builtin.compressor',
+        version: 1,
+        enabled: true,
+        params: {},
+      }]
+    })
     for (const variant of variants) {
       expect(audioPlaybackPlanKey(variant, fixture.catalog)).not.toBe(baseline)
     }
@@ -1626,6 +1674,154 @@ describe('createWebAudioPlaybackOutput ownership', () => {
       h.analysers[1],
       1,
     )
+
+    output.stop()
+  })
+
+  test('applies master audio effects after master gain', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context, {
+      tracks: [{
+        trackId: 'A1',
+        volume: 1,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        audioEffects: [],
+      }],
+      master: {
+        volume: 0.5,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        muted: false,
+        audioEffects: [createLimiterEffect('afx-master-lim')],
+      },
+    })
+    expect(h.processors).toHaveLength(1)
+    expect(h.gains[0].connect).toHaveBeenCalledWith(h.processors[0])
+    expect(h.processors[0].connect).toHaveBeenCalledWith(h.splitters[0])
+    output.stop()
+  })
+
+  test('routes clips through track buses and reports per-strip peaks', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context, {
+      tracks: [{
+        trackId: 'A1',
+        volume: 0.5,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        audioEffects: [],
+      }],
+      master: {
+        volume: 0.8,
+        balance: 0,
+        leftGain: 1,
+        rightGain: 1,
+        muted: false,
+        audioEffects: [],
+      },
+    })
+    expect(h.analysers.length).toBeGreaterThan(2)
+    const buffer = { duration: 1, numberOfChannels: 2 } as AudioBuffer
+    output.schedule({
+      clipId: 'clip',
+      trackId: 'A1',
+      buffer,
+      timelineStartTime: 0,
+      when: 10,
+      offset: 0,
+      duration: 0.2,
+      volume: 1,
+      envelope: null,
+    })
+    expect(h.processors).toHaveLength(0)
+    const trackInput = h.gains.find((gain) => gain.gain.value === 0.5)
+    expect(trackInput).toBeDefined()
+    expect(h.gains.some((gain) =>
+      gain.connect.mock.calls.some((args) => args[0] === trackInput),
+    )).toBe(true)
+    h.analysers[0].samples = [0.2]
+    h.analysers[1].samples = [0.1]
+    const diagnostics = output.diagnostics()
+    expect(diagnostics.trackMeters).toEqual([
+      expect.objectContaining({ trackId: 'A1' }),
+    ])
+    output.stop()
+  })
+
+  test('applies clip gain and balance before stateful clip effects', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    const samples = new Float32Array(4_096).fill(1)
+    const limiter = createLimiterEffect('afx-clip-limiter')
+    limiter.params.ceilingDb = -6
+
+    output.schedule({
+      clipId: 'clip-with-input-gain',
+      buffer: makePlanarAudioBuffer([samples, samples.slice()], 48_000),
+      timelineStartTime: 0,
+      when: 10,
+      offset: 0,
+      duration: samples.length / 48_000,
+      volume: 0.25,
+      envelope: null,
+      balance: -1,
+      leftGain: 1,
+      rightGain: 0,
+      audioEffects: [limiter],
+    })
+
+    const processed = h.sources[0]?.buffer
+    expect(processed).not.toBeNull()
+    expect(processed?.getChannelData(0).at(-1)).toBeCloseTo(0.25, 5)
+    expect(processed?.getChannelData(1).at(-1)).toBeCloseTo(0, 7)
+    expect(h.gains[1]?.gain.value).toBe(1)
+    // The balance stage was baked ahead of DSP, so only the meter splitter exists.
+    expect(h.splitters).toHaveLength(1)
+
+    output.stop()
+  })
+
+  test('routes animated balance through the identity clip path', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    const samples = new Float32Array(8).fill(1)
+
+    output.schedule({
+      clipId: 'clip-with-animated-balance',
+      buffer: makePlanarAudioBuffer([samples, samples.slice()], 8),
+      timelineStartTime: 0,
+      when: 10,
+      offset: 0,
+      duration: 1,
+      volume: 1,
+      envelope: null,
+      balance: -1,
+      leftGain: 1,
+      rightGain: 0,
+      clipTimelineStartFrame: 0,
+      frameRate: { num: 1, den: 1 },
+      balanceAnimation: {
+        property: 'balance',
+        keyframes: [
+          { frame: 0, value: -1, easing: { type: 'linear' } },
+          { frame: 1, value: 1, easing: { type: 'linear' } },
+        ],
+      },
+    })
+
+    const curves = h.gains.flatMap((node) =>
+      node.gain.setValueCurveAtTime.mock.calls.map((call) => call[0] as Float32Array),
+    )
+    expect(curves).toHaveLength(2)
+    expect(curves[0][0]).toBeCloseTo(1, 7)
+    expect(curves[0].at(-1)).toBeCloseTo(0, 7)
+    expect(curves[1][0]).toBeCloseTo(0, 7)
+    expect(curves[1].at(-1)).toBeCloseTo(1, 7)
+    expect(h.processors).toHaveLength(0)
 
     output.stop()
   })

@@ -1,4 +1,5 @@
 import type { Effect, TimelineDoc } from '../schema';
+import { masterAudioSettings, trackBalance, trackVolume } from '../audioMixer';
 import { compareTimelineMarkers } from '../timelineMarkers';
 import { clipAnimation, cloneClipAnimation } from '../clipAnimation';
 import { clipAudioSettings, clipVisualSettings } from '../clipInspector';
@@ -98,6 +99,13 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
             enabled: effect.enabled,
             params: cloneEffectParams(effect.params),
           })),
+          audioEffects: (clip.audioEffects ?? []).map((effect) => ({
+            id: effect.id,
+            type: effect.type,
+            version: effect.version,
+            enabled: effect.enabled,
+            params: cloneEffectParams(effect.params),
+          })),
           ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
           ...(clip.linkGroupId === undefined ? {} : { linkGroupId: clip.linkGroupId }),
         })),
@@ -125,6 +133,15 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
         muted: track.muted,
         solo: track.solo,
         locked: track.locked,
+        volume: trackVolume(track),
+        balance: trackBalance(track),
+        audioEffects: (track.audioEffects ?? []).map((effect) => ({
+          id: effect.id,
+          type: effect.type,
+          version: effect.version,
+          enabled: effect.enabled,
+          params: cloneEffectParams(effect.params),
+        })),
       })),
       markers: [...(document.markers ?? [])]
         .sort(compareTimelineMarkers)
@@ -148,6 +165,21 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           text: item.text,
         })),
       })),
+      masterAudio: (() => {
+        const master = masterAudioSettings(document)
+        return {
+          volume: master.volume,
+          balance: master.balance,
+          muted: master.muted,
+          audioEffects: (master.audioEffects ?? []).map((effect) => ({
+            id: effect.id,
+            type: effect.type,
+            version: effect.version,
+            enabled: effect.enabled,
+            params: cloneEffectParams(effect.params),
+          })),
+        }
+      })(),
     },
     assets: project.assets
       .map((asset) => ({

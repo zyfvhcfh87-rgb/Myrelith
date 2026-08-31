@@ -7,6 +7,7 @@ import type { Clip, TimelineDoc, Track } from './schema'
 import {
   activeClipAt,
   audibleTracks,
+  clipContributesAudioOutput,
   clipContributesVisualOutput,
   clipSourceFrame,
   docDurationFrames,
@@ -56,7 +57,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 18,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -356,6 +357,28 @@ describe('outputMediaAssetIds', () => {
     expect([...outputMediaAssetIds(makeDoc([
       makeTrack('V1', 'video', [faded]),
     ]))]).toEqual(['video-faded'])
+  })
+
+  test('includes a zero-volume clip when its volume animation becomes audible', () => {
+    const faded = {
+      ...makeClip('fade-in', 0, 10),
+      assetId: 'audio-faded',
+      volume: 0,
+      animation: {
+        tracks: [{
+          property: 'volume' as const,
+          keyframes: [
+            { frame: 0, value: 0, easing: { type: 'linear' as const } },
+            { frame: 8, value: 1, easing: { type: 'linear' as const } },
+          ],
+        }],
+        effectTracks: [],
+      },
+    }
+    expect(clipContributesAudioOutput(faded)).toBe(true)
+    expect([...outputMediaAssetIds(makeDoc([
+      makeTrack('A1', 'audio', [faded]),
+    ]))]).toEqual(['audio-faded'])
   })
 })
 

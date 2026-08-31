@@ -72,6 +72,7 @@ function serializedProject(
       tracks: [],
       markers: [],
       captionTracks: [],
+      masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
     },
     assets: [],
     collections: [],

@@ -19,7 +19,7 @@
  */
 
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
-import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
+import type { AssetId, MediaAsset, TimelineDoc, TrackId } from '../domain/schema'
 import {
   createSourceBoundsCatalog,
   type SourceBoundsCatalog,
@@ -134,6 +134,7 @@ interface ControllerState {
   audioAssetsKey: string
   meterTimer: number | null
   meterBallistics: AudioMeterBallisticsState
+  trackMeterBallistics: Map<TrackId, AudioMeterBallisticsState>
   meterSequence: number
   meterSampleWindowSize: number
   unsubscribes: Array<() => void>
@@ -153,6 +154,7 @@ const state: ControllerState = {
   audioAssetsKey: '',
   meterTimer: null,
   meterBallistics: createAudioMeterBallistics(),
+  trackMeterBallistics: new Map(),
   meterSequence: 0,
   meterSampleWindowSize: AUDIO_METER_FFT_SIZE,
   unsubscribes: [],
@@ -204,6 +206,14 @@ function warnAudio(message: string, cause: unknown): void {
   )
 }
 
+function trackMeterReadouts(nowMs: number): Readonly<Record<TrackId, ReturnType<typeof audioMeterReadout>>> {
+  const readouts: Record<TrackId, ReturnType<typeof audioMeterReadout>> = {}
+  for (const [trackId, ballistics] of state.trackMeterBallistics) {
+    readouts[trackId] = audioMeterReadout(ballistics, nowMs)
+  }
+  return readouts
+}
+
 function publishAudioMeter(status: AudioMeterStatus, reason: string): void {
   const nowMs = state.deps.now()
   state.meterSequence += 1
@@ -211,6 +221,7 @@ function publishAudioMeter(status: AudioMeterStatus, reason: string): void {
     status,
     reason,
     readout: audioMeterReadout(state.meterBallistics, nowMs),
+    trackReadouts: trackMeterReadouts(nowMs),
     sequence: state.meterSequence,
     updatedAtMs: nowMs,
     sampleWindowSize: state.meterSampleWindowSize,
@@ -223,6 +234,12 @@ function stopAudioMeter(status: AudioMeterStatus, reason: string): void {
     state.meterTimer = null
   }
   state.meterBallistics = silenceAudioMeterBallistics(state.meterBallistics)
+  for (const [trackId, ballistics] of state.trackMeterBallistics) {
+    state.trackMeterBallistics.set(
+      trackId,
+      silenceAudioMeterBallistics(ballistics),
+    )
+  }
   publishAudioMeter(status, reason)
 }
 
@@ -249,6 +266,33 @@ function pollAudioMeter(
       },
       nowMs,
     )
+    const seen = new Set<TrackId>()
+    for (const strip of diagnostics.trackMeters ?? []) {
+      seen.add(strip.trackId)
+      const previous = state.trackMeterBallistics.get(strip.trackId)
+        ?? createAudioMeterBallistics()
+      state.trackMeterBallistics.set(
+        strip.trackId,
+        advanceAudioMeterBallistics(
+          previous,
+          {
+            left: strip.peakLeft,
+            right: strip.peakRight,
+            master: strip.peakMaster,
+          },
+          nowMs,
+        ),
+      )
+    }
+    for (const trackId of [...state.trackMeterBallistics.keys()]) {
+      if (seen.has(trackId)) continue
+      const previous = state.trackMeterBallistics.get(trackId)
+      if (!previous) continue
+      state.trackMeterBallistics.set(
+        trackId,
+        silenceAudioMeterBallistics(previous),
+      )
+    }
     publishAudioMeter('active', 'Live playback levels')
   } catch (cause) {
     warnAudio('audio meter telemetry failed', cause)
@@ -724,6 +768,7 @@ export async function disposeTransport(): Promise<void> {
   state.audioPlanKey = ''
   state.audioAssetsKey = ''
   state.meterBallistics = createAudioMeterBallistics()
+  state.trackMeterBallistics = new Map()
   state.meterSequence = 0
   state.meterSampleWindowSize = AUDIO_METER_FFT_SIZE
   useAudioMeterStore.getState().resetAudioMeter()
@@ -753,6 +798,12 @@ export function getAudioPlaybackDiagnostics():
 /** Clear held/latched overload feedback without changing playback gain. */
 export function resetAudioMeterOverload(): void {
   state.meterBallistics = clearAudioMeterOverload(state.meterBallistics)
+  for (const [trackId, ballistics] of state.trackMeterBallistics) {
+    state.trackMeterBallistics.set(
+      trackId,
+      clearAudioMeterOverload(ballistics),
+    )
+  }
   const meter = useAudioMeterStore.getState()
   publishAudioMeter(meter.status, meter.reason)
 }

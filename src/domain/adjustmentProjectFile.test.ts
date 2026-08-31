@@ -9,7 +9,7 @@ import {
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from './projectSettings'
 
 describe('adjustment project-file schema 15', () => {
-  test('migrates schema 14 with empty adjustment collections and unchanged content', () => {
+  test('migrates schema 14 through current with empty adjustments and unchanged content', () => {
     const document = structuredClone(createTimelineDoc(
       'Legacy adjustment migration',
       DEFAULT_PROJECT_SETTINGS,
@@ -23,7 +23,7 @@ describe('adjustment project-file schema 15', () => {
     for (const track of legacy.document.tracks) delete track.adjustments
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
-    expect(parsed.document.schemaVersion).toBe(15)
+    expect(parsed.document.schemaVersion).toBe(18)
     expect(parsed.document.tracks.every((track) => track.adjustments?.length === 0))
       .toBe(true)
     expect(parsed.document.name).toBe(document.name)

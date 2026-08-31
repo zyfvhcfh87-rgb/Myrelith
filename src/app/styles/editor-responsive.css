@@ -22,46 +22,46 @@
 }
 
 /* Keep the independently docked tool, playback, and zoom groups disjoint as
-   the editor narrows. These rules intentionally follow every base button
-   declaration so the compact sizes win the cascade. */
-@media (max-width: 1250px) {
-  .transport-tools {
+   the editor narrows. The area qualifier keeps these compact sizes ahead of
+   component styles regardless of stylesheet evaluation order. */
+@media (max-width: 1320px) {
+  .area-transport .transport-tools {
     left: 4px;
     gap: 2px;
   }
 
-  .transport-tools .tool-button {
+  .area-transport .transport-tools .tool-button {
     min-width: 24px;
     padding-right: 4px;
     padding-left: 4px;
     font-size: 13px;
   }
 
-  .timeline-zoom-controls {
+  .area-transport .timeline-zoom-controls {
     right: 4px;
     gap: 2px;
   }
 
-  .timeline-zoom-button {
+  .area-transport .timeline-zoom-button {
     width: 22px;
   }
 
-  .timeline-zoom-slider {
+  .area-transport .timeline-zoom-slider {
     width: 44px;
     margin: 0;
   }
 
-  .transport-bar {
+  .area-transport .transport-bar {
     gap: 6px;
   }
 
-  .transport-button {
+  .area-transport .transport-button {
     min-width: 30px;
     padding-right: 6px;
     padding-left: 6px;
   }
 
-  .transport-play {
+  .area-transport .transport-play {
     min-width: 40px;
   }
 }
@@ -87,32 +87,32 @@
     height: 20px;
   }
 
-  .transport-tools .tool-button {
+  .area-transport .transport-tools .tool-button {
     min-width: 22px;
     padding-right: 3px;
     padding-left: 3px;
     font-size: 12px;
   }
 
-  .timeline-zoom-button {
+  .area-transport .timeline-zoom-button {
     width: 20px;
   }
 
-  .timeline-zoom-slider {
+  .area-transport .timeline-zoom-slider {
     width: 32px;
   }
 
-  .transport-bar {
+  .area-transport .transport-bar {
     gap: 4px;
   }
 
-  .transport-button {
+  .area-transport .transport-button {
     min-width: 26px;
     padding-right: 4px;
     padding-left: 4px;
   }
 
-  .transport-play {
+  .area-transport .transport-play {
     min-width: 36px;
   }
 
@@ -149,52 +149,98 @@
     gap: 1px;
   }
 
-  .transport-tools .tool-button {
+  .area-transport .transport-tools .tool-button {
     box-sizing: border-box;
-    width: 20px;
-    min-width: 20px;
+    width: 24px;
+    min-width: 24px;
     padding-right: 0;
     padding-left: 0;
     font-size: 11px;
   }
 
-  .transport-tools {
+  .area-transport .transport-tools {
     gap: 1px;
   }
 
-  .timeline-zoom-controls {
+  .area-transport .tool-button-add-text,
+  .area-transport .tool-button-snap {
+    margin-left: 0;
+  }
+
+  .area-transport .timeline-zoom-controls {
     gap: 1px;
   }
 
-  .timeline-zoom-button {
-    width: 18px;
+  .area-transport .timeline-zoom-button {
+    width: 24px;
   }
 
-  .timeline-zoom-button svg {
+  .area-transport .timeline-zoom-button svg {
     width: 14px;
     height: 14px;
   }
 
-  .timeline-zoom-slider {
+  .area-transport .timeline-zoom-slider {
     width: 28px;
   }
 
-  .transport-bar {
+  .area-transport .transport-bar {
     gap: 3px;
   }
 
-  .transport-button {
+  .area-transport .transport-button {
+    box-sizing: border-box;
+    width: 24px;
     min-width: 24px;
+    max-width: 24px;
     padding-right: 3px;
     padding-left: 3px;
   }
 
-  .transport-play {
+  .area-transport .transport-play {
+    width: 32px;
     min-width: 32px;
+    max-width: 32px;
+  }
+
+  .area-transport .transport-sequence-edit {
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+    overflow: hidden;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .audio-meter {
     width: 64px;
+  }
+
+  .audio-mixer {
+    min-height: 132px;
+    max-height: 148px;
+    padding: 4px 6px;
+    gap: 4px;
+  }
+
+  .mixer-strip {
+    flex-basis: 80px;
+    width: 80px;
+    min-width: 80px;
+    padding: 4px 3px;
+  }
+
+  .mixer-fader {
+    height: 60px;
+  }
+
+  .mixer-meter-track {
+    height: 60px;
+  }
+
+  .audio-mixer .mixer-pan {
+    width: 68px;
   }
 }
 

@@ -27,6 +27,8 @@ import type {
   CaptionItemId,
   CaptionTrack,
   CaptionTrackId,
+  AudioEffectDescriptor,
+  AudioEffectId,
   Clip,
   ClipAnimationKeyframe,
   ClipAnimationProperty,
@@ -74,7 +76,10 @@ import type {
   ClipVisualPatch,
   CrossfadeSettings,
   TextPropsPatch,
+  AudioEffectTarget,
+  MasterAudioPatch,
   TrackFlagsPatch,
+  TrackMixerPatch,
   TrimEdge,
 } from '../domain/operations'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
@@ -87,6 +92,8 @@ import type { MotionTrackingPlan } from '../domain/motionTracking'
 import {
   addCrossfade,
   addCrossfadeWithSourceBounds as addExactCrossfade,
+  addAudioEffect,
+  applyAudioEffectPreset,
   addEffect,
   applyDynamicZoomWithResult,
   applyVideoStabilizationWithResult,
@@ -95,20 +102,29 @@ import {
   insertClip,
   removeTransition,
   removeTrack,
+  removeAudioEffect,
   removeEffect,
+  reorderAudioEffect,
   reorderEffect,
+  resetAudioEffect,
   resetEffect,
   resetVideoStabilizationWithResult,
   renameTrack,
   setClipVolume,
+  setMasterAudio,
+  normalizeMasterLoudness,
+  setAudioEffectEnabled,
   setEffectEnabled,
   setCrossfadeDuration,
   setCrossfadeSettingsWithSourceBounds,
   setTrackFlags,
+  setTrackMixer,
   updateClipAudio,
+  updateClipAudioAtFrame,
   updateClipTransform,
   updateClipVisual,
   updateClipVisualAtFrame,
+  updateAudioEffectParams,
   updateEffectParams,
   updateEffectParamsAtFrame,
   setClipKeyframe,
@@ -451,6 +467,12 @@ export interface DocumentState {
   setClipVolume: (clipId: ClipId, volume: number) => void
   /** Atomically edit/reset the complete static audio Inspector surface. */
   updateClipAudio: (clipId: ClipId, patch: ClipAudioPatch) => void
+  /** Edit static audio fields or upsert active volume/balance keys at one playhead frame. */
+  updateClipAudioAtFrame: (
+    clipId: ClipId,
+    timelineFrame: number,
+    patch: ClipAudioPatch,
+  ) => void
   /**
    * Add a new empty V#/A# track (timeline header "+ track" buttons). One
    * history entry — an added track is undoable like any other edit.
@@ -462,6 +484,10 @@ export interface DocumentState {
    * entry.
    */
   setTrackFlags: (trackId: TrackId, patch: TrackFlagsPatch) => void
+  /** Track fader/pan. One history entry; mute/solo stay on setTrackFlags. */
+  setTrackMixer: (trackId: TrackId, patch: TrackMixerPatch) => void
+  /** Master bus gain/pan/mute. One history entry. */
+  setMasterAudio: (patch: MasterAudioPatch) => void
   /**
    * Rename a track's display name (header double-click). Trimmed by the
    * domain op; renaming to the current name pushes no history entry.
@@ -557,6 +583,26 @@ export interface DocumentState {
   resetEffect: (clipId: ClipId, effectId: EffectId) => void
   /** Remove one effect descriptor. */
   removeEffect: (clipId: ClipId, effectId: EffectId) => void
+  addAudioEffect: (target: AudioEffectTarget, effect: AudioEffectDescriptor) => void
+  setAudioEffectEnabled: (
+    target: AudioEffectTarget,
+    effectId: AudioEffectId,
+    enabled: boolean,
+  ) => void
+  updateAudioEffectParams: (
+    target: AudioEffectTarget,
+    effectId: AudioEffectId,
+    patch: Readonly<Record<string, EffectParamValue>>,
+  ) => void
+  reorderAudioEffect: (
+    target: AudioEffectTarget,
+    effectId: AudioEffectId,
+    targetIndex: number,
+  ) => void
+  resetAudioEffect: (target: AudioEffectTarget, effectId: AudioEffectId) => void
+  removeAudioEffect: (target: AudioEffectTarget, effectId: AudioEffectId) => void
+  applyAudioEffectPreset: (target: AudioEffectTarget, presetId: string) => void
+  normalizeMasterLoudness: (measuredLufs: number, targetLufs?: number) => void
   /** Step back one snapshot. No-op when history is empty. */
   undo: () => void
   /** Step forward one undone snapshot. No-op when future is empty. */
@@ -1012,10 +1058,22 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   updateClipAudio: (clipId, patch) =>
     set((state) => commit(state, updateClipAudio(state.doc, clipId, patch))),
 
+  updateClipAudioAtFrame: (clipId, timelineFrame, patch) =>
+    set((state) => commit(
+      state,
+      updateClipAudioAtFrame(state.doc, clipId, timelineFrame, patch),
+    )),
+
   addTrack: (kind) => set((state) => commit(state, addTrack(state.doc, kind))),
 
   setTrackFlags: (trackId, patch) =>
     set((state) => commit(state, setTrackFlags(state.doc, trackId, patch))),
+
+  setTrackMixer: (trackId, patch) =>
+    set((state) => commit(state, setTrackMixer(state.doc, trackId, patch))),
+
+  setMasterAudio: (patch) =>
+    set((state) => commit(state, setMasterAudio(state.doc, patch))),
 
   renameTrack: (trackId, name) =>
     set((state) => commit(state, renameTrack(state.doc, trackId, name))),
@@ -1140,6 +1198,45 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   removeEffect: (clipId, effectId) =>
     set((state) => commit(state, removeEffect(state.doc, clipId, effectId))),
+
+  addAudioEffect: (target, effect) =>
+    set((state) => commit(state, addAudioEffect(state.doc, target, effect))),
+
+  setAudioEffectEnabled: (target, effectId, enabled) =>
+    set((state) => commit(
+      state,
+      setAudioEffectEnabled(state.doc, target, effectId, enabled),
+    )),
+
+  updateAudioEffectParams: (target, effectId, patch) =>
+    set((state) => commit(
+      state,
+      updateAudioEffectParams(state.doc, target, effectId, patch),
+    )),
+
+  reorderAudioEffect: (target, effectId, targetIndex) =>
+    set((state) => commit(
+      state,
+      reorderAudioEffect(state.doc, target, effectId, targetIndex),
+    )),
+
+  resetAudioEffect: (target, effectId) =>
+    set((state) => commit(state, resetAudioEffect(state.doc, target, effectId))),
+
+  removeAudioEffect: (target, effectId) =>
+    set((state) => commit(state, removeAudioEffect(state.doc, target, effectId))),
+
+  applyAudioEffectPreset: (target, presetId) =>
+    set((state) => commit(
+      state,
+      applyAudioEffectPreset(state.doc, target, presetId),
+    )),
+
+  normalizeMasterLoudness: (measuredLufs, targetLufs) =>
+    set((state) => commit(
+      state,
+      normalizeMasterLoudness(state.doc, measuredLufs, targetLufs),
+    )),
 
   undo: () =>
     set((state) => {

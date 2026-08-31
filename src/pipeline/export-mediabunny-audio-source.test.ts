@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { applyStereoBalanceToSample } from '../domain/audioChannelMix'
 import { stereoBalanceGains } from '../domain/clipInspector'
 import {
@@ -13,6 +13,7 @@ import {
 import {
   adapterTestSubject,
   audioTrack,
+  deferred,
   decodedAudioSample,
   inputAt,
   mb,
@@ -64,6 +65,42 @@ async function exportFoldedParity(
 }
 
 describe('createMediabunnyExportAudioSource exact ranges', () => {
+  test('closes a decoded sample that fulfills after cancellation', async () => {
+    const decoded = decodedAudioSample(
+      [new Float32Array([0.25])],
+      48_000,
+    )
+    const sampleGate = deferred<typeof decoded>()
+    mb.audioTracks.push(audioTrack(true, 1))
+    mb.audioSinkSampleSequences.push([sampleGate.promise])
+    const controller = new AbortController()
+    const source = createMediabunnyExportAudioSource(
+      async () => resolvedAsset(new Blob(['late-cancelled-audio'])),
+    )
+    const reader = await source.openClip({
+      clipId: 'late-cancelled',
+      assetId: 'audio-asset',
+      startSample: 0,
+      endSample: 1,
+      sampleRate: 48_000,
+      channelCount: 2,
+      signal: controller.signal,
+    })
+
+    const read = reader.read(1)
+    await Promise.resolve()
+    controller.abort(new DOMException('cancelled', 'AbortError'))
+    await expect(read).rejects.toMatchObject({
+      failure: { reason: 'decode-failed' },
+    })
+    expect(decoded.close).not.toHaveBeenCalled()
+
+    sampleGate.resolve(decoded)
+    await vi.waitFor(() => expect(decoded.close).toHaveBeenCalledOnce())
+    await reader.close()
+    await source.close()
+  })
+
   test('fails an exact crossfade handle instead of zero-filling early EOF', async () => {
     const decoded = decodedAudioSample(
       [new Float32Array(4).fill(0.25)],

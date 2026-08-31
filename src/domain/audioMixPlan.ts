@@ -2,7 +2,9 @@
 
 import type {
   AssetId,
+  AudioEffectDescriptor,
   Clip,
+  ClipAnimationTrack,
   ClipId,
   TimelineDoc,
   TrackId,
@@ -14,13 +16,25 @@ import {
   type CrossfadeLegRole,
   type SourceBoundsCatalog,
 } from './crossfadePlan'
-import { audibleTracks } from './selectors'
+import {
+  animationTrackValidationError,
+  clipAnimationTrack,
+  evaluateValidatedAnimationTrackAtBoundaryPosition,
+} from './clipAnimation'
+import { audibleTracks, clipContributesAudioOutput } from './selectors'
+import {
+  timelineAudioMixerGraph,
+  type TimelineAudioMasterBus,
+  type TimelineAudioTrackBus,
+} from './audioMixer'
 import { rangeEnd } from './time'
 import {
   clipAudioSettings,
   clipAudioSettingsValidationError,
   stereoBalanceGains,
+  writeStereoBalanceGains,
 } from './clipInspector'
+import { cloneAudioEffectStack } from './audioEffectStack'
 import {
   clipSourceTimeMap,
   sourceFrameAtTimelineOffset,
@@ -45,15 +59,77 @@ export interface TimelineAudioClipFields {
   assetId: AssetId
   timelineStartFrame: number
   timelineEndFrame: number
+  /** Authored clip start; animation origin even after crossfade handle expansion. */
+  clipTimelineStartFrame: number
   sourceStartFrame: number
   sourceEndFrame: number
   volume: number
   balance: number
   leftGain: number
   rightGain: number
+  volumeAnimation: ClipAnimationTrack | null
+  balanceAnimation: ClipAnimationTrack | null
   fadeInFrames: number
   fadeOutFrames: number
   envelopes: TimelineAudioEnvelope[]
+  audioEffects: readonly AudioEffectDescriptor[]
+}
+
+export interface ClipAudioGains {
+  readonly volume: number
+  readonly balance: number
+  readonly leftGain: number
+  readonly rightGain: number
+}
+
+export interface MutableClipAudioGains {
+  volume: number
+  balance: number
+  leftGain: number
+  rightGain: number
+}
+
+/** Allocation-free gain evaluation for export and other audio-rate hosts. */
+export function writeClipAudioGainsAtLocalFrame(
+  plan: Pick<
+    TimelineAudioClipFields,
+    'volume' | 'balance' | 'volumeAnimation' | 'balanceAnimation'
+  >,
+  localFrame: number,
+  target: MutableClipAudioGains,
+): void {
+  target.volume = plan.volumeAnimation
+    ? evaluateValidatedAnimationTrackAtBoundaryPosition(
+        plan.volumeAnimation,
+        localFrame,
+        plan.volume,
+      )
+    : plan.volume
+  target.balance = plan.balanceAnimation
+    ? evaluateValidatedAnimationTrackAtBoundaryPosition(
+        plan.balanceAnimation,
+        localFrame,
+        plan.balance,
+      )
+    : plan.balance
+  writeStereoBalanceGains(target.balance, target)
+}
+
+export function clipAudioGainsAtLocalFrame(
+  plan: Pick<
+    TimelineAudioClipFields,
+    'volume' | 'balance' | 'volumeAnimation' | 'balanceAnimation'
+  >,
+  localFrame: number,
+): ClipAudioGains {
+  const gains: MutableClipAudioGains = {
+    volume: plan.volume,
+    balance: plan.balance,
+    leftGain: 1,
+    rightGain: 1,
+  }
+  writeClipAudioGainsAtLocalFrame(plan, localFrame, gains)
+  return gains
 }
 
 export interface ConstantRateAudioStretch {
@@ -77,7 +153,11 @@ export type TimelineAudioClipPlan =
 export interface TimelineAudioMixPlan {
   clips: TimelineAudioClipPlan[]
   mutedClips: TimelineAudioMutedClip[]
+  tracks: TimelineAudioTrackBus[]
+  master: TimelineAudioMasterBus
 }
+
+export type { TimelineAudioMasterBus, TimelineAudioTrackBus } from './audioMixer'
 
 export interface TimelineAudioMutedClip {
   clipId: ClipId
@@ -264,23 +344,38 @@ export function createTimelineAudioMixPlan(
       if (audioError) {
         throw new RangeError(`Audio clip "${clip.id}" ${audioError}`)
       }
-      if (clip.volume <= 0 || !audio.enabled) continue
+      if (!clipContributesAudioOutput(clip)) continue
       const [leftGain, rightGain] = stereoBalanceGains(audio.balance)
+      const volumeAnimation = clipAnimationTrack(clip, 'volume')
+      const balanceAnimation = clipAnimationTrack(clip, 'balance')
+      for (const animation of [volumeAnimation, balanceAnimation]) {
+        if (!animation) continue
+        const animationError = animationTrackValidationError(animation)
+        if (animationError) {
+          throw new RangeError(
+            `Audio clip "${clip.id}" ${animation.property} animation: ${animationError}`,
+          )
+        }
+      }
       const plan: TimelineAudioClipFields = {
         clipId: clip.id,
         trackId: track.id,
         assetId: clip.assetId,
         timelineStartFrame: clip.timelineRange.startFrame,
         timelineEndFrame,
+        clipTimelineStartFrame: clip.timelineRange.startFrame,
         sourceStartFrame: sourceFrameAtTimelineOffset(clipSourceTimeMap(clip), 0),
         sourceEndFrame,
         volume: clip.volume,
         balance: audio.balance,
         leftGain,
         rightGain,
+        volumeAnimation,
+        balanceAnimation,
         fadeInFrames: audio.fadeInFrames,
         fadeOutFrames: audio.fadeOutFrames,
         envelopes: [],
+        audioEffects: cloneAudioEffectStack(clip.audioEffects),
       }
       plans.set(clip.id, retimePolicy.kind === 'direct'
         ? { kind: 'direct', clip, plan }
@@ -376,6 +471,7 @@ export function createTimelineAudioMixPlan(
       : finishStretchedContributor(draft.plan, draft.clip, draft.rate)
   })
 
+  const mixer = timelineAudioMixerGraph(doc)
   return {
     clips: finishedPlans.sort((left, right) =>
       left.timelineStartFrame - right.timelineStartFrame
@@ -386,5 +482,7 @@ export function createTimelineAudioMixPlan(
       left.trackId.localeCompare(right.trackId)
       || left.clipId.localeCompare(right.clipId),
     ),
+    tracks: mixer.tracks,
+    master: mixer.master,
   }
 }

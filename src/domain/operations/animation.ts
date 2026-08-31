@@ -1,5 +1,18 @@
 import type { Clip, ClipAnimationEasing, ClipAnimationKeyframe, ClipAnimationProperty, ClipId, Effect, EffectId, TimelineDoc } from '../schema';
-import { clipAnimation, documentAnimationKeyframeGrowthAllowed, effectAnimationTrack, moveAnimationKeyframe, removeAnimationKeyframe, removeAnimationTrack, moveEffectAnimationKeyframe, removeEffectAnimationKeyframe, removeEffectAnimationTracks, upsertAnimationKeyframe, upsertEffectAnimationKeyframe } from '../clipAnimation';
+import {
+  clipAnimation,
+  documentAnimationKeyframeGrowthAllowed,
+  effectAnimationTrack,
+  isAudioAnimationProperty,
+  moveAnimationKeyframe,
+  removeAnimationKeyframe,
+  removeAnimationTrack,
+  moveEffectAnimationKeyframe,
+  removeEffectAnimationKeyframe,
+  removeEffectAnimationTracks,
+  upsertAnimationKeyframe,
+  upsertEffectAnimationKeyframe,
+} from '../clipAnimation';
 import { effectAnimationParameterSpec } from '../effectStack';
 import { clipSourceTimeMap, sourceTicksAtTimelineOffset } from '../sourceTimeMap';
 import { locateClip, reject, withTrack, type ClipLocation } from './operationInternals';
@@ -23,8 +36,9 @@ function animationEditLocation(
   doc: TimelineDoc,
   clipId: ClipId,
   operation: string,
+  property?: ClipAnimationProperty,
 ): ClipLocation | null {
-  const result = animationEditLocationResult(doc, clipId)
+  const result = animationEditLocationResult(doc, clipId, property)
   if (!result.ok) {
     reject(doc, operation, result.reason)
     return null
@@ -39,13 +53,29 @@ type AnimationEditLocationResult =
 export function animationEditLocationResult(
   doc: TimelineDoc,
   clipId: ClipId,
+  property?: ClipAnimationProperty,
 ): AnimationEditLocationResult {
   const loc = locateClip(doc, clipId)
   if (!loc) return { ok: false, reason: `clip ${clipId} not found` }
   if (loc.track.locked) {
     return { ok: false, reason: `track ${loc.track.id} is locked` }
   }
-  if (loc.track.kind !== 'video' || loc.clip.text !== undefined) {
+  if (loc.clip.text !== undefined) {
+    return {
+      ok: false,
+      reason: 'keyframes are supported only on visual media clips',
+    }
+  }
+  if (loc.track.kind === 'audio') {
+    if (property !== undefined && isAudioAnimationProperty(property)) {
+      return { ok: true, loc }
+    }
+    return {
+      ok: false,
+      reason: 'audio clips support only volume and balance keyframes',
+    }
+  }
+  if (loc.track.kind !== 'video') {
     return {
       ok: false,
       reason: 'keyframes are supported only on visual media clips',
@@ -72,7 +102,7 @@ export function setClipKeyframe(
   keyframe: ClipAnimationKeyframe,
 ): TimelineDoc {
   const op = 'setClipKeyframe'
-  const loc = animationEditLocation(doc, clipId, op)
+  const loc = animationEditLocation(doc, clipId, op, property)
   if (!loc) return doc
   const current = clipAnimation(loc.clip)
   let sourceTimeTicks: number
@@ -111,7 +141,7 @@ export function moveClipKeyframe(
   toFrame: number,
 ): TimelineDoc {
   const op = 'moveClipKeyframe'
-  const loc = animationEditLocation(doc, clipId, op)
+  const loc = animationEditLocation(doc, clipId, op, property)
   if (!loc) return doc
   const animation = moveAnimationKeyframe(
     clipAnimation(loc.clip),
@@ -146,7 +176,7 @@ export function removeClipKeyframe(
   frame: number,
 ): TimelineDoc {
   const op = 'removeClipKeyframe'
-  const loc = animationEditLocation(doc, clipId, op)
+  const loc = animationEditLocation(doc, clipId, op, property)
   if (!loc) return doc
   const animation = removeAnimationKeyframe(clipAnimation(loc.clip), property, frame)
   if (!animation) return reject(doc, op, 'keyframe not found')
@@ -160,7 +190,7 @@ export function resetClipAnimationTrack(
   property: ClipAnimationProperty,
 ): TimelineDoc {
   const op = 'resetClipAnimationTrack'
-  const loc = animationEditLocation(doc, clipId, op)
+  const loc = animationEditLocation(doc, clipId, op, property)
   if (!loc) return doc
   const animation = removeAnimationTrack(clipAnimation(loc.clip), property)
   if (!animation) return doc

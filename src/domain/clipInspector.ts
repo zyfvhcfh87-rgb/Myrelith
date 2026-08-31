@@ -15,6 +15,10 @@ export const MIN_CLIP_SCALE = 0
 export const MAX_CLIP_SCALE = 100
 export const MIN_AUDIO_BALANCE = -1
 export const MAX_AUDIO_BALANCE = 1
+/** Linear clip gain floor. Zero is valid and silent. */
+export const MIN_CLIP_VOLUME = 0
+/** Upper clip-volume bound: 200% gain, the usual NLE headroom. */
+export const MAX_CLIP_VOLUME = 2
 
 export const DEFAULT_CLIP_VISUAL_SETTINGS: Readonly<ClipVisualSettings> =
   Object.freeze({
@@ -152,13 +156,32 @@ export function migrateLegacyClipInspectorSettings(
   }
 }
 
-/** Linear stereo balance with center preserving both source channels. */
-export function stereoBalanceGains(balance: number): readonly [number, number] {
+function assertAudioBalance(balance: number): void {
   if (!finite(balance) || balance < MIN_AUDIO_BALANCE || balance > MAX_AUDIO_BALANCE) {
     throw new RangeError(
       `Audio balance must be from ${MIN_AUDIO_BALANCE} to ${MAX_AUDIO_BALANCE}`,
     )
   }
+}
+
+export interface StereoBalanceGainTarget {
+  leftGain: number
+  rightGain: number
+}
+
+/** Allocation-free linear stereo balance for audio-rate callers. */
+export function writeStereoBalanceGains(
+  balance: number,
+  target: StereoBalanceGainTarget,
+): void {
+  assertAudioBalance(balance)
+  target.leftGain = balance < 0 ? 1 : 1 - balance
+  target.rightGain = balance < 0 ? 1 + balance : 1
+}
+
+/** Linear stereo balance with center preserving both source channels. */
+export function stereoBalanceGains(balance: number): readonly [number, number] {
+  assertAudioBalance(balance)
   return balance < 0
     ? [1, 1 + balance]
     : [1 - balance, 1]

@@ -20,6 +20,9 @@ import {
   rangeOverlap,
   rateEquals,
   rescaleFrames,
+  audioSampleBoundary,
+  clipLocalFrameAtSample,
+  clipLocalFrameAtSeconds,
   secondsToFrames,
   secondsToMicroseconds,
   snapToStandardRate,
@@ -40,6 +43,16 @@ const r = (startFrame: number, durationFrames: number): TimeRange => ({
 /* ------------------------------------------------------------------ */
 /* Plan test 1: round-trip drift                                        */
 /* ------------------------------------------------------------------ */
+
+describe('audio sample grid', () => {
+  test('maps integer-rate frames to exact sample boundaries', () => {
+    const doc = { frameRate: F30, audioSampleRate: 48_000 }
+    expect(audioSampleBoundary(0, doc)).toBe(0)
+    expect(audioSampleBoundary(1, doc)).toBe(1_600)
+    expect(clipLocalFrameAtSample(0, 800, 0, doc)).toBe(0.5)
+    expect(clipLocalFrameAtSeconds(10, framesToSeconds(15, F30), F30)).toBe(5)
+  })
+})
 
 describe('frames <-> seconds round-trips (no drift)', () => {
   test('29.97fps: 1000 frames does not drift after 10 round-trips', () => {

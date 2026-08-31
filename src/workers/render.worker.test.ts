@@ -719,7 +719,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 15,
+    schemaVersion: 18,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 10, den: 1 },

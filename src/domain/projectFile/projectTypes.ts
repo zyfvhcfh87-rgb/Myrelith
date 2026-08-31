@@ -4,7 +4,8 @@ import { MAX_TOTAL_ANIMATION_KEYFRAMES } from '../clipAnimation';
 import { TEXT_OVERLAY_LIMITS } from '../textOverlay';
 import { MAX_DOCUMENT_ID_CHARACTERS, MAX_PROJECT_NAME_CHARACTERS } from '../projectLimits';
 import { MEDIA_COLLECTION_LIMITS, type MediaCollection } from '../mediaCollections';
-import { EFFECT_STACK_LIMITS } from '../effectBounds';
+import { EFFECT_STACK_LIMITS } from '../effectBounds'
+import { AUDIO_EFFECT_STACK_LIMITS } from '../audioEffectBounds';
 import { MAX_SOURCE_TIME_SPEED_POINTS } from '../sourceTimeMap';
 
 export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
@@ -18,7 +19,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 15 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 18 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
@@ -36,6 +37,10 @@ export const PROJECT_FILE_LIMITS = {
   maxTotalEffects: EFFECT_STACK_LIMITS.maxTotalEffects,
   maxTotalEffectParams: EFFECT_STACK_LIMITS.maxTotalEffectParams,
   maxTotalEffectStringCharacters: EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters,
+  maxAudioEffectsPerStack: AUDIO_EFFECT_STACK_LIMITS.maxEffectsPerStack,
+  maxTotalAudioEffects: AUDIO_EFFECT_STACK_LIMITS.maxTotalEffects,
+  maxTotalAudioEffectParams: AUDIO_EFFECT_STACK_LIMITS.maxTotalEffectParams,
+  maxTotalAudioEffectStringCharacters: AUDIO_EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters,
   maxTransitions: 100_000,
   maxMarkers: MAX_TIMELINE_MARKERS,
   maxTotalKeyframes: MAX_TOTAL_ANIMATION_KEYFRAMES,
