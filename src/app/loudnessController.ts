@@ -72,11 +72,6 @@ export async function startLoudnessScan(range: LoudnessMeasurementRange): Promis
     failure = cause
   } finally {
     if (active === controller) active = null
-    try {
-      await source.close()
-    } catch (cause) {
-      failure ??= cause
-    }
   }
   if (
     controller.signal.aborted

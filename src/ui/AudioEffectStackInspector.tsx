@@ -6,7 +6,7 @@ import {
   masterAudioEffects,
   trackAudioEffects,
   audioEffectAppendBudgetError,
-} from '../domain/audioEffectBounds'
+} from '../state/editorUi'
 import {
   COMPRESSOR_EFFECT_TYPE,
   COMPRESSOR_EFFECT_VERSION,
@@ -29,13 +29,13 @@ import {
   PARAMETRIC_EQ_EFFECT_VERSION,
   audioEffectRegistration,
   type EqBandType,
-} from '../domain/audioEffectStack'
+} from '../state/editorUi'
 import {
   PENDING_AUDIO_EFFECT_DETAIL,
   useAudioEffectStatusStore,
 } from '../state/audioEffectStatusStore'
 import { useDocumentStore } from '../state/documentStore'
-import { AUDIO_EFFECT_PRESETS } from '../domain/audioEffectPresets'
+import { AUDIO_EFFECT_PRESETS } from '../state/editorUi'
 import { NumberField } from './inspector/InspectorFields'
 
 function stackForTarget(

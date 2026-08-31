@@ -10,7 +10,7 @@ import {
   MAX_KEYFRAME_FRAME,
   readClipAnimationProperty,
   resolveClipAnimationAtFrame,
-} from '../domain/clipAnimation'
+} from '../state/editorUi'
 import {
   MAX_AUDIO_BALANCE,
   MAX_CLIP_SCALE,
@@ -18,7 +18,7 @@ import {
   MIN_AUDIO_BALANCE,
   MIN_CLIP_SCALE,
   MIN_CLIP_VOLUME,
-} from '../domain/clipInspector'
+} from '../state/editorUi'
 import type {
   Clip,
   ClipAnimationEasing,

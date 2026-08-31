@@ -29,52 +29,65 @@ export async function scanTimelineLoudness(
     readonly onProgress?: (progress: LoudnessScanProgress) => void
   },
 ): Promise<LoudnessMeasurement> {
-  const durationFrames = docDurationFrames(doc)
-  const { startFrame, endFrame } = options.range
-  if (
-    !Number.isSafeInteger(startFrame)
-    || !Number.isSafeInteger(endFrame)
-    || startFrame < 0
-    || endFrame < startFrame
-    || endFrame > durationFrames
-  ) {
-    throw new RangeError(
-      `loudness range must be integer document frames within 0..${durationFrames}`,
-    )
-  }
-  const frameCount = endFrame - startFrame
-  const expectedSamples = audioSampleBoundary(endFrame, doc)
-    - audioSampleBoundary(startFrame, doc)
-  const meter = new LoudnessMeter(doc.audioSampleRate, expectedSamples)
-  if (frameCount <= 0) return meter.result()
-  const mixer = new TimelineAudioMixer(
-    doc,
-    source,
-    options.catalog ?? new Map(),
-    options.signal,
-  )
+  let mixer: TimelineAudioMixer | null = null
+  let measurement: LoudnessMeasurement | undefined
+  let failure: unknown
   try {
-    // Prime the same stateful mixer from frame zero, but meter only the
-    // explicitly selected range. This keeps range measurements faithful to
-    // compressor, limiter, and gate history at the range boundary.
-    for (let frame = 0; frame < endFrame; frame++) {
-      if (options.signal?.aborted) {
-        throw new DOMException('Loudness scan cancelled', 'AbortError')
-      }
-      await mixer.writeFrame(frame, async (block) => {
-        if (frame >= startFrame) {
-          meter.process(block.channels[0], block.channels[1])
+    const durationFrames = docDurationFrames(doc)
+    const { startFrame, endFrame } = options.range
+    if (
+      !Number.isSafeInteger(startFrame)
+      || !Number.isSafeInteger(endFrame)
+      || startFrame < 0
+      || endFrame < startFrame
+      || endFrame > durationFrames
+    ) {
+      throw new RangeError(
+        `loudness range must be integer document frames within 0..${durationFrames}`,
+      )
+    }
+    const frameCount = endFrame - startFrame
+    const expectedSamples = audioSampleBoundary(endFrame, doc)
+      - audioSampleBoundary(startFrame, doc)
+    const meter = new LoudnessMeter(doc.audioSampleRate, expectedSamples)
+    if (frameCount > 0) {
+      mixer = new TimelineAudioMixer(
+        doc,
+        source,
+        options.catalog ?? new Map(),
+        options.signal,
+      )
+      // Prime the same stateful mixer from frame zero, but meter only the
+      // explicitly selected range. This keeps range measurements faithful to
+      // compressor, limiter, and gate history at the range boundary.
+      for (let frame = 0; frame < endFrame; frame++) {
+        if (options.signal?.aborted) {
+          throw new DOMException('Loudness scan cancelled', 'AbortError')
         }
-      })
-      if (frame >= startFrame) {
-        options.onProgress?.({
-          framesDone: frame - startFrame + 1,
-          frameCount,
+        await mixer.writeFrame(frame, async (block) => {
+          if (frame >= startFrame) {
+            meter.process(block.channels[0], block.channels[1])
+          }
         })
+        if (frame >= startFrame) {
+          options.onProgress?.({
+            framesDone: frame - startFrame + 1,
+            frameCount,
+          })
+        }
       }
     }
-  } finally {
-    await mixer.close()
+    measurement = meter.result()
+  } catch (cause) {
+    failure = cause
   }
-  return meter.result()
+  try {
+    if (mixer) await mixer.close()
+    else await source.close()
+  } catch (cause) {
+    failure ??= cause
+  }
+  if (failure !== undefined) throw failure
+  if (!measurement) throw new Error('Loudness scan completed without a measurement')
+  return measurement
 }

@@ -431,7 +431,7 @@ describe('portable project file', () => {
       .toBe(before)
   })
 
-  test('migrates schema-15 documents to schema 16 with mixer defaults', () => {
+  test('migrates schema-15 documents through schema 18 with mixer defaults', () => {
     const legacy = clone(makeProject())
     legacy.document.schemaVersion = 15
     for (const item of legacy.document.tracks) {
@@ -459,7 +459,7 @@ describe('portable project file', () => {
     ])
   })
 
-  test('migrates schema-16 documents to schema 17 with empty audio-effect stacks', () => {
+  test('migrates schema-16 documents through schema 18 with empty audio-effect stacks', () => {
     const legacy = clone(makeProject())
     legacy.document.schemaVersion = 16
     for (const item of legacy.document.tracks) {
@@ -482,6 +482,27 @@ describe('portable project file', () => {
         item.clips.every((clip) => clip.audioEffects?.length === 0),
       ),
     ).toBe(true)
+  })
+
+  test('migrates schema-17 mixer documents to schema 18 audio-effect stacks', () => {
+    const legacy = clone(makeProject())
+    legacy.document.schemaVersion = 17
+    for (const item of legacy.document.tracks) {
+      Reflect.deleteProperty(item, 'audioEffects')
+      for (const clip of item.clips) Reflect.deleteProperty(clip, 'audioEffects')
+    }
+    if (legacy.document.masterAudio) {
+      Reflect.deleteProperty(legacy.document.masterAudio, 'audioEffects')
+    }
+
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.document.masterAudio?.audioEffects).toEqual([])
+    expect(parsed.document.tracks.every((item) => item.audioEffects?.length === 0)).toBe(true)
+    expect(parsed.document.tracks.every((item) => (
+      item.clips.every((clip) => clip.audioEffects?.length === 0)
+    ))).toBe(true)
   })
 
   test('round-trips authored clip, track, and master audio-effect stacks including unknown types', () => {

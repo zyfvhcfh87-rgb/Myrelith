@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { linkedPartners } from '../../domain/linking'
 import type {
   Clip,
   SourceTimeSpeedEasing,
   SourceTimeSpeedPoint,
   TimelineDoc,
 } from '../../domain/schema'
-import { findClip, trackOfClip } from '../../domain/selectors'
 import {
   clipAudioPresentation,
   clipSourceTimeMap,
@@ -18,7 +16,10 @@ import {
   sourceTimeMapWholeClipSpeed,
   sourceTimeSpeedRateFromPercent,
   sourceTimeSpeedRatePercent,
-} from '../../domain/sourceTimeMap'
+  findClip,
+  linkedPartners,
+  trackOfClip,
+} from '../../state/editorUi'
 import { useDocumentStore } from '../../state/documentStore'
 import { useTransportStore } from '../../state/transportStore'
 import { InspectorSection } from './InspectorFields'

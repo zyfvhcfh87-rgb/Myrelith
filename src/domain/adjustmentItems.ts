@@ -21,6 +21,7 @@ import {
   cloneAnimationEasing,
   documentAnimationKeyframeGrowthAllowed,
   evaluateAnimationTrack,
+  MAX_KEYFRAME_FRAME,
 } from './clipAnimation'
 import {
   cloneEffectDescriptor,
@@ -340,7 +341,7 @@ function shiftAnimation(
 ): AdjustmentAnimation | null {
   const shift = (keyframe: AdjustmentAnimationKeyframe): AdjustmentAnimationKeyframe | null => {
     const frame = keyframe.frame + deltaFrames
-    if (!Number.isSafeInteger(frame) || Math.abs(frame) > 1_000_000_000) return null
+    if (!Number.isSafeInteger(frame) || Math.abs(frame) > MAX_KEYFRAME_FRAME) return null
     return { ...cloneAdjustmentKeyframe(keyframe), frame }
   }
   const tracks = animation.tracks.map((track) => ({
@@ -565,7 +566,7 @@ function upsertKeyframe(
 ): AdjustmentAnimationKeyframe[] | null {
   if (
     !Number.isSafeInteger(keyframe.frame)
-    || Math.abs(keyframe.frame) > 1_000_000_000
+    || Math.abs(keyframe.frame) > MAX_KEYFRAME_FRAME
     || !Number.isFinite(keyframe.value)
     || animationEasingValidationError(keyframe.easing)
   ) return null

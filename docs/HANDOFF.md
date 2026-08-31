@@ -131,7 +131,9 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #77 — signed sandboxed plugins** | 🚧 PR #123 remediation validated locally | production preview/export/migration wiring; fail-closed render and stale-generation gates; bounded host-acknowledged teardown; safe startup recovery; hostile-package and real Chromium acceptance; full/exact-head publication gates pending |
 | **Post-MVP #179 — marquee selection + grouped move** | ✅ implementation complete | Select-tool left-drag over empty lanes previews and commits box selection; selected/link-expanded clips move horizontally as one collision-safe, one-history edit; 3,364 tests + desktop Chromium interaction/undo/redo gate clean |
 | **Post-MVP #180 — Compatibility/HEVC export flush error** | ✅ fixed locally; native Chrome regression locked | #178's 96→48 kHz mapping remains correct; the remaining 59.94/60 fps failure was Chrome AAC rejecting 800/801-sample frame-aligned startup chunks at flush; one bounded shared assembler now feeds 2,048 startup samples then 1,024-sample blocks without codec/profile substitution; 3,370 tests plus real sink exports in repository Chromium and installed Chrome pass |
-| **Post-MVP #190 — bounded adjustment layers** | ✅ implementation complete locally | schema-15 resource-free video-track items; full history/edit/persistence/recovery; safe post-composite color effects and bounded animation; deterministic shared preview/export order; zero additional compositor surfaces; Chromium interaction/undo/redo/responsive gate clean |
+| **Post-MVP #188 — pitch-safe constant retiming** | ✅ first slice merged in PR #213 as `c846555` | shared bounded WSOLA for constant 0.25×–4× live/export audio; exact 1× remains direct; ramps and freezes remain explicit silence and keep #188 open for the remaining acceptance work |
+| **Post-MVP #189 — audio automation, mixer, and effects** | ✅ merged in PR #215 as `138db35` | schema-16 automation, schema-17 mixer, schema-18 clip/track/master effects; shared live/export signal order; loudness and presets; exact-head CI/review green |
+| **Post-MVP #190 — bounded adjustment layers** | ✅ merged in PR #214 as `024ea9b` | schema-15 resource-free video-track items; full history/edit/persistence/recovery; safe post-composite color effects and bounded animation; deterministic shared preview/export order; zero additional compositor surfaces; Chromium interaction/undo/redo/responsive gate clean |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Current public preview — `v0.2.0-alpha.1` First Light** | ✅ published | annotated tag resolves to `2a845c8`; verified 43-file web archive `sha256:aef2445b…`; public Linux AMD64/ARM64 GHCR index `sha256:ee060a7e…`; exact-head PR + master CI, 3,335 Vitest tests, 17 runner tests, and 10 Chromium tests passed |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
@@ -1600,27 +1602,27 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
-- Issue #189 is implementation- and gate-complete locally on
-  `t3code/read-issue-189`. Schema 18 carries bounded clip/track/master audio-
+- Issue #189 merged through PR #215 as `138db35`. Schema 18 carries bounded clip/track/master audio-
   effect descriptors; live playback and export share the automated mix order,
   EQ, compressor, limiter, and stereo-linked noise-gate DSP. Loudness is a
   cancellable, explicit-range derived LUFS + FIR inter-sample true-peak scan;
   Inspector reports live/export effect readiness separately; Voice, Music, and
   Podcast presets replace ordinary descriptor stacks.
-- Exact-head gates pass all 259 Vitest files / 3,672 tests plus all 17 runner
+- Its exact-head gates passed all 259 Vitest files / 3,672 tests plus all 17 runner
   checks, production build/typecheck (4,945 modules), clean lint, a production
   dependency audit with 0 vulnerabilities, clean diff hygiene, and all 14
   Chromium browser tests. The 1280x720 Inspector regression proves master
   effect controls remain reachable; 720px transport groups remain disjoint and
-  mixer controls retain 24px targets. Do not tick or close GitHub #189 until
-  the user passes it and separately authorizes publication.
-- Issue #188 is implementation-complete in this worktree, not yet committed.
+  mixer controls retain 24px targets. The user explicitly waived the final
+  user pass and authorized publication and merge; GitHub #189 is closed.
+- Issue #188's bounded constant-rate first slice merged through PR #213 as
+  `c846555`.
   `SourceTimeAudioPolicy` admits constant stretch. `createTimelineAudioMixPlan`
   emits tick windows. `pipeline/audioStretch.ts` is first-party WSOLA. Live
   and export pull the same session after 4,096-frame rechunk. Exact 1× stays
   on the old path. Ramps, freezes, invalid curves, and sub-frame 1× stay
-  silent. Inspector copy comes from `clipAudioPresentation`. Chromium speech,
-  music, slow/fast, export-reopen, cancel, and memory gates are still open.
+  silent. Inspector copy comes from `clipAudioPresentation`. PR #213 explicitly
+  did not claim the remaining ramp acceptance; #188 stays open for that work.
 - Issue #72 is implementation-complete on `codex/issue-72-speed-ramps`.
   Timeline schema 12 adds an optional deterministic piecewise curve above the
   schema-11 constant fallback. Curves have one bounded integer origin, strictly
@@ -5187,7 +5189,7 @@ surface; it is not a second zoom and never enters document history.
 
 ## Post-MVP issue #190 - bounded adjustment layers
 
-**IMPLEMENTATION COMPLETE LOCALLY (2026-08-30); PUBLICATION AND ISSUE CLOSEOUT NOT AUTHORIZED.**
+**MERGED (2026-08-30) THROUGH PR #214 AS `024ea9b`; ISSUE #190 CLOSED.**
 
 - Timeline schema 15 adds video-track `AdjustmentItem` records with stable
   identity, name, range, enabled state, opacity, ordered effects, and bounded
@@ -5222,4 +5224,5 @@ surface; it is not a second zoom and never enters document history.
 - The authoritative gate passes all 250 Vitest files / 3,584 tests plus all 17
   repository runner checks, production build/typecheck (4,930 modules), clean
   lint, and diff hygiene.
-- Do not tick or close GitHub #190 unless asked after a user pass.
+- Exact-head CI/review passed before merge; the user authorized skipping the
+  final user pass and closing GitHub #190.

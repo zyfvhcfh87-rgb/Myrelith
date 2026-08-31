@@ -75,11 +75,26 @@ describe('loudness scan', () => {
 
   test('aborts without claiming complete coverage', async () => {
     const controller = new AbortController()
+    const source = makeSource()
+    const sourceClose = vi.spyOn(source, 'close')
     controller.abort()
-    await expect(scanTimelineLoudness(makeDoc(), makeSource(), {
+    await expect(scanTimelineLoudness(makeDoc(), source, {
       range: { startFrame: 0, endFrame: 1 },
       signal: controller.signal,
     })).rejects.toMatchObject({ name: 'AbortError' })
+    expect(sourceClose).toHaveBeenCalledOnce()
+  })
+
+  test('closes source ownership for an empty range', async () => {
+    const source = makeSource()
+    const sourceClose = vi.spyOn(source, 'close')
+
+    const measurement = await scanTimelineLoudness(makeDoc(), source, {
+      range: { startFrame: 0, endFrame: 0 },
+    })
+
+    expect(measurement.expectedSamples).toBe(0)
+    expect(sourceClose).toHaveBeenCalledOnce()
   })
 
   test('propagates cancellation into an active decoder read and still closes ownership', async () => {
@@ -129,8 +144,22 @@ describe('loudness scan', () => {
   })
 
   test('rejects a range outside the document', async () => {
-    await expect(scanTimelineLoudness(makeDoc(), makeSource(), {
+    const source = makeSource()
+    const sourceClose = vi.spyOn(source, 'close')
+    await expect(scanTimelineLoudness(makeDoc(), source, {
       range: { startFrame: 0, endFrame: 2 },
     })).rejects.toThrow(RangeError)
+    expect(sourceClose).toHaveBeenCalledOnce()
+  })
+
+  test('preserves the scan failure when owned-source cleanup also fails', async () => {
+    const source = makeSource()
+    source.close = vi.fn(async () => {
+      throw new Error('cleanup failed')
+    })
+
+    await expect(scanTimelineLoudness(makeDoc(), source, {
+      range: { startFrame: 0, endFrame: 2 },
+    })).rejects.toThrow('loudness range must be integer document frames')
   })
 })

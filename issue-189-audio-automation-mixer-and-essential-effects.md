@@ -4,7 +4,7 @@ GitHub: [zyfvhcfh87-rgb/Myrelith#189](https://github.com/zyfvhcfh87-rgb/Myrelith
 
 The issue's "feasible first slice" is the whole feature. Myrelith does not ship that as one PR. This plan splits it the way #43 (keyframes), #45 (effect stack), and #71 (color) were split: one complete, gated slice at a time, with the later slices named so slice 1 does not trap the signal-flow order.
 
-**Status:** Slices 1–6 plus the issue's bounded noise-gate option and exact-head automated/Chromium gates are complete on this branch. A user pass and separate publication authorization remain. Do not close GitHub #189 until after that pass.
+**Status:** Slices 1–6 plus the bounded noise-gate option merged through PR #215 as `138db35` on 2026-08-31. Exact-head automated, Chromium, CI, and review gates passed; the user explicitly waived the final user pass and authorized merge. GitHub #189 is closed.
 
 The original notes below record the staged implementation. After rebasing over adjustment layers, the authoritative schema sequence is: adjustments 15, clip audio automation 16, mixer 17, and audio-effect descriptors 18. `docs/AUDIO_SIGNAL_FLOW.md` is the normative runtime contract.
 
@@ -12,9 +12,9 @@ The original notes below record the staged implementation. After rebasing over a
 
 Myrelith now plays and exports through the shared automated clip, track, and master mix model.
 
-| Implemented | Publication gate still required |
+| Implemented | Publication status |
 |---|---|
-| Clip volume/balance automation on integer-frame keys | User pass before issue closeout |
+| Clip volume/balance automation on integer-frame keys | Merged in PR #215 |
 | Track/master mixer and per-strip meters |  |
 | Versioned clip/track/master audio-effect stacks |  |
 | Shared EQ, compressor, limiter, and bounded noise gate |  |
@@ -193,7 +193,7 @@ Exclusive strict port (e.g. `42189`). Synthetic speech or tone fixture.
 
 ### Gate
 
-Focused tests for the files above, then `npm test`, `npm run build`, `npm run lint`. Production audit and diff checks. Then the Chromium gate. No issue closeout until the user passes it.
+Focused tests for the files above, then `npm test`, `npm run build`, `npm run lint`. Production audit and diff checks, then the Chromium gate. Those gates passed before PR #215 merged; the user waived the final manual pass for this closeout.
 
 ---
 
