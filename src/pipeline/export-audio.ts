@@ -23,7 +23,7 @@ import type { AudioEffectChain } from '../domain/audioDsp'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import { docDurationFrames } from '../domain/selectors'
-import { audioSampleBoundary } from '../domain/time'
+import { audioSampleBoundary, clipLocalFrameAtSample } from '../domain/time'
 import { audioSampleFromSourceTicks } from '../domain/sourceTimeMap'
 import {
   AUDIO_STRETCH_MAX_SESSIONS,
@@ -762,7 +762,6 @@ export class TimelineAudioMixer {
         }
         const clipLeft = this.clipLeft.subarray(0, sampleCount)
         const clipRight = this.clipRight.subarray(0, sampleCount)
-        const clipLocalFrameStart = docFrame - input.plan.clipTimelineStartFrame
         for (let i = 0; i < sampleCount; i++) {
           const l = input.channels[0][i]
           const r = input.channels[1][i]
@@ -770,7 +769,12 @@ export class TimelineAudioMixer {
             throw new Error('Decoded audio contains a non-finite sample')
           }
           const sample = blockStart + i
-          const localFrame = clipLocalFrameStart + i / sampleCount
+          const localFrame = clipLocalFrameAtSample(
+            input.plan.clipTimelineStartFrame,
+            sample,
+            docFrame,
+            this.doc,
+          )
           writeClipAudioGainsAtLocalFrame(input.plan, localFrame, this.clipGains)
           const envelope = this.envelopeAtSample(input.plan, sample)
           clipLeft[i] = l * envelope * this.clipGains.volume * this.clipGains.leftGain

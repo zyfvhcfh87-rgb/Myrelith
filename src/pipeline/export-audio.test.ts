@@ -862,6 +862,52 @@ describe('TimelineAudioMixer selection and mapping', () => {
     expect(samples[8]).toBeCloseTo(0.5, 5)
   })
 
+  test('maps clip automation across split PCM blocks using the frame sample span', async () => {
+    const clip = makeClip('ramped', 0, 1, { volume: 0 })
+    clip.animation = {
+      tracks: [{
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 0, easing: { type: 'linear' } },
+          { frame: 1, value: 1, easing: { type: 'linear' } },
+        ],
+      }],
+      effectTracks: [],
+    }
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])])
+    const frameSamples = audioSampleBoundary(1, doc)
+    expect(frameSamples).toBeGreaterThan(EXPORT_AUDIO_BLOCK_SAMPLES)
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    const samples: number[] = []
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        samples.push(...block.channels[0])
+      })
+    } finally {
+      await mixer.close()
+    }
+
+    expect(h.readers[0].readCounts).toEqual([
+      EXPORT_AUDIO_BLOCK_SAMPLES,
+      frameSamples - EXPORT_AUDIO_BLOCK_SAMPLES,
+    ])
+    expect(samples).toHaveLength(frameSamples)
+    expect(samples[0]).toBeCloseTo(0)
+    // A block-local i/sampleCount ramp would restart at 0 on the 576-sample tail.
+    expect(samples[EXPORT_AUDIO_BLOCK_SAMPLES]).toBeCloseTo(
+      EXPORT_AUDIO_BLOCK_SAMPLES / frameSamples,
+      5,
+    )
+    expect(samples[frameSamples - 1]).toBeCloseTo(
+      (frameSamples - 1) / frameSamples,
+      5,
+    )
+  })
+
   test('applies track gain after clip envelopes and master after the sum', async () => {
     const clip = makeClip('tone', 0, 1, { volume: 0.5 })
     const track = makeTrack('A1', 'audio', [clip])
