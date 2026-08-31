@@ -4895,3 +4895,61 @@ acceptance claims.
   hygiene.
 - [x] Push, publish PR #214, pass exact-head CI/review, and close Issue #190
   after explicit user authorization to skip the final user pass.
+
+## Post-MVP issue #188 - pitch-preserving audio for retimed ramps
+
+**FINAL IMPLEMENTATION AND ACCEPTANCE COMPLETE (2026-08-31).**
+
+- [x] Preserve exact integer-origin 1× on the direct decoder path and PR #213's
+  constant 0.25×–4× behavior, quality vocabulary, session cap, and host
+  ownership.
+- [x] Add one validated, cloned, bounded `RampedAudioStretch` plan below React
+  and Zustand. Store exact source-tick endpoints plus at most 256 merged,
+  window-clipped 0× hold ranges; never build a duration-sized rate table.
+- [x] Extend the first-party WSOLA session so every grain re-anchors to the
+  canonical `SourceTimeMap` at adjacent document-frame sample boundaries.
+  Preserve pitch, sample count, stereo phase, pull-partition identity, and
+  shared live/export PCM behavior across hold, linear, and smooth legs.
+- [x] Fade true held 0× spans to exact silence over 3 ms. Treat an entirely
+  frozen contributor as decoder-free/session-free silence. Keep an
+  instantaneous linear move away from 0× audible.
+- [x] Wire the same ramp factory into live and export after document-rate
+  normalization and before #189 automation, fades/crossfades, clip effects,
+  track/master effects, meters, and loudness. Preserve #190's resource-free
+  adjustment behavior.
+- [x] Fail malformed and reverse/unrepresentable maps closed; isolate live
+  decode failures as warnings, reject export failures, and close decoder plus
+  stretch ownership on cancellation, seek/re-prime, project replacement,
+  teardown, and repeated export.
+- [x] Prove exact totals, no missing/duplicate samples, mid-ramp seeks, bounded
+  discontinuities, slow/fast pitch, pump/lookahead latency, combined eight-
+  session admission, fully frozen behavior, repeated ownership, and direct/
+  constant compatibility in focused tests. Lock the nonzero-start 29.97 fps
+  absolute-sample boundary, all-1× sub-frame rejection, and offline whole-
+  freeze preflight while preserving a same-asset visual contributor and actual
+  audible linked-crossfade handles without retaining transition-free,
+  one-sided, or still-silent incoming pre-roll links.
+- [x] Keep whole-freeze export preflight bounded with one lazy O(n log n)
+  structural link/transition-window index and per-track clip lookups. Resolve
+  descriptor-backed capacity before cross-track conflicts, and preserve source
+  bounds independently of connected Blob ownership so an unavailable
+  transition or offline silent leg cannot erase a surviving handle dependency.
+  Lock this with a 100,000-clip ambiguous-link scaling regression.
+- [x] Replace the inherited 8 MiB estimate with code-derived maximum-pull
+  accounting: 5 MiB/session and 40 MiB across eight sessions cover 4× stereo
+  input/output planes, the 4,096-frame rechunk, persistent WSOLA arrays, and
+  bounded descriptor/bookkeeping headroom at 96 kHz.
+- [x] Verify real Chromium generated speech/music fixtures at 0.5×, 2×,
+  positive ramp, and freeze ramp; six playback lifecycles; #189 automation and
+  effects; a #190 adjustment item; exact 29.97 fps / 48,048-sample A/V export/
+  reopen; decoded non-silent authored speech/music pitch bands; a sample-exact
+  live freeze; cancellation; zero retained playback resources; and a clean
+  console. Pass the full 15-test Chromium suite.
+
+Publication, exact-head CI/review, merge verification, and closure evidence
+remain pending until the closing pull request and Issue #188 contain them.
+
+Validation: 259 Vitest files / 3,702 tests, all 17 repository runner checks,
+production build/typecheck (4,946 modules), clean oxlint, zero-vulnerability
+production high audit, clean diff hygiene, and all 15 headed repository
+Chromium tests. Vite retains only the established non-fatal large-chunk notice.

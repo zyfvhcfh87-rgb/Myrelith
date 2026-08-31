@@ -764,6 +764,72 @@ export function sourceTimeSpeedPointsAtClip(
   }))
 }
 
+export interface SourceTimeZeroHoldRange {
+  readonly startFrame: number
+  readonly endFrame: number
+}
+
+/** Exact clip-local spans whose canonical speed is identically zero. */
+export function sourceTimeZeroHoldRanges(
+  map: SourceTimeMap,
+  localStartFrame: number,
+  localEndFrame: number,
+): SourceTimeZeroHoldRange[] {
+  if (
+    !Number.isSafeInteger(localStartFrame)
+    || !Number.isSafeInteger(localEndFrame)
+    || localEndFrame <= localStartFrame
+  ) return []
+  const points = sourceTimeSpeedPointsAtClip(map)
+  if (points.length < 2) return []
+  const candidates: SourceTimeZeroHoldRange[] = []
+  const first = points[0]!
+  if (first.rate.numerator === 0 && localStartFrame < first.frame) {
+    candidates.push({ startFrame: localStartFrame, endFrame: first.frame })
+  }
+  for (let index = 0; index < points.length - 1; index++) {
+    const left = points[index]!
+    const right = points[index + 1]!
+    if (
+      left.rate.numerator !== 0
+      || (left.easing !== 'hold' && right.rate.numerator !== 0)
+    ) continue
+    candidates.push({ startFrame: left.frame, endFrame: right.frame })
+  }
+
+  const clipped = candidates
+    .map((range) => ({
+      startFrame: Math.max(localStartFrame, range.startFrame),
+      endFrame: Math.min(localEndFrame, range.endFrame),
+    }))
+    .filter((range) => range.startFrame < range.endFrame)
+  const merged: SourceTimeZeroHoldRange[] = []
+  for (const range of clipped) {
+    const previous = merged[merged.length - 1]
+    if (previous && range.startFrame <= previous.endFrame) {
+      merged[merged.length - 1] = {
+        startFrame: previous.startFrame,
+        endFrame: Math.max(previous.endFrame, range.endFrame),
+      }
+    } else {
+      merged.push(range)
+    }
+  }
+  return merged
+}
+
+/** True when one exact clip-local window needs no decoded source samples. */
+export function sourceTimeAudioWindowIsSilent(
+  map: SourceTimeMap,
+  localStartFrame: number,
+  localEndFrame: number,
+): boolean {
+  const ranges = sourceTimeZeroHoldRanges(map, localStartFrame, localEndFrame)
+  return ranges.length === 1
+    && ranges[0]!.startFrame === localStartFrame
+    && ranges[0]!.endFrame === localEndFrame
+}
+
 export function sourceTimeMapWithSpeedPoint(
   map: SourceTimeMap,
   localFrame: number,
@@ -965,11 +1031,15 @@ export type SourceTimeAudioPolicy =
       rate: ConstantAudioStretchRate
     }
   | {
+      status: 'supported'
+      kind: 'ramped'
+      quality: StretchQualityBand
+      hasSilence: boolean
+    }
+  | {
       status: 'muted'
       reason:
         | 'invalid-speed-curve'
-        | 'speed-ramp-audio-unsupported'
-        | 'freeze-audio-silence'
         | 'sub-frame-origin-audio-unsupported'
     }
 
@@ -988,6 +1058,18 @@ export type ClipAudioPresentation =
       kind: 'stretched'
       rate: ConstantAudioStretchRate
       quality: 'edge'
+    }
+  | {
+      state: 'ready'
+      kind: 'ramped'
+      quality: 'nominal'
+      hasSilence: false
+    }
+  | {
+      state: 'fallback'
+      kind: 'ramped'
+      quality: StretchQualityBand
+      hasSilence: boolean
     }
   | {
       state: 'silence'
@@ -1038,7 +1120,7 @@ export function sourceTimeMapIsConstantStretchCompatible(
 
 export function sourceTimeAudioPolicy(clip: Clip): SourceTimeAudioPolicy {
   const map = clipSourceTimeMap(clip)
-  if (sourceTimeMapHasInvalidSpeedCurve(map)) {
+  if (sourceTimeMapValidationError(map)) {
     return { status: 'muted', reason: 'invalid-speed-curve' }
   }
   if (sourceTimeMapIsDirectAudioCompatible(map)) {
@@ -1050,18 +1132,25 @@ export function sourceTimeAudioPolicy(clip: Clip): SourceTimeAudioPolicy {
   }
   const curve = validSpeedCurve(map)
   if (curve) {
-    const positiveRates = curve.points
-      .filter((point) => point.rate.numerator > 0)
-      .map((point) => point.rate)
-    const firstPositiveRate = positiveRates[0]
-    if (
-      firstPositiveRate
-      && positiveRates.some((rate) => !sameSourceTimeRate(rate, firstPositiveRate))
-    ) {
-      return { status: 'muted', reason: 'speed-ramp-audio-unsupported' }
+    // An all-unity curve is direct audio semantically. If its source origin is
+    // sub-frame, the direct compatibility check above deliberately rejected
+    // it; WSOLA must not quietly turn that legacy mute into a ramp.
+    if (curve.points.every((point) => isUnitySourceTimeRate(point.rate))) {
+      return { status: 'muted', reason: 'sub-frame-origin-audio-unsupported' }
     }
-    if (curve.points.some((point) => point.rate.numerator === 0)) {
-      return { status: 'muted', reason: 'freeze-audio-silence' }
+    const hasSilence = sourceTimeZeroHoldRanges(
+      map,
+      0,
+      clip.timelineRange.durationFrames,
+    ).length > 0
+    const quality = hasSilence || curve.points.some((point) =>
+      point.rate.numerator === 0 || stretchQualityBand(point.rate) === 'edge'
+    ) ? 'edge' : 'nominal'
+    return {
+      status: 'supported',
+      kind: 'ramped',
+      quality,
+      hasSilence,
     }
   }
   return { status: 'muted', reason: 'sub-frame-origin-audio-unsupported' }
@@ -1083,6 +1172,21 @@ export function clipAudioPresentation(clip: Clip): ClipAudioPresentation {
     return { state: 'silence', reason: policy.reason }
   }
   if (policy.kind === 'direct') return { state: 'ready', kind: 'direct' }
+  if (policy.kind === 'ramped') {
+    return policy.quality === 'nominal' && !policy.hasSilence
+      ? {
+          state: 'ready',
+          kind: 'ramped',
+          quality: policy.quality,
+          hasSilence: false,
+        }
+      : {
+          state: 'fallback',
+          kind: 'ramped',
+          quality: policy.quality,
+          hasSilence: policy.hasSilence,
+        }
+  }
   const quality = stretchQualityBand(policy.rate)
   return quality === 'nominal'
     ? { state: 'ready', kind: 'stretched', rate: policy.rate, quality }

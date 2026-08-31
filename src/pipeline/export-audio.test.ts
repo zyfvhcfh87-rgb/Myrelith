@@ -72,6 +72,23 @@ function makeClip(
   }
 }
 
+function makePositiveRampClip(id: string, duration = 10): Clip {
+  const clip = makeClip(id, 0, duration)
+  clip.sourceTimeMap = {
+    sourceStartTicks: 0,
+    sourceDurationTicks: duration * 1_000_000,
+    rate: { numerator: 1, denominator: 1 },
+    speedCurve: {
+      originFrame: 0,
+      points: [
+        { frame: 0, rate: { numerator: 1, denominator: 2 }, easing: 'linear' },
+        { frame: duration, rate: { numerator: 3, denominator: 2 }, easing: 'hold' },
+      ],
+    },
+  }
+  return clip
+}
+
 function makeTrack(
   id: string,
   kind: Track['kind'],
@@ -418,7 +435,88 @@ describe('TimelineAudioMixer selection and mapping', () => {
     await mixer.close()
   })
 
-  test('rejects nine overlapping stretch sessions before opening media', () => {
+  test('renders a variable-speed ramp and only silences its held freeze span', async () => {
+    const clip = makeClip('ramped-retime', 0, 4)
+    clip.sourceTimeMap = {
+      sourceStartTicks: 0,
+      sourceDurationTicks: 4_000_000,
+      rate: { numerator: 1, denominator: 1 },
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: { numerator: 1, denominator: 2 }, easing: 'linear' },
+          { frame: 1, rate: { numerator: 2, denominator: 1 }, easing: 'smooth' },
+          { frame: 2, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+          { frame: 3, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+        ],
+      },
+    }
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])])
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    const samples: number[] = []
+
+    try {
+      for (let frame = 0; frame < 4; frame++) {
+        await mixer.writeFrame(frame, async (block) => {
+          samples.push(...block.channels[0])
+        })
+      }
+    } finally {
+      await mixer.close()
+    }
+
+    expect(samples).toHaveLength(6_400)
+    expect(samples.slice(3_200, 4_800).every((sample) => sample === 0)).toBe(true)
+    expect(samples.slice(0, 3_000).some((sample) => sample !== 0)).toBe(true)
+    expect(samples.slice(5_000).some((sample) => sample !== 0)).toBe(true)
+    expect(h.requests[0]).toMatchObject({
+      clipId: 'ramped-retime',
+      startSample: 0,
+      endSample: 5_200,
+    })
+    expect(h.readers[0].close).toHaveBeenCalledOnce()
+    expect(h.source.close).toHaveBeenCalledOnce()
+  })
+
+  test('renders an entirely frozen window as silence without opening media', async () => {
+    const clip = makeClip('fully-frozen', 0, 4)
+    clip.sourceTimeMap = {
+      sourceStartTicks: 0,
+      sourceDurationTicks: 4_000_000,
+      rate: { numerator: 1, denominator: 1 },
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+          { frame: 4, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+        ],
+      },
+    }
+    const h = makeSource()
+    const mixer = new TimelineAudioMixer(
+      makeDoc([makeTrack('A1', 'audio', [clip])]),
+      h.source,
+    )
+    const samples: number[] = []
+
+    for (let frame = 0; frame < 4; frame++) {
+      await mixer.writeFrame(frame, async (block) => {
+        samples.push(...block.channels[0])
+      })
+    }
+    await mixer.close()
+
+    expect(samples).toHaveLength(6_400)
+    expect(samples.every((sample) => sample === 0)).toBe(true)
+    expect(h.requests).toEqual([])
+    expect(h.source.close).toHaveBeenCalledOnce()
+  })
+
+  test('rejects nine overlapping constant and ramp sessions before opening media', () => {
     const tracks = Array.from({ length: 9 }, (_value, index) => {
       const clip = makeClip(`retimed-${index}`, 0, 1)
       clip.sourceRange = { startFrame: 0, durationFrames: 2 }
@@ -426,6 +524,17 @@ describe('TimelineAudioMixer selection and mapping', () => {
         sourceStartTicks: 0,
         sourceDurationTicks: 2_000_000,
         rate: { numerator: 2, denominator: 1 },
+        ...(index % 2 === 0
+          ? {
+              speedCurve: {
+                originFrame: 0,
+                points: [
+                  { frame: 0, rate: { numerator: 1, denominator: 2 }, easing: 'linear' as const },
+                  { frame: 1, rate: { numerator: 2, denominator: 1 }, easing: 'hold' as const },
+                ],
+              },
+            }
+          : {}),
       }
       return makeTrack(`A${index + 1}`, 'audio', [clip])
     })
@@ -1159,7 +1268,7 @@ describe('TimelineAudioMixer streaming and ownership', () => {
 
   test('cancellation closes active readers and the media source exactly once', async () => {
     const doc = makeDoc([
-      makeTrack('A1', 'audio', [makeClip('long', 0, 10)]),
+      makeTrack('A1', 'audio', [makePositiveRampClip('long')]),
     ])
     const h = makeSource()
     const mixer = new TimelineAudioMixer(doc, h.source)
@@ -1174,6 +1283,28 @@ describe('TimelineAudioMixer streaming and ownership', () => {
 
     expect(h.readers[0].close).toHaveBeenCalledOnce()
     expect(h.close).toHaveBeenCalledOnce()
+  })
+
+  test('releases every ramp reader across repeated export owners', async () => {
+    for (let cycle = 0; cycle < 12; cycle++) {
+      const h = makeSource((_request, sampleCount) => [
+        filled(sampleCount, 0.25),
+        filled(sampleCount, 0.25),
+      ])
+      const mixer = new TimelineAudioMixer(
+        makeDoc([makeTrack('A1', 'audio', [makePositiveRampClip(`ramp-${cycle}`, 4)])]),
+        h.source,
+      )
+      for (let frame = 0; frame < 4; frame++) {
+        await mixer.writeFrame(frame, async () => undefined)
+      }
+      const firstClose = mixer.close()
+      expect(mixer.close()).toBe(firstClose)
+      await firstClose
+      expect(h.requests).toHaveLength(1)
+      expect(h.readers[0].close).toHaveBeenCalledOnce()
+      expect(h.source.close).toHaveBeenCalledOnce()
+    }
   })
 })
 

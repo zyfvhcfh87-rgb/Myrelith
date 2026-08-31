@@ -9,7 +9,7 @@ The stage order below does not change.
 decode
   → fold-down to stereo
   → normalize onto the document sample grid
-  → constant-rate stretch when the timing plan requires it
+  → constant- or variable-rate stretch when the timing plan requires it
   → clip volume / balance (static or integer-frame keys)
   → clip fades / crossfades
   → clip audio effects            [Slice 3–4]
@@ -25,9 +25,24 @@ decode
 ```
 
 Live playback and export both perform sample-grid normalization before
-time stretch and clip effects. The playback `AudioContext` is requested at
+time stretch and clip effects. Variable-rate sessions consume the same bounded
+`RampedAudioStretch` descriptor and first-party WSOLA implementation on both
+surfaces; live intervals use differences between absolute document sample
+boundaries so fractional frame rates cannot duplicate or drop a sample.
+Authored 0% holds are silence at this stage, and a whole-window freeze retains
+no source Blob or decoder unless that asset also contributes video or a
+structurally complete linked crossfade expands it into an audible source-time
+window. Merely having a link id, a missing opposite audio partner, or a still-
+silent incoming pre-roll does not retain the source. Export computes this from
+one lazy O(n log n) structural transition/link index with per-track clip
+lookups, resolves source capacity before cross-track conflicts, then reuses the
+captured required-asset set. Source bounds remain descriptor-owned even when a
+silent leg is offline; connected Blobs remain separately owned. The playback
+`AudioContext` is requested at
 the document rate so track/master DSP does not silently move across a browser
-resampling boundary.
+resampling boundary. Maximum-pull accounting covers the stereo input/output
+planes, 4,096-frame rechunk, and persistent WSOLA arrays below 5 MiB/session
+and 40 MiB across the admitted eight sessions.
 
 ## Clip automation (schema 16)
 

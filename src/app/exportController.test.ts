@@ -13,6 +13,7 @@ import {
 } from '../domain/exportProfile'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
+import { createTimelineAudioMixPlan } from '../domain/audioMixPlan'
 import type { MediaAsset, TimelineDoc } from '../domain/schema'
 import { createPluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import type {
@@ -897,6 +898,303 @@ describe('exportController wiring and completion', () => {
 
     await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
     expect(h.fetchBlob).toHaveBeenCalledOnce()
+  })
+
+  test('fully frozen audio neither blocks offline export nor retains a Blob', async () => {
+    const audioDoc = docWithSourceClipOn('audio')
+    audioDoc.tracks[0].clips[0] = {
+      ...audioDoc.tracks[0].clips[0],
+      linkGroupId: 'frozen-link',
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 2_000_000,
+        rate: { numerator: 1, denominator: 1 },
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+            { frame: 2, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+          ],
+        },
+      },
+    }
+    audioDoc.tracks.unshift({
+      ...audioDoc.tracks[0],
+      id: 'V1',
+      kind: 'video',
+      hidden: true,
+      clips: [{
+        ...audioDoc.tracks[0].clips[0],
+        id: 'hidden-linked-video',
+      }],
+    })
+    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.runExport).toHaveBeenCalledOnce()
+  })
+
+  test('same-asset video still blocks offline export beside fully frozen audio', async () => {
+    const audioDoc = docWithSourceClipOn('audio')
+    const frozen = {
+      ...audioDoc.tracks[0].clips[0],
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 2_000_000,
+        rate: { numerator: 1, denominator: 1 },
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' as const },
+            { frame: 2, rate: { numerator: 1, denominator: 1 }, easing: 'hold' as const },
+          ],
+        },
+      },
+    }
+    const video = { ...frozen, id: 'same-asset-video' }
+    audioDoc.tracks = [
+      { ...audioDoc.tracks[0], id: 'V1', kind: 'video', clips: [video] },
+      { ...audioDoc.tracks[0], id: 'A1', kind: 'audio', clips: [frozen] },
+    ]
+    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
+      'Reconnect 1 offline source before exporting: source.mp4.',
+    )
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('offline silent incoming bounds preserve the connected outgoing crossfade', async () => {
+    const base = DOC.tracks[0].clips[0]
+    const outgoingAsset: MediaAsset = {
+      ...ASSET,
+      id: 'asset-outgoing',
+      fileName: 'outgoing.mp4',
+      objectUrl: 'blob:outgoing-source',
+    }
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+    useMediaStore.getState().addAsset(outgoingAsset)
+
+    const outgoingAudio = {
+      ...base,
+      id: 'audio-outgoing',
+      assetId: outgoingAsset.id,
+      name: outgoingAsset.fileName,
+      linkGroupId: 'outgoing-link',
+      sourceRange: { startFrame: 0, durationFrames: 20 },
+      timelineRange: { startFrame: 0, durationFrames: 10 },
+    }
+    const frozenIncoming = {
+      ...base,
+      id: 'audio-frozen-incoming',
+      linkGroupId: 'frozen-link',
+      sourceRange: { startFrame: 10, durationFrames: 20 },
+      timelineRange: { startFrame: 10, durationFrames: 10 },
+      sourceTimeMap: {
+        sourceStartTicks: 10_000_000,
+        sourceDurationTicks: 20_000_000,
+        rate: { numerator: 1, denominator: 1 },
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' as const },
+            { frame: 10, rate: { numerator: 1, denominator: 1 }, easing: 'hold' as const },
+          ],
+        },
+      },
+    }
+    const videoTrack = {
+      ...DOC.tracks[0],
+      hidden: true,
+      clips: [
+        { ...outgoingAudio, id: 'video-outgoing' },
+        { ...frozenIncoming, id: 'video-frozen-incoming' },
+      ],
+      transitions: [{
+        id: 'offline-incoming-crossfade',
+        type: 'crossfade' as const,
+        fromClipId: 'video-outgoing',
+        toClipId: 'video-frozen-incoming',
+        durationFrames: 4,
+        audio: { enabled: true, curve: 'equal-power' as const },
+      }],
+    }
+    const audioDoc: TimelineDoc = {
+      ...DOC,
+      tracks: [
+        videoTrack,
+        {
+          ...videoTrack,
+          id: 'A1',
+          kind: 'audio',
+          hidden: false,
+          clips: [outgoingAudio],
+          transitions: [],
+        },
+        {
+          ...videoTrack,
+          id: 'A2',
+          kind: 'audio',
+          hidden: false,
+          clips: [frozenIncoming],
+          transitions: [],
+        },
+      ],
+    }
+    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
+
+    expect(h.fetchBlob).toHaveBeenCalledOnce()
+    expect(h.fetchBlob).toHaveBeenCalledWith(outgoingAsset.objectUrl)
+    const catalog = h.createMediaSource.mock.calls[0]?.[2] as SourceBoundsCatalog
+    expect([...catalog.keys()].sort()).toEqual([ASSET.id, outgoingAsset.id].sort())
+    const plan = createTimelineAudioMixPlan(audioDoc, catalog)
+    const outgoing = plan.clips.find((clip) => clip.clipId === outgoingAudio.id)
+    const incoming = plan.clips.find((clip) => clip.clipId === frozenIncoming.id)
+    expect(outgoing).toMatchObject({
+      timelineEndFrame: 12,
+      envelopes: [{ transitionId: 'offline-incoming-crossfade', role: 'from' }],
+    })
+    expect(incoming).toMatchObject({
+      timelineStartFrame: 8,
+      ramp: { silent: true },
+      envelopes: [{ transitionId: 'offline-incoming-crossfade', role: 'to' }],
+    })
+  })
+
+  test('source-aware conflicts retain an offline frozen asset used by the surviving fade', async () => {
+    const base = DOC.tracks[0].clips[0]
+    const validAsset: MediaAsset = {
+      ...ASSET,
+      id: 'asset-valid-partner',
+      fileName: 'valid-partner.mp4',
+      objectUrl: 'blob:valid-partner',
+    }
+    const unavailableAsset: MediaAsset = {
+      ...ASSET,
+      id: 'asset-unavailable-partner',
+      fileName: 'unavailable-partner.mp4',
+      objectUrl: 'blob:unavailable-partner',
+      sourceBounds: {
+        ...ASSET.sourceBounds,
+        audio: { status: 'unknown' },
+      },
+    }
+    useMediaStore.getState().addAsset(validAsset)
+    useMediaStore.getState().addAsset(unavailableAsset)
+    useMediaStore.getState().disconnectAsset(ASSET.id)
+
+    const frozenAudio = {
+      ...base,
+      id: 'audio-conflict-frozen',
+      linkGroupId: 'conflict-frozen-link',
+      sourceRange: { startFrame: 10, durationFrames: 20 },
+      timelineRange: { startFrame: 0, durationFrames: 10 },
+      sourceTimeMap: {
+        sourceStartTicks: 10_000_000,
+        sourceDurationTicks: 20_000_000,
+        rate: { numerator: 1, denominator: 1 },
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' as const },
+            { frame: 10, rate: { numerator: 1, denominator: 1 }, easing: 'hold' as const },
+          ],
+        },
+      },
+    }
+    const validAudio = {
+      ...base,
+      id: 'audio-conflict-valid',
+      assetId: validAsset.id,
+      name: validAsset.fileName,
+      linkGroupId: 'conflict-valid-link',
+      sourceRange: { startFrame: 30, durationFrames: 20 },
+      timelineRange: { startFrame: 10, durationFrames: 10 },
+    }
+    const unavailableAudio = {
+      ...base,
+      id: 'audio-conflict-unavailable',
+      assetId: unavailableAsset.id,
+      name: unavailableAsset.fileName,
+      linkGroupId: 'conflict-unavailable-link',
+      sourceRange: { startFrame: 30, durationFrames: 20 },
+      timelineRange: { startFrame: 10, durationFrames: 10 },
+    }
+    const videoTrack = (
+      id: string,
+      to: typeof validAudio,
+      transitionId: string,
+    ) => ({
+      ...DOC.tracks[0],
+      id,
+      hidden: true,
+      clips: [
+        { ...frozenAudio, id: `${id}-from` },
+        { ...to, id: `${id}-to` },
+      ],
+      transitions: [{
+        id: transitionId,
+        type: 'crossfade' as const,
+        fromClipId: `${id}-from`,
+        toClipId: `${id}-to`,
+        durationFrames: 4,
+        audio: { enabled: true, curve: 'equal-power' as const },
+      }],
+    })
+    const validVideo = videoTrack('V-valid', validAudio, 'valid-crossfade')
+    const unavailableVideo = videoTrack(
+      'V-unavailable',
+      unavailableAudio,
+      'unavailable-crossfade',
+    )
+    const audioDoc: TimelineDoc = {
+      ...DOC,
+      tracks: [
+        validVideo,
+        unavailableVideo,
+        {
+          ...validVideo,
+          id: 'A-frozen',
+          kind: 'audio',
+          hidden: false,
+          clips: [frozenAudio],
+          transitions: [],
+        },
+        {
+          ...validVideo,
+          id: 'A-valid',
+          kind: 'audio',
+          hidden: false,
+          clips: [validAudio],
+          transitions: [],
+        },
+        {
+          ...unavailableVideo,
+          id: 'A-unavailable',
+          kind: 'audio',
+          hidden: false,
+          clips: [unavailableAudio],
+          transitions: [],
+        },
+      ],
+    }
+    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
+      'Reconnect 1 offline source before exporting: source.mp4.',
+    )
+    expect(h.fetchBlob).not.toHaveBeenCalled()
+    expect(h.runExport).not.toHaveBeenCalled()
   })
 
   test('a retimed visual contributor still requires and retains its source', async () => {

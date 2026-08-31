@@ -1,6 +1,6 @@
 # Myrelith and open-source video editor feature comparison
 
-Date: 2026-08-24
+Date: 2026-08-31
 
 Status: current capability comparison and product-roadmap recommendation
 
@@ -70,13 +70,13 @@ labels it unstable alpha.
 |---|---|---|---|---|
 | Timeline and editing | **Shipping, strong core / limited pro grammar** | Multitrack select, marquee/group move, razor, trim, ripple trim, slip, slide, linked A/V, track controls, snapping, markers, captions, keyboard stepping, and undo/redo. | No evidenced Source Monitor, source In/Out, three-point insert/overwrite, lift/extract, roll-edit tool, or JKL/shuttle workflow. | [Public inventory](../README.md#what-works-today), [store operations](../ARCHITECTURE.md#store-action-contracts) |
 | Media, formats, proxies | **Shipping / limited by browser codecs** | Video/audio plus PNG/JPEG/WebP/AVIF, byte inspection, searchable virtualized Media Pool, collections, thumbnails, filmstrips, waveforms, offline relink, and local editing proxies. | Desktop peers accept and transcode a much wider FFmpeg-backed set. Myrelith proxies are video-only AVC helpers, and final export always requires the original. | [Public inventory](../README.md#what-works-today), [proxy contract](PROXY_CODEC_SUPPORT.md) |
-| Effects, compositing, animation | **Shipping / narrow vocabulary** | Transforms, crop, opacity, four blend modes, ordered effects, five-control color adjustment, masks, chroma key, dynamic zoom, crossfades, effect/property keyframes, and signed local plugins. | Far fewer built-ins, presets, generators, blend modes, track/master effects, and direct mask controls than Kdenlive/Shotcut. Text effects remain static. Adjustment layers are research-only. | [Effect contract](EFFECTS.md), [public inventory](../README.md#what-works-today) |
+| Effects, compositing, animation | **Shipping / narrow vocabulary** | Transforms, crop, opacity, four blend modes, ordered effects, five-control color adjustment, masks, chroma key, dynamic zoom, crossfades, effect/property keyframes, bounded adjustment layers, and signed local plugins. | Far fewer built-ins, presets, generators, blend modes, and direct mask controls than Kdenlive/Shotcut. Text effects remain static. | [Effect contract](EFFECTS.md), [public inventory](../README.md#what-works-today) |
 | Tracking and masks | **Shipping, comparatively strong** | Rectangle/ellipse/Bezier masks, animated mask geometry, point and box tracking, stabilization, and manual lens correction. | Lens correction currently blocks tracking on that source, mask editing is numeric/list-based rather than direct on-monitor, and there is no broad rotoscope/object-segmentation workflow. | [Effect contract](EFFECTS.md#masks-and-chroma-key), [architecture](../ARCHITECTURE.md#motion-analysis-foundation-and-research-boundary) |
 | Color and scopes | **Shipping / basic SDR** | Exposure, contrast, saturation, temperature, tint, histogram, luma waveform, and vectorscope over completed preview output. | No LUT import, RGB curves, wheels/lift-gamma-gain, secondary grading, color management, 10-bit pipeline, HDR preview, or HDR metadata/export contract. Current pixels are display-referred 8-bit sRGB. | [Effect contract](EFFECTS.md#built-in-color-correction), [scopes](EFFECTS.md#video-scopes) |
-| Audio | **Shipping / basic mix** | Live playback, clip volume and stereo balance, track mute/solo, multichannel-to-stereo fold-down, meters, synchronized fades, and AAC/Opus export. | No pitch-safe non-1x audio, gain/pan automation, track/master mixer, EQ, compressor, limiter, noise reduction, loudness normalization, buses, or audio plugin workflow. | [Audio meters](AUDIO_METERING.md), [known limitation](../README.md#known-limitations), [timing policy](../ARCHITECTURE.md#crossfade-planning-composition-and-audio) |
+| Audio | **Shipping / capable local mix** | Pitch-safe constant/ramped retiming, clip gain/pan automation, track/master mixer, multichannel stereo fold-down, fades/crossfades, EQ/compressor/limiter/noise gate, meters, loudness/true peak, presets, and AAC/Opus export. | No buses/sends, broad noise restoration, source separation, audio plugin workflow, or formant editing. Edge retiming rates use a documented quality fallback. | [Audio signal flow](AUDIO_SIGNAL_FLOW.md), [audio meters](AUDIO_METERING.md), [timing policy](../ARCHITECTURE.md#crossfade-planning-composition-and-audio) |
 | Titles, subtitles, speech | **Shipping / limited** | Editable procedural text overlays plus semantic caption tracks with SRT/WebVTT import/export. | No title-template library, rich multi-element title canvas, text keyframes, rolls/crawls, ASS styling/interchange, local transcription, or translation workflow. | [Public inventory](../README.md#what-works-today), [known limitation](../README.md#known-limitations) |
-| Multicam, sync, sequences | **Research-only** | Pure feasibility work proves bounded adjustment layers, multiple same-settings sequences, exact nested sequences, and manual-sync multicam contracts. | No product schema, UI, preview/export integration, automatic sync, or simultaneous angle wall ships. | [Research status and decisions](EDITOR_STRUCTURE_RESEARCH.md#decision-summary) |
-| Stabilization, lens, retiming | **Shipping / audio-limited** | Constant speed, speed ramps/freezes, stabilization, point/box tracking, dynamic zoom, and bounded manual lens correction. | Retimed picture is silent outside exact 1x; no pitch-preserving time stretch. Camera/lens profile catalogs and automatic lens detection are intentionally absent. | [Public inventory](../README.md#what-works-today), [known limitation](../README.md#known-limitations) |
+| Multicam, sync, sequences | **Research-only beyond shipped adjustments** | Bounded adjustment layers ship; pure feasibility work also proves multiple same-settings sequences, exact nested sequences, and manual-sync multicam contracts. | No shipping multiple-sequence schema/UI, automatic sync, or simultaneous angle wall. | [Research status and decisions](EDITOR_STRUCTURE_RESEARCH.md#decision-summary) |
+| Stabilization, lens, retiming | **Shipping / bounded** | Pitch-safe constant speed and ramps with explicit freeze silence, stabilization, point/box tracking, dynamic zoom, and bounded manual lens correction. | Edge retiming quality is limited; camera/lens profile catalogs, automatic lens detection, reverse audio, and formant correction are intentionally absent. | [Public inventory](../README.md#what-works-today), [timing policy](../ARCHITECTURE.md#crossfade-planning-composition-and-audio) |
 | Export and delivery | **Shipping / narrow** | Capability-aware MP4 AVC/AAC, WebM VP9/Opus, WebM AV1/Opus, explicit HEVC, buffered download, and direct-to-file export. | No persistent render queue, batch/range jobs, custom presets, image sequence, audio-only, alpha, chapters, streaming, project render scripts, or explicit hardware-encoder selection. | [Public inventory](../README.md#what-works-today), [export contract](../ARCHITECTURE.md#export-profile-and-delivery-contracts) |
 | Project, recovery, interchange | **Shipping, strong local safety / limited interchange** | Portable projects, Save/Save As/live save, Recent, bounded recovery, remembered local handles, offline projects, deterministic relink, and collections. | No multiple shipping sequences, project archive/collect-media flow, OTIO/EDL/XML interchange, multi-tab recovery coordination, or real-time collaboration. | [Project inventory](../README.md#what-works-today), [known limitation](../README.md#known-limitations), [architecture](../ARCHITECTURE.md#store-action-contracts) |
 | Accessibility, localization, customization | **Shipping intent / limited evidence** | Keyboard-accessible native controls, command palette, focus/status handling, responsive editor, and accessible timeline/Inspector operations are built into the current UI. | No formal accessibility-conformance claim, localization system, or mature workspace/layout customization comparable with desktop peers is documented. | [Public inventory](../README.md#what-works-today), [architecture](../ARCHITECTURE.md#store-action-contracts) |
@@ -132,16 +132,15 @@ per command. This closes the most important daily-workflow gap against Kdenlive,
 Shotcut, and Flowblade; adding dozens of filters first would leave assembly
 editing unnecessarily slow.
 
-**2. Finish retiming audio.** Add pitch-safe time stretch for constant speeds
-and ramps through one shared live/export contract. The current silent-audio
-policy is correct as a fail-closed boundary, but it makes an otherwise strong
-retiming feature unsuitable for common dialogue, music, and montage work.
+**2. Deepen retiming audio after the shared foundation.** Pitch-safe constant
+and ramped time stretch now share one bounded live/export contract. Future work
+can evaluate formant correction and higher-quality edge-rate algorithms without
+weakening exact 1× or the explicit 0× silence policy.
 
-**3. Establish the first production audio effect/automation seam.** Start with
-keyframed gain and pan, a track/master mixer, EQ, compressor, limiter, and
-EBU-style loudness/true-peak analysis. Every effect must share deterministic
-preview/export evaluation; do not build a Web Audio-only preview path that
-cannot render the same output offline.
+**3. Extend the production audio seam.** Keyframed gain/pan, track/master
+mixing, EQ, compressor, limiter, noise gate, and loudness/true-peak analysis now
+ship through the shared signal order. Next evaluate buses/sends, restoration,
+and a bounded audio-plugin contract without creating preview-only DSP.
 
 ### Priority 1 — ship the already-researched structure roadmap
 

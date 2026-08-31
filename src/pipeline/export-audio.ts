@@ -11,7 +11,8 @@ import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import {
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
-  isStretchedAudioClipPlan,
+  isRampedAudioClipPlan,
+  isTimeStretchedAudioClipPlan,
   type TimelineAudioClipPlan,
   type TimelineAudioEnvelope,
   type TimelineAudioMasterBus,
@@ -30,6 +31,7 @@ import {
   AUDIO_STRETCH_RECHUNK_FRAMES,
   audioStretchSourceLeadSamples,
   createConstantRateAudioStretcher,
+  createRampedAudioStretcher,
   type StereoPcm,
 } from './audioStretch'
 
@@ -317,6 +319,7 @@ interface SampleAudioEnvelope extends TimelineAudioEnvelope {
 }
 
 type SampleAudioClipPlan = TimelineAudioClipPlan & {
+  frameRate: TimelineDoc['frameRate']
   timelineStartSample: number
   timelineEndSample: number
   fadeInEndSample: number
@@ -358,7 +361,10 @@ async function closeReaders(
 
 function assertStretchSessionLimit(plans: readonly SampleAudioClipPlan[]): void {
   const events = plans
-    .filter(isStretchedAudioClipPlan)
+    .filter((plan) =>
+      isTimeStretchedAudioClipPlan(plan)
+      && !(isRampedAudioClipPlan(plan) && plan.ramp.silent)
+    )
     .flatMap((plan) => [
       { frame: plan.timelineStartFrame, delta: 1 },
       { frame: plan.timelineEndFrame, delta: -1 },
@@ -377,15 +383,24 @@ function assertStretchSessionLimit(plans: readonly SampleAudioClipPlan[]): void 
 
 function createStretchedExportReader(
   inner: ExportAudioClipReader,
-  plan: Extract<SampleAudioClipPlan, { stretch: object }>,
+  plan: Extract<SampleAudioClipPlan, { stretch: object } | { ramp: object }>,
   sampleRate: number,
   preRollSamples: number,
 ): ExportAudioClipReader {
-  const session = createConstantRateAudioStretcher({
-    stretch: plan.stretch,
-    sampleRate,
-    outputStartSample: 0,
-  })
+  const session = isRampedAudioClipPlan(plan)
+    ? createRampedAudioStretcher({
+        ramp: plan.ramp,
+        frameRate: plan.frameRate,
+        sampleRate,
+        timelineStartFrame: plan.timelineStartFrame,
+        clipTimelineStartFrame: plan.clipTimelineStartFrame,
+        outputStartSample: 0,
+      })
+    : createConstantRateAudioStretcher({
+        stretch: plan.stretch,
+        sampleRate,
+        outputStartSample: 0,
+      })
   let chunk: StereoPcm | null = null
   let chunkOffset = 0
   let remainingPreRoll = preRollSamples
@@ -516,6 +531,7 @@ export class TimelineAudioMixer {
     this.mixPlans = mixPlan.clips
       .map((plan) => ({
         ...plan,
+        frameRate: doc.frameRate,
         timelineStartSample: audioSampleBoundary(plan.timelineStartFrame, doc),
         timelineEndSample: audioSampleBoundary(plan.timelineEndFrame, doc),
         fadeInEndSample: audioSampleBoundary(
@@ -545,6 +561,8 @@ export class TimelineAudioMixer {
     return this.mixPlans.filter((plan) =>
       plan.timelineStartFrame <= frame
       && frame < plan.timelineEndFrame,
+    ).filter((plan) =>
+      !(isRampedAudioClipPlan(plan) && plan.ramp.silent),
     )
   }
 
@@ -566,9 +584,9 @@ export class TimelineAudioMixer {
     for (const plan of plans) {
       if (this.readers.has(plan.clipId)) continue
       if (
-        isStretchedAudioClipPlan(plan)
+        isTimeStretchedAudioClipPlan(plan)
         && [...this.readers.values()].filter((active) =>
-          isStretchedAudioClipPlan(active.plan)
+          isTimeStretchedAudioClipPlan(active.plan)
         ).length >= AUDIO_STRETCH_MAX_SESSIONS
       ) {
         throw new Error(
@@ -583,9 +601,11 @@ export class TimelineAudioMixer {
         plan.timelineEndFrame,
         this.doc,
       )
-      const sourceStartSample = isStretchedAudioClipPlan(plan)
+      const sourceStartSample = isTimeStretchedAudioClipPlan(plan)
         ? audioSampleFromSourceTicks(
-            plan.stretch.sourceStartTicks,
+            isRampedAudioClipPlan(plan)
+              ? plan.ramp.sourceStartTicks
+              : plan.stretch.sourceStartTicks,
             this.doc.frameRate,
             this.doc.audioSampleRate,
           )
@@ -599,9 +619,11 @@ export class TimelineAudioMixer {
           `Clip "${plan.clipId}" has an invalid audio in-point`,
         )
       }
-      const sourceEndSample = isStretchedAudioClipPlan(plan)
+      const sourceEndSample = isTimeStretchedAudioClipPlan(plan)
         ? audioSampleFromSourceTicks(
-            plan.stretch.sourceEndTicks,
+            isRampedAudioClipPlan(plan)
+              ? plan.ramp.sourceEndTicks
+              : plan.stretch.sourceEndTicks,
             this.doc.frameRate,
             this.doc.audioSampleRate,
           )
@@ -611,7 +633,7 @@ export class TimelineAudioMixer {
           `Clip "${plan.clipId}" audio range is too large`,
         )
       }
-      const lead = isStretchedAudioClipPlan(plan)
+      const lead = isTimeStretchedAudioClipPlan(plan)
         ? audioStretchSourceLeadSamples(this.doc.audioSampleRate)
         : 0
       const openStartSample = Math.max(0, sourceStartSample - lead)
@@ -630,7 +652,7 @@ export class TimelineAudioMixer {
       let reader: ExportAudioClipReader
       try {
         throwIfAudioAborted(this.signal)
-        reader = isStretchedAudioClipPlan(plan)
+        reader = isTimeStretchedAudioClipPlan(plan)
           ? createStretchedExportReader(
               inner,
               plan,

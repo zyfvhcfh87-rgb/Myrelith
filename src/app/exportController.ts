@@ -12,7 +12,9 @@
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import { validateExportProfile } from '../domain/exportProfile'
 import {
+  createCrossfadeAudioWindowIndex,
   createSourceBoundsCatalog,
+  type CrossfadeAudioWindowIndex,
   type SourceBoundsCatalog,
 } from '../domain/crossfadePlan'
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
@@ -21,12 +23,12 @@ import type { PluginVideoEffectContributionSnapshot } from '../domain/pluginVide
 import { selectMediaRepresentation } from '../domain/proxyCache'
 import {
   audibleTracks,
-  clipContributesAudioOutput,
+  clipContributesDecodedAudioOutput,
   clipContributesVisualOutput,
+  clipHasWholeWindowSilentRampedAudio,
   documentHasOutputPluginEffects,
   outputMediaAssetIds,
 } from '../domain/selectors'
-import { sourceTimeAudioPolicy } from '../domain/sourceTimeMap'
 import {
   assertExportAdmission,
   exportTimeline,
@@ -237,11 +239,10 @@ function createAssetResolver(
 
 /** Start retaining every Blob that can contribute to the captured output. */
 function retainReferencedBlobs(
-  doc: TimelineDoc,
+  assetIds: readonly AssetId[],
   resolveAsset: ExportAssetResolver,
-  includeAudio: boolean,
 ): void {
-  for (const assetId of outputMediaAssetIds(doc, includeAudio)) {
+  for (const assetId of assetIds) {
     try {
       // The pipeline remains the error owner when it requests this same
       // cached promise. This handler only prevents an unused hidden/muted
@@ -259,8 +260,10 @@ function partialTrackConflict(
   doc: TimelineDoc,
   assets: ReadonlyMap<AssetId, MediaAsset>,
   includeAudio: boolean,
+  providedCrossfadeWindows?: CrossfadeAudioWindowIndex,
 ): string | null {
   const audibleTrackIds = new Set(audibleTracks(doc).map((track) => track.id))
+  let crossfadeWindows = providedCrossfadeWindows
   for (const track of doc.tracks) {
     const contributes = track.kind === 'video'
       ? !track.hidden
@@ -270,9 +273,13 @@ function partialTrackConflict(
       if (track.kind === 'video') {
         if (!clipContributesVisualOutput(clip)) continue
       } else {
-        if (!clipContributesAudioOutput(clip)) continue
-        const audioPolicy = sourceTimeAudioPolicy(clip)
-        if (audioPolicy.status !== 'supported') continue
+        const crossfadeWindow = clipHasWholeWindowSilentRampedAudio(clip)
+          ? (crossfadeWindows ??= createCrossfadeAudioWindowIndex(doc)).get(clip.id) ?? null
+          : null
+        if (!clipContributesDecodedAudioOutput(
+          clip,
+          crossfadeWindow,
+        )) continue
       }
       const asset = assets.get(clip.assetId)
       if (!asset) continue
@@ -314,6 +321,8 @@ function assertDestinationCapability(
 
 interface CapturedExportInputs {
   readonly assets: ReadonlyMap<AssetId, MediaAsset>
+  readonly retainedAssetIds: readonly AssetId[]
+  readonly sourceBounds: SourceBoundsCatalog
   readonly runtimeGuards: Map<AssetId, MediaRuntimeGuard>
 }
 
@@ -323,8 +332,20 @@ function captureExportInputs(
 ): CapturedExportInputs {
   const mediaState = useMediaStore.getState()
   const assets = new Map(mediaState.assets)
+  const sourceBounds = createSourceBoundsCatalog(mediaState.descriptors.values())
   const includeAudio = settings.audioChannelLayout !== 'off'
-  const offline = [...outputMediaAssetIds(doc, includeAudio)].filter(
+  const hasSilentRamp = includeAudio && audibleTracks(doc).some((track) => (
+    track.clips.some(clipHasWholeWindowSilentRampedAudio)
+  ))
+  const crossfadeWindows = hasSilentRamp
+    ? createCrossfadeAudioWindowIndex(doc, sourceBounds)
+    : undefined
+  const retainedAssetIds = [...outputMediaAssetIds(
+    doc,
+    includeAudio,
+    crossfadeWindows,
+  )]
+  const offline = retainedAssetIds.filter(
     (assetId) => !assets.has(assetId),
   )
   if (offline.length > 0) {
@@ -335,10 +356,17 @@ function captureExportInputs(
       `Reconnect ${offline.length} offline source${offline.length === 1 ? '' : 's'} before exporting: ${names.join(', ')}.`,
     )
   }
-  const trackConflict = partialTrackConflict(doc, assets, includeAudio)
+  const trackConflict = partialTrackConflict(
+    doc,
+    assets,
+    includeAudio,
+    crossfadeWindows,
+  )
   if (trackConflict) throw new Error(trackConflict)
   return Object.freeze({
     assets,
+    retainedAssetIds: Object.freeze(retainedAssetIds),
+    sourceBounds,
     runtimeGuards: captureExportRuntimeGuards(assets),
   })
 }
@@ -480,6 +508,8 @@ async function preflightAndRunExport(
   doc: TimelineDoc,
   settings: ExportSettings,
   assets: ReadonlyMap<AssetId, MediaAsset>,
+  retainedAssetIds: readonly AssetId[],
+  sourceBounds: SourceBoundsCatalog,
   callbacks: ExportCallbacks,
   deps: ExportControllerDeps,
   pluginExecution?: Pick<
@@ -493,15 +523,13 @@ async function preflightAndRunExport(
   // Reject impossible work before Blob retention, profile probing, or the
   // cooperative per-asset visual schedule owned by createMediaSource().
   assertExportAdmission(doc, settings)
-  const includeAudio = settings.audioChannelLayout !== 'off'
-  const sourceBounds = createSourceBoundsCatalog(assets.values())
   let resolveAsset: ExportAssetResolver | null = null
   if (!pluginExecution) {
     resolveAsset = createAssetResolver(assets, deps.fetchBlob)
     // Legacy no-plugin exports retain captured object URLs across the profile
     // await. Prepared plugin exports deliberately defer every Blob until the
     // plugin attempt and encoding profile have both passed.
-    retainReferencedBlobs(doc, resolveAsset, includeAudio)
+    retainReferencedBlobs(retainedAssetIds, resolveAsset)
   }
   // Blob retention calls an injected boundary synchronously. If it re-enters
   // cancellation, do not advance into profile/media ownership afterward.
@@ -525,7 +553,7 @@ async function preflightAndRunExport(
   if (lifecycle.cancelRequested) return undefined
   if (!resolveAsset) {
     resolveAsset = createAssetResolver(assets, deps.fetchBlob)
-    retainReferencedBlobs(doc, resolveAsset, includeAudio)
+    retainReferencedBlobs(retainedAssetIds, resolveAsset)
   }
   if (lifecycle.cancelRequested) return undefined
 
@@ -624,6 +652,8 @@ export function startExport(
       doc,
       runSettings,
       captured.assets,
+      captured.retainedAssetIds,
+      captured.sourceBounds,
       runOptions,
       deps,
     ),
@@ -680,6 +710,8 @@ export function startPreparedExport(
           execution.document,
           execution.settings,
           captured.assets,
+          captured.retainedAssetIds,
+          captured.sourceBounds,
           runOptions,
           deps,
           execution,

@@ -9,6 +9,7 @@ import type {
   Transition,
 } from './schema'
 import {
+  createCrossfadeAudioWindowIndex,
   crossfadeFrameGroupAt,
   evaluateCrossfadeDraft,
   evaluateCrossfadeUpdate,
@@ -517,7 +518,7 @@ describe('canonical crossfade planner', () => {
     })
   })
 
-  test('keeps speed-ramped linked audio unavailable', () => {
+  test('keeps speed-ramped linked audio available', () => {
     const from = clip('video-from', 'asset-a', 0, 10, 10, { linkGroupId: 'g-a' })
     const to = clip('video-to', 'asset-b', 10, 10, 30, { linkGroupId: 'g-b' })
     const audioFrom = clip('audio-from', 'asset-a', 0, 10, 10, { linkGroupId: 'g-a' })
@@ -549,12 +550,11 @@ describe('canonical crossfade planner', () => {
 
     expect(resolved.status).toBe('available')
     if (resolved.status !== 'available') return
-    expect(resolved.plan.audio).toEqual({
-      status: 'unavailable',
-      reason: 'retimed-audio-unsupported',
-      leg: null,
-      maximumDurationFrames: null,
-    })
+    expect(resolved.plan.audio.status).toBe('available')
+    if (resolved.plan.audio.status !== 'available') return
+    expect(resolved.plan.audio.maximumDurationFrames).toBe(20)
+    expect(resolved.plan.audio.from.clip.id).toBe(audioFrom.id)
+    expect(resolved.plan.audio.to.clip.id).toBe(audioTo.id)
   })
 
   test.each([
@@ -616,6 +616,126 @@ describe('canonical crossfade planner', () => {
       leg,
       maximumDurationFrames: null,
     })
+  })
+
+  test('indexes a maximum-size ambiguous link group without transition rescans', () => {
+    const transitionCount = 1_000
+    const videoClipCount = transitionCount * 2
+    const audioClipCount = 100_000 - videoClipCount
+    const videoClips = Array.from({ length: videoClipCount }, (_, index) => (
+      clip(
+        `mass-video-${index}`,
+        `mass-video-asset-${index}`,
+        index * 2,
+        2,
+        0,
+        { linkGroupId: 'mass-ambiguous-link' },
+      )
+    ))
+    const transitions = Array.from({ length: transitionCount }, (_, index) => (
+      transition(
+        `mass-transition-${index}`,
+        videoClips[index * 2].id,
+        videoClips[index * 2 + 1].id,
+        1,
+      )
+    ))
+    const audioClips = Array.from({ length: audioClipCount }, (_, index) => (
+      clip(
+        `mass-audio-${index}`,
+        `mass-audio-asset-${index}`,
+        index,
+        1,
+        0,
+        { linkGroupId: 'mass-ambiguous-link' },
+      )
+    ))
+    const project = doc([
+      track('V1', 'video', videoClips, transitions),
+      track('A1', 'audio', audioClips),
+    ])
+
+    expect(createCrossfadeAudioWindowIndex(project).size).toBe(0)
+  })
+
+  test('source-aware indexing prunes unavailable candidates before cross-track conflicts', () => {
+    const frozenAudio = clip(
+      'audio-frozen',
+      'asset-frozen',
+      0,
+      10,
+      10,
+      { linkGroupId: 'frozen-link' },
+    )
+    frozenAudio.sourceRange = { startFrame: 10, durationFrames: 20 }
+    frozenAudio.sourceTimeMap = {
+      sourceStartTicks: 10_000_000,
+      sourceDurationTicks: 20_000_000,
+      rate: { numerator: 1, denominator: 1 },
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+          { frame: 10, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+        ],
+      },
+    }
+    const validAudio = clip(
+      'audio-valid',
+      'asset-valid',
+      10,
+      10,
+      30,
+      { linkGroupId: 'valid-link' },
+    )
+    const unavailableAudio = clip(
+      'audio-unavailable',
+      'asset-unavailable',
+      10,
+      10,
+      30,
+      { linkGroupId: 'unavailable-link' },
+    )
+    const videoFrom = (id: string): Clip => ({ ...frozenAudio, id })
+    const project = doc([
+      track('V-valid', 'video', [
+        videoFrom('video-valid-from'),
+        { ...validAudio, id: 'video-valid-to' },
+      ], [transition('valid-transition', 'video-valid-from', 'video-valid-to', 4)]),
+      track('V-unavailable', 'video', [
+        videoFrom('video-unavailable-from'),
+        { ...unavailableAudio, id: 'video-unavailable-to' },
+      ], [transition(
+        'unavailable-transition',
+        'video-unavailable-from',
+        'video-unavailable-to',
+        4,
+      )]),
+      track('A-frozen', 'audio', [frozenAudio]),
+      track('A-valid', 'audio', [validAudio]),
+      track('A-unavailable', 'audio', [unavailableAudio]),
+    ])
+    const bounds = catalog([
+      ['asset-frozen', exact([0, 100_000_000], [0, 100_000_000])],
+      ['asset-valid', exact([0, 100_000_000], [0, 100_000_000])],
+      ['asset-unavailable', {
+        video: exact([0, 100_000_000]).video,
+        audio: { status: 'unknown' },
+      }],
+    ])
+
+    const sourceAware = createCrossfadeAudioWindowIndex(project, bounds)
+    expect(sourceAware.get(frozenAudio.id)).toEqual({
+      startFrame: 8,
+      endFrame: 12,
+    })
+    expect(sourceAware.has(validAudio.id)).toBe(true)
+    expect(sourceAware.has(unavailableAudio.id)).toBe(false)
+
+    const sourceAgnostic = createCrossfadeAudioWindowIndex(project)
+    expect(sourceAgnostic.has(frozenAudio.id)).toBe(true)
+    expect(sourceAgnostic.has(validAudio.id)).toBe(true)
+    expect(sourceAgnostic.has(unavailableAudio.id)).toBe(true)
   })
 
   test('reports exact audio capacity independently from visual capacity', () => {

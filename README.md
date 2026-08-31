@@ -128,8 +128,9 @@ security metadata. Cloudflare Web Analytics is disabled. Read the full
 - Local ProRes and AC-3/E-AC-3 extensions cover import only. There is no proxy
   converter or local export-encoder fallback. Editing proxies are optional
   preview helpers; export always uses the original source.
-- Non-1× speed and speed ramps retime picture. Clip audio is muted outside
-  exact 1×. Timeline text overlays and caption tracks are separate; text
+- Non-1× speed and speed ramps share bounded pitch-preserving audio in preview
+  and export. Held 0% sections fade to silence, and edge speeds can sound more
+  granular. Timeline text overlays and caption tracks are separate; text
   overlays do not yet have keyframe animation.
 - Manual lens correction needs a capable WebGL2 path and can block motion
   tracking while it is active. Signed plugins are local packages only and can

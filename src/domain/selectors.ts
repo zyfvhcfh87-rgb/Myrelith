@@ -13,8 +13,18 @@ import type {
 } from './schema'
 import { clipAnimation } from './clipAnimation'
 import { clipAudioSettings } from './clipInspector'
-import { resolveCrossfadeGeometry } from './crossfadePlan'
-import { sourceFrameAtTimelineFrame, sourceTimeAudioPolicy } from './sourceTimeMap'
+import {
+  createCrossfadeAudioWindowIndex,
+  resolveCrossfadeGeometry,
+  type CrossfadeAudioClipWindow,
+  type CrossfadeAudioWindowIndex,
+} from './crossfadePlan'
+import {
+  clipSourceTimeMap,
+  sourceFrameAtTimelineFrame,
+  sourceTimeAudioPolicy,
+  sourceTimeAudioWindowIsSilent,
+} from './sourceTimeMap'
 import { rangeContains, rangeEnd } from './time'
 import { adjustmentItems } from './adjustmentItems'
 
@@ -151,6 +161,53 @@ export function clipContributesAudioOutput(clip: Clip): boolean {
   ))
 }
 
+/**
+ * True when an audible clip needs decoded source samples. A whole-window
+ * freeze contributes intentional silence and therefore owns no media Blob or
+ * decoder. Linked clips stay conservative because a valid crossfade may
+ * reveal source handles outside the authored half-open clip range.
+ */
+export function clipHasWholeWindowSilentRampedAudio(
+  clip: Clip,
+): boolean {
+  const policy = sourceTimeAudioPolicy(clip)
+  return policy.status === 'supported'
+    && policy.kind === 'ramped'
+    && sourceTimeAudioWindowIsSilent(
+      clipSourceTimeMap(clip),
+      0,
+      clip.timelineRange.durationFrames,
+    )
+}
+
+export function clipContributesDecodedAudioOutput(
+  clip: Clip,
+  crossfadeWindow: CrossfadeAudioClipWindow | null = null,
+): boolean {
+  if (!clipContributesAudioOutput(clip)) return false
+  const policy = sourceTimeAudioPolicy(clip)
+  if (policy.status !== 'supported') return false
+  if (policy.kind !== 'ramped') return true
+  const map = clipSourceTimeMap(clip)
+  if (!sourceTimeAudioWindowIsSilent(
+    map,
+    0,
+    clip.timelineRange.durationFrames,
+  )) return true
+  if (!crossfadeWindow) return false
+  return !sourceTimeAudioWindowIsSilent(
+    map,
+    Math.min(
+      0,
+      crossfadeWindow.startFrame - clip.timelineRange.startFrame,
+    ),
+    Math.max(
+      clip.timelineRange.durationFrames,
+      crossfadeWindow.endFrame - clip.timelineRange.startFrame,
+    ),
+  )
+}
+
 /** Visible video clips whose stacks contain a plugin-prefixed descriptor. */
 export function documentHasOutputPluginEffects(doc: TimelineDoc): boolean {
   return doc.tracks.some((track) => (
@@ -166,6 +223,7 @@ export function documentHasOutputPluginEffects(doc: TimelineDoc): boolean {
 export function outputMediaAssetIds(
   doc: TimelineDoc,
   includeAudio = true,
+  providedCrossfadeWindows?: CrossfadeAudioWindowIndex,
 ): Set<AssetId> {
   const ids = new Set<AssetId>()
   for (const track of doc.tracks) {
@@ -175,11 +233,19 @@ export function outputMediaAssetIds(
     }
   }
   if (includeAudio) {
+    let crossfadeWindows = providedCrossfadeWindows
     for (const track of audibleTracks(doc)) {
       for (const clip of track.clips) {
-        if (!clipContributesAudioOutput(clip)) continue
-        const audioPolicy = sourceTimeAudioPolicy(clip)
-        if (audioPolicy.status === 'supported') ids.add(clip.assetId)
+        if (clipContributesDecodedAudioOutput(clip)) {
+          ids.add(clip.assetId)
+          continue
+        }
+        if (!clipHasWholeWindowSilentRampedAudio(clip)) continue
+        crossfadeWindows ??= createCrossfadeAudioWindowIndex(doc)
+        if (clipContributesDecodedAudioOutput(
+          clip,
+          crossfadeWindows.get(clip.id) ?? null,
+        )) ids.add(clip.assetId)
       }
     }
   }

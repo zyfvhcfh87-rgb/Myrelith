@@ -77,6 +77,26 @@ function makeClip(
   }
 }
 
+function makeRampedClip(): Clip {
+  const clip = makeClip('ramped-retime', 0, 10)
+  clip.sourceRange = { startFrame: 0, durationFrames: 11 }
+  clip.sourceTimeMap = {
+    sourceStartTicks: 0,
+    sourceDurationTicks: 11_000_000,
+    rate: { numerator: 1, denominator: 1 },
+    speedCurve: {
+      originFrame: 0,
+      points: [
+        { frame: 0, rate: { numerator: 1, denominator: 2 }, easing: 'linear' },
+        { frame: 4, rate: { numerator: 2, denominator: 1 }, easing: 'hold' },
+        { frame: 6, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+        { frame: 8, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+      ],
+    },
+  }
+  return clip
+}
+
 function makeTrack(
   id: string,
   kind: Track['kind'],
@@ -96,12 +116,16 @@ function makeTrack(
   }
 }
 
-function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
+function makeDoc(
+  audioTracks: Track[],
+  durationFrames = 30,
+  frameRate: FrameRate = F10,
+): TimelineDoc {
   return {
     schemaVersion: 18,
     id: 'doc',
     name: 'Playback audio test',
-    frameRate: F10,
+    frameRate,
     width: 64,
     height: 48,
     audioSampleRate: 48_000,
@@ -595,6 +619,153 @@ describe('startTimelineAudioPlayback scheduling', () => {
       duration: 0.5,
     })
     expect(h.output.scheduled[0].buffer.duration).toBe(0.5)
+    await session.stop()
+  })
+
+  test('schedules one exact ramp buffer and silences only the held freeze span', async () => {
+    const clip = makeRampedClip()
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 10)
+    const h = makePlaybackHarness({ lookaheadSeconds: 1 })
+    const source = new Float32Array(96_000).fill(1)
+    const cursor = makeCursor([{
+      buffer: makePlanarAudioBuffer([source, source.slice()], 48_000),
+      timestamp: 0,
+      duration: 2,
+    }])
+    h.media.enqueue(clip.assetId, cursor.cursor)
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(audioPlaybackAssetIds(doc, 0)).toEqual([clip.assetId])
+    expect(h.media.requests).toEqual([{
+      assetId: clip.assetId,
+      startTime: 0,
+      endTime: 1.1,
+      stretchLead: true,
+      stretchSampleRate: 48_000,
+    }])
+    expect(h.output.scheduled).toHaveLength(1)
+    const scheduled = h.output.scheduled[0]!
+    expect(scheduled.buffer.length).toBe(48_000)
+    expect(scheduled.duration).toBe(1)
+    const samples = scheduled.buffer.getChannelData(0)
+    expect(samples.subarray(28_800, 38_400).every((sample) => sample === 0)).toBe(true)
+    expect(samples.subarray(0, 28_600).some((sample) => sample !== 0)).toBe(true)
+    expect(samples.subarray(38_600).some((sample) => sample !== 0)).toBe(true)
+    await session.stop()
+    expect(cursor.cursor.close).toHaveBeenCalledOnce()
+  })
+
+  test('starts a ramp seek on the canonical mid-curve source sample', async () => {
+    const clip = makeRampedClip()
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 10)
+    const h = makePlaybackHarness({ lookaheadSeconds: 1 })
+    const source = new Float32Array(96_000).fill(1)
+    h.media.enqueue(clip.assetId, makeCursor([{
+      buffer: makePlanarAudioBuffer([source, source.slice()], 48_000),
+      timestamp: 0,
+      duration: 2,
+    }]).cursor)
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      5,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.media.requests[0]).toMatchObject({
+      assetId: clip.assetId,
+      startTime: 0.7,
+      endTime: 1.1,
+    })
+    const scheduled = h.output.scheduled[0]!
+    expect(scheduled.buffer.length).toBe(24_000)
+    expect(scheduled.buffer.getChannelData(0)
+      .subarray(4_800, 14_400)
+      .every((sample) => sample === 0)).toBe(true)
+    await session.stop()
+  })
+
+  test('uses absolute NTSC sample boundaries for a nonzero-start ramp', async () => {
+    const clip = makeClip('ntsc-ramp', 1, 1)
+    clip.sourceRange = { startFrame: 0, durationFrames: 2 }
+    clip.sourceTimeMap = {
+      sourceStartTicks: 0,
+      sourceDurationTicks: 2_000_000,
+      rate: { numerator: 1, denominator: 1 },
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: { numerator: 1, denominator: 2 }, easing: 'linear' },
+          { frame: 1, rate: { numerator: 3, denominator: 2 }, easing: 'hold' },
+        ],
+      },
+    }
+    const frameRate = { num: 30_000, den: 1_001 }
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 2, frameRate)
+    const h = makePlaybackHarness({ lookaheadSeconds: 1 })
+    const source = new Float32Array(9_600).fill(1)
+    h.media.enqueue(clip.assetId, makeCursor([{
+      buffer: makePlanarAudioBuffer([source, source.slice()], 48_000),
+      timestamp: 0,
+      duration: source.length / 48_000,
+    }]).cursor)
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      1,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.output.scheduled).toHaveLength(1)
+    expect(h.output.scheduled[0]?.buffer.length).toBe(1_601)
+    expect(h.output.scheduled[0]?.duration).toBe(1_601 / 48_000)
+    await session.stop()
+  })
+
+  test('keeps an entirely frozen ramp decoder-free', async () => {
+    const clip = makeClip('fully-frozen', 0, 10)
+    clip.sourceTimeMap = {
+      sourceStartTicks: 0,
+      sourceDurationTicks: 10_000_000,
+      rate: { numerator: 1, denominator: 1 },
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+          { frame: 10, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+        ],
+      },
+    }
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 10)
+    const h = makePlaybackHarness({ lookaheadSeconds: 1 })
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(audioPlaybackAssetIds(doc, 0)).toEqual([])
+    expect(h.media.requests).toEqual([])
+    expect(h.output.scheduled).toEqual([])
+    expect(session.diagnostics().activeDecoderCount).toBe(0)
     await session.stop()
   })
 
@@ -1648,10 +1819,11 @@ describe('startTimelineAudioPlayback ownership', () => {
     expect(h.media.source.close).toHaveBeenCalledOnce()
   })
 
-  test('abort during a deferred initial read schedules nothing and cleans up', async () => {
+  test('abort during a deferred ramp read schedules nothing and cleans up', async () => {
+    const ramp = makeRampedClip()
     const doc = makeDoc([
-      makeTrack('A1', 'audio', [makeClip('deferred', 0, 20)]),
-    ], 20)
+      makeTrack('A1', 'audio', [ramp]),
+    ], 10)
     const h = makePlaybackHarness()
     const read = deferred<IteratorResult<PlaybackAudioBuffer, void>>()
     const cursor: PlaybackAudioCursor = {
@@ -1660,7 +1832,7 @@ describe('startTimelineAudioPlayback ownership', () => {
         read.resolve({ done: true, value: undefined })
       }),
     }
-    h.media.enqueue('asset-deferred', cursor)
+    h.media.enqueue(ramp.assetId, cursor)
     const controller = new AbortController()
     const onWarning = vi.fn()
 
