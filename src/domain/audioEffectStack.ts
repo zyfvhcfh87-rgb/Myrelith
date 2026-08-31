@@ -12,6 +12,8 @@ export const COMPRESSOR_EFFECT_TYPE = 'builtin.compressor' as const
 export const COMPRESSOR_EFFECT_VERSION = 1 as const
 export const LIMITER_EFFECT_TYPE = 'builtin.limiter' as const
 export const LIMITER_EFFECT_VERSION = 1 as const
+export const NOISE_GATE_EFFECT_TYPE = 'builtin.noise-gate' as const
+export const NOISE_GATE_EFFECT_VERSION = 1 as const
 export const JS_STEREO_BLOCK_CAPABILITY = 'js-stereo-block' as const
 
 export const EQ_BAND_TYPES = Object.freeze([
@@ -63,6 +65,14 @@ export interface CompressorParams extends Record<string, EffectParamValue> {
 export interface LimiterParams extends Record<string, EffectParamValue> {
   ceilingDb: number
   releaseMs: number
+}
+
+export interface NoiseGateParams extends Record<string, EffectParamValue> {
+  thresholdDb: number
+  attackMs: number
+  holdMs: number
+  releaseMs: number
+  rangeDb: number
 }
 
 export const EQ_BAND_FREQ_LIMITS = Object.freeze({
@@ -131,6 +141,22 @@ export const LIMITER_LIMITS = Object.freeze({
 export const DEFAULT_LIMITER_PARAMS: Readonly<LimiterParams> = Object.freeze({
   ceilingDb: 0,
   releaseMs: 50,
+})
+
+export const NOISE_GATE_LIMITS = Object.freeze({
+  thresholdDb: Object.freeze({ min: -80, max: 0, step: 0.1, label: 'Threshold (dB)' }),
+  attackMs: Object.freeze({ min: 0.1, max: 100, step: 0.1, label: 'Attack (ms)' }),
+  holdMs: Object.freeze({ min: 0, max: 1_000, step: 1, label: 'Hold (ms)' }),
+  releaseMs: Object.freeze({ min: 1, max: 2_000, step: 1, label: 'Release (ms)' }),
+  rangeDb: Object.freeze({ min: 0, max: 96, step: 0.1, label: 'Range (dB)' }),
+})
+
+export const DEFAULT_NOISE_GATE_PARAMS: Readonly<NoiseGateParams> = Object.freeze({
+  thresholdDb: -50,
+  attackMs: 2,
+  holdMs: 50,
+  releaseMs: 100,
+  rangeDb: 80,
 })
 
 export type AudioEffectCapability = typeof JS_STEREO_BLOCK_CAPABILITY
@@ -218,6 +244,18 @@ function validateLimiterParams(
   return null
 }
 
+function validateNoiseGateParams(
+  params: Readonly<Record<string, EffectParamValue>>,
+): string | null {
+  for (const key of Object.keys(NOISE_GATE_LIMITS) as (keyof typeof NOISE_GATE_LIMITS)[]) {
+    const limit = NOISE_GATE_LIMITS[key]
+    if (!finiteInRange(params[key], limit.min, limit.max)) {
+      return `${key} must be between ${limit.min} and ${limit.max}`
+    }
+  }
+  return null
+}
+
 const EQ_REGISTRATION: AudioEffectRegistration = Object.freeze({
   type: PARAMETRIC_EQ_EFFECT_TYPE,
   version: PARAMETRIC_EQ_EFFECT_VERSION,
@@ -245,10 +283,20 @@ const LIMITER_REGISTRATION: AudioEffectRegistration = Object.freeze({
   validateParams: validateLimiterParams,
 })
 
+const NOISE_GATE_REGISTRATION: AudioEffectRegistration = Object.freeze({
+  type: NOISE_GATE_EFFECT_TYPE,
+  version: NOISE_GATE_EFFECT_VERSION,
+  label: 'Noise gate',
+  capabilities: Object.freeze([JS_STEREO_BLOCK_CAPABILITY]),
+  defaultParams: DEFAULT_NOISE_GATE_PARAMS,
+  validateParams: validateNoiseGateParams,
+})
+
 const AUDIO_EFFECT_REGISTRY = new Map<string, AudioEffectRegistration>([
   [PARAMETRIC_EQ_EFFECT_TYPE, EQ_REGISTRATION],
   [COMPRESSOR_EFFECT_TYPE, COMPRESSOR_REGISTRATION],
   [LIMITER_EFFECT_TYPE, LIMITER_REGISTRATION],
+  [NOISE_GATE_EFFECT_TYPE, NOISE_GATE_REGISTRATION],
 ])
 
 export function registeredAudioEffects(): readonly AudioEffectRegistration[] {
@@ -298,6 +346,16 @@ export function createLimiterEffect(id: string): AudioEffectDescriptor {
     version: LIMITER_EFFECT_VERSION,
     enabled: true,
     params: { ...DEFAULT_LIMITER_PARAMS },
+  }
+}
+
+export function createNoiseGateEffect(id: string): AudioEffectDescriptor {
+  return {
+    id,
+    type: NOISE_GATE_EFFECT_TYPE,
+    version: NOISE_GATE_EFFECT_VERSION,
+    enabled: true,
+    params: { ...DEFAULT_NOISE_GATE_PARAMS },
   }
 }
 

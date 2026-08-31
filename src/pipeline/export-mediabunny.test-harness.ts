@@ -317,7 +317,7 @@ vi.mock('mediabunny', () => {
       this.samples = vi.fn(() => {
         const sequence = mb.audioSinkSampleSequences.shift() ?? []
         const iterator = (async function* () {
-          for (const sample of sequence) yield sample
+          for (const sample of sequence) yield await sample
         })()
         const returnIterator = iterator.return.bind(iterator)
         iterator.return = vi.fn(returnIterator)

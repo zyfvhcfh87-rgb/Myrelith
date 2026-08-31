@@ -9,6 +9,7 @@ import {
   animationEasingProgress,
   clipAnimationValidationError,
   evaluateAnimationTrack,
+  evaluateAnimationTrackAtBoundaryPosition,
   MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP,
   moveAnimationKeyframe,
   removeAnimationKeyframe,
@@ -64,11 +65,12 @@ describe('clip animation evaluator', () => {
     expect(evaluateAnimationTrack(track, 15, -10)).toBe(100)
   })
 
-  test('interpolates finite fractional frames for audio-rate evaluation', () => {
+  test('keeps authored evaluation integer-only and isolates boundary interpolation', () => {
     const track = positionTrack()
 
-    expect(evaluateAnimationTrack(track, 2.5, -10)).toBe(25)
-    expect(evaluateAnimationTrack(track, Number.NaN, -10)).toBe(-10)
+    expect(evaluateAnimationTrack(track, 2.5, -10)).toBe(-10)
+    expect(evaluateAnimationTrackAtBoundaryPosition(track, 2.5, -10)).toBe(25)
+    expect(evaluateAnimationTrackAtBoundaryPosition(track, Number.NaN, -10)).toBe(-10)
   })
 
   test('resolves volume and balance without mutating the durable clip', () => {

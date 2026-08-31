@@ -13,6 +13,7 @@ import {
   COMPRESSOR_LIMITS,
   createCompressorEffect,
   createLimiterEffect,
+  createNoiseGateEffect,
   createParametricEqEffect,
   EQ_BAND_GAIN_LIMITS,
   EQ_BAND_FREQ_LIMITS,
@@ -21,6 +22,9 @@ import {
   LIMITER_EFFECT_TYPE,
   LIMITER_EFFECT_VERSION,
   LIMITER_LIMITS,
+  NOISE_GATE_EFFECT_TYPE,
+  NOISE_GATE_EFFECT_VERSION,
+  NOISE_GATE_LIMITS,
   PARAMETRIC_EQ_EFFECT_TYPE,
   PARAMETRIC_EQ_EFFECT_VERSION,
   audioEffectRegistration,
@@ -216,6 +220,38 @@ function LimiterFields({
   )
 }
 
+function NoiseGateFields({
+  effect,
+  locked,
+  onPatch,
+}: {
+  effect: AudioEffectDescriptor
+  locked: boolean
+  onPatch: (patch: Record<string, number>) => void
+}) {
+  return (
+    <div className="inspector-effect-params">
+      {(Object.keys(NOISE_GATE_LIMITS) as (keyof typeof NOISE_GATE_LIMITS)[]).map((parameter) => {
+        const spec = NOISE_GATE_LIMITS[parameter]
+        return (
+          <NumberField
+            key={parameter}
+            label={spec.label}
+            value={Number(effect.params[parameter])}
+            min={spec.min}
+            max={spec.max}
+            step={spec.step}
+            disabled={locked}
+            testId={`inspector-audio-effect-${parameter}-${effect.id}`}
+            clamp
+            onCommit={(value) => onPatch({ [parameter]: value })}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 export default function AudioEffectStackInspector({
   doc,
   target,
@@ -233,15 +269,17 @@ export default function AudioEffectStackInspector({
     eq: createParametricEqEffect('__audio-effect-budget-eq__'),
     compressor: createCompressorEffect('__audio-effect-budget-compressor__'),
     limiter: createLimiterEffect('__audio-effect-budget-limiter__'),
+    gate: createNoiseGateEffect('__audio-effect-budget-gate__'),
   }
   const limits = {
     eq: audioEffectAppendBudgetError(doc, stack, probes.eq),
     compressor: audioEffectAppendBudgetError(doc, stack, probes.compressor),
     limiter: audioEffectAppendBudgetError(doc, stack, probes.limiter),
+    gate: audioEffectAppendBudgetError(doc, stack, probes.gate),
   }
   const addBudgetReasonBaseId = useId()
   const addBudgetReasons = [...new Set(
-    [limits.eq, limits.compressor, limits.limiter]
+    [limits.eq, limits.compressor, limits.limiter, limits.gate]
       .filter((reason): reason is string => reason !== null),
   )]
   const addBudgetReasonId = (reason: string | null): string | undefined => {
@@ -289,6 +327,15 @@ export default function AudioEffectStackInspector({
           >
             Add limiter
           </button>
+          <button
+            type="button"
+            className="inspector-effect-add"
+            disabled={locked || limits.gate !== null}
+            aria-describedby={addBudgetReasonId(limits.gate)}
+            onClick={() => add(createNoiseGateEffect(newId()))}
+          >
+            Add noise gate
+          </button>
           {AUDIO_EFFECT_PRESETS.map((preset) => (
             <button
               key={preset.id}
@@ -323,17 +370,24 @@ export default function AudioEffectStackInspector({
         : (
             <ol className="inspector-effect-list" aria-label={`Ordered ${heading.toLowerCase()}`}>
               {stack.map((effect, index) => {
-                const resolution = statuses.get(effect.id) ?? {
+                const pending = {
                   label: audioEffectRegistration(effect.type)?.label ?? effect.type,
                   status: 'unsupported' as const,
                   detail: PENDING_AUDIO_EFFECT_DETAIL,
                 }
+                const hostStatuses = statuses.get(effect.id) ?? {
+                  playback: pending,
+                  export: pending,
+                }
+                const label = hostStatuses.playback.label
                 const editableEq = effect.type === PARAMETRIC_EQ_EFFECT_TYPE
                   && effect.version === PARAMETRIC_EQ_EFFECT_VERSION
                 const editableCompressor = effect.type === COMPRESSOR_EFFECT_TYPE
                   && effect.version === COMPRESSOR_EFFECT_VERSION
                 const editableLimiter = effect.type === LIMITER_EFFECT_TYPE
                   && effect.version === LIMITER_EFFECT_VERSION
+                const editableNoiseGate = effect.type === NOISE_GATE_EFFECT_TYPE
+                  && effect.version === NOISE_GATE_EFFECT_VERSION
                 const resettable = audioEffectRegistration(effect.type)?.version === effect.version
                 const patch = (next: Record<string, string | number>): void => {
                   store().updateAudioEffectParams(target, effect.id, next)
@@ -346,14 +400,22 @@ export default function AudioEffectStackInspector({
                   >
                     <div className="inspector-effect-card-heading">
                       <span>
-                        <strong>{resolution.label}</strong>
+                        <strong>{label}</strong>
                         <small>{index + 1} of {stack.length}</small>
                       </span>
-                      <span
-                        className={`inspector-effect-status is-${resolution.status}`}
-                        aria-label={`Audio effect status: ${resolution.status}`}
-                      >
-                        {resolution.status}
+                      <span className="inspector-effect-host-statuses">
+                        <span
+                          className={`inspector-effect-status is-${hostStatuses.playback.status}`}
+                          aria-label={`Live audio effect status: ${hostStatuses.playback.status}`}
+                        >
+                          Live {hostStatuses.playback.status}
+                        </span>
+                        <span
+                          className={`inspector-effect-status is-${hostStatuses.export.status}`}
+                          aria-label={`Export audio effect status: ${hostStatuses.export.status}`}
+                        >
+                          Export {hostStatuses.export.status}
+                        </span>
                       </span>
                     </div>
                     {toggle(
@@ -370,12 +432,16 @@ export default function AudioEffectStackInspector({
                     {editableLimiter && (
                       <LimiterFields effect={effect} locked={locked} onPatch={patch} />
                     )}
-                    <span className="inspector-note">{resolution.detail}</span>
-                    <div className="inspector-effect-actions" aria-label={`${resolution.label} actions`}>
+                    {editableNoiseGate && (
+                      <NoiseGateFields effect={effect} locked={locked} onPatch={patch} />
+                    )}
+                    <span className="inspector-note">Live: {hostStatuses.playback.detail}</span>
+                    <span className="inspector-note">Export: {hostStatuses.export.detail}</span>
+                    <div className="inspector-effect-actions" aria-label={`${label} actions`}>
                       <button
                         type="button"
                         disabled={locked || index === 0}
-                        aria-label={`Move ${resolution.label} up`}
+                        aria-label={`Move ${label} up`}
                         onClick={() => store().reorderAudioEffect(target, effect.id, index - 1)}
                       >
                         Move up
@@ -383,7 +449,7 @@ export default function AudioEffectStackInspector({
                       <button
                         type="button"
                         disabled={locked || index === stack.length - 1}
-                        aria-label={`Move ${resolution.label} down`}
+                        aria-label={`Move ${label} down`}
                         onClick={() => store().reorderAudioEffect(target, effect.id, index + 1)}
                       >
                         Move down
@@ -391,7 +457,7 @@ export default function AudioEffectStackInspector({
                       <button
                         type="button"
                         disabled={locked || !resettable}
-                        aria-label={`Reset ${resolution.label}`}
+                        aria-label={`Reset ${label}`}
                         onClick={() => store().resetAudioEffect(target, effect.id)}
                       >
                         Reset
@@ -399,7 +465,7 @@ export default function AudioEffectStackInspector({
                       <button
                         type="button"
                         disabled={locked}
-                        aria-label={`Remove ${resolution.label}`}
+                        aria-label={`Remove ${label}`}
                         onClick={() => store().removeAudioEffect(target, effect.id)}
                       >
                         Remove

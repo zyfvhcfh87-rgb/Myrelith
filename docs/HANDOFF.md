@@ -1600,11 +1600,20 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
-- Issue #189 Slices 1–6 are implementation-complete on `t3code/read-issue-189`.
-  Schema 17 descriptors, shared EQ/compressor/limiter DSP for live playback
-  and export, derived LUFS + true-peak, and Voice/Music/Podcast presets.
-  Gate/denoise stays later. Do not tick GitHub #189 unless asked after a
-  user pass.
+- Issue #189 is implementation- and gate-complete locally on
+  `t3code/read-issue-189`. Schema 18 carries bounded clip/track/master audio-
+  effect descriptors; live playback and export share the automated mix order,
+  EQ, compressor, limiter, and stereo-linked noise-gate DSP. Loudness is a
+  cancellable, explicit-range derived LUFS + FIR inter-sample true-peak scan;
+  Inspector reports live/export effect readiness separately; Voice, Music, and
+  Podcast presets replace ordinary descriptor stacks.
+- Exact-head gates pass all 259 Vitest files / 3,670 tests plus all 17 runner
+  checks, production build/typecheck (4,945 modules), clean lint, a production
+  dependency audit with 0 vulnerabilities, clean diff hygiene, and all 14
+  Chromium browser tests. The 1280x720 Inspector regression proves master
+  effect controls remain reachable; 720px transport groups remain disjoint and
+  mixer controls retain 24px targets. Do not tick or close GitHub #189 until
+  the user passes it and separately authorizes publication.
 - Issue #188 is implementation-complete in this worktree, not yet committed.
   `SourceTimeAudioPolicy` admits constant stretch. `createTimelineAudioMixPlan`
   emits tick windows. `pipeline/audioStretch.ts` is first-party WSOLA. Live

@@ -49,7 +49,7 @@ function makeTrack(id: string, clips: Clip[], locked = false): Track {
 /** V1: clipA [100,50), clipB [200,40). VL (locked): clipE [0,30). */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: 'doc-keys',
     name: 'keys fixture',
     frameRate: { num: 30, den: 1 },

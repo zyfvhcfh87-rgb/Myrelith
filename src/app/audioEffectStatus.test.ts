@@ -9,7 +9,7 @@ import {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: 'doc-audio-status',
     name: 'Audio status',
     frameRate: { num: 30, den: 1 },
@@ -58,16 +58,33 @@ function makeDoc(): TimelineDoc {
 }
 
 describe('audio-effect status projection', () => {
-  test('playback and export both advertise the JS stereo block host', () => {
-    expect([...playbackAudioEffectCapabilities()]).toEqual([...exportAudioEffectCapabilities()])
-    expect(playbackAudioEffectCapabilities().has('js-stereo-block')).toBe(true)
+  test('advertises live DSP only when the AudioContext host can provide it', () => {
+    const supported = playbackAudioEffectCapabilities({
+      createScriptProcessor() {},
+    })
+    expect([...supported]).toEqual([...exportAudioEffectCapabilities()])
+    expect(playbackAudioEffectCapabilities(undefined).has('js-stereo-block')).toBe(false)
   })
 
   test('projects clip, track, and master statuses without evaluating in the Inspector', () => {
-    const statuses = projectAudioEffectStatuses(makeDoc())
-    expect(statuses.get('afx-clip')?.status).toBe('ready')
-    expect(statuses.get('afx-master')?.status).toBe('ready')
-    expect(statuses.get('afx-unknown')?.status).toBe('unsupported')
-    expect(statuses.get('afx-unknown')?.detail).toContain('preserved')
+    const statuses = projectAudioEffectStatuses(
+      makeDoc(),
+      exportAudioEffectCapabilities(),
+    )
+    expect(statuses.get('afx-clip')?.playback.status).toBe('ready')
+    expect(statuses.get('afx-clip')?.export.status).toBe('ready')
+    expect(statuses.get('afx-master')?.playback.status).toBe('ready')
+    expect(statuses.get('afx-master')?.export.status).toBe('ready')
+    expect(statuses.get('afx-unknown')?.playback.status).toBe('unsupported')
+    expect(statuses.get('afx-unknown')?.export.status).toBe('unsupported')
+    expect(statuses.get('afx-unknown')?.export.detail).toContain('preserved')
+  })
+
+  test('keeps offline clip DSP ready when live bus DSP is unavailable', () => {
+    const statuses = projectAudioEffectStatuses(makeDoc(), new Set())
+    expect(statuses.get('afx-clip')?.playback.status).toBe('ready')
+    expect(statuses.get('afx-clip')?.export.status).toBe('ready')
+    expect(statuses.get('afx-master')?.playback.status).toBe('unsupported')
+    expect(statuses.get('afx-master')?.export.status).toBe('ready')
   })
 })

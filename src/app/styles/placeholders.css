@@ -16,6 +16,11 @@
   padding: 0;
 }
 
+/* The empty Inspector also hosts master audio controls, so it can outgrow the panel. */
+.area-inspector > .inspector-empty-state {
+  justify-content: flex-start;
+}
+
 .placeholder-title {
   font-weight: 600;
   color: #bbb;

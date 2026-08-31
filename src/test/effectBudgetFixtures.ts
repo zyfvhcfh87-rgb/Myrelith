@@ -94,7 +94,7 @@ export function documentAtAggregateEffectBudget(
     ? effectCountClips()
     : [budget === 'params' ? parameterBudgetClip() : stringBudgetClip()]
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: `doc-${budget}-budget`,
     name: `${budget} budget`,
     frameRate: { num: 30, den: 1 },

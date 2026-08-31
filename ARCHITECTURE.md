@@ -217,10 +217,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   left keyframe owns the outgoing `hold`, `linear`, or bounded CSS-style cubic
   Bézier easing into the next keyframe. `domain/clipAnimation.ts` is the one
   pure, bounded validator/evaluator/editor authority. Static clip fields remain
-  the fallback and are unchanged when a property animation is reset. Text,
-  audio, crop, flips, effects, and text styling are intentionally outside this
-  first property set. Timeline schema 6 adds the durable contract; schema-5
-  migration installs an empty animation without changing appearance.
+  the fallback and are unchanged when a property animation is reset. Schema 16
+  extends that same canonical contract with clip volume and balance tracks;
+  text styling, crop, flips, and effects remain outside it. Authored keys and
+  all persisted timeline geometry stay integer-frame. Audio hosts may evaluate
+  an ephemeral fractional position only at the decoder/audio-clock boundary;
+  that coordinate is never persisted or reused as timeline geometry. Timeline
+  schema 6 adds the original visual contract; schema-5 migration installs an
+  empty animation without changing appearance.
 - `TimelineDoc.markers` holds sequence-level annotations as stable ids, exact
   non-negative integer frames, bounded labels/optional notes, and one color
   from the portable marker palette. `domain/timelineMarkers.ts` is the pure
@@ -610,14 +614,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   absolute linear or equal-power envelope. Track gain/pan multiply after
   those envelopes; the master bus multiplies after the sum. Clip, track, and
   master audio-effect stacks are ordered descriptors on those same buses.
-  Ready EQ, compressor, and limiter stages share one JS stereo block
+  Ready EQ, compressor, limiter, and bounded noise-gate stages share one JS stereo block
   processor for live playback and export; unknown, invalid, and disabled
   entries stay preserved and bypassed. Web Audio
   schedules that plan against the shared audio anchor; export evaluates it
   on the exact BigInt-derived sample grid before one final clamp. Invalid or
   unavailable audio falls back to the ordinary hard cut without weakening a
   valid visual crossfade. The ordered stages live in
-  `docs/AUDIO_SIGNAL_FLOW.md`.
+  `docs/AUDIO_SIGNAL_FLOW.md`. Derived loudness owns the same cancellable
+  decoder/mixer path and measures inter-sample true peak with the fixed
+  four-phase FIR from ITU-R BS.1770 Annex 2; analysis never mutates gain.
 - `domain/audioChannelMix.ts` is the one browser-free decoded-channel fold-down
   authority. Preview and export fold 1–32 channels into stereo with the same
   canonical Web Audio layouts before applying clip `stereoBalanceGains`:

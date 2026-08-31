@@ -6,6 +6,7 @@ import {
 import {
   createCompressorEffect,
   createLimiterEffect,
+  createNoiseGateEffect,
   createParametricEqEffect,
   DEFAULT_EQ_PARAMS,
 } from './audioEffectStack'
@@ -71,7 +72,7 @@ describe('audio DSP processors', () => {
     expect(rms(left, 4_096)).toBeLessThan(0.6)
   })
 
-  test('limiter at -6 dB keeps the settled peak at the ceiling', () => {
+  test('limiter at -6 dB never lets a transient cross the ceiling', () => {
     const limiter = createLimiterEffect('lim')
     limiter.params.ceilingDb = -6
     limiter.params.releaseMs = 20
@@ -80,9 +81,49 @@ describe('audio DSP processors', () => {
     const chain = createAudioEffectChainFromReady([limiter], SAMPLE_RATE)
     processAudioBufferWithChain(left, right, chain)
     let peak = 0
-    for (let i = 2_048; i < left.length; i++) peak = Math.max(peak, Math.abs(left[i]))
+    for (let i = 0; i < left.length; i++) peak = Math.max(peak, Math.abs(left[i]))
     const ceiling = 10 ** (-6 / 20)
-    expect(peak).toBeLessThanOrEqual(ceiling + 0.04)
-    expect(peak).toBeGreaterThan(ceiling - 0.08)
+    expect(peak).toBeLessThanOrEqual(ceiling + 1e-7)
+    expect(peak).toBeGreaterThan(ceiling - 0.01)
+  })
+
+  test('limiter clamps the first sample of an isolated impulse', () => {
+    const limiter = createLimiterEffect('lim')
+    limiter.params.ceilingDb = -6
+    limiter.params.releaseMs = 20
+    const left = new Float32Array([1, 0, 0, 0])
+    const right = new Float32Array([0.75, 0, 0, 0])
+
+    createAudioEffectChainFromReady([limiter], SAMPLE_RATE).process(left, right)
+
+    const ceiling = 10 ** (-6 / 20)
+    expect(left[0]).toBeCloseTo(ceiling, 6)
+    expect(right[0]).toBeCloseTo(ceiling * 0.75, 6)
+  })
+
+  test('noise gate suppresses a quiet floor, opens on signal, and closes again', () => {
+    const gate = createNoiseGateEffect('gate')
+    gate.params.thresholdDb = -30
+    gate.params.attackMs = 0.1
+    gate.params.holdMs = 0
+    gate.params.releaseMs = 1
+    gate.params.rangeDb = 80
+    const chain = createAudioEffectChainFromReady([gate], SAMPLE_RATE)
+
+    const quietBefore = new Float32Array(4_096).fill(0.001)
+    const quietBeforeRight = quietBefore.slice()
+    processAudioBufferWithChain(quietBefore, quietBeforeRight, chain)
+    expect(Math.abs(quietBefore.at(-1) ?? 1)).toBeLessThan(0.000001)
+
+    const signal = new Float32Array(4_096).fill(0.5)
+    const signalRight = signal.slice()
+    processAudioBufferWithChain(signal, signalRight, chain)
+    expect(signal.at(-1)).toBeCloseTo(0.5, 5)
+    expect(signalRight.at(-1)).toBeCloseTo(0.5, 5)
+
+    const quietAfter = new Float32Array(4_096).fill(0.001)
+    const quietAfterRight = quietAfter.slice()
+    processAudioBufferWithChain(quietAfter, quietAfterRight, chain)
+    expect(Math.abs(quietAfter.at(-1) ?? 1)).toBeLessThan(0.000001)
   })
 })

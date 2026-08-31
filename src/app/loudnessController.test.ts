@@ -7,7 +7,7 @@ import './loudnessController'
 
 function doc(id: string): TimelineDoc {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },
@@ -25,7 +25,7 @@ describe('loudness controller', () => {
   })
 
   test('document edits discard a complete reading so Normalize cannot double-apply', () => {
-    useLoudnessStore.getState().setRunning(1, 10)
+    useLoudnessStore.getState().setRunning(1, { startFrame: 0, endFrame: 10 })
     useLoudnessStore.getState().setResult(1, {
       integratedLufs: -22,
       truePeakDbtp: -1,

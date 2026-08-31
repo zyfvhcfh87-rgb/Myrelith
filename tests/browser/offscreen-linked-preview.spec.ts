@@ -72,10 +72,13 @@ function trackFixture(
     name: id,
     clips,
     transitions: [],
+    adjustments: [],
     hidden,
     muted: false,
     solo: false,
     locked: false,
+    volume: 1,
+    balance: 0,
   }
 }
 
@@ -115,6 +118,11 @@ function linkedProjectFixture(hiddenVideoPartner = false): string {
       ],
       markers: [],
       captionTracks: [],
+      masterAudio: {
+        volume: 1,
+        balance: 0,
+        muted: false,
+      },
     },
     assets: [{
       id: 'linked-av-source',

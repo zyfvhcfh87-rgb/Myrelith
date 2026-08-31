@@ -10,16 +10,21 @@ export interface AudioEffectStatus {
   readonly detail: string
 }
 
+export interface AudioEffectHostStatuses {
+  readonly playback: AudioEffectStatus
+  readonly export: AudioEffectStatus
+}
+
 export interface AudioEffectStatusState {
-  statuses: ReadonlyMap<AudioEffectId, AudioEffectStatus>
-  setStatuses(statuses: ReadonlyMap<AudioEffectId, AudioEffectStatus>): void
+  statuses: ReadonlyMap<AudioEffectId, AudioEffectHostStatuses>
+  setStatuses(statuses: ReadonlyMap<AudioEffectId, AudioEffectHostStatuses>): void
   resetAudioEffectStatuses(): void
 }
 
 export const PENDING_AUDIO_EFFECT_DETAIL =
   'Audio host status has not been projected yet; the effect is preserved and bypassed.'
 
-const EMPTY_STATUSES: ReadonlyMap<AudioEffectId, AudioEffectStatus> = new Map()
+const EMPTY_STATUSES: ReadonlyMap<AudioEffectId, AudioEffectHostStatuses> = new Map()
 
 export const useAudioEffectStatusStore = create<AudioEffectStatusState>()((set) => ({
   statuses: EMPTY_STATUSES,

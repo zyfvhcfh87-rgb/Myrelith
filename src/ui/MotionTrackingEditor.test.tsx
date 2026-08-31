@@ -60,7 +60,7 @@ function targetClip(): Clip {
 
 function doc(item: Clip): TimelineDoc {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: 'tracking-ui',
     name: 'Tracking UI',
     frameRate: { num: 30, den: 1 },

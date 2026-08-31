@@ -43,7 +43,7 @@ function clip(overrides: Partial<Clip> = {}): Clip {
 
 function doc(item = clip(), width = 1_920, height = 1_080): TimelineDoc {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: 'doc-stabilize',
     name: 'Stabilization',
     frameRate: { num: 30, den: 1 },

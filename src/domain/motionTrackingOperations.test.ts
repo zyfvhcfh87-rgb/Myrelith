@@ -28,7 +28,7 @@ function track(id: string, item: Clip, locked = false): Track {
 
 function doc(target = clip('target'), locked = false): TimelineDoc {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: 'tracking-operation',
     name: 'Tracking operation',
     frameRate: { num: 30, den: 1 },

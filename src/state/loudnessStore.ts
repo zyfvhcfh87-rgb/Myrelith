@@ -1,7 +1,10 @@
 /** Session-only derived loudness reading. Never writes gain. */
 
 import { create } from 'zustand'
-import type { LoudnessMeasurement } from '../domain/audioLoudness'
+import type {
+  LoudnessMeasurement,
+  LoudnessMeasurementRange,
+} from '../domain/audioLoudness'
 
 export type LoudnessJobStatus =
   | 'idle'
@@ -14,11 +17,12 @@ export type LoudnessJobStatus =
 export interface LoudnessState {
   status: LoudnessJobStatus
   measurement: LoudnessMeasurement | null
+  range: LoudnessMeasurementRange | null
   error: string | null
   framesDone: number
   frameCount: number
   generation: number
-  setRunning(generation: number, frameCount: number): void
+  setRunning(generation: number, range: LoudnessMeasurementRange): void
   setProgress(generation: number, framesDone: number, frameCount: number): void
   setResult(generation: number, measurement: LoudnessMeasurement): void
   setCancelled(generation: number): void
@@ -29,6 +33,7 @@ export interface LoudnessState {
 const INITIAL = {
   status: 'idle' as const,
   measurement: null,
+  range: null,
   error: null,
   framesDone: 0,
   frameCount: 0,
@@ -37,12 +42,13 @@ const INITIAL = {
 
 export const useLoudnessStore = create<LoudnessState>()((set) => ({
   ...INITIAL,
-  setRunning: (generation, frameCount) => set({
+  setRunning: (generation, range) => set({
     status: 'running',
     measurement: null,
+    range: { ...range },
     error: null,
     framesDone: 0,
-    frameCount,
+    frameCount: range.endFrame - range.startFrame,
     generation,
   }),
   setProgress: (generation, framesDone, frameCount) => set((state) => (

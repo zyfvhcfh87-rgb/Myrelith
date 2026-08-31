@@ -7,10 +7,12 @@ import {
   COMPRESSOR_EFFECT_TYPE,
   createCompressorEffect,
   createLimiterEffect,
+  createNoiseGateEffect,
   createParametricEqEffect,
   JS_STEREO_BLOCK_CAPABILITY,
   jsStereoBlockCapabilities,
   LIMITER_EFFECT_TYPE,
+  NOISE_GATE_EFFECT_TYPE,
   migrateAudioEffectDescriptor,
   PARAMETRIC_EQ_EFFECT_TYPE,
   resolveAudioEffectStack,
@@ -18,17 +20,20 @@ import {
 } from './audioEffectStack'
 
 describe('audio-effect registry and identity evaluation', () => {
-  test('creates independent versioned defaults for the three built-ins', () => {
+  test('creates independent versioned defaults for the four built-ins', () => {
     const eq = createParametricEqEffect('afx-eq')
     const compressor = createCompressorEffect('afx-comp')
     const limiter = createLimiterEffect('afx-lim')
+    const gate = createNoiseGateEffect('afx-gate')
 
     expect(eq.type).toBe(PARAMETRIC_EQ_EFFECT_TYPE)
     expect(compressor.type).toBe(COMPRESSOR_EFFECT_TYPE)
     expect(limiter.type).toBe(LIMITER_EFFECT_TYPE)
+    expect(gate.type).toBe(NOISE_GATE_EFFECT_TYPE)
     expect(eq.params.band1Gain).toBe(0)
     expect(compressor.params.ratio).toBe(1)
     expect(limiter.params.ceilingDb).toBe(0)
+    expect(gate.params.rangeDb).toBe(80)
     expect(eq.params).not.toBe(createParametricEqEffect('afx-eq-2').params)
   })
 

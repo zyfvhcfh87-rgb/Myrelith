@@ -156,13 +156,32 @@ export function migrateLegacyClipInspectorSettings(
   }
 }
 
-/** Linear stereo balance with center preserving both source channels. */
-export function stereoBalanceGains(balance: number): readonly [number, number] {
+function assertAudioBalance(balance: number): void {
   if (!finite(balance) || balance < MIN_AUDIO_BALANCE || balance > MAX_AUDIO_BALANCE) {
     throw new RangeError(
       `Audio balance must be from ${MIN_AUDIO_BALANCE} to ${MAX_AUDIO_BALANCE}`,
     )
   }
+}
+
+export interface StereoBalanceGainTarget {
+  leftGain: number
+  rightGain: number
+}
+
+/** Allocation-free linear stereo balance for audio-rate callers. */
+export function writeStereoBalanceGains(
+  balance: number,
+  target: StereoBalanceGainTarget,
+): void {
+  assertAudioBalance(balance)
+  target.leftGain = balance < 0 ? 1 : 1 - balance
+  target.rightGain = balance < 0 ? 1 + balance : 1
+}
+
+/** Linear stereo balance with center preserving both source channels. */
+export function stereoBalanceGains(balance: number): readonly [number, number] {
+  assertAudioBalance(balance)
   return balance < 0
     ? [1, 1 + balance]
     : [1 - balance, 1]

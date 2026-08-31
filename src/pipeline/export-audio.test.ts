@@ -18,6 +18,7 @@ import type {
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { splitClipAtFrame, trimClip } from '../domain/operations'
 import { docDurationFrames } from '../domain/selectors'
+import { createNoiseGateEffect } from '../domain/audioEffectStack'
 import {
   audioSampleBoundary,
   EXPORT_AUDIO_BLOCK_SAMPLES,
@@ -96,7 +97,7 @@ function makeDoc(
   audioSampleRate = 48_000,
 ): TimelineDoc {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: 'doc',
     name: 'Audio export test',
     frameRate,
@@ -245,7 +246,7 @@ function crossfadeFixture(options: {
         options.frameRate ?? { num: 1, den: 1 },
         options.audioSampleRate ?? 4_096,
       ),
-      schemaVersion: 17,
+      schemaVersion: 18,
     },
     catalog: new Map(
       [...new Set(assetIds)].map((assetId) => [assetId, exactBounds()]),
@@ -961,6 +962,39 @@ describe('TimelineAudioMixer selection and mapping', () => {
     for (let i = 200; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]))
     expect(peak).toBeGreaterThan(0.2 * 1.5)
     expect(peak).toBeLessThan(0.2 * 2.4)
+  })
+
+  test('advances stateful track effects through a silent timeline gap', async () => {
+    const first = makeClip('first', 0, 1)
+    const second = makeClip('second', 2, 1)
+    const track = makeTrack('A1', 'audio', [first, second])
+    const gate = createNoiseGateEffect('track-gate')
+    gate.params.thresholdDb = -30
+    gate.params.attackMs = 0.1
+    gate.params.holdMs = 0
+    gate.params.releaseMs = 1
+    gate.params.rangeDb = 80
+    track.audioEffects = [gate]
+    const doc = makeDoc([track], { num: 1, den: 1 }, 8_000)
+    const h = makeSource((request, sampleCount) => {
+      const amplitude = request.clipId === 'first' ? 0.5 : 0.001
+      return [filled(sampleCount, amplitude), filled(sampleCount, amplitude)]
+    })
+    const mixer = new TimelineAudioMixer(doc, h.source)
+    let secondStart = 1
+    try {
+      await mixer.writeFrame(0, async () => undefined)
+      await mixer.writeFrame(1, async (block) => {
+        expect(block.channels[0].every((sample) => sample === 0)).toBe(true)
+      })
+      await mixer.writeFrame(2, async (block) => {
+        secondStart = block.channels[0][0]
+      })
+    } finally {
+      await mixer.close()
+    }
+
+    expect(Math.abs(secondStart)).toBeLessThan(0.000001)
   })
 })
 

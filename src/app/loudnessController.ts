@@ -1,7 +1,7 @@
 /** App-owned cancellable loudness job. Analysis never writes gain. */
 
 import { createSourceBoundsCatalog } from '../domain/crossfadePlan'
-import { docDurationFrames } from '../domain/selectors'
+import type { LoudnessMeasurementRange } from '../domain/audioLoudness'
 import {
   createMediabunnyExportAudioSource,
   type ExportAssetResolver,
@@ -15,7 +15,7 @@ import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 let generation = 0
 let active: AbortController | null = null
 
-function createResolver(): ExportAssetResolver {
+function createResolver(signal: AbortSignal): ExportAssetResolver {
   const assets = useMediaStore.getState().assets
   const cache = new Map<string, ReturnType<ExportAssetResolver>>()
   return (assetId) => {
@@ -25,7 +25,7 @@ function createResolver(): ExportAssetResolver {
     if (!asset) {
       return Promise.reject(new Error(`Media asset "${assetId}" is missing`))
     }
-    const pending = fetch(asset.objectUrl)
+    const pending = fetch(asset.objectUrl, { signal })
       .then((response) => {
         if (!response.ok) throw new Error(`Failed to read ${asset.fileName}`)
         return response.blob()
@@ -45,17 +45,19 @@ export function cancelLoudnessScan(): void {
   active = null
 }
 
-export async function startLoudnessScan(): Promise<void> {
+export async function startLoudnessScan(range: LoudnessMeasurementRange): Promise<void> {
   cancelLoudnessScan()
   const nextGeneration = ++generation
   const controller = new AbortController()
   active = controller
   const doc = useDocumentStore.getState().doc
-  const frameCount = docDurationFrames(doc)
-  useLoudnessStore.getState().setRunning(nextGeneration, frameCount)
-  const source = createMediabunnyExportAudioSource(createResolver())
+  useLoudnessStore.getState().setRunning(nextGeneration, range)
+  const source = createMediabunnyExportAudioSource(createResolver(controller.signal))
+  let measurement: Awaited<ReturnType<typeof scanTimelineLoudness>> | undefined
+  let failure: unknown
   try {
-    const measurement = await scanTimelineLoudness(doc, source, {
+    measurement = await scanTimelineLoudness(doc, source, {
+      range,
       catalog: createSourceBoundsCatalog(useMediaStore.getState().assets.values()),
       signal: controller.signal,
       onProgress: (progress) => {
@@ -66,22 +68,30 @@ export async function startLoudnessScan(): Promise<void> {
         )
       },
     })
-    if (controller.signal.aborted) {
-      useLoudnessStore.getState().setCancelled(nextGeneration)
-      return
-    }
-    useLoudnessStore.getState().setResult(nextGeneration, measurement)
   } catch (cause) {
-    if (controller.signal.aborted || (cause instanceof DOMException && cause.name === 'AbortError')) {
-      useLoudnessStore.getState().setCancelled(nextGeneration)
-      return
-    }
-    const message = cause instanceof Error ? cause.message : 'Loudness scan failed'
-    useLoudnessStore.getState().setFailed(nextGeneration, message)
+    failure = cause
   } finally {
     if (active === controller) active = null
-    await source.close()
+    try {
+      await source.close()
+    } catch (cause) {
+      failure ??= cause
+    }
   }
+  if (
+    controller.signal.aborted
+    || (failure instanceof DOMException && failure.name === 'AbortError')
+  ) {
+    useLoudnessStore.getState().setCancelled(nextGeneration)
+    return
+  }
+  if (failure !== undefined) {
+    const message = failure instanceof Error ? failure.message : 'Loudness scan failed'
+    useLoudnessStore.getState().setFailed(nextGeneration, message)
+    return
+  }
+  if (!measurement) throw new Error('Loudness scan completed without a measurement')
+  useLoudnessStore.getState().setResult(nextGeneration, measurement)
 }
 
 useDocumentStore.subscribe((state, previous) => {

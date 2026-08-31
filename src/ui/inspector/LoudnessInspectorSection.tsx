@@ -1,12 +1,17 @@
+import { useState } from 'react'
 import {
   DEFAULT_NORMALIZE_TARGET_LUFS,
 } from '../../domain/audioLoudness'
+import { docDurationFrames } from '../../domain/selectors'
 import {
   cancelLoudnessScan,
   startLoudnessScan,
 } from '../../app/loudnessController'
 import { useDocumentStore } from '../../state/documentStore'
 import { useLoudnessStore } from '../../state/loudnessStore'
+import { useTransportStore } from '../../state/transportStore'
+
+type MeasurementRangeChoice = 'timeline' | 'in-out'
 
 function formatLufs(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return '—'
@@ -20,13 +25,33 @@ function formatPeak(value: number | null): string {
 }
 
 export default function LoudnessInspectorSection() {
+  const [rangeChoice, setRangeChoice] = useState<MeasurementRangeChoice>('timeline')
+  const doc = useDocumentStore((state) => state.doc)
+  const durationFrames = docDurationFrames(doc)
+  const timelineInFrame = useTransportStore((state) => state.timelineInFrame)
+  const timelineOutExclusive = useTransportStore((state) => state.timelineOutExclusive)
   const status = useLoudnessStore((state) => state.status)
   const measurement = useLoudnessStore((state) => state.measurement)
+  const measuredRange = useLoudnessStore((state) => state.range)
   const error = useLoudnessStore((state) => state.error)
   const framesDone = useLoudnessStore((state) => state.framesDone)
   const frameCount = useLoudnessStore((state) => state.frameCount)
   const complete = status === 'complete' && measurement?.coverage === 'complete'
   const canNormalize = complete && measurement?.integratedLufs !== null
+  const inOutRange = timelineInFrame !== null
+    && timelineOutExclusive !== null
+    && timelineInFrame >= 0
+    && timelineOutExclusive > timelineInFrame
+    && timelineOutExclusive <= durationFrames
+    ? { startFrame: timelineInFrame, endFrame: timelineOutExclusive }
+    : null
+  const measurementRange = rangeChoice === 'in-out'
+    ? inOutRange
+    : { startFrame: 0, endFrame: durationFrames }
+  const displayedRange = status === 'idle' ? measurementRange : measuredRange
+  const rangeLabel = displayedRange
+    ? `${displayedRange.startFrame}–${displayedRange.endFrame} (end exclusive)`
+    : 'Timeline In/Out is not set to a valid project range'
 
   return (
     <section className="inspector-section" aria-label="Loudness">
@@ -39,14 +64,35 @@ export default function LoudnessInspectorSection() {
               </button>
             )
           : (
-              <button type="button" onClick={() => { void startLoudnessScan() }}>
+              <button
+                type="button"
+                disabled={measurementRange === null}
+                onClick={() => {
+                  if (measurementRange) void startLoudnessScan(measurementRange)
+                }}
+              >
                 Measure
               </button>
             )}
       </div>
+      <label className="inspector-field inspector-field-wide">
+        <span className="inspector-field-label">Measurement range</span>
+        <select
+          aria-label="Loudness measurement range"
+          value={rangeChoice}
+          disabled={status === 'running'}
+          onChange={(event) => setRangeChoice(event.currentTarget.value as MeasurementRangeChoice)}
+        >
+          <option value="timeline">Full timeline</option>
+          <option value="in-out" disabled={inOutRange === null}>Timeline In/Out</option>
+        </select>
+      </label>
       <span className="inspector-note">
         Measurement is derived from the mixed program. It never writes gain.
         Incomplete coverage cannot claim a complete reading.
+      </span>
+      <span className="inspector-note">
+        {status === 'idle' ? 'Selected range' : 'Job range'}: {rangeLabel}.
       </span>
       {status === 'running' && (
         <span className="inspector-note" role="status">

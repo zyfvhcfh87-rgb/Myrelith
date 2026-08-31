@@ -74,7 +74,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(durationFrames = 120): TimelineDoc {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: 'doc-source-playback',
     name: 'source playback fixture',
     frameRate: { num: 30, den: 1 },

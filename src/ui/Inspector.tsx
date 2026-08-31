@@ -79,7 +79,7 @@ export default function Inspector() {
 
   if (!clip) {
     return (
-      <div className="panel-placeholder">
+      <div className="panel-placeholder inspector-empty-state">
         <span className="placeholder-title inspector-empty-title">Inspector</span>
         <LinkSelectionControls key="linking-controls" />
         <span className="placeholder-note">

@@ -16,7 +16,11 @@ import {
   type CrossfadeLegRole,
   type SourceBoundsCatalog,
 } from './crossfadePlan'
-import { clipAnimationTrack, evaluateAnimationTrack } from './clipAnimation'
+import {
+  animationTrackValidationError,
+  clipAnimationTrack,
+  evaluateValidatedAnimationTrackAtBoundaryPosition,
+} from './clipAnimation'
 import { audibleTracks, clipContributesAudioOutput } from './selectors'
 import {
   timelineAudioMixerGraph,
@@ -28,6 +32,7 @@ import {
   clipAudioSettings,
   clipAudioSettingsValidationError,
   stereoBalanceGains,
+  writeStereoBalanceGains,
 } from './clipInspector'
 import { cloneAudioEffectStack } from './audioEffectStack'
 import {
@@ -77,6 +82,39 @@ export interface ClipAudioGains {
   readonly rightGain: number
 }
 
+export interface MutableClipAudioGains {
+  volume: number
+  balance: number
+  leftGain: number
+  rightGain: number
+}
+
+/** Allocation-free gain evaluation for export and other audio-rate hosts. */
+export function writeClipAudioGainsAtLocalFrame(
+  plan: Pick<
+    TimelineAudioClipFields,
+    'volume' | 'balance' | 'volumeAnimation' | 'balanceAnimation'
+  >,
+  localFrame: number,
+  target: MutableClipAudioGains,
+): void {
+  target.volume = plan.volumeAnimation
+    ? evaluateValidatedAnimationTrackAtBoundaryPosition(
+        plan.volumeAnimation,
+        localFrame,
+        plan.volume,
+      )
+    : plan.volume
+  target.balance = plan.balanceAnimation
+    ? evaluateValidatedAnimationTrackAtBoundaryPosition(
+        plan.balanceAnimation,
+        localFrame,
+        plan.balance,
+      )
+    : plan.balance
+  writeStereoBalanceGains(target.balance, target)
+}
+
 export function clipAudioGainsAtLocalFrame(
   plan: Pick<
     TimelineAudioClipFields,
@@ -84,14 +122,14 @@ export function clipAudioGainsAtLocalFrame(
   >,
   localFrame: number,
 ): ClipAudioGains {
-  const volume = plan.volumeAnimation
-    ? evaluateAnimationTrack(plan.volumeAnimation, localFrame, plan.volume)
-    : plan.volume
-  const balance = plan.balanceAnimation
-    ? evaluateAnimationTrack(plan.balanceAnimation, localFrame, plan.balance)
-    : plan.balance
-  const [leftGain, rightGain] = stereoBalanceGains(balance)
-  return { volume, balance, leftGain, rightGain }
+  const gains: MutableClipAudioGains = {
+    volume: plan.volume,
+    balance: plan.balance,
+    leftGain: 1,
+    rightGain: 1,
+  }
+  writeClipAudioGainsAtLocalFrame(plan, localFrame, gains)
+  return gains
 }
 
 export interface ConstantRateAudioStretch {
@@ -308,6 +346,17 @@ export function createTimelineAudioMixPlan(
       }
       if (!clipContributesAudioOutput(clip)) continue
       const [leftGain, rightGain] = stereoBalanceGains(audio.balance)
+      const volumeAnimation = clipAnimationTrack(clip, 'volume')
+      const balanceAnimation = clipAnimationTrack(clip, 'balance')
+      for (const animation of [volumeAnimation, balanceAnimation]) {
+        if (!animation) continue
+        const animationError = animationTrackValidationError(animation)
+        if (animationError) {
+          throw new RangeError(
+            `Audio clip "${clip.id}" ${animation.property} animation: ${animationError}`,
+          )
+        }
+      }
       const plan: TimelineAudioClipFields = {
         clipId: clip.id,
         trackId: track.id,
@@ -321,8 +370,8 @@ export function createTimelineAudioMixPlan(
         balance: audio.balance,
         leftGain,
         rightGain,
-        volumeAnimation: clipAnimationTrack(clip, 'volume'),
-        balanceAnimation: clipAnimationTrack(clip, 'balance'),
+        volumeAnimation,
+        balanceAnimation,
         fadeInFrames: audio.fadeInFrames,
         fadeOutFrames: audio.fadeOutFrames,
         envelopes: [],

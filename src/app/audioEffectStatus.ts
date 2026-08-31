@@ -4,6 +4,7 @@ import {
   audioEffectHostCapabilities,
   resolveAudioEffectStack,
   type AudioEffectCapability,
+  type AudioEffectResolution,
 } from '../domain/audioEffectStack'
 import {
   clipAudioEffects,
@@ -14,11 +15,17 @@ import type { AudioEffectDescriptor, AudioEffectId, TimelineDoc } from '../domai
 import { useDocumentStore } from '../state/documentStore'
 import {
   useAudioEffectStatusStore,
+  type AudioEffectHostStatuses,
   type AudioEffectStatus,
 } from '../state/audioEffectStatusStore'
 
-export function playbackAudioEffectCapabilities(): ReadonlySet<AudioEffectCapability> {
-  return audioEffectHostCapabilities({ jsStereoBlock: true })
+export function playbackAudioEffectCapabilities(
+  host: { readonly createScriptProcessor?: unknown } | undefined =
+    globalThis.AudioContext?.prototype,
+): ReadonlySet<AudioEffectCapability> {
+  return audioEffectHostCapabilities({
+    jsStereoBlock: typeof host?.createScriptProcessor === 'function',
+  })
 }
 
 export function exportAudioEffectCapabilities(): ReadonlySet<AudioEffectCapability> {
@@ -27,23 +34,41 @@ export function exportAudioEffectCapabilities(): ReadonlySet<AudioEffectCapabili
 
 export function projectAudioEffectStatuses(
   doc: TimelineDoc,
-  capabilities: ReadonlySet<AudioEffectCapability> = playbackAudioEffectCapabilities(),
-): ReadonlyMap<AudioEffectId, AudioEffectStatus> {
-  const statuses = new Map<AudioEffectId, AudioEffectStatus>()
-  const recordStack = (effects: readonly AudioEffectDescriptor[]): void => {
-    for (const resolution of resolveAudioEffectStack(effects, capabilities)) {
+  playbackCapabilities: ReadonlySet<AudioEffectCapability> =
+    playbackAudioEffectCapabilities(),
+  exportCapabilities: ReadonlySet<AudioEffectCapability> =
+    exportAudioEffectCapabilities(),
+): ReadonlyMap<AudioEffectId, AudioEffectHostStatuses> {
+  const statuses = new Map<AudioEffectId, AudioEffectHostStatuses>()
+  const recordStack = (
+    effects: readonly AudioEffectDescriptor[],
+    stackPlaybackCapabilities: ReadonlySet<AudioEffectCapability>,
+  ): void => {
+    const exportResolutions = new Map<AudioEffectId, AudioEffectResolution>(
+      resolveAudioEffectStack(effects, exportCapabilities)
+        .map((resolution) => [resolution.effect.id, resolution] as const),
+    )
+    for (const resolution of resolveAudioEffectStack(effects, stackPlaybackCapabilities)) {
+      const exportResolution = exportResolutions.get(resolution.effect.id)
+      if (!exportResolution) continue
+      const toStatus = (item: AudioEffectResolution): AudioEffectStatus => ({
+        label: item.label,
+        status: item.status,
+        detail: item.detail,
+      })
       statuses.set(resolution.effect.id, {
-        label: resolution.label,
-        status: resolution.status,
-        detail: resolution.detail,
+        playback: toStatus(resolution),
+        export: toStatus(exportResolution),
       })
     }
   }
-  recordStack(masterAudioEffects(doc.masterAudio))
+  recordStack(masterAudioEffects(doc.masterAudio), playbackCapabilities)
   for (const track of doc.tracks) {
-    recordStack(trackAudioEffects(track))
+    recordStack(trackAudioEffects(track), playbackCapabilities)
     for (const clip of track.clips) {
-      recordStack(clipAudioEffects(clip))
+      // Clip stacks are rendered into bounded PCM blocks without relying on
+      // the deprecated live ScriptProcessor host.
+      recordStack(clipAudioEffects(clip), exportCapabilities)
     }
   }
   return statuses

@@ -33,7 +33,7 @@ function SequenceEditButton({
   const shortcut = shortcutForCommand(commandId)
   return (
     <button
-      className="transport-button"
+      className="transport-button transport-sequence-edit"
       aria-label={command.label}
       aria-keyshortcuts={shortcut?.ariaKeyShortcuts}
       title={disabled ?? `${command.label}${shortcut ? ` (${shortcut.label})` : ''}`}

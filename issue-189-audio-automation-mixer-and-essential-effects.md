@@ -4,43 +4,36 @@ GitHub: [zyfvhcfh87-rgb/Myrelith#189](https://github.com/zyfvhcfh87-rgb/Myrelith
 
 The issue's "feasible first slice" is the whole feature. Myrelith does not ship that as one PR. This plan splits it the way #43 (keyframes), #45 (effect stack), and #71 (color) were split: one complete, gated slice at a time, with the later slices named so slice 1 does not trap the signal-flow order.
 
-**Status:** Slices 1–6 are implemented on this branch. Gate/denoise stays later. Do not close GitHub #189 until after a user pass.
+**Status:** Slices 1–6 plus the issue's bounded noise-gate option and exact-head automated/Chromium gates are complete on this branch. A user pass and separate publication authorization remain. Do not close GitHub #189 until after that pass.
 
-**This session originally implemented Slice 2 only.** Slice 1 is in the tree. Later slices stay on paper until Slice 2 is green.
+The original notes below record the staged implementation. After rebasing over adjustment layers, the authoritative schema sequence is: adjustments 15, clip audio automation 16, mixer 17, and audio-effect descriptors 18. `docs/AUDIO_SIGNAL_FLOW.md` is the normative runtime contract.
 
 ## Current state
 
-Myrelith already plays and exports a stereo mix. It does **not** have automation, a track/master mixer, audio effects, or loudness analysis.
+Myrelith now plays and exports through the shared automated clip, track, and master mix model.
 
-| Already exists | Missing |
+| Implemented | Publication gate still required |
 |---|---|
-| `clip.volume` linear gain **0..2** (schema comment still says 0..1; that comment is wrong) | Time-varying volume/balance |
-| `clip.audio.balance` **-1..1**, applied **after** channel fold-down | Track gain/pan; master bus |
-| Linear fade in/out frames; crossfade linear/equal-power envelopes | Versioned audio effect descriptors |
-| Track `muted` / `solo` via `audibleTracks` | EQ, compressor, limiter, gate |
-| Playback meters after a unity master gain (`docs/AUDIO_METERING.md`) | Loudness / true-peak analysis |
-| Integer-frame clip animation for position/scale/rotation/opacity | Audio keys in that same model |
-| Issue #188 constant pitch-safe stretch in this worktree | Gate/denoise (explicitly later) |
+| Clip volume/balance automation on integer-frame keys | User pass before issue closeout |
+| Track/master mixer and per-strip meters |  |
+| Versioned clip/track/master audio-effect stacks |  |
+| Shared EQ, compressor, limiter, and bounded noise gate |  |
+| Cancellable LUFS and FIR inter-sample true peak |  |
+| Voice, Music, and Podcast presets |  |
 
-**Signal flow today**
+**Signal flow**
 
 ```
-decode → fold-down (audioChannelMix) → clip volume × stereoBalanceGains
-      → fade / crossfade envelopes → sum → clamp
-      → (playback only) master GainNode = 1 → analysers → output
+decode → fold-down → clip gain/pan automation → fades/crossfades → clip FX
+      → track gain/pan → track FX → sum → master gain/pan/mute → master FX
+      → meters / derived loudness → output
 ```
 
-Volume and balance are **constants** baked into `TimelineAudioClipFields.leftGain` / `rightGain`. Export multiplies them per sample in `TimelineAudioMixer.gainAtSample`. Playback sets one `GainNode` and optional constant L/R balance nodes, then uses a 129-point `setValueCurveAtTime` only when fades or equal-power crossfades exist.
-
-`evaluateAnimationTrack` currently **rejects non-integer frames** (`Number.isSafeInteger`). Visual callers pass integers. Audio needs the same easing on the sample grid.
-
-Inspector: audio volume/balance are static (`updateClipAudio`). The Animation tab and `AnimationCurveEditor` exist only for **video** clips. Audio-only clips have no keyframe surface.
-
-`audioPlaybackPlanKey` fingerprints `clip.volume` and `clip.audio`, **not** `clip.animation`. Volume keys would otherwise play stale audio until some other plan field changed.
-
-Clips with static `volume <= 0` are omitted from the mix, `outputMediaAssetIds`, and export preflight. Opacity already has `clipContributesVisualOutput` so a 0 static value with a later key still renders. Audio needs the same rule.
-
-Split/trim/slip/retime already call `shiftClipAnimation` / source-time remap on **every** `ClipAnimation.tracks` entry. Adding `'volume' | 'balance'` to the property union picks that up automatically.
+Clip input stages are evaluated before stateful clip DSP in both hosts. Track
+and master effects follow their own gain/pan stages. Loudness reuses export
+mixing, measures an explicit full-timeline or timeline-In/Out range, and owns
+cancellation through fetch, decode, read, and cleanup. Inspector reports live
+and export effect readiness independently.
 
 ## Binding decisions (all slices)
 
@@ -50,7 +43,7 @@ Split/trim/slip/retime already call `shiftClipAnimation` / source-time remap on 
 4. **Linear gain, not dB.** Keep 0..2 volume and -1..1 balance. Display may later show dB; storage does not change.
 5. **Audio effects never go on `Clip.effects`.** That array is the visual compositor stack. Audio descriptors will be sibling lists on clip / track / master.
 6. **Meters and loudness never write gain.** Analysis is derived. A separate Normalize action may author an ordinary volume change.
-7. **No VST/LV2, no bus graph, no cloud denoise, no presets until the descriptor contract is stable.**
+7. **No VST/LV2, unlimited bus graph, or cloud denoise.** Presets are ordinary replacements over the stable descriptor contract.
 
 **Documented signal flow** (write this in `docs/AUDIO_SIGNAL_FLOW.md` in Slice 1; later stages occupy labeled empty slots):
 
@@ -77,13 +70,12 @@ Playback may keep using `AudioParam` curves for Slice 1 gain/pan. When clip effe
 
 | Slice | Ships | Schema |
 |---|---|---|
-| **1 — this work** | Clip volume/balance automation, shared live/export evaluation, Inspector keys, signal-flow doc | 14 → **15** |
-| 2 | Track + master gain/pan/mute, mixer strip UI, per-strip meters (10 Hz, no audio-rate React) | 15 → 16 |
-| 3 | Versioned `AudioEffectDescriptor` registry, unknown preservation, capability status, bypass/reorder/reset | 16 → 17 |
-| 4 | Built-in parametric EQ, compressor, limiter. Shared block DSP. Reference fixtures within declared tolerance | no schema bump if types already registered |
+| **1** | Clip volume/balance automation, shared live/export evaluation, Inspector keys, signal-flow doc | 15 → **16** |
+| 2 | Track + master gain/pan/mute, mixer strip UI, per-strip meters (10 Hz, no audio-rate React) | 16 → **17** |
+| 3 | Versioned `AudioEffectDescriptor` registry, unknown preservation, capability status, bypass/reorder/reset | 17 → **18** |
+| 4 | Built-in parametric EQ, compressor, limiter, and bounded noise gate. Shared block DSP. Reference fixtures within declared tolerance | no schema bump |
 | 5 | Local cancellable loudness + true-peak; incomplete coverage cannot claim complete; Normalize is a separate gain edit | derived cache, not project mutation |
 | 6 | Presets, only after Slice 3's contract is stable | later |
-| later | Noise gate / denoise, only after live/export parity evidence | later |
 
 Pitch-safe constant stretch (#188) is already in this worktree. Slice 1 evaluates automation on the **timeline** sample grid, after stretch, so retimed clips keep the same clip-local keys.
 
@@ -91,13 +83,13 @@ Pitch-safe constant stretch (#188) is already in this worktree. Slice 1 evaluate
 
 ## Slice 1 — Clip gain and pan automation
 
-### Schema 14 → 15
+### Schema 15 → 16
 
-Identity bump. No new clip fields. `CURRENT_TIMELINE_SCHEMA_VERSION = 15`.
+Identity bump. No new clip fields. `CURRENT_TIMELINE_SCHEMA_VERSION = 16` at this slice.
 
-`ClipAnimationProperty` gains `'volume' | 'balance'`. Portable validation already rejects unknown property names (`clipValidation.ts`), so older builds must refuse schema-15 files via the version gate rather than "unsupported animated property."
+`ClipAnimationProperty` gains `'volume' | 'balance'`. Portable validation already rejects unknown property names (`clipValidation.ts`), so older builds must refuse schema-16 files via the version gate rather than "unsupported animated property."
 
-Migration `migrateClipAudioAutomation` (schema 14 → 15): bump `schemaVersion` only. Existing animation tracks are unchanged. Current test documents that hardcode `schemaVersion: 14` become 15 (same mechanical pass as 12 → 13). Intentional schema-14 fixtures in `projectFile.test.ts` stay on 14 and must migrate.
+Migration `migrateClipAudioAutomation` (schema 15 → 16): bump `schemaVersion` only. Existing animation tracks are unchanged. Intentional schema-15 fixtures in `projectFile.test.ts` stay on 15 and must migrate.
 
 Fix the stale `Clip.volume` comment in `schema.ts` to **0..2**.
 
@@ -170,7 +162,7 @@ Declared live/export tolerance: same as other audio gates — exact for linear/h
 - `src/pipeline/export-audio.ts`, `playback-audio.ts` (+ tests)
 - `src/app/exportController.ts` if preflight still uses `volume <= 0`
 - `src/ui/inspector/AudioInspectorSection.tsx`, `Inspector.tsx`, `AnimationCurveEditor.tsx` (+ tests)
-- Mechanical `schemaVersion: 14` → `15` in current-document test fixtures; leave intentional v14 migration fixtures alone
+- Mechanical `schemaVersion: 15` → `16` in current-document test fixtures; leave intentional v15 migration fixtures alone
 
 Do **not** add track/master fields, mixer UI, effect descriptors, or loudness in this slice.
 
@@ -183,7 +175,7 @@ Do **not** add track/master fields, mixer UI, effect descriptors, or loudness in
 - Playback plan key changes when a volume key is added
 - `updateClipAudioAtFrame` keys vs static; one history entry; locked track reject; budget reject
 - Inspector: audio-only clip can add a volume key at playhead; undo restores static
-- Project file: schema 14 without volume tracks migrates to 15; schema 15 with volume tracks round-trips; future schema 16 still rejected
+- Project file: schema 15 without volume tracks migrates to 16; schema 16 with volume tracks round-trips; future schema 17 still rejected
 
 ### Browser gate (Slice 1)
 
@@ -205,13 +197,13 @@ Focused tests for the files above, then `npm test`, `npm run build`, `npm run li
 
 ---
 
-## Later slices (not this session)
+## Completed subsequent slices
 
-**Slice 2 — mixer.** Add `Track.volume` / `Track.balance` (defaults 1 / 0) and `TimelineDoc.masterAudio: { volume, balance, muted }`. Schema 16 identity migrate. Mix after clip envelopes, before the sum; master after the sum. UI: a mixer strip docked to the timeline (not a fourth workspace column). One fader + pan + mute/solo per audio track, plus master. Reuse track-header mute/solo. Meters: extend the existing 10 Hz `audioMeterStore` with per-track peaks; React reads the store only. Keyboard/screen-reader on native range/buttons. Usable at 720px.
+**Slice 2 — mixer.** Add `Track.volume` / `Track.balance` (defaults 1 / 0) and `TimelineDoc.masterAudio: { volume, balance, muted }`. Schema 17 identity migrate. Mix after clip envelopes, before the sum; master after the sum. UI: a mixer strip docked to the timeline (not a fourth workspace column). One fader + pan + mute/solo per audio track, plus master. Reuse track-header mute/solo. Meters: extend the existing 10 Hz `audioMeterStore` with per-track peaks; React reads the store only. Keyboard/screen-reader on native range/buttons. Usable at 720px.
 
-**Slice 3 — descriptors.** New `AudioEffectDescriptor` (`id`, `type`, `version`, `enabled`, `params`) on clip, track, and master. Registry in `domain/audioEffectStack.ts` mirroring `effectStack.ts`: unknown preserve, invalid/unsupported/disabled status, capability probe per host (playback AudioContext vs export). Inspector cards: bypass, reorder, reset. No DSP yet besides identity.
+**Slice 3 — descriptors.** Schema 18 adds `AudioEffectDescriptor` (`id`, `type`, `version`, `enabled`, `params`) on clip, track, and master. Registry in `domain/audioEffectStack.ts` mirrors `effectStack.ts`: unknown preserve, invalid/unsupported/disabled status, capability probe per host (playback AudioContext vs export). Inspector cards expose bypass, reorder, and reset.
 
-**Slice 4 — DSP.** Built-in parametric EQ, compressor, limiter as version-1 types. Pure block processors (fixed work per 128/1024-sample block, no per-sample allocation). Export mixer and playback both call them. Fixture vectors with a declared numeric tolerance. Missing capability / future descriptor / cancel / failure keep authored intent and an exact status.
+**Slice 4 — DSP.** Built-in parametric EQ, compressor, limiter, and bounded stereo-linked noise gate are version-1 types. Pure block processors use fixed work per block with no per-sample allocation. Export mixer and playback both call them in the same stage order. Missing capability / future descriptor / cancel / failure keep authored intent and an exact status.
 
 **Slice 5 — loudness.** Cancellable derived job (pattern from motion-analysis / video scopes). Explicit measurement range. Incomplete coverage cannot claim complete. UI reports LUFS + true peak. Normalize is a separate action that writes ordinary gain. Never mutate because a scan ran.
 

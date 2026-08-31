@@ -51,7 +51,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },
@@ -1302,6 +1302,7 @@ describe('manual A/V link controls (Issue 12 Slice 6)', () => {
     const uuid = vi.spyOn(crypto, 'randomUUID')
       .mockReturnValueOnce('00000000-0000-4000-8000-0000000000a1')
       .mockReturnValueOnce('00000000-0000-4000-8000-0000000000a2')
+      .mockReturnValueOnce('00000000-0000-4000-8000-0000000000a3')
     transport().setSelectedClip('clipD')
     render(<Inspector />)
 
@@ -1327,9 +1328,14 @@ describe('manual A/V link controls (Issue 12 Slice 6)', () => {
     expect(masterSection).toBeInstanceOf(HTMLElement)
     if (!(masterSection instanceof HTMLElement)) return
     await user.click(within(masterSection).getByRole('button', { name: 'Add limiter' }))
+    await user.click(within(masterSection).getByRole('button', { name: 'Add noise gate' }))
     expect(doc().doc.masterAudio?.audioEffects?.map((effect) => effect.id)).toEqual([
       'afx_00000000-0000-4000-8000-0000000000a2',
+      'afx_00000000-0000-4000-8000-0000000000a3',
     ])
+    expect(screen.getByTestId(
+      'inspector-audio-effect-thresholdDb-afx_00000000-0000-4000-8000-0000000000a3',
+    )).toBeEnabled()
     await user.click(screen.getByTestId(
       'inspector-audio-effect-enabled-afx_00000000-0000-4000-8000-0000000000a1',
     ))
@@ -1357,6 +1363,8 @@ describe('manual A/V link controls (Issue 12 Slice 6)', () => {
       'builtin.limiter',
     ])
     expect(screen.getByRole('heading', { name: 'Loudness' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Loudness measurement range' }))
+      .toHaveValue('timeline')
     expect(screen.getByRole('button', { name: 'Measure' })).toBeEnabled()
     expect(screen.getByRole('button', { name: /Normalize master to/ })).toBeDisabled()
     uuid.mockRestore()

@@ -13,6 +13,7 @@ import {
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
   isStretchedAudioClipPlan,
+  writeClipAudioGainsAtLocalFrame,
 } from './audioMixPlan'
 import { sourceTimeAudioPolicy } from './sourceTimeMap'
 
@@ -121,7 +122,7 @@ function fixture(options: {
   }
   return {
     doc: {
-      schemaVersion: 17,
+      schemaVersion: 18,
       id: 'audio-plan-doc',
       name: 'Audio plan',
       frameRate: { num: 30, den: 1 },
@@ -446,6 +447,49 @@ describe('timeline audio mix plan', () => {
 
     expect(planned?.volume).toBe(0)
     expect(planned?.volumeAnimation?.keyframes).toHaveLength(2)
+  })
+
+  test('writes animated clip gains into caller-owned audio-rate scratch state', () => {
+    const gains = { volume: 0, balance: 0, leftGain: 0, rightGain: 0 }
+    const identity = gains
+    writeClipAudioGainsAtLocalFrame({
+      volume: 0,
+      balance: 0,
+      volumeAnimation: {
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 0, easing: { type: 'linear' } },
+          { frame: 2, value: 1, easing: { type: 'linear' } },
+        ],
+      },
+      balanceAnimation: {
+        property: 'balance',
+        keyframes: [
+          { frame: 0, value: -1, easing: { type: 'linear' } },
+          { frame: 2, value: 1, easing: { type: 'linear' } },
+        ],
+      },
+    }, 1, gains)
+
+    expect(gains).toBe(identity)
+    expect(gains).toEqual({ volume: 0.5, balance: 0, leftGain: 1, rightGain: 1 })
+  })
+
+  test('rejects invalid audio animation once at the planning boundary', () => {
+    const input = fixture()
+    input.doc.tracks[1].clips[0].animation = {
+      tracks: [{
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 1, easing: { type: 'linear' } },
+          { frame: 8, value: 3, easing: { type: 'linear' } },
+        ],
+      }],
+      effectTracks: [],
+    }
+
+    expect(() => createTimelineAudioMixPlan(input.doc, input.catalog))
+      .toThrow(/volume animation: volume keyframe value must be from 0 to 2/)
   })
 
   test('includes track and master mixer buses with authored gains', () => {

@@ -9,7 +9,6 @@
 
 import type { AssetId, ClipId, TimelineDoc } from '../domain/schema'
 import {
-  clipAudioGainsAtLocalFrame,
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
   isStretchedAudioClipPlan,
@@ -17,13 +16,14 @@ import {
   type TimelineAudioEnvelope,
   type TimelineAudioMasterBus,
   type TimelineAudioTrackBus,
+  writeClipAudioGainsAtLocalFrame,
 } from '../domain/audioMixPlan'
 import { createAudioEffectChain } from '../domain/audioEffectStack'
 import type { AudioEffectChain } from '../domain/audioDsp'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import { docDurationFrames } from '../domain/selectors'
-import { audioSampleBoundary, clipLocalFrameAtSample } from '../domain/time'
+import { audioSampleBoundary } from '../domain/time'
 import { audioSampleFromSourceTicks } from '../domain/sourceTimeMap'
 import {
   AUDIO_STRETCH_MAX_SESSIONS,
@@ -51,6 +51,8 @@ export interface ExportAudioClipRequest {
    * after decode has started, or at EOF.
    */
   requireComplete?: true
+  /** Cancels resolver, decoder, and sequential PCM reads for owned jobs. */
+  signal?: AbortSignal
 }
 
 export interface ExportAudioClipReader {
@@ -77,6 +79,12 @@ function assertPositiveSafeInteger(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${label} must be a positive safe integer`)
   }
+}
+
+function throwIfAudioAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return
+  if (typeof signal.throwIfAborted === 'function') signal.throwIfAborted()
+  throw new DOMException('Audio operation cancelled', 'AbortError')
 }
 
 /** Floor-scale a mix-grid sample index onto another integer sample rate. */
@@ -467,8 +475,15 @@ export class TimelineAudioMixer {
   private readonly clipChains = new Map<ClipId, AudioEffectChain>()
   private readonly trackChains = new Map<string, AudioEffectChain>()
   private readonly masterChain: AudioEffectChain
+  private readonly signal: AbortSignal | undefined
   private readonly clipLeft: Float32Array
   private readonly clipRight: Float32Array
+  private readonly clipGains = {
+    volume: 1,
+    balance: 0,
+    leftGain: 1,
+    rightGain: 1,
+  }
   private nextFrame = 0
   private closePromise: Promise<void> | null = null
 
@@ -476,9 +491,12 @@ export class TimelineAudioMixer {
     doc: TimelineDoc,
     source: ExportAudioMediaSource,
     catalog: SourceBoundsCatalog = new Map(),
+    signal?: AbortSignal,
   ) {
     this.doc = doc
     this.source = source
+    this.signal = signal
+    throwIfAudioAborted(signal)
     this.durationFrames = docDurationFrames(doc)
     const mixPlan = createTimelineAudioMixPlan(doc, catalog)
     this.trackGains = new Map(
@@ -533,6 +551,7 @@ export class TimelineAudioMixer {
   private async reconcileReaders(
     plans: readonly SampleAudioClipPlan[],
   ): Promise<void> {
+    throwIfAudioAborted(this.signal)
     const wanted = new Set(plans.map((plan) => plan.clipId))
     const stale: ExportAudioClipReader[] = []
     for (const [clipId, active] of this.readers) {
@@ -542,6 +561,7 @@ export class TimelineAudioMixer {
       stale.push(active.reader)
     }
     await closeReaders(stale)
+    throwIfAudioAborted(this.signal)
 
     for (const plan of plans) {
       if (this.readers.has(plan.clipId)) continue
@@ -602,12 +622,14 @@ export class TimelineAudioMixer {
         endSample: sourceEndSample,
         sampleRate: this.doc.audioSampleRate,
         channelCount: EXPORT_AUDIO_CHANNELS,
+        ...(this.signal ? { signal: this.signal } : {}),
         ...(plan.sampleEnvelopes.length > 0
           ? { requireComplete: true as const }
           : {}),
       })
       let reader: ExportAudioClipReader
       try {
+        throwIfAudioAborted(this.signal)
         reader = isStretchedAudioClipPlan(plan)
           ? createStretchedExportReader(
               inner,
@@ -642,9 +664,13 @@ export class TimelineAudioMixer {
         (plan.timelineEndSample - sample) / duration,
       ))
     }
-    const envelope = plan.sampleEnvelopes.find((candidate) =>
-      sample >= candidate.startSample && sample < candidate.endSample,
-    )
+    let envelope: SampleAudioEnvelope | undefined
+    for (const candidate of plan.sampleEnvelopes) {
+      if (sample >= candidate.startSample && sample < candidate.endSample) {
+        envelope = candidate
+        break
+      }
+    }
     if (!envelope) return gain
     const duration = envelope.endSample - envelope.startSample
     if (duration <= 0) {
@@ -662,6 +688,7 @@ export class TimelineAudioMixer {
     docFrame: number,
     writeBlock: MixedAudioBlockWriter,
   ): Promise<void> {
+    throwIfAudioAborted(this.signal)
     if (this.closePromise) throw new Error('Timeline audio mixer is closed')
     if (docFrame !== this.nextFrame) {
       throw new Error(
@@ -677,6 +704,7 @@ export class TimelineAudioMixer {
 
     const plans = this.activePlans(docFrame)
     await this.reconcileReaders(plans)
+    throwIfAudioAborted(this.signal)
 
     const frameStart = audioSampleBoundary(docFrame, this.doc)
     const frameEnd = audioSampleBoundary(docFrame + 1, this.doc)
@@ -700,6 +728,7 @@ export class TimelineAudioMixer {
           return { channels, plan }
         }),
       )
+      throwIfAudioAborted(this.signal)
       const failed = settled.find(
         (entry): entry is PromiseRejectedResult =>
           entry.status === 'rejected',
@@ -713,6 +742,15 @@ export class TimelineAudioMixer {
       const left = new Float32Array(sampleCount)
       const right = new Float32Array(sampleCount)
       const byTrack = new Map<string, { left: Float32Array; right: Float32Array }>()
+      // Stateful track DSP must advance through timeline silence just like the
+      // continuously connected playback buses. Identity chains need no bus.
+      for (const [trackId, chain] of this.trackChains) {
+        if (chain.identity) continue
+        byTrack.set(trackId, {
+          left: new Float32Array(sampleCount),
+          right: new Float32Array(sampleCount),
+        })
+      }
       for (const input of decoded) {
         let trackMix = byTrack.get(input.plan.trackId)
         if (!trackMix) {
@@ -724,6 +762,7 @@ export class TimelineAudioMixer {
         }
         const clipLeft = this.clipLeft.subarray(0, sampleCount)
         const clipRight = this.clipRight.subarray(0, sampleCount)
+        const clipLocalFrameStart = docFrame - input.plan.clipTimelineStartFrame
         for (let i = 0; i < sampleCount; i++) {
           const l = input.channels[0][i]
           const r = input.channels[1][i]
@@ -731,16 +770,11 @@ export class TimelineAudioMixer {
             throw new Error('Decoded audio contains a non-finite sample')
           }
           const sample = blockStart + i
-          const localFrame = clipLocalFrameAtSample(
-            input.plan.clipTimelineStartFrame,
-            sample,
-            docFrame,
-            this.doc,
-          )
-          const gains = clipAudioGainsAtLocalFrame(input.plan, localFrame)
+          const localFrame = clipLocalFrameStart + i / sampleCount
+          writeClipAudioGainsAtLocalFrame(input.plan, localFrame, this.clipGains)
           const envelope = this.envelopeAtSample(input.plan, sample)
-          clipLeft[i] = l * envelope * gains.volume * gains.leftGain
-          clipRight[i] = r * envelope * gains.volume * gains.rightGain
+          clipLeft[i] = l * envelope * this.clipGains.volume * this.clipGains.leftGain
+          clipRight[i] = r * envelope * this.clipGains.volume * this.clipGains.rightGain
         }
         let clipChain = this.clipChains.get(input.plan.clipId)
         if (!clipChain) {
@@ -782,11 +816,11 @@ export class TimelineAudioMixer {
           left[i] *= this.master.volume * this.master.leftGain
           right[i] *= this.master.volume * this.master.rightGain
         }
-        this.masterChain.process(left, right)
-        for (let i = 0; i < sampleCount; i++) {
-          left[i] = Math.max(-1, Math.min(1, left[i]))
-          right[i] = Math.max(-1, Math.min(1, right[i]))
-        }
+      }
+      this.masterChain.process(left, right)
+      for (let i = 0; i < sampleCount; i++) {
+        left[i] = Math.max(-1, Math.min(1, left[i]))
+        right[i] = Math.max(-1, Math.min(1, right[i]))
       }
 
       await writeBlock({
@@ -794,6 +828,7 @@ export class TimelineAudioMixer {
         sampleCount,
         channels: [left, right],
       })
+      throwIfAudioAborted(this.signal)
       blockStart += sampleCount
     }
 

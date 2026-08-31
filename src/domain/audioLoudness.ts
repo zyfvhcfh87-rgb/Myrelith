@@ -8,6 +8,12 @@ export const DEFAULT_NORMALIZE_TARGET_LUFS = -16
 
 export type LoudnessCoverage = 'complete' | 'incomplete'
 
+/** Explicit document-frame range measured by a loudness scan. End is exclusive. */
+export interface LoudnessMeasurementRange {
+  readonly startFrame: number
+  readonly endFrame: number
+}
+
 export interface LoudnessMeasurement {
   readonly integratedLufs: number | null
   readonly truePeakDbtp: number | null
@@ -75,6 +81,59 @@ function meanSquareToLufs(meanSquare: number): number {
   return -0.691 + 10 * Math.log10(meanSquare)
 }
 
+/**
+ * Annex 2's 48-tap, four-phase true-peak interpolation filter. One input
+ * sample advances a fixed 12-sample history; each phase is evaluated without
+ * allocating. This exposes inter-sample peaks that linear interpolation
+ * cannot reveal.
+ */
+const TRUE_PEAK_PHASE_TAPS = Object.freeze([
+  Object.freeze([0.0017089843750, -0.0291748046875, -0.0189208984375, -0.0083007812500]),
+  Object.freeze([0.0109863281250, 0.0292968750000, 0.0330810546875, 0.0148925781250]),
+  Object.freeze([-0.0196533203125, -0.0517578125000, -0.0582275390625, -0.0266113281250]),
+  Object.freeze([0.0332031250, 0.0891113281250, 0.1015625, 0.0476074218750]),
+  Object.freeze([-0.0594482421875, -0.16650390625, -0.2003173828125, -0.1022949218750]),
+  Object.freeze([0.1373291015625, 0.4650878906250, 0.77978515625, 0.97216796875]),
+  Object.freeze([0.97216796875, 0.77978515625, 0.4650878906250, 0.1373291015625]),
+  Object.freeze([-0.1022949218750, -0.2003173828125, -0.16650390625, -0.0594482421875]),
+  Object.freeze([0.0476074218750, 0.1015625, 0.0891113281250, 0.0332031250]),
+  Object.freeze([-0.0266113281250, -0.0582275390625, -0.0517578125, -0.0196533203125]),
+  Object.freeze([0.0148925781250, 0.0330810546875, 0.0292968750, 0.0109863281250]),
+  Object.freeze([-0.00830078125, -0.0189208984375, -0.0291748046875, 0.0017089843750]),
+] as const)
+
+function advanceTruePeak(history: Float64Array, sample: number): number {
+  history.copyWithin(1, 0, history.length - 1)
+  history[0] = sample
+  let peak = Math.abs(sample)
+  for (let phase = 0; phase < 4; phase++) {
+    let interpolated = 0
+    for (let tap = 0; tap < TRUE_PEAK_PHASE_TAPS.length; tap++) {
+      interpolated += history[tap] * TRUE_PEAK_PHASE_TAPS[tap][phase]
+    }
+    peak = Math.max(peak, Math.abs(interpolated))
+  }
+  return peak
+}
+
+function truePeakWithTail(
+  measured: number,
+  leftHistory: Float64Array,
+  rightHistory: Float64Array,
+): number {
+  const left = leftHistory.slice()
+  const right = rightHistory.slice()
+  let peak = measured
+  for (let index = 1; index < TRUE_PEAK_PHASE_TAPS.length; index++) {
+    peak = Math.max(
+      peak,
+      advanceTruePeak(left, 0),
+      advanceTruePeak(right, 0),
+    )
+  }
+  return peak
+}
+
 export class LoudnessMeter {
   private readonly expectedSamples: number
   private readonly shelfL: Biquad
@@ -87,8 +146,8 @@ export class LoudnessMeter {
   private readonly gatingSquares: number[] = []
   private measuredSamples = 0
   private truePeak = 0
-  private prevL = 0
-  private prevR = 0
+  private readonly truePeakHistoryL = new Float64Array(TRUE_PEAK_PHASE_TAPS.length)
+  private readonly truePeakHistoryR = new Float64Array(TRUE_PEAK_PHASE_TAPS.length)
 
   constructor(sampleRate: number, expectedSamples: number) {
     if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
@@ -116,20 +175,14 @@ export class LoudnessMeter {
       const r = right[i]
       this.truePeak = Math.max(
         this.truePeak,
-        Math.abs(l),
-        Math.abs(r),
-        Math.abs(l * 0.75 + this.prevL * 0.25),
-        Math.abs(r * 0.75 + this.prevR * 0.25),
-        Math.abs(l * 0.5 + this.prevL * 0.5),
-        Math.abs(r * 0.5 + this.prevR * 0.5),
-        Math.abs(l * 0.25 + this.prevL * 0.75),
-        Math.abs(r * 0.25 + this.prevR * 0.75),
+        advanceTruePeak(this.truePeakHistoryL, l),
+        advanceTruePeak(this.truePeakHistoryR, r),
       )
-      this.prevL = l
-      this.prevR = r
       const weightedL = processBiquad(processBiquad(l, this.shelfL), this.hpL)
       const weightedR = processBiquad(processBiquad(r, this.shelfR), this.hpR)
-      this.block.push((weightedL * weightedL + weightedR * weightedR) * 0.5)
+      // BS.1770 sums the weighted channel energies. Averaging stereo here
+      // would under-report ordinary two-channel programme by 3.0103 LU.
+      this.block.push(weightedL * weightedL + weightedR * weightedR)
       this.measuredSamples += 1
       if (this.block.length >= this.blockSize) {
         let sum = 0
@@ -145,7 +198,12 @@ export class LoudnessMeter {
       && this.expectedSamples > 0
       ? 'complete'
       : 'incomplete'
-    const truePeakDbtp = this.truePeak > 0 ? 20 * Math.log10(this.truePeak) : -Infinity
+    const truePeak = truePeakWithTail(
+      this.truePeak,
+      this.truePeakHistoryL,
+      this.truePeakHistoryR,
+    )
+    const truePeakDbtp = truePeak > 0 ? 20 * Math.log10(truePeak) : -Infinity
     if (this.gatingSquares.length === 0) {
       return {
         integratedLufs: null,

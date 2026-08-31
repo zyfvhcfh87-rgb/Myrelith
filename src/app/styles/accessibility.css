@@ -9,7 +9,7 @@
   min-height: 24px;
 }
 
-.track-toggle,
+.timeline-root .track-toggle,
 .media-remove {
   min-width: 24px;
   min-height: 24px;

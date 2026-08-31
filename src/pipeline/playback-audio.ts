@@ -1049,28 +1049,56 @@ function processScheduledClipBuffer(
   context: AudioContext,
   buffer: AudioBuffer,
   chain: AudioEffectChain,
-  offset: number,
-  duration: number,
-): { buffer: AudioBuffer; offset: number; duration: number } {
-  if (chain.identity) return { buffer, offset, duration }
+  request: ScheduledPlaybackAudio,
+): { buffer: AudioBuffer; offset: number; duration: number; preprocessed: boolean } {
+  if (chain.identity) {
+    return {
+      buffer,
+      offset: request.offset,
+      duration: request.duration,
+      preprocessed: false,
+    }
+  }
   const rate = buffer.sampleRate
-  const start = Math.max(0, Math.floor(offset * rate))
+  const start = Math.max(0, Math.floor(request.offset * rate))
   const count = Math.min(
     buffer.length - start,
-    Math.max(0, Math.round(duration * rate)),
+    Math.max(0, Math.round(request.duration * rate)),
   )
-  if (count <= 0) return { buffer, offset, duration }
+  if (count <= 0) {
+    return {
+      buffer,
+      offset: request.offset,
+      duration: request.duration,
+      preprocessed: false,
+    }
+  }
   const leftSource = buffer.getChannelData(0)
   const rightSource = buffer.numberOfChannels > 1
     ? buffer.getChannelData(1)
     : leftSource
   const left = leftSource.slice(start, start + count)
   const right = rightSource.slice(start, start + count)
+  // Clip gain, fades/crossfades, and balance are part of the clip input to
+  // its effect stack. Bake those sample-accurate stages before stateful DSP,
+  // matching TimelineAudioMixer's export order exactly.
+  for (let index = 0; index < count; index++) {
+    const timelineTime = request.timelineStartTime + index / rate
+    const gains = playbackClipGainsAtTime(request, timelineTime)
+    const envelope = playbackEnvelopeAtTime(request, timelineTime)
+    left[index] *= envelope * gains.volume * gains.leftGain
+    right[index] *= envelope * gains.volume * gains.rightGain
+  }
   processAudioBufferWithChain(left, right, chain, PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES)
   const processed = context.createBuffer(2, count, rate)
   processed.getChannelData(0).set(left)
   processed.getChannelData(1).set(right)
-  return { buffer: processed, offset: 0, duration: count / rate }
+  return {
+    buffer: processed,
+    offset: 0,
+    duration: count / rate,
+    preprocessed: true,
+  }
 }
 
 function createBalanceStage(
@@ -1204,6 +1232,7 @@ export function createWebAudioPlaybackOutput(
     let scheduledBuffer = playbackBuffer
     let scheduledOffset = request.offset
     let scheduledDuration = request.duration
+    let clipInputPreprocessed = false
     const clipEffects = request.audioEffects
     if (clipEffects && clipEffects.length > 0) {
       let chain = clipChains.get(request.clipId)
@@ -1218,19 +1247,21 @@ export function createWebAudioPlaybackOutput(
         context,
         playbackBuffer,
         chain,
-        request.offset,
-        request.duration,
+        request,
       )
       scheduledBuffer = processed.buffer
       scheduledOffset = processed.offset
       scheduledDuration = processed.duration
+      clipInputPreprocessed = processed.preprocessed
     }
     source.buffer = scheduledBuffer
-    scheduleNodeGain(gain.gain, request)
+    if (clipInputPreprocessed) gain.gain.value = 1
+    else scheduleNodeGain(gain.gain, request)
     source.connect(gain)
     const balanceNodes: AudioNode[] = []
     if (
-      playbackBuffer.numberOfChannels >= 2
+      !clipInputPreprocessed
+      && playbackBuffer.numberOfChannels >= 2
       && (
         request.balanceAnimation != null
         || (

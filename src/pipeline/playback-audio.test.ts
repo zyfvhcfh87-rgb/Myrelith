@@ -98,7 +98,7 @@ function makeTrack(
 
 function makeDoc(audioTracks: Track[], durationFrames = 30): TimelineDoc {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     id: 'doc',
     name: 'Playback audio test',
     frameRate: F10,
@@ -168,7 +168,7 @@ function crossfadePlaybackFixture(
   videoTrack.transitions = [transition]
   return {
     doc: {
-      schemaVersion: 17,
+      schemaVersion: 18,
       id: 'crossfade-playback',
       name: 'Crossfade playback',
       frameRate: F10,
@@ -1749,6 +1749,39 @@ describe('createWebAudioPlaybackOutput ownership', () => {
     expect(diagnostics.trackMeters).toEqual([
       expect.objectContaining({ trackId: 'A1' }),
     ])
+    output.stop()
+  })
+
+  test('applies clip gain and balance before stateful clip effects', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    const samples = new Float32Array(4_096).fill(1)
+    const limiter = createLimiterEffect('afx-clip-limiter')
+    limiter.params.ceilingDb = -6
+
+    output.schedule({
+      clipId: 'clip-with-input-gain',
+      buffer: makePlanarAudioBuffer([samples, samples.slice()], 48_000),
+      timelineStartTime: 0,
+      when: 10,
+      offset: 0,
+      duration: samples.length / 48_000,
+      volume: 0.25,
+      envelope: null,
+      balance: -1,
+      leftGain: 1,
+      rightGain: 0,
+      audioEffects: [limiter],
+    })
+
+    const processed = h.sources[0]?.buffer
+    expect(processed).not.toBeNull()
+    expect(processed?.getChannelData(0).at(-1)).toBeCloseTo(0.25, 5)
+    expect(processed?.getChannelData(1).at(-1)).toBeCloseTo(0, 7)
+    expect(h.gains[1]?.gain.value).toBe(1)
+    // The balance stage was baked ahead of DSP, so only the meter splitter exists.
+    expect(h.splitters).toHaveLength(1)
+
     output.stop()
   })
 

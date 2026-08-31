@@ -714,6 +714,13 @@
   text-transform: uppercase;
 }
 
+.inspector-effect-host-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
 .inspector-effect-status.is-ready {
   color: #b9eed2;
   background: #173b2b;

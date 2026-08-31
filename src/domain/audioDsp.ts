@@ -222,15 +222,59 @@ function limiterStage(effect: AudioEffectDescriptor, sampleRate: number): Stage 
   const releaseMs = effect.params.releaseMs
   if (typeof ceilingDb !== 'number' || typeof releaseMs !== 'number') return null
   const ceiling = dbToGain(ceilingDb)
-  const attack = attackReleaseCoef(0.0005, sampleRate)
   const release = attackReleaseCoef(releaseMs / 1000, sampleRate)
-  let envelope = 0
+  let gain = 1
   return {
     process(left, right) {
       for (let i = 0; i < left.length; i++) {
         const peak = Math.max(Math.abs(left[i]), Math.abs(right[i]))
-        envelope += (peak - envelope) * (peak > envelope ? attack : release)
-        const gain = envelope > ceiling && envelope > 1e-12 ? ceiling / envelope : 1
+        const requiredGain = peak > ceiling && peak > 1e-12 ? ceiling / peak : 1
+        // A limiter cannot let its detector attack through the authored
+        // ceiling. Reduction is instantaneous; only recovery is smoothed.
+        gain = requiredGain < gain
+          ? requiredGain
+          : gain + (requiredGain - gain) * release
+        left[i] *= gain
+        right[i] *= gain
+      }
+    },
+  }
+}
+
+/** Bounded stereo-linked downward expander with attack, hold, and release. */
+function noiseGateStage(effect: AudioEffectDescriptor, sampleRate: number): Stage | null {
+  const thresholdDb = effect.params.thresholdDb
+  const attackMs = effect.params.attackMs
+  const holdMs = effect.params.holdMs
+  const releaseMs = effect.params.releaseMs
+  const rangeDb = effect.params.rangeDb
+  if (
+    typeof thresholdDb !== 'number'
+    || typeof attackMs !== 'number'
+    || typeof holdMs !== 'number'
+    || typeof releaseMs !== 'number'
+    || typeof rangeDb !== 'number'
+  ) return null
+  if (rangeDb === 0) return null
+  const threshold = dbToGain(thresholdDb)
+  const floor = dbToGain(-rangeDb)
+  const attack = attackReleaseCoef(attackMs / 1000, sampleRate)
+  const release = attackReleaseCoef(releaseMs / 1000, sampleRate)
+  const holdSamples = Math.max(0, Math.round(holdMs * sampleRate / 1000))
+  let holdRemaining = 0
+  let gain = floor
+  return {
+    process(left, right) {
+      for (let i = 0; i < left.length; i++) {
+        const peak = Math.max(Math.abs(left[i]), Math.abs(right[i]))
+        let open = peak >= threshold
+        if (open) holdRemaining = holdSamples
+        else if (holdRemaining > 0) {
+          open = true
+          holdRemaining--
+        }
+        const target = open ? 1 : floor
+        gain += (target - gain) * (target > gain ? attack : release)
         left[i] *= gain
         right[i] *= gain
       }
@@ -250,6 +294,9 @@ function stageForReadyEffect(
   }
   if (effect.type === 'builtin.limiter' && effect.version === 1) {
     return limiterStage(effect, sampleRate)
+  }
+  if (effect.type === 'builtin.noise-gate' && effect.version === 1) {
+    return noiseGateStage(effect, sampleRate)
   }
   return null
 }

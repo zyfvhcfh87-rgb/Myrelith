@@ -2,7 +2,7 @@
 
 Shared live-playback and export mix contract. Issue #189 owns clip
 automation, the track/master mixer, versioned audio-effect descriptors,
-shared EQ/compressor/limiter DSP, derived loudness, and built-in presets.
+shared EQ/compressor/limiter/noise-gate DSP, derived loudness, and built-in presets.
 The stage order below does not change.
 
 ```
@@ -27,8 +27,10 @@ decode
 - Keys live on `Clip.animation` as `'volume'` and `'balance'`.
 - Static `clip.volume` (0..2) and `clip.audio.balance` (-1..1) remain the
   fallback when no track exists.
-- Keys are clip-local integer frames. Sample-rate evaluation interpolates
-  with the same hold / linear / cubic-bezier easing as visual animation.
+- Keys are clip-local integer frames. At the decoder/audio-clock boundary,
+  sample-rate evaluation uses an ephemeral fractional position with the same
+  hold / linear / cubic-bezier easing as visual animation. That coordinate is
+  never persisted or used for timeline geometry.
 - Fades and crossfade envelopes multiply **after** automation.
 - Audio clips may carry only volume and balance tracks. Video clips may
   carry those too (video-track crossfade audio uses the video clip).
@@ -57,10 +59,13 @@ call the same `clipAudioGainsAtLocalFrame` helper.
   `TimelineDoc.masterAudio.audioEffects`. It never lives on `Clip.effects`.
 - `domain/audioEffectStack.ts` is the registry. Unknown types and future
   versions are preserved, reported, and bypassed. Invalid params and
-  disabled entries are the same. Both live playback and export probe
-  `js-stereo-block`; Inspector reads the app-owned status projection.
-- Version-1 types `builtin.eq`, `builtin.compressor`, and `builtin.limiter`
-  share one JS stereo block processor for live playback and export. Ready
+  disabled entries are the same. Offline clip/export DSP always owns the
+  bounded JS stereo-block host; live track/master buses advertise it only
+  when the actual AudioContext provides the processor stage. Inspector reads
+  the app-owned projection and reports live and export readiness separately.
+- Version-1 types `builtin.eq`, `builtin.compressor`, `builtin.limiter`, and
+  `builtin.noise-gate` share one JS stereo block processor for live playback
+  and export. Ready
   stages run in authored order; missing capability / unknown / invalid
   entries stay preserved and bypassed.
 - Inspector cards expose bypass, reorder, reset, remove, and built-in
@@ -69,5 +74,10 @@ call the same `clipAudioGainsAtLocalFrame` helper.
 ## Loudness (derived)
 
 - A cancellable scan mixes the program through the same export mixer.
-- UI reports integrated LUFS and true peak. Incomplete coverage cannot
-  claim complete. Normalize writes an ordinary master-volume change.
+- The user explicitly selects either the full timeline or a valid timeline
+  In/Out range. The completed reading retains that exact half-open frame range.
+- The cancellation signal reaches asset fetch, decoder iteration, sequential
+  reads, and mixer ownership; cleanup must settle before a terminal UI state.
+- UI reports integrated LUFS and four-phase FIR inter-sample true peak.
+  Incomplete coverage cannot claim complete. Normalize writes an ordinary
+  master-volume change.

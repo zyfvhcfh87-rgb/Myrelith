@@ -379,27 +379,10 @@ export function animationEasingProgress(
   return cubicCoordinate((low + high) / 2, easing.y1, easing.y2)
 }
 
-/**
- * Evaluate one canonical track at a clip-local frame. Persisted keys stay
- * integer; finite fractional frames interpolate with the same easing so
- * audio-rate evaluation shares the visual curve.
- * Boundaries hold the nearest value; an exact duplicate time is impossible in
- * persisted data and edit operations deterministically replace the target.
- * Invalid in-memory tracks return the supplied static fallback.
- */
-export function evaluateAnimationTrack(
+function evaluateValidatedAnimationTrackPosition(
   track: Pick<ClipAnimationTrack, 'keyframes'>,
   frame: number,
-  fallback: number,
 ): number {
-  if (
-    !Number.isFinite(frame)
-    || keyframesValidationError(track.keyframes, (value) =>
-      !Number.isFinite(value) || Math.abs(value) > MAX_ANIMATED_FINITE_MAGNITUDE
-        ? 'animated value exceeds the finite project bound'
-        : null,
-    )
-  ) return fallback
   const keyframes = track.keyframes
   if (frame <= keyframes[0].frame) return keyframes[0].value
   const last = keyframes[keyframes.length - 1]
@@ -418,6 +401,58 @@ export function evaluateAnimationTrack(
   const linearProgress = (frame - left.frame) / (right.frame - left.frame)
   const eased = animationEasingProgress(left.easing, linearProgress)
   return left.value + (right.value - left.value) * eased
+}
+
+function evaluateAnimationTrackPosition(
+  track: Pick<ClipAnimationTrack, 'keyframes'>,
+  frame: number,
+  fallback: number,
+): number {
+  if (
+    keyframesValidationError(track.keyframes, (value) =>
+      !Number.isFinite(value) || Math.abs(value) > MAX_ANIMATED_FINITE_MAGNITUDE
+        ? 'animated value exceeds the finite project bound'
+        : null,
+    )
+  ) return fallback
+  return evaluateValidatedAnimationTrackPosition(track, frame)
+}
+
+/** Evaluate authored timeline geometry only at an exact integer frame. */
+export function evaluateAnimationTrack(
+  track: Pick<ClipAnimationTrack, 'keyframes'>,
+  frame: number,
+  fallback: number,
+): number {
+  if (!Number.isSafeInteger(frame)) return fallback
+  return evaluateAnimationTrackPosition(track, frame, fallback)
+}
+
+/**
+ * Evaluate an ephemeral decoder/audio-clock boundary position. The caller
+ * owns conversion from an exact integer timeline or sample boundary; this
+ * value must never become authored or persisted geometry.
+ */
+export function evaluateAnimationTrackAtBoundaryPosition(
+  track: Pick<ClipAnimationTrack, 'keyframes'>,
+  frame: number,
+  fallback: number,
+): number {
+  if (!Number.isFinite(frame)) return fallback
+  return evaluateAnimationTrackPosition(track, frame, fallback)
+}
+
+/**
+ * Allocation-free boundary evaluation for audio-rate callers whose planning
+ * boundary already accepted the complete animation track.
+ */
+export function evaluateValidatedAnimationTrackAtBoundaryPosition(
+  track: Pick<ClipAnimationTrack, 'keyframes'>,
+  frame: number,
+  fallback: number,
+): number {
+  if (!Number.isFinite(frame)) return fallback
+  return evaluateValidatedAnimationTrackPosition(track, frame)
 }
 
 function applyAnimatedValues(
