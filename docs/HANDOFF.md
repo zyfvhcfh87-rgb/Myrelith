@@ -1607,7 +1607,7 @@ surface; it is not a second zoom and never enters document history.
   cancellable, explicit-range derived LUFS + FIR inter-sample true-peak scan;
   Inspector reports live/export effect readiness separately; Voice, Music, and
   Podcast presets replace ordinary descriptor stacks.
-- Exact-head gates pass all 259 Vitest files / 3,670 tests plus all 17 runner
+- Exact-head gates pass all 259 Vitest files / 3,672 tests plus all 17 runner
   checks, production build/typecheck (4,945 modules), clean lint, a production
   dependency audit with 0 vulnerabilities, clean diff hygiene, and all 14
   Chromium browser tests. The 1280x720 Inspector regression proves master

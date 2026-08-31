@@ -1785,6 +1785,47 @@ describe('createWebAudioPlaybackOutput ownership', () => {
     output.stop()
   })
 
+  test('routes animated balance through the identity clip path', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    const samples = new Float32Array(8).fill(1)
+
+    output.schedule({
+      clipId: 'clip-with-animated-balance',
+      buffer: makePlanarAudioBuffer([samples, samples.slice()], 8),
+      timelineStartTime: 0,
+      when: 10,
+      offset: 0,
+      duration: 1,
+      volume: 1,
+      envelope: null,
+      balance: -1,
+      leftGain: 1,
+      rightGain: 0,
+      clipTimelineStartFrame: 0,
+      frameRate: { num: 1, den: 1 },
+      balanceAnimation: {
+        property: 'balance',
+        keyframes: [
+          { frame: 0, value: -1, easing: { type: 'linear' } },
+          { frame: 1, value: 1, easing: { type: 'linear' } },
+        ],
+      },
+    })
+
+    const curves = h.gains.flatMap((node) =>
+      node.gain.setValueCurveAtTime.mock.calls.map((call) => call[0] as Float32Array),
+    )
+    expect(curves).toHaveLength(2)
+    expect(curves[0][0]).toBeCloseTo(1, 7)
+    expect(curves[0].at(-1)).toBeCloseTo(0, 7)
+    expect(curves[1][0]).toBeCloseTo(0, 7)
+    expect(curves[1].at(-1)).toBeCloseTo(1, 7)
+    expect(h.processors).toHaveLength(0)
+
+    output.stop()
+  })
+
   test('uses exact ramps for linear legs and bounded curves for equal-power legs', () => {
     const h = makeWebAudioHarness('running')
     const output = createWebAudioPlaybackOutput(h.context)
