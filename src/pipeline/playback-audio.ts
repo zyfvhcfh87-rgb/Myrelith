@@ -195,8 +195,8 @@ function projectRatePlaybackCursor(
         const endSample = Math.ceil(sourceEndTime * targetSampleRate - epsilon)
         const outputStart = Math.max(nextOutputSample ?? firstSample, firstSample)
         const outputLength = endSample - outputStart
-        nextOutputSample = endSample
         if (outputLength <= 0) continue
+        nextOutputSample = endSample
 
         const channels = Array.from(
           { length: buffer.numberOfChannels },

@@ -653,6 +653,56 @@ describe('startTimelineAudioPlayback scheduling', () => {
     await session.stop()
   })
 
+  test('keeps the project-rate resample cursor from walking backward', async () => {
+    const clip = makeClip('project-rate-rewind', 0, 1)
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 1)
+    const h = makePlaybackHarness({ lookaheadSeconds: 0.2 })
+    const first = new Float32Array(2_205).map((_value, index) => index)
+    const behind = new Float32Array(882).fill(-1)
+    const later = new Float32Array(2_646).map((_value, index) => 10_000 + index)
+    h.media.enqueue(
+      clip.assetId,
+      makeCursor([
+        {
+          buffer: makePlanarAudioBuffer([first, first.slice()], 44_100),
+          timestamp: 0,
+          duration: 0.05,
+        },
+        {
+          buffer: makePlanarAudioBuffer([behind, behind.slice()], 44_100),
+          timestamp: 0.02,
+          duration: 0.02,
+        },
+        {
+          buffer: makePlanarAudioBuffer([later, later.slice()], 44_100),
+          timestamp: 0.04,
+          duration: 0.06,
+        },
+      ]).cursor,
+    )
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.output.scheduled.map((event) => event.buffer.length)).toEqual([
+      2_400,
+      2_400,
+    ])
+    expect(h.output.scheduled.map((event) => event.duration)).toEqual([0.05, 0.05])
+    expect(h.output.scheduled[1]?.offset).toBe(0)
+    expect(h.output.scheduled[1]?.buffer.getChannelData(0)[0]).toBeCloseTo(
+      10_441,
+      6,
+    )
+    await session.stop()
+  })
+
   test('marks a ninth overlapping live stretch session unavailable', async () => {
     const clips = Array.from({ length: 9 }, (_value, index) => {
       const clip = makeClip(`retimed-${index}`, 0, 10)
