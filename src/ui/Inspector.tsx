@@ -8,10 +8,12 @@ import {
   ANIMATABLE_AUDIO_PROPERTIES,
   ANIMATABLE_VISUAL_PROPERTIES,
   resolveClipAnimationAtFrame,
-} from '../domain/clipAnimation'
-import { linkedPartners } from '../domain/linking'
+  findAdjustment,
+  findClip,
+  linkedPartners,
+  trackOfClip,
+} from '../state/editorUi'
 import type { Clip } from '../domain/schema'
-import { findClip, trackOfClip } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
@@ -23,7 +25,6 @@ import TextOverlayFields from './inspector/TextOverlayFields'
 import TimingInspectorSection from './inspector/TimingInspectorSection'
 import VideoInspectorSections from './inspector/VideoInspectorSections'
 import AdjustmentInspector from './AdjustmentInspector'
-import { findAdjustment } from '../domain/adjustmentItems'
 
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
 const DynamicZoomEditor = lazy(() => import('./DynamicZoomEditor'))

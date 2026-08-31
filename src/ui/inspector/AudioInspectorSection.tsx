@@ -1,8 +1,11 @@
-import { resolveClipAnimationAtFrame } from '../../domain/clipAnimation'
-import { clipAudioSettings, DEFAULT_CLIP_AUDIO_SETTINGS } from '../../domain/clipInspector'
 import type { ClipAudioPatch } from '../../domain/operations'
 import type { Clip } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
+import {
+  clipAudioSettings,
+  DEFAULT_CLIP_AUDIO_SETTINGS,
+  resolveClipAnimationAtFrame,
+} from '../../state/editorUi'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
 import {

@@ -1,10 +1,11 @@
 /**
  * pipeline/playback-audio.ts — bounded live timeline audio playback.
  *
- * Mediabunny decodes short, sequential AudioBuffer windows. Web Audio owns
- * mixing/resampling and schedules every buffer against one AudioContext
- * anchor. Refill timers only maintain a rolling lookahead; they never drive
- * timeline position. The shared AudioContext clock remains the master clock.
+ * Mediabunny decodes short, sequential AudioBuffer windows. Playback first
+ * normalizes decoded PCM onto the document sample grid, then schedules every
+ * buffer against one AudioContext anchor. Refill timers only maintain a rolling
+ * lookahead; they never drive timeline position. The shared AudioContext clock
+ * remains the master clock.
  */
 
 import {
@@ -129,11 +130,139 @@ export interface PlaybackAudioClipRequest {
   startTime: number
   endTime: number
   stretchLead?: true
+  stretchSampleRate?: number
 }
 
 export interface PlaybackAudioMediaSource {
   openClip(request: PlaybackAudioClipRequest): Promise<PlaybackAudioCursor>
   close(): Promise<void>
+}
+
+/**
+ * Convert decoded PCM to the same project-rate grid used by export before any
+ * time stretch or clip DSP. Same-rate and structural test buffers pass through.
+ */
+function projectRatePlaybackCursor(
+  context: AudioContext,
+  inner: PlaybackAudioCursor,
+  targetSampleRate: number,
+): PlaybackAudioCursor {
+  let lookahead: IteratorResult<PlaybackAudioBuffer, void> | null = null
+  let nextOutputSample: number | null = null
+  let closed = false
+  const epsilon = 1e-10
+
+  const pull = async (): Promise<IteratorResult<PlaybackAudioBuffer, void>> => {
+    if (lookahead) {
+      const step = lookahead
+      lookahead = null
+      return step
+    }
+    return inner.next()
+  }
+
+  return {
+    next: async (): Promise<IteratorResult<PlaybackAudioBuffer, void>> => {
+      if (closed) return { done: true, value: undefined }
+      while (true) {
+        const step = await pull()
+        if (step.done) return step
+        const wrapped = step.value
+        const buffer = wrapped.buffer
+        const sourceRate = buffer.sampleRate
+        if (
+          sourceRate === targetSampleRate
+          || !Number.isSafeInteger(sourceRate)
+          || sourceRate <= 0
+          || !Number.isSafeInteger(buffer.length)
+          || buffer.length < 1
+          || !Number.isSafeInteger(buffer.numberOfChannels)
+          || buffer.numberOfChannels < 1
+          || buffer.numberOfChannels > 32
+        ) {
+          nextOutputSample = null
+          return step
+        }
+
+        const usableDuration = Math.min(wrapped.duration, buffer.duration)
+        if (
+          !Number.isFinite(wrapped.timestamp)
+          || !Number.isFinite(usableDuration)
+          || usableDuration <= 0
+        ) return step
+        const sourceEndTime = wrapped.timestamp + usableDuration
+        const firstSample = Math.ceil(wrapped.timestamp * targetSampleRate - epsilon)
+        const endSample = Math.ceil(sourceEndTime * targetSampleRate - epsilon)
+        const outputStart = Math.max(nextOutputSample ?? firstSample, firstSample)
+        const outputLength = endSample - outputStart
+        nextOutputSample = endSample
+        if (outputLength <= 0) continue
+
+        const channels = Array.from(
+          { length: buffer.numberOfChannels },
+          (_value, channel) => buffer.getChannelData(channel),
+        )
+        const output = context.createBuffer(2, outputLength, targetSampleRate)
+        const left = output.getChannelData(0)
+        const right = output.getChannelData(1)
+        let nextBuffer: PlaybackAudioBuffer | null | undefined
+
+        for (let outputIndex = 0; outputIndex < outputLength; outputIndex++) {
+          const outputSample = outputStart + outputIndex
+          const sourcePosition = Math.max(
+            0,
+            (outputSample / targetSampleRate - wrapped.timestamp) * sourceRate,
+          )
+          const lower = Math.min(buffer.length - 1, Math.floor(sourcePosition))
+          const fraction = Math.max(0, Math.min(1, sourcePosition - lower))
+          let nextPlanes: readonly Float32Array[] | null = null
+          let nextFrame = lower + 1
+          if (nextFrame >= buffer.length && fraction > epsilon) {
+            if (nextBuffer === undefined) {
+              lookahead = await inner.next()
+              nextBuffer = lookahead.done ? null : lookahead.value
+            }
+            if (nextBuffer) {
+              const gap = Math.abs(nextBuffer.timestamp - sourceEndTime)
+              if (
+                gap <= 1.5 / sourceRate
+                && nextBuffer.buffer.numberOfChannels >= 1
+                && nextBuffer.buffer.numberOfChannels <= 32
+                && nextBuffer.buffer.length >= 1
+              ) {
+                nextPlanes = Array.from(
+                  { length: nextBuffer.buffer.numberOfChannels },
+                  (_value, channel) => nextBuffer!.buffer.getChannelData(channel),
+                )
+                nextFrame = 0
+              }
+            }
+          }
+          const first = foldDecodedFrameToStereo(channels, lower)
+          const second = nextPlanes
+            ? foldDecodedFrameToStereo(nextPlanes, nextFrame)
+            : first
+          left[outputIndex] = first[0] + (second[0] - first[0]) * fraction
+          right[outputIndex] = first[1] + (second[1] - first[1]) * fraction
+        }
+
+        return {
+          done: false,
+          value: {
+            buffer: output,
+            timestamp: outputStart / targetSampleRate,
+            duration: outputLength / targetSampleRate,
+          },
+        }
+      }
+    },
+    close: async () => {
+      if (closed) return
+      closed = true
+      lookahead = null
+      await inner.close()
+    },
+  }
 }
 
 export interface ScheduledPlaybackAudio {
@@ -680,13 +809,14 @@ export function createMediabunnyPlaybackAudioSource(
     }
     let iterator: AsyncIterator<PlaybackAudioBuffer, void>
     try {
+      const stretchSampleRate = request.stretchSampleRate ?? asset.sampleRate
       const supportedStretchRate = [44_100, 48_000, 96_000]
-        .includes(asset.sampleRate)
+        .includes(stretchSampleRate)
       const startTime = request.stretchLead && supportedStretchRate
         ? Math.max(
             0,
             request.startTime
-              - audioStretchSourceLeadSamples(asset.sampleRate) / asset.sampleRate,
+              - audioStretchSourceLeadSamples(stretchSampleRate) / stretchSampleRate,
           )
         : request.startTime
       iterator = asset.sink.buffers(
@@ -1572,12 +1702,22 @@ export async function startTimelineAudioPlayback(
       admittedStretchClips.add(plan.clipId)
     }
     try {
-      const cursor = await media.openClip({
+      const decodedCursor = await media.openClip({
         assetId: plan.assetId,
         startTime: sourceStartTime,
         endTime: plan.decodeEndTime,
-        ...(isStretchedPlaybackPlan(plan) ? { stretchLead: true as const } : {}),
+        ...(isStretchedPlaybackPlan(plan)
+          ? {
+              stretchLead: true as const,
+              stretchSampleRate: doc.audioSampleRate,
+            }
+          : {}),
       })
+      const cursor = projectRatePlaybackCursor(
+        context,
+        decodedCursor,
+        doc.audioSampleRate,
+      )
       if (stopped) {
         admittedStretchClips.delete(plan.clipId)
         await cursor.close()

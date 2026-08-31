@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import {
   DEFAULT_NORMALIZE_TARGET_LUFS,
-} from '../../domain/audioLoudness'
-import { docDurationFrames } from '../../domain/selectors'
+  docDurationFrames,
+} from '../../state/editorUi'
 import {
   cancelLoudnessScan,
   startLoudnessScan,

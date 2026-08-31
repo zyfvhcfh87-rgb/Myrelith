@@ -37,6 +37,7 @@ import {
   splitClipAtFrame,
   trimClip,
 } from './operations'
+import { createAdjustmentItem } from './adjustmentItems'
 import type { Clip, MediaAsset, TimelineDoc, Track } from './schema'
 import {
   sourceTimeMapUsesSpeedCurve,
@@ -306,6 +307,44 @@ describe('linkedRetimeClips', () => {
     })
     expect(clipIn(out, 'V1', 'vB').timelineRange.startFrame).toBe(40)
     expect(clipIn(out, 'V1', 'vB').timelineRange.durationFrames).toBe(10)
+  })
+
+  test('slowing a packed clip pushes a following adjustment layer just far enough', () => {
+    const map = sourceTimeMapWithSpeedPoint(
+      {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 40_000_000,
+        rate: { numerator: 1, denominator: 1 },
+      },
+      0,
+      sourceTimeRateFromPercent(400),
+      'hold',
+    )
+    const track = makeTrack('V1', 'video', [{
+      ...makeClip('vA', 0, 40),
+      sourceTimeMap: map,
+      timelineRange: { startFrame: 0, durationFrames: 10 },
+    }])
+    track.adjustments = [createAdjustmentItem(10, 10, 'Grade')]
+    const doc = deepFreeze({
+      schemaVersion: 18,
+      id: 'doc-retime-push-adjustment',
+      name: 'retime push adjustment',
+      frameRate: { num: 30, den: 1 },
+      width: 1920,
+      height: 1080,
+      audioSampleRate: 48_000,
+      tracks: [track],
+    } satisfies TimelineDoc)
+
+    const out = linkedRetimeClip(doc, 'vA', sourceTimeRateFromPercent(100))
+
+    expect(out).not.toBe(doc)
+    expect(clipIn(out, 'V1', 'vA').timelineRange.durationFrames).toBe(40)
+    expect(out.tracks[0]?.adjustments?.[0]?.timelineRange).toEqual({
+      startFrame: 40,
+      durationFrames: 10,
+    })
   })
 
   test('leaves a later clip put when it already clears the restored end', () => {

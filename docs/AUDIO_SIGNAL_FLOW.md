@@ -8,6 +8,8 @@ The stage order below does not change.
 ```
 decode
   → fold-down to stereo
+  → normalize onto the document sample grid
+  → constant-rate stretch when the timing plan requires it
   → clip volume / balance (static or integer-frame keys)
   → clip fades / crossfades
   → clip audio effects            [Slice 3–4]
@@ -21,6 +23,11 @@ decode
   → loudness (derived, off-line)  [Slice 5]
   → output
 ```
+
+Live playback and export both perform sample-grid normalization before
+time stretch and clip effects. The playback `AudioContext` is requested at
+the document rate so track/master DSP does not silently move across a browser
+resampling boundary.
 
 ## Clip automation (schema 16)
 

@@ -532,7 +532,7 @@ export interface Clip {
   effects: Effect[]
   /**
    * Ordered clip audio-effect stack. Optional on in-memory fixtures;
-   * portable schema-17 files always write the array, empty when unused.
+   * portable schema-18 files always write the array, empty when unused.
    */
   audioEffects?: AudioEffectDescriptor[]
   /** Present only on text clips; such clips render text instead of media. */
@@ -640,18 +640,18 @@ export interface Track {
   locked: boolean
   /**
    * Linear track gain 0..2, default 1. Applied after clip envelopes and
-   * before the sum. Optional on in-memory fixtures; portable schema-16
+   * before the sum. Optional on in-memory fixtures; portable schema-17
    * files always write it.
    */
   volume?: number
   /**
    * Stereo balance -1..1, default 0. Applied with track volume.
-   * Optional on in-memory fixtures; portable schema-16 files always write it.
+   * Optional on in-memory fixtures; portable schema-17 files always write it.
    */
   balance?: number
   /**
    * Ordered track audio-effect stack, after track gain/pan and before the sum.
-   * Optional on in-memory fixtures; portable schema-17 files always write it.
+   * Optional on in-memory fixtures; portable schema-18 files always write it.
    */
   audioEffects?: AudioEffectDescriptor[]
 }
@@ -666,7 +666,7 @@ export interface MasterAudioSettings {
   muted: boolean
   /**
    * Ordered master audio-effect stack, after master gain/pan/mute.
-   * Optional on in-memory fixtures; portable schema-17 files always write it.
+   * Optional on in-memory fixtures; portable schema-18 files always write it.
    */
   audioEffects?: AudioEffectDescriptor[]
 }
@@ -736,7 +736,7 @@ export interface CaptionTrack {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 17. */
+  /** Schema version for forward-compatible project files. Currently 18. */
   schemaVersion: number
   /** Unique document id. */
   id: string
@@ -765,7 +765,7 @@ export interface TimelineDoc {
   captionTracks?: CaptionTrack[]
   /**
    * Master stereo bus after the track sum. Optional only so in-memory
-   * fixtures stay source-compatible; portable schema-16 files always write it.
+   * fixtures stay source-compatible; portable schema-17 files always write it.
    */
   masterAudio?: MasterAudioSettings
 }

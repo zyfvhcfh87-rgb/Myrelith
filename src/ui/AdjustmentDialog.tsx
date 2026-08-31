@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useDocumentStore } from '../state/documentStore'
 import {
   createAdjustmentItem,
   findAdjustment,
-} from '../domain/adjustmentItems'
-import { MAX_PROJECT_NAME_CHARACTERS } from '../domain/projectLimits'
-import { useDocumentStore } from '../state/documentStore'
+  MAX_PROJECT_NAME_CHARACTERS,
+  secondsToFrames,
+} from '../state/editorUi'
 import { useTransportStore } from '../state/transportStore'
 
 interface AdjustmentDialogProps {
@@ -27,7 +28,7 @@ export default function AdjustmentDialog({ onClose }: AdjustmentDialogProps) {
   const [startFrame, setStartFrame] = useState(String(initialPlayhead))
   const [durationFrames, setDurationFrames] = useState(String(Math.max(
     1,
-    Math.round((initialDoc.frameRate.num / initialDoc.frameRate.den) * 5),
+    secondsToFrames(5, initialDoc.frameRate),
   )))
   const [error, setError] = useState<string | null>(null)
   const dialogRef = useRef<HTMLDialogElement | null>(null)

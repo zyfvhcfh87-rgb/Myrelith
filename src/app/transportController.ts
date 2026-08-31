@@ -74,7 +74,7 @@ export interface ClockContext extends PlaybackClock {
 
 /** Injection points so tests run without AudioContext/rAF. */
 export interface TransportDeps {
-  createContext(): ClockContext
+  createContext(sampleRate: number): ClockContext
   scheduleTick(cb: () => void): number
   cancelTick(id: number): void
   scheduleMeterPoll(cb: () => void, delayMs: number): number
@@ -92,7 +92,7 @@ export interface TransportDeps {
 }
 
 const realDeps: TransportDeps = {
-  createContext: () => new AudioContext(),
+  createContext: (sampleRate) => new AudioContext({ sampleRate }),
   scheduleTick: (cb) => requestAnimationFrame(cb),
   cancelTick: (id) => cancelAnimationFrame(id),
   scheduleMeterPoll: (cb, delayMs) => window.setTimeout(cb, delayMs),
@@ -184,7 +184,9 @@ function haltSourcePlaybackClock(): void {
 
 function ensureClock(): ClockContext {
   if (!state.clockCtx) {
-    state.clockCtx = state.deps.createContext()
+    state.clockCtx = state.deps.createContext(
+      useDocumentStore.getState().doc.audioSampleRate,
+    )
   }
   return state.clockCtx
 }

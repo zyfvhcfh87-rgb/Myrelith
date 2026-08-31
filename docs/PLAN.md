@@ -4864,7 +4864,7 @@ acceptance claims.
 
 ## Post-MVP issue #190 - bounded adjustment layers
 
-**IMPLEMENTATION COMPLETE LOCALLY (2026-08-30); PUBLICATION AND CLOSEOUT NOT AUTHORIZED.**
+**MERGED (2026-08-30) THROUGH PR #214 AS `024ea9b`; ISSUE #190 CLOSED.**
 
 - [x] Advance timeline schema 14→15 with a bounded, resource-free,
   video-track-only `AdjustmentItem`; migrate existing tracks to empty arrays and
@@ -4893,5 +4893,5 @@ acceptance claims.
 - [x] Pass all 250 Vitest files / 3,584 tests plus all 17 repository runner
   checks, production build/typecheck (4,930 modules), clean lint, and diff
   hygiene.
-- [ ] Push, publish a PR, pass exact-head CI/review, and close Issue #190 only
-  when explicitly authorized.
+- [x] Push, publish PR #214, pass exact-head CI/review, and close Issue #190
+  after explicit user authorization to skip the final user pass.

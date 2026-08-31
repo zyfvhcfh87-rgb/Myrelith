@@ -321,8 +321,9 @@ function makeFakeDeps() {
   let nowMs = 0
   let deviceChange: (() => void) | null = null
   const unsubscribeDeviceChange = vi.fn()
+  const createContext = vi.fn((_sampleRate: number) => clock)
   const deps = {
-    createContext: () => clock,
+    createContext,
     scheduleTick: (cb: () => void) => {
       const id = nextId++
       pending.set(id, cb)
@@ -402,6 +403,7 @@ describe('play / pause', () => {
     play()
     expect(transport().isPlaying).toBe(true)
     expect(fake.clock.resume).toHaveBeenCalled()
+    expect(fake.deps.createContext).toHaveBeenCalledWith(48_000)
 
     fake.clock.currentTime = 1
     fake.pump()

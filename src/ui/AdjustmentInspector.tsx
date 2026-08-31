@@ -2,17 +2,15 @@ import { useEffect, useState, type KeyboardEvent } from 'react'
 import { StackSimple } from '@phosphor-icons/react'
 import type { AdjustmentItem, EffectDescriptor, TimelineDoc } from '../domain/schema'
 import {
-  locateAdjustment,
-  resolveAdjustmentAtFrame,
-} from '../domain/adjustmentItems'
-import {
   COLOR_ADJUST_EFFECT_TYPE,
   COLOR_ADJUST_LIMITS,
   createColorAdjustEffect,
   effectAnimationParameterSpec,
   resolvePostCompositeEffectStack,
-} from '../domain/effectStack'
-import { rangeEnd } from '../domain/time'
+  locateAdjustment,
+  rangeEnd,
+  resolveAdjustmentAtFrame,
+} from '../state/editorUi'
 import { useDocumentStore } from '../state/documentStore'
 
 interface AdjustmentInspectorProps {

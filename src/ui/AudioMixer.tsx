@@ -7,14 +7,12 @@ import { useEffect, useRef, useState } from 'react'
 import {
   AUDIO_METER_CEILING_DB,
   AUDIO_METER_FLOOR_DB,
-  type AudioMeterReadout,
-} from '../domain/audioMeter'
-import {
   masterAudioSettings,
   mixerAudioTracks,
   trackBalance,
   trackVolume,
-} from '../domain/audioMixer'
+} from '../state/editorUi'
+import type { AudioMeterReadout } from '../domain/audioMeter'
 import { useDocumentStore } from '../state/documentStore'
 import {
   SILENT_AUDIO_METER_READOUT,
@@ -97,6 +95,9 @@ function MixerRange({
   useEffect(() => {
     if (!dragging.current) setDraft(value)
   }, [value])
+  useEffect(() => () => {
+    dragging.current = false
+  }, [])
 
   const decimals = String(step).split('.')[1]?.length ?? 0
   const commit = (next: number): void => {
@@ -104,6 +105,16 @@ function MixerRange({
     const rounded = Number(bounded.toFixed(decimals))
     setDraft(rounded)
     onCommit(rounded)
+  }
+  const cancelDrag = (element: HTMLInputElement, pointerId: number): void => {
+    if (!dragging.current) return
+    dragging.current = false
+    setDraft(value)
+    if (typeof element.hasPointerCapture === 'function'
+      && element.hasPointerCapture(pointerId)
+      && typeof element.releasePointerCapture === 'function') {
+      element.releasePointerCapture(pointerId)
+    }
   }
 
   return (
@@ -132,6 +143,8 @@ function MixerRange({
         }
         commit(Number(event.currentTarget.value))
       }}
+      onPointerCancel={(event) => cancelDrag(event.currentTarget, event.pointerId)}
+      onLostPointerCapture={(event) => cancelDrag(event.currentTarget, event.pointerId)}
       onChange={(event) => {
         const next = Number(event.currentTarget.value)
         setDraft(next)

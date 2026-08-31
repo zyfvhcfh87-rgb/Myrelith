@@ -44,6 +44,22 @@ describe('AudioMixer', () => {
     expect(useDocumentStore.getState().past).toHaveLength(1)
   })
 
+  test('pointer cancellation discards the draft and restores keyboard commits', () => {
+    render(<AudioMixer />)
+    const fader = screen.getByRole('slider', { name: 'A1 volume' })
+    fireEvent.pointerDown(fader, { pointerId: 7 })
+    fireEvent.change(fader, { target: { value: '0.4' } })
+    fireEvent.pointerCancel(fader, { pointerId: 7 })
+
+    expect(fader).toHaveValue('1')
+    expect(useDocumentStore.getState().past).toHaveLength(0)
+
+    fireEvent.change(fader, { target: { value: '0.75' } })
+    expect(useDocumentStore.getState().doc.tracks.find((track) => track.id === 'A1')?.volume)
+      .toBe(0.75)
+    expect(useDocumentStore.getState().past).toHaveLength(1)
+  })
+
   test('mute reuses track flags and master mute is its own edit', () => {
     render(<AudioMixer />)
     fireEvent.click(screen.getByRole('button', { name: 'mute track A1' }))

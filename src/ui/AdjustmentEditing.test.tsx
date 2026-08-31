@@ -39,6 +39,19 @@ beforeEach(() => {
 })
 
 describe('adjustment editor surfaces', () => {
+  test('uses canonical integer-frame conversion for the default duration', () => {
+    const doc = createTimelineDoc('NTSC', {
+      ...DEFAULT_PROJECT_SETTINGS,
+      frameRate: { num: 30_000, den: 1_001 },
+    }, 'ntsc')
+    useDocumentStore.setState({ doc, past: [], future: [] })
+
+    render(<AdjustmentDialog onClose={vi.fn()} />)
+
+    expect(screen.getByRole('spinbutton', { name: 'Duration (frames)' }))
+      .toHaveValue(150)
+  })
+
   test('adds an explicit adjustment item and selects it without fake media', () => {
     const onClose = vi.fn()
     render(<AdjustmentDialog onClose={onClose} />)

@@ -585,6 +585,7 @@ describe('startTimelineAudioPlayback scheduling', () => {
       startTime: 0,
       endTime: 2,
       stretchLead: true,
+      stretchSampleRate: 48_000,
     }])
     expect(h.output.scheduled).toHaveLength(1)
     expect(h.output.scheduled[0]).toMatchObject({
@@ -594,6 +595,61 @@ describe('startTimelineAudioPlayback scheduling', () => {
       duration: 0.5,
     })
     expect(h.output.scheduled[0].buffer.duration).toBe(0.5)
+    await session.stop()
+  })
+
+  test('resamples decoded media onto the project grid before scheduling clip DSP', async () => {
+    const clip = makeClip('project-rate', 0, 1)
+    clip.audioEffects = [createLimiterEffect('clip-limiter')]
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 1)
+    const h = makePlaybackHarness({ lookaheadSeconds: 0.2 })
+    const native = Float32Array.from(
+      { length: 4_410 },
+      (_value, index) => index / 4_409,
+    )
+    h.media.enqueue(
+      clip.assetId,
+      makeCursor([
+        {
+          buffer: makePlanarAudioBuffer([
+            native.slice(0, 2_205),
+            native.slice(0, 2_205),
+          ], 44_100),
+          timestamp: 0,
+          duration: 0.05,
+        },
+        {
+          buffer: makePlanarAudioBuffer([
+            native.slice(2_205),
+            native.slice(2_205),
+          ], 44_100),
+          timestamp: 0.05,
+          duration: 0.05,
+        },
+      ]).cursor,
+    )
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.output.scheduled).toHaveLength(2)
+    expect(h.output.scheduled[0]?.buffer.sampleRate).toBe(48_000)
+    expect(h.output.scheduled.map((event) => event.buffer.length)).toEqual([2_400, 2_400])
+    expect(h.output.scheduled[0]?.audioEffects).toEqual(clip.audioEffects)
+    expect(h.output.scheduled[0]?.buffer.getChannelData(0)[2_399]).toBeCloseTo(
+      2_204.08125 / 4_409,
+      6,
+    )
+    expect(h.output.scheduled[1]?.buffer.getChannelData(0)[0]).toBeCloseTo(
+      2_205 / 4_409,
+      6,
+    )
     await session.stop()
   })
 
@@ -709,7 +765,7 @@ describe('startTimelineAudioPlayback scheduling', () => {
     await session.stop()
   })
 
-  test('warns and silences a stretch source at an unsupported sample rate', async () => {
+  test('normalizes an unsupported native stretch rate onto the supported project rate', async () => {
     const clip = makeClip('unsupported-rate', 0, 10)
     clip.sourceRange = { startFrame: 0, durationFrames: 20 }
     clip.sourceTimeMap = {
@@ -739,13 +795,9 @@ describe('startTimelineAudioPlayback scheduling', () => {
       h.deps,
     )
 
-    expect(h.output.scheduled).toEqual([])
-    expect(onWarning).toHaveBeenCalledWith(expect.objectContaining({
-      scope: 'media',
-      stage: 'decode',
-      clipId: clip.id,
-      reason: 'decode-failed',
-    }))
+    expect(h.output.scheduled).toHaveLength(1)
+    expect(h.output.scheduled[0]?.buffer.sampleRate).toBe(48_000)
+    expect(onWarning).not.toHaveBeenCalled()
     await session.stop()
   })
 

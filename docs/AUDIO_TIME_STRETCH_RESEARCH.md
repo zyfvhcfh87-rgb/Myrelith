@@ -2,7 +2,7 @@
 
 Issue: [#188](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/188)
 Date: 2026-08-26
-Status: research complete; constant 0.25x–4x stretch is wired in this worktree. Ramps and freezes still mute.
+Status: research complete; constant 0.25x–4x stretch merged through PR #213 as `c846555`. Ramps and freezes still mute, so Issue #188 remains open for the unshipped ramp acceptance work.
 
 ## Decision summary
 

@@ -60,6 +60,7 @@ import {
   timelineFramesWithinSourceMap,
 } from './sourceTimeMap'
 import { rangeEnd, rangeOverlap } from './time'
+import { shiftLaterAdjustments } from './operations/operationInternals'
 
 /** Rejection path: warn and hand back the SAME doc reference. */
 function reject(doc: TimelineDoc, op: string, why: string): TimelineDoc {
@@ -237,8 +238,8 @@ function durationAfterConstantRetime(
 }
 
 /**
- * Push later clips, and each of their link groups, just far enough that
- * newRange can sit on clipId's track. Touching is allowed. A locked or
+ * Push later timeline items, and each later clip's link group, just far enough
+ * that newRange can sit on clipId's track. Touching is allowed. A locked or
  * blocked partner aborts with null so the caller can roll back.
  */
 function makeRoomForTimelineRange(
@@ -248,25 +249,27 @@ function makeRoomForTimelineRange(
 ): TimelineDoc | null {
   const track = trackOfClip(doc, clipId)
   if (!track) return null
-  const blockers = track.clips.filter((candidate) => (
+  const clipBlockers = track.clips.filter((candidate) => (
     candidate.id !== clipId
     && rangeOverlap(candidate.timelineRange, newRange)
   ))
-  if (blockers.length === 0) return doc
-
-  const firstBlocker = blockers.reduce((earliest, candidate) => (
-    candidate.timelineRange.startFrame < earliest.timelineRange.startFrame
-      ? candidate
-      : earliest
+  const adjustmentBlockers = (track.adjustments ?? []).filter((candidate) => (
+    rangeOverlap(candidate.timelineRange, newRange)
   ))
-  const shiftFrames = rangeEnd(newRange) - firstBlocker.timelineRange.startFrame
+  const firstBlockerFrame = Math.min(
+    ...clipBlockers.map((candidate) => candidate.timelineRange.startFrame),
+    ...adjustmentBlockers.map((candidate) => candidate.timelineRange.startFrame),
+  )
+  if (!Number.isFinite(firstBlockerFrame)) return doc
+
+  const shiftFrames = rangeEnd(newRange) - firstBlockerFrame
   if (shiftFrames <= 0) return doc
 
   const movingIds: ClipId[] = []
   const seen = new Set<ClipId>()
   for (const candidate of track.clips) {
     if (candidate.id === clipId) continue
-    if (candidate.timelineRange.startFrame < firstBlocker.timelineRange.startFrame) {
+    if (candidate.timelineRange.startFrame < firstBlockerFrame) {
       continue
     }
     for (const member of groupMembers(doc, candidate.id)) {
@@ -275,8 +278,25 @@ function makeRoomForTimelineRange(
       movingIds.push(member.id)
     }
   }
-  const moved = moveClipsByDelta(doc, movingIds, shiftFrames)
-  return moved === doc ? null : moved
+  const shiftedAdjustments = shiftLaterAdjustments(
+    track.adjustments,
+    firstBlockerFrame,
+    shiftFrames,
+  )
+  if (shiftedAdjustments === null) return null
+  const staged = shiftedAdjustments === track.adjustments
+    ? doc
+    : {
+        ...doc,
+        tracks: doc.tracks.map((candidate) => (
+          candidate.id === track.id
+            ? { ...candidate, adjustments: shiftedAdjustments }
+            : candidate
+        )),
+      }
+  if (movingIds.length === 0) return staged === doc ? null : staged
+  const moved = moveClipsByDelta(staged, movingIds, shiftFrames)
+  return moved === staged ? null : moved
 }
 
 function applyConstantRetimeWithRoom(
