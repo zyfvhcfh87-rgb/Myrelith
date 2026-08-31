@@ -303,7 +303,7 @@ No WebAssembly file ships in this slice. No runtime download or dynamic algorith
 - Input is decoded PCM at 44.1, 48, or 96 kHz. The adapter accepts exactly two channels after the canonical 1 to 32 channel fold-down.
 - One `push` accepts at most 4,096 stereo frames.
 - One session may retain at most 32,768 input frames and 32,768 output frames. Adapter-owned PCM is therefore at most 512 KiB. Package bookkeeping and overlap state receive a separate 512 KiB allowance.
-- The pipeline admits at most eight simultaneous stretch sessions. The total stretch working-memory ceiling is 8 MiB. Stable timeline, track, and clip ordering decides live admission. Export rejects any interval that needs a ninth session.
+- This arena sketch proposed an 8 MiB ceiling. The final implementation accounts 5 MiB/session and 40 MiB across the admitted eight sessions. Stable timeline, track, and clip ordering decides live admission. Export rejects any interval that needs a ninth session.
 - Live algorithmic priming must stay at or below 150 ms at 48 kHz. One 4,096-frame `push` must complete within 8 ms at p95 on the project's minimum browser test machine. A miss receives `stretch-latency-limit`; the first slice does not hide it behind `playbackRate`.
 - The existing 750 ms playback lookahead stays the scheduling bound. Stretch processing does not become a clock.
 - Playback and export rechunk decoded stereo PCM into the same 4,096-frame sequence before stretching. Decoder packet boundaries cannot select different SoundTouch output.

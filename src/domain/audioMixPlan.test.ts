@@ -12,6 +12,7 @@ import {
   createConstantRateAudioStretch,
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
+  isRampedAudioClipPlan,
   isStretchedAudioClipPlan,
   writeClipAudioGainsAtLocalFrame,
 } from './audioMixPlan'
@@ -245,9 +246,11 @@ describe('timeline audio mix plan', () => {
     )).toThrow(/safe integers/)
   })
 
-  test('omits variable-speed and freeze audio with the ramp-specific policy', () => {
+  test('emits one exact bounded ramp descriptor after envelope expansion', () => {
     const input = fixture()
-    input.doc.tracks[1].clips[0].sourceTimeMap = {
+    const target = input.doc.tracks[1].clips[0]
+    target.sourceRange.durationFrames = 13
+    target.sourceTimeMap = {
       sourceStartTicks: 30_000_000,
       sourceDurationTicks: 13_000_000,
       rate: { numerator: 1, denominator: 1 },
@@ -263,16 +266,27 @@ describe('timeline audio mix plan', () => {
     }
 
     const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+    const ramped = plan.clips.find((item) => item.clipId === 'audio-from')
 
-    expect(plan.clips.map((item) => item.clipId)).not.toContain('audio-from')
-    expect(plan.mutedClips).toContainEqual({
-      clipId: 'audio-from',
-      trackId: 'A-from',
-      reason: 'speed-ramp-audio-unsupported',
+    expect(ramped).toMatchObject({
+      timelineStartFrame: 10,
+      timelineEndFrame: 23,
+      clipTimelineStartFrame: 10,
+      sourceStartFrame: 30,
+      sourceEndFrame: 43,
+      ramp: {
+        sourceStartTicks: 30_000_000,
+        sourceEndTicks: 43_000_000,
+        silenceRanges: [{ startFrame: 14, endFrame: 16 }],
+        silent: false,
+        sourceTimeMap: target.sourceTimeMap,
+      },
     })
+    expect(ramped && isRampedAudioClipPlan(ramped)).toBe(true)
+    expect(plan.mutedClips.map((item) => item.clipId)).not.toContain('audio-from')
   })
 
-  test('omits freeze audio with its explicit silence policy', () => {
+  test('keeps a freeze map audible outside its explicit silence span', () => {
     const input = fixture()
     input.doc.tracks[1].clips[0].sourceTimeMap = {
       sourceStartTicks: 30_000_000,
@@ -288,12 +302,46 @@ describe('timeline audio mix plan', () => {
     }
 
     const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+    const ramped = plan.clips.find((item) => item.clipId === 'audio-from')
 
-    expect(plan.clips.map((item) => item.clipId)).not.toContain('audio-from')
-    expect(plan.mutedClips).toContainEqual({
-      clipId: 'audio-from',
-      trackId: 'A-from',
-      reason: 'freeze-audio-silence',
+    expect(ramped && isRampedAudioClipPlan(ramped)).toBe(true)
+    expect(ramped).toMatchObject({
+      ramp: {
+        silenceRanges: [{ startFrame: 10, endFrame: 14 }],
+        silent: false,
+      },
+    })
+    expect(plan.mutedClips.map((item) => item.clipId)).not.toContain('audio-from')
+  })
+
+  test('represents an entirely frozen window as decoder-free silence', () => {
+    const input = fixture()
+    const target = input.doc.tracks[1].clips[0]
+    target.sourceTimeMap = {
+      sourceStartTicks: 30_000_000,
+      sourceDurationTicks: 10_000_000,
+      rate: { numerator: 1, denominator: 1 },
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+          { frame: 13, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+        ],
+      },
+    }
+
+    const plan = createTimelineAudioMixPlan(input.doc, input.catalog)
+    const ramped = plan.clips.find((item) => item.clipId === 'audio-from')
+
+    expect(ramped).toMatchObject({
+      sourceStartFrame: 30,
+      sourceEndFrame: 30,
+      ramp: {
+        sourceStartTicks: 30_000_000,
+        sourceEndTicks: 30_000_000,
+        silenceRanges: [{ startFrame: 10, endFrame: 23 }],
+        silent: true,
+      },
     })
   })
 

@@ -1,5 +1,9 @@
 # Issue 188 grafted design
 
+> Historical constant-rate slice. This contract produced PR #213. The final
+> variable-rate and 0x behavior is specified by [RAMP_DESIGN.md](RAMP_DESIGN.md),
+> which supersedes this file wherever this file says ramps or freezes mute.
+
 Fill in `not implemented` bodies against this file. If a body needs a parameter this file does not name, stop and change this file.
 
 Base: candidate A. Grafts and rejections: `SYNTHESIS.md`.
@@ -7,7 +11,7 @@ Algorithm and license: `../AUDIO_TIME_STRETCH_RESEARCH.md`.
 
 ## Usage
 
-An editor sets a 25% step between 25% and 400%. Preview and export play the same pitch-stable audio. Exact 100% stays on today's decode path. A variable ramp or a 0% freeze stays silent with a named reason.
+An editor sets a 25% step between 25% and 400%. Preview and export play the same pitch-stable audio. Exact 100% stays on today's decode path. This historical slice left variable ramps and 0% freezes silent; `RAMP_DESIGN.md` completes those cases.
 
 Callers import the plan from `audioMixPlan` and the stretcher from `pipeline/audioStretch`. They do not import WSOLA knobs, `AudioBuffer`, `AudioContext`, or WASM types from domain.
 
@@ -159,7 +163,7 @@ export function createConstantRateAudioStretcher(args: {
 
 `close` releases scratch and refuses later `pull`. A second `close` is a no-op.
 
-Hosts rechunk folded source to 4,096 stereo frames before `pull`. At most eight overlapping stretch sessions. Export rejects a ninth before opening a sink. Live marks the denied clip `unavailable` and writes silence for that window. Total stretch working set ≤ 8 MiB. This file does not open decoders or apply gain.
+Hosts rechunk folded source to 4,096 stereo frames before `pull`. At most eight overlapping stretch sessions. Export rejects a ninth before opening a sink. Live marks the denied clip `unavailable` and writes silence for that window. `audioStretchMaximumPcmWorkingBytes` accounts the maximum 4× input/output planes, rechunk, and persistent arrays below a 5 MiB per-session allowance; the eight-session aggregate allowance is 40 MiB. This file does not open decoders or apply gain.
 
 A new session from clip start plus the same pull sizes and source bytes must be bit-identical. Live remake on re-prime is the existing restart. Mid-clip live start may use a declared source lead. Grain mismatch with export is a measured concession, not a documented feature. Export from sample 0 is the quality reference.
 
@@ -176,8 +180,8 @@ A new session from clip start plus the same pull sizes and source bytes must be 
 | Channels | Exactly two planes after fold-down. |
 | Pull cap | 96,000 output samples. |
 | Rechunk | 4,096 stereo frames. |
-| Workspace | One stereo scratch per session. About 30 KiB at 48 kHz, 60 KiB at 96 kHz. |
-| Concurrency | 8 sessions. 8 MiB working set. |
+| Persistent workspace | 60,416 bytes (~59 KiB) at 48 kHz; 120,832 bytes (~118 KiB) at 96 kHz for both source planes, Hann, overlap rings, reference/index, and search planes. |
+| Concurrency | 8 sessions; 5 MiB/session and 40 MiB aggregate working allowance. |
 | Parity gate | Same PCM fixture through live-mode and export-mode adapters is byte-equal before gain. Duration matches the scheduled sample count. Extra flush is trimmed. A short result fails. Pitch error on a steady tone ≤ 10 cents. |
 
 Window 21 + 1/3 ms Hann. Output hop 5 + 1/3 ms. Search ±10 + 2/3 ms. At 48 kHz that is 1024 / 256 / ±512. Snap hop so `outputHop * rate.num / rate.den` is an integer for every 25% step.

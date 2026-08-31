@@ -2,7 +2,7 @@
 
 Issue: [#188](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/188)
 Date: 2026-08-26
-Status: research complete; constant 0.25x–4x stretch merged through PR #213 as `c846555`. Ramps and freezes still mute, so Issue #188 remains open for the unshipped ramp acceptance work.
+Status: research complete; constant 0.25x–4x stretch merged through PR #213 as `c846555`. The final ramp implementation extends that same bounded WSOLA and is specified by [issue188/RAMP_DESIGN.md](issue188/RAMP_DESIGN.md).
 
 ## Decision summary
 
@@ -11,8 +11,8 @@ Status: research complete; constant 0.25x–4x stretch merged through PR #213 as
 | Shared live/export membership | Go | Extend `createTimelineAudioMixPlan`. One contributor list. Exact 1x stays a plan object with no stretch field. |
 | Constant 0.25x–4x stretch | Go, bounded | First-party TypeScript WSOLA in `pipeline/audioStretch.ts`. Same session API for preview and export. |
 | All-constant speed curve | Go | A curve whose every point is the same canonical non-unity rate is constant stretch, not a ramp mute. |
-| 0x freeze | Silence | Named reason `freeze-audio-silence`. No held tone. No unbounded synthesis. |
-| Variable-rate ramp | Mute | Named reason `speed-ramp-audio-unsupported` until a later slice. |
+| 0x freeze | Go, explicit silence | Held 0x intervals fade to exact silence. A fully frozen window opens no decoder or stretch session. No held tone. |
+| Variable-rate ramp | Go, bounded | Every grain derives its source position from the canonical `SourceTimeMap`; live and export call the same session implementation. |
 | Sub-frame 1x origin | Mute | Named reason `sub-frame-origin-audio-unsupported`. Stretch maps may start on a tick. Direct 1x readers stay on whole frames. |
 | Rubber Band | No-go | GPL-2-or-later, or a paid commercial grant. Either one forces a product-wide license change. |
 | SoundTouchJS | No-go for this slice | MPL-2.0 is compatible. Its documented live tempo path mirrors source `playbackRate`. A new DSP dependency is unnecessary once WSOLA is first-party. |
@@ -21,12 +21,13 @@ Status: research complete; constant 0.25x–4x stretch merged through PR #213 as
 
 Portable schemas do not change. `SourceTimeMap` already stores the rates this slice will play.
 
-Implementation contract: [issue188/DESIGN.md](issue188/DESIGN.md).
+Constant-rate implementation contract: [issue188/DESIGN.md](issue188/DESIGN.md).
+Ramp completion contract: [issue188/RAMP_DESIGN.md](issue188/RAMP_DESIGN.md).
 Arena record: [issue188/SYNTHESIS.md](issue188/SYNTHESIS.md).
 
 ## Evidence basis
 
-Today's fail-closed mute is intentional. `sourceTimeAudioPolicy()` in `src/domain/sourceTimeMap.ts` supports only an exact integer-origin 1x map, including an all-1x curve. `createTimelineAudioMixPlan()` omits the rest. Live (`src/pipeline/playback-audio.ts`) and export (`src/pipeline/export-audio.ts`) consume `.clips` only. Web Audio calls `AudioBufferSourceNode.start(when, offset, duration)` with no clip `playbackRate`. `ARCHITECTURE.md` forbids approximating stretch with divergent browser rate nodes.
+The pre-#188 fail-closed mute was intentional. The completed policy now admits exact integer-origin 1x direct audio, constant stretch, and validated variable ramps. `createTimelineAudioMixPlan()` emits one cloned, bounded ramp descriptor; live (`src/pipeline/playback-audio.ts`) and export (`src/pipeline/export-audio.ts`) consume that same plan and `createRampedAudioStretcher()`. Web Audio still has no clip `playbackRate`; the browser cannot create a divergent shortcut.
 
 Kdenlive's pitch compensation is Rubber Band through MLT ([Kdenlive audio tools](https://docs.kdenlive.org/en/effects_and_filters/audio.html), [pitch and time](https://docs.kdenlive.org/en/effects_and_filters/audio_effects/pitch_and_time/index.html)). Shotcut lists pitch compensation for speed changes on its [feature list](https://shotcut.org/features/). Those products can take GPL. Myrelith cannot. The repo license is MIT (`LICENSE`). Runtime JavaScript today is MIT or MPL-2.0 (`THIRD_PARTY_NOTICES.md`).
 
@@ -42,13 +43,17 @@ WSOLA (waveform similarity overlap-add) is the time-domain method SoundTouch use
 
 First-party stereo WSOLA in `pipeline/audioStretch.ts`.
 
-- Tempo comes from the branded constant `SourceTimeRate`. Pitch stays 1.
+- Constant tempo comes from the branded `SourceTimeRate`. Ramp grain positions
+  come from exact source-tick anchors at adjacent document frames with
+  sample-local interpolation. Pitch stays 1.
 - Window 21 + 1/3 ms Hann. Output hop 5 + 1/3 ms. Search ±10 + 2/3 ms.
 - At 48 kHz that is 1024 / 256 / ±512. Hop snaps so `outputHop * numerator / denominator` is an integer for every 25% step.
 - Search uses AMDF on the mid mix. Lowest offset wins a tie. The same lag is applied to left and right.
 - Fold-down stays `domain/audioChannelMix.ts` before the session sees PCM.
 - Live and export rechunk folded source to 4,096 stereo frames, then pull the same session type.
 - Exact 1x never constructs a session.
+- Held 0x intervals receive a 3 ms boundary fade and exact interior silence.
+  A window that is entirely frozen constructs neither a decoder nor a session.
 
 Nominal quality is 0.75x to 1.5x. Edge rates still play and surface `fallback` copy. Grain or slap at 0.25x and 4x is accepted. Formant correction is out.
 
@@ -71,9 +76,9 @@ Cite Verhelst and Roelands 1993 in the stretcher file header as the method, not 
 | Lookback | ~32 ms at 48 kHz | One window plus search. Not added to the audio clock |
 | Live lookahead | 0.75 s existing pump | Stretch is not a clock |
 | Worst extra decode | ~3.1 s | 4x × 0.75 s plus lead |
-| Scratch | ~30 KiB at 48 kHz, ~60 KiB at 96 kHz | One stereo workspace per session |
+| Persistent WSOLA arrays | 60,416 bytes (~59 KiB) at 48 kHz; 120,832 bytes (~118 KiB) at 96 kHz | Both source planes, Hann, three overlap rings, reference/index, and both search planes per session |
 | Concurrent sessions | 8 | Crowded timelines stay finite |
-| Working set | 8 MiB | 8 × 1 MiB session allowance |
+| Working set | 5 MiB/session; 40 MiB aggregate | Code-derived maximum covers 4× input/output planes, 4,096-frame rechunk, and persistent WSOLA arrays at the 96,000-sample pull cap, with descriptor/bookkeeping headroom |
 | Determinism | No RNG | Same start, pulls, and source bytes → same bytes |
 | Parity | Byte-equal live/export PCM before gain | Shared algorithm, not a similar one |
 
@@ -88,9 +93,9 @@ Cancel, seek teardown, and project replacement close the session next to the dec
 | Ready, direct | Exact integer-origin 1x |
 | Ready, stretched, nominal | Constant 0.75x–1.5x except 1x |
 | Fallback, stretched, edge | Constant 0.25x, 0.50x, or 1.75x–4x. Still audible |
+| Ready, ramped, nominal | Positive variable curve with endpoints inside 0.75x–1.5x |
+| Fallback, ramped, edge | A positive edge rate or authored 0x hold; positive regions still play |
 | Silence, invalid curve | Stored curve fails validation |
-| Silence, ramp | Two different positive rates |
-| Silence, freeze | Any 0x point |
 | Silence, sub-frame 1x | Unity rate, origin not on a whole frame |
 
 Volume 0 and `audio.enabled === false` stay ordinary omits. They are not retiming silence.
@@ -104,6 +109,11 @@ Volume 0 and `audio.enabled === false` stay ordinary omits. They are not retimin
 - Held-tone freeze.
 - Schema changes.
 
-## Next implementation step
+## Completion gate
 
-Change `SourceTimeAudioPolicy` and its tests so a 1.5x map is `{ status: 'supported', kind: 'stretched', rate }` and a 1x fixture stays byte-equal. Then emit a descriptor from `createTimelineAudioMixPlan`. Then fill `pipeline/audioStretch.ts`. Then wire playback and export to the same session. Then Chromium speech, music, slow, fast, export reopen, cancel, and memory gates.
+The final gate covers exact 1x and constant-regression behavior, slow/fast ramps,
+pull-partition identity, exact sample totals, 0x boundaries, mid-ramp seeks,
+live/export host parity, eight-session admission, cancellation/teardown, project
+replacement, all-1x sub-frame rejection, decoder-free/offline whole freezes,
+29.97 fps absolute-sample parity, export/reopen A/V duration, and decoded real
+Chromium speech/music pitch energy.

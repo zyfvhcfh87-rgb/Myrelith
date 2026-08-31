@@ -278,7 +278,7 @@ describe('Inspector', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Point speed' }), '200')
     expect(clipA().timelineRange.durationFrames).toBe(70)
     expect(screen.getByText(
-      'Audio is muted because variable speed ramps are not supported for audio.',
+      'Audio plays pitch-preserved through the speed ramp. Quality is limited at edge speeds.',
     )).toBeInTheDocument()
 
     act(() => transport().setPlayheadFrame(20))
@@ -294,6 +294,9 @@ describe('Inspector', () => {
       { frame: 20, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
       { frame: 40, rate: { numerator: 2, denominator: 1 }, easing: 'hold' },
     ])
+    expect(screen.getByText(
+      'Audio plays pitch-preserved through the speed ramp. Held 0% sections fade to silence; edge speeds use limited quality.',
+    )).toBeInTheDocument()
     const rampedJson = JSON.stringify(doc().doc)
 
     await user.click(screen.getByRole('button', { name: 'Clear ramp' }))

@@ -20,7 +20,7 @@ From B:
 - Brand the stretch rate so unity cannot be constructed.
 - Classify an all-constant non-1x speed curve as stretch, not as a ramp mute. Playhead-authored 200% sections must play.
 - Fixed 4,096-frame rechunk before stretch so decoder packet boundaries cannot change output.
-- Admission and memory caps. At most eight overlapping stretch sessions. 8 MiB stretch working set.
+- Admission and memory caps. At most eight overlapping stretch sessions. Final implementation accounting supersedes the sketch's 8 MiB estimate with 5 MiB/session and 40 MiB aggregate.
 - Live and export must produce byte-equal stretched PCM on the same fixture before gain.
 
 From C:

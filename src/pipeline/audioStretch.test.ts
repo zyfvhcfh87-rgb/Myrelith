@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import type { Clip } from '../domain/schema'
 import {
   createConstantRateAudioStretch,
+  createRampedAudioStretch,
   type ConstantRateAudioStretch,
 } from '../domain/audioMixPlan'
 import {
@@ -10,11 +11,16 @@ import {
   SOURCE_TIME_TICKS_PER_FRAME,
 } from '../domain/sourceTimeMap'
 import {
+  AUDIO_STRETCH_MAX_AGGREGATE_WORKING_BYTES,
   AUDIO_STRETCH_MAX_OUTPUT_SAMPLES,
+  AUDIO_STRETCH_MAX_SESSION_WORKING_BYTES,
   AUDIO_STRETCH_MAX_SESSIONS,
   AUDIO_STRETCH_RECHUNK_FRAMES,
+  audioStretchMaximumPcmWorkingBytes,
   audioStretchSourceLeadSamples,
   createConstantRateAudioStretcher,
+  createRampedAudioStretcher,
+  rampedAudioSourceSampleAtOutputSample,
   type StereoPcm,
   wsolaTimeConstants,
 } from './audioStretch'
@@ -63,6 +69,41 @@ function stretchAt(percent: number): ConstantRateAudioStretch {
   )
 }
 
+function rampStretch() {
+  const ramp = clipAt(100)
+  ramp.timelineRange.durationFrames = 30
+  ramp.sourceTimeMap = {
+    ...ramp.sourceTimeMap!,
+    speedCurve: {
+      originFrame: 0,
+      points: [
+        { frame: 0, rate: { numerator: 1, denominator: 2 }, easing: 'linear' },
+        { frame: 10, rate: { numerator: 2, denominator: 1 }, easing: 'smooth' },
+        { frame: 20, rate: { numerator: 0, denominator: 1 }, easing: 'hold' },
+        { frame: 25, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+      ],
+    },
+  }
+  return createRampedAudioStretch(ramp, 0, 30)
+}
+
+function positiveRampStretch() {
+  const ramp = clipAt(100)
+  ramp.timelineRange.durationFrames = 30
+  ramp.sourceTimeMap = {
+    ...ramp.sourceTimeMap!,
+    speedCurve: {
+      originFrame: 0,
+      points: [
+        { frame: 0, rate: { numerator: 1, denominator: 2 }, easing: 'linear' },
+        { frame: 15, rate: { numerator: 2, denominator: 1 }, easing: 'smooth' },
+        { frame: 30, rate: { numerator: 1, denominator: 1 }, easing: 'hold' },
+      ],
+    },
+  }
+  return createRampedAudioStretch(ramp, 0, 30)
+}
+
 function sineReader(
   frequency: number,
   rightFrequency = frequency,
@@ -100,6 +141,18 @@ describe('audio stretch constants', () => {
   test('exports host admission and rechunk bounds', () => {
     expect(AUDIO_STRETCH_RECHUNK_FRAMES).toBe(4_096)
     expect(AUDIO_STRETCH_MAX_SESSIONS).toBe(8)
+    expect(AUDIO_STRETCH_MAX_SESSION_WORKING_BYTES).toBe(5 * 1024 * 1024)
+    expect(AUDIO_STRETCH_MAX_AGGREGATE_WORKING_BYTES).toBe(40 * 1024 * 1024)
+  })
+
+  test('accounts every supported maximum pull below the per-session allowance', () => {
+    const estimates = [44_100, 48_000, 96_000].map((sampleRate) => (
+      audioStretchMaximumPcmWorkingBytes(sampleRate)
+    ))
+    for (const bytes of estimates) {
+      expect(bytes).toBeLessThanOrEqual(AUDIO_STRETCH_MAX_SESSION_WORKING_BYTES)
+    }
+    expect(estimates[2]).toBe(Math.max(...estimates))
   })
 
   test('uses the reviewed 48 kHz constants', () => {
@@ -328,5 +381,135 @@ describe('constant-rate WSOLA output', () => {
     combined.set(second.left, first.left.length)
     const whole = await single.pull(8_192, sineReader(440))
     expect(combined).toEqual(whole.left)
+  })
+})
+
+describe('ramped WSOLA output', () => {
+  test('keeps a sine near pitch across slow and fast ramp legs', async () => {
+    const session = createRampedAudioStretcher({
+      ramp: positiveRampStretch(),
+      frameRate: { num: 30, den: 1 },
+      sampleRate: SAMPLE_RATE,
+      timelineStartFrame: 0,
+      clipTimelineStartFrame: 0,
+      outputStartSample: 0,
+    })
+    const output = await session.pull(SAMPLE_RATE, sineReader(440))
+    expectNearPitch(estimateFrequency(output.left), 440)
+    session.close()
+  })
+
+  test('is pull-partition independent and returns every scheduled sample', async () => {
+    const sequential = createRampedAudioStretcher({
+      ramp: rampStretch(),
+      frameRate: { num: 30, den: 1 },
+      sampleRate: SAMPLE_RATE,
+      timelineStartFrame: 0,
+      clipTimelineStartFrame: 0,
+      outputStartSample: 0,
+    })
+    const single = createRampedAudioStretcher({
+      ramp: rampStretch(),
+      frameRate: { num: 30, den: 1 },
+      sampleRate: SAMPLE_RATE,
+      timelineStartFrame: 0,
+      clipTimelineStartFrame: 0,
+      outputStartSample: 0,
+    })
+    const counts = [777, 4_096, 11_111, 8_192, 23_824]
+    expect(counts.reduce((sum, count) => sum + count, 0)).toBe(SAMPLE_RATE)
+    const combined = new Float32Array(SAMPLE_RATE)
+    const reader = sineReader(440)
+    let offset = 0
+    for (const count of counts) {
+      const output = await sequential.pull(count, reader)
+      expect(output.left).toHaveLength(count)
+      expect(output.right).toHaveLength(count)
+      combined.set(output.left, offset)
+      offset += count
+    }
+    const whole = await single.pull(SAMPLE_RATE, sineReader(440))
+    expect(combined).toEqual(whole.left)
+  })
+
+  test('maps a mid-frame ramp start to the exact canonical source sample', () => {
+    expect(rampedAudioSourceSampleAtOutputSample({
+      ramp: rampStretch(),
+      frameRate: { num: 30, den: 1 },
+      sampleRate: SAMPLE_RATE,
+      timelineStartFrame: 0,
+      clipTimelineStartFrame: 0,
+      outputStartSample: 800,
+    })).toBe(460)
+  })
+
+  test('silences only the held 0x span with click-bounded edges', async () => {
+    const session = createRampedAudioStretcher({
+      ramp: rampStretch(),
+      frameRate: { num: 30, den: 1 },
+      sampleRate: SAMPLE_RATE,
+      timelineStartFrame: 0,
+      clipTimelineStartFrame: 0,
+      outputStartSample: 0,
+    })
+    const output = await session.pull(SAMPLE_RATE, sineReader(440))
+    const freezeStart = 32_000
+    const freezeEnd = 40_000
+    expect(output.left.subarray(freezeStart, freezeEnd).every(
+      (sample) => sample === 0,
+    )).toBe(true)
+    expect(output.left.subarray(0, freezeStart - 200).some(
+      (sample) => sample !== 0,
+    )).toBe(true)
+    expect(output.left.subarray(freezeEnd + 200).some(
+      (sample) => sample !== 0,
+    )).toBe(true)
+
+    let maximumBoundaryDelta = 0
+    for (const boundary of [freezeStart, freezeEnd]) {
+      for (let sample = boundary - 256; sample < boundary + 256; sample++) {
+        maximumBoundaryDelta = Math.max(
+          maximumBoundaryDelta,
+          Math.abs(output.left[sample]! - output.left[sample - 1]!),
+        )
+      }
+    }
+    expect(maximumBoundaryDelta).toBeLessThan(0.25)
+  })
+
+  test('stays within the existing 100ms pump and lookahead latency gates', async () => {
+    const rows: number[] = []
+    for (const samples of [SAMPLE_RATE / 10, Math.round(SAMPLE_RATE * 0.75)]) {
+      const session = createRampedAudioStretcher({
+        ramp: positiveRampStretch(),
+        frameRate: { num: 30, den: 1 },
+        sampleRate: SAMPLE_RATE,
+        timelineStartFrame: 0,
+        clipTimelineStartFrame: 0,
+        outputStartSample: 0,
+      })
+      const started = performance.now()
+      await session.pull(samples, sineReader(440))
+      rows.push(performance.now() - started)
+      session.close()
+    }
+    expect(rows[0]).toBeLessThan(80)
+    expect(rows[1]).toBeLessThan(400)
+  })
+
+  test('rejects a session for a fully silent ramp plan', () => {
+    expect(() => createRampedAudioStretcher({
+      ramp: {
+        ...rampStretch(),
+        sourceEndTicks: 0,
+        silenceRanges: [{ startFrame: 0, endFrame: 30 }],
+        silent: true,
+      },
+      frameRate: { num: 30, den: 1 },
+      sampleRate: SAMPLE_RATE,
+      timelineStartFrame: 0,
+      clipTimelineStartFrame: 0,
+      outputStartSample: 0,
+    })).toThrow(/does not require a stretch session/)
   })
 })

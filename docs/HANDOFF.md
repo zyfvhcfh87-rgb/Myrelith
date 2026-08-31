@@ -131,7 +131,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #77 — signed sandboxed plugins** | 🚧 PR #123 remediation validated locally | production preview/export/migration wiring; fail-closed render and stale-generation gates; bounded host-acknowledged teardown; safe startup recovery; hostile-package and real Chromium acceptance; full/exact-head publication gates pending |
 | **Post-MVP #179 — marquee selection + grouped move** | ✅ implementation complete | Select-tool left-drag over empty lanes previews and commits box selection; selected/link-expanded clips move horizontally as one collision-safe, one-history edit; 3,364 tests + desktop Chromium interaction/undo/redo gate clean |
 | **Post-MVP #180 — Compatibility/HEVC export flush error** | ✅ fixed locally; native Chrome regression locked | #178's 96→48 kHz mapping remains correct; the remaining 59.94/60 fps failure was Chrome AAC rejecting 800/801-sample frame-aligned startup chunks at flush; one bounded shared assembler now feeds 2,048 startup samples then 1,024-sample blocks without codec/profile substitution; 3,370 tests plus real sink exports in repository Chromium and installed Chrome pass |
-| **Post-MVP #188 — pitch-safe constant retiming** | ✅ first slice merged in PR #213 as `c846555` | shared bounded WSOLA for constant 0.25×–4× live/export audio; exact 1× remains direct; ramps and freezes remain explicit silence and keep #188 open for the remaining acceptance work |
+| **Post-MVP #188 — pitch-safe retiming** | ✅ final implementation and acceptance complete; delivery via PR #217 | PR #213's constant 0.25×–4× WSOLA now also follows canonical variable-speed ramps in shared live/export code; exact 1× remains direct; held 0× spans fade to silence; combined eight-session and lifecycle gates plus real Chromium speech/music export-reopen evidence are green |
 | **Post-MVP #189 — audio automation, mixer, and effects** | ✅ merged in PR #215 as `138db35` | schema-16 automation, schema-17 mixer, schema-18 clip/track/master effects; shared live/export signal order; loudness and presets; exact-head CI/review green |
 | **Post-MVP #190 — bounded adjustment layers** | ✅ merged in PR #214 as `024ea9b` | schema-15 resource-free video-track items; full history/edit/persistence/recovery; safe post-composite color effects and bounded animation; deterministic shared preview/export order; zero additional compositor surfaces; Chromium interaction/undo/redo/responsive gate clean |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
@@ -1620,9 +1620,49 @@ surface; it is not a second zoom and never enters document history.
   `SourceTimeAudioPolicy` admits constant stretch. `createTimelineAudioMixPlan`
   emits tick windows. `pipeline/audioStretch.ts` is first-party WSOLA. Live
   and export pull the same session after 4,096-frame rechunk. Exact 1× stays
-  on the old path. Ramps, freezes, invalid curves, and sub-frame 1× stay
-  silent. Inspector copy comes from `clipAudioPresentation`. PR #213 explicitly
-  did not claim the remaining ramp acceptance; #188 stays open for that work.
+  on the old path.
+- Issue #188's final ramp slice extends that same session rather than adding a
+  second audio path. `createTimelineAudioMixPlan` clones one bounded
+  `SourceTimeMap` descriptor with exact source-tick anchors and merged 0× hold
+  ranges. Every grain re-anchors to adjacent canonical document-frame ticks,
+  then interpolates only inside that sample interval. Uneven host pulls are
+  byte-identical to one pull and cannot add or drop scheduled samples.
+- Positive slow/fast legs stay pitch-preserved. Held 0× spans receive a bounded
+  3 ms fade into exact silence; an entirely frozen contributor opens no decoder
+  or stretch session. Exact 1× and PR #213's constant path remain unchanged.
+  Invalid/reverse maps fail closed, live decode failures warn per clip, export
+  failures reject, and cancel/seek/project replacement close sessions beside
+  their decoder cursors.
+- Constant and ramp sessions share the existing maximum of eight, 96,000-sample
+  pull cap, 4,096-frame decoder rechunk, and 0.75 s live lookahead. The ramp
+  descriptor remains bounded by 256 authored points and never allocates a
+  duration-sized rate table or output buffer.
+- Focused domain/pipeline/UI regressions cover direct/constant compatibility,
+  positive and freeze ramps, exact source/sample boundaries, partition
+  independence, pitch, discontinuity, latency, session admission, failures,
+  cancellation, and repeated playback/export ownership. Repository Chromium
+  generated speech and music WAVs, exercised 0.5×, 2×, positive and freeze
+  ramps with #189 automation/effects and a #190 adjustment item, settled six
+  playback generations to zero resources, exported and reopened exact 29.97
+  fps / 48,048-sample A/V, decoded the result to verify non-silent authored
+  speech/music pitch bands, and proved the live freeze interval sample-exact.
+  It cancelled a second export and produced no console warnings/errors. The
+  full 15-test Chromium suite is green. Complete gates pass 259 Vitest files / 3,702
+  tests, all 17 repository runner checks, production build/typecheck (4,946
+  modules), oxlint, the production high audit with 0 vulnerabilities, and diff
+  hygiene. Exact-head review also locked absolute NTSC live sample boundaries,
+  all-1× sub-frame compatibility, and decoder-free/offline whole-freeze
+  preflight while preserving same-asset video and actual linked-crossfade
+  handles without retaining transition-free, one-sided, or still-silent
+  incoming pre-roll links. The final preflight uses one lazy O(n log n)
+  structural link/transition index with per-track clip lookups, resolves source
+  capacity before cross-track conflicts, and keeps immutable descriptor bounds
+  separate from connected Blob ownership. A 100,000-clip ambiguous-link gate
+  and an unavailable-versus-available cross-track regression preserve the
+  surviving connected handle dependency. Code-derived resource accounting
+  covers the maximum 4×/96,000-sample pull, rechunk, and WSOLA arrays below
+  5 MiB/session and 40 MiB across eight sessions. Vite retains only its
+  existing large-chunk advisory.
 - Issue #72 is implementation-complete on `codex/issue-72-speed-ramps`.
   Timeline schema 12 adds an optional deterministic piecewise curve above the
   schema-11 constant fallback. Curves have one bounded integer origin, strictly
@@ -1642,9 +1682,9 @@ surface; it is not a second zoom and never enters document history.
   the playhead, edit speed and outgoing easing, remove, clear, seek from the
   ordered point list, and receive linked/locked/bounds feedback. Linked A/V
   partners update atomically and every accepted gesture is one exact undo entry.
-  Exact integer-origin 1× and all-1× curves retain audio; constant non-1×,
-  variable ramps, and freezes are silent in both preview and export until a
-  pitch-safe time-stretch implementation exists.
+  Exact integer-origin 1× and all-1× curves retain the direct path; constant
+  non-1× and variable positive ramps use shared pitch-safe WSOLA; only authored
+  0× hold spans are silent.
 - Issue #72's complete automated gate passes 2,226 Vitest cases across 159 files
   plus all 16 benchmark-runner cases, production build/typecheck, oxlint, the
   production high-severity audit with 0 vulnerabilities, and clean diff checks.

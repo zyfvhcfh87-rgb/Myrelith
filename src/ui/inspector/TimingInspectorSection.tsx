@@ -40,19 +40,21 @@ function audioPresentationCopy(
         ? 'Audio stays enabled because every active speed point is exactly 100%.'
         : 'Audio stays enabled at 100% speed.'
     }
+    if (presentation.kind === 'ramped') {
+      return 'Audio plays pitch-preserved through the speed ramp.'
+    }
     return `Audio plays time-stretched at ${sourceTimeRatePercent(presentation.rate)}% so pitch stays put.`
   }
   if (presentation.state === 'fallback') {
+    if (presentation.kind === 'ramped') {
+      return presentation.hasSilence
+        ? 'Audio plays pitch-preserved through the speed ramp. Held 0% sections fade to silence; edge speeds use limited quality.'
+        : 'Audio plays pitch-preserved through the speed ramp. Quality is limited at edge speeds.'
+    }
     return `Audio plays time-stretched at ${sourceTimeRatePercent(presentation.rate)}%. Quality is limited at this speed.`
   }
   if (presentation.reason === 'invalid-speed-curve') {
     return 'Audio is muted because the stored speed curve is invalid; video uses the preserved constant fallback.'
-  }
-  if (presentation.reason === 'speed-ramp-audio-unsupported') {
-    return 'Audio is muted because variable speed ramps are not supported for audio.'
-  }
-  if (presentation.reason === 'freeze-audio-silence') {
-    return 'Audio is muted because this timing map contains a freeze.'
   }
   return 'Audio is muted because its source starts between supported audio sample boundaries.'
 }

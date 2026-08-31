@@ -37,11 +37,13 @@ import {
   clipAudioGainsAtLocalFrame,
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
+  isRampedAudioClipPlan,
   isStretchedAudioClipPlan,
   type TimelineAudioDirectClipPlan,
   type TimelineAudioEnvelope,
   type TimelineAudioMasterBus,
   type TimelineAudioStretchedClipPlan,
+  type TimelineAudioRampedClipPlan,
   type TimelineAudioTrackBus,
 } from '../domain/audioMixPlan'
 import { timelineAudioMixerGraph } from '../domain/audioMixer'
@@ -56,7 +58,12 @@ import type {
   SourceBoundsCatalog,
 } from '../domain/crossfadePlan'
 import { audibleTracks, docDurationFrames } from '../domain/selectors'
-import { clipLocalFrameAtSeconds, framesToSeconds, rangeEnd } from '../domain/time'
+import {
+  audioSampleBoundary,
+  clipLocalFrameAtSeconds,
+  framesToSeconds,
+  rangeEnd,
+} from '../domain/time'
 import {
   AUDIO_METER_FFT_SIZE,
   measureAudioMeterSample,
@@ -68,6 +75,8 @@ import {
   AUDIO_STRETCH_RECHUNK_FRAMES,
   audioStretchSourceLeadSamples,
   createConstantRateAudioStretcher,
+  createRampedAudioStretcher,
+  rampedAudioSourceSampleAtOutputSample,
   type ConstantRateAudioStretcher,
   type StereoPcm,
 } from './audioStretch'
@@ -383,6 +392,7 @@ export interface StartTimelineAudioOptions {
 interface PlaybackAudioClipFields {
   timelineStartTime: number
   timelineEndTime: number
+  timelineStartSample: number
   sourceStartTime: number
   sourceEndTime: number
   decodeStartTime: number
@@ -401,12 +411,23 @@ type DirectAudioClipPlan =
   Omit<TimelineAudioDirectClipPlan, 'envelopes'> & PlaybackAudioClipFields
 type StretchedAudioClipPlan =
   Omit<TimelineAudioStretchedClipPlan, 'envelopes'> & PlaybackAudioClipFields
-type AudioClipPlan = DirectAudioClipPlan | StretchedAudioClipPlan
+type RampedAudioClipPlan =
+  Omit<TimelineAudioRampedClipPlan, 'envelopes'> & PlaybackAudioClipFields
+type AudioClipPlan =
+  | DirectAudioClipPlan
+  | StretchedAudioClipPlan
+  | RampedAudioClipPlan
 
-function isStretchedPlaybackPlan(
+function isTimeStretchedPlaybackPlan(
   plan: AudioClipPlan,
-): plan is StretchedAudioClipPlan {
-  return plan.stretch !== undefined
+): plan is StretchedAudioClipPlan | RampedAudioClipPlan {
+  return plan.stretch !== undefined || plan.ramp !== undefined
+}
+
+function isRampedPlaybackPlan(
+  plan: AudioClipPlan,
+): plan is RampedAudioClipPlan {
+  return plan.ramp !== undefined
 }
 
 interface ClipCursorState {
@@ -539,20 +560,25 @@ function buildAudioClipPlans(
         plan.timelineEndFrame,
         doc.frameRate,
       )
-      const decodeStartTime = isStretchedAudioClipPlan(plan)
-        ? sourceTicksToSeconds(plan.stretch.sourceStartTicks, doc.frameRate)
+      const decodeStartTime = isRampedAudioClipPlan(plan)
+        ? sourceTicksToSeconds(plan.ramp.sourceStartTicks, doc.frameRate)
+        : isStretchedAudioClipPlan(plan)
+          ? sourceTicksToSeconds(plan.stretch.sourceStartTicks, doc.frameRate)
         : framesToSeconds(plan.sourceStartFrame, doc.frameRate)
-      const decodeEndTime = isStretchedAudioClipPlan(plan)
-        ? sourceTicksToSeconds(plan.stretch.sourceEndTicks, doc.frameRate)
+      const decodeEndTime = isRampedAudioClipPlan(plan)
+        ? sourceTicksToSeconds(plan.ramp.sourceEndTicks, doc.frameRate)
+        : isStretchedAudioClipPlan(plan)
+          ? sourceTicksToSeconds(plan.stretch.sourceEndTicks, doc.frameRate)
         : framesToSeconds(plan.sourceEndFrame, doc.frameRate)
       return {
         ...plan,
         timelineStartTime,
         timelineEndTime,
-        sourceStartTime: isStretchedAudioClipPlan(plan)
+        timelineStartSample: audioSampleBoundary(plan.timelineStartFrame, doc),
+        sourceStartTime: isStretchedAudioClipPlan(plan) || isRampedAudioClipPlan(plan)
           ? timelineStartTime
           : decodeStartTime,
-        sourceEndTime: isStretchedAudioClipPlan(plan)
+        sourceEndTime: isStretchedAudioClipPlan(plan) || isRampedAudioClipPlan(plan)
           ? timelineEndTime
           : decodeEndTime,
         decodeStartTime,
@@ -637,7 +663,10 @@ export function audioPlaybackAssetIds(
   return [
     ...new Set(
       buildAudioClipPlans(doc, catalog)
-        .filter((plan) => plan.timelineEndFrame > fromFrame)
+        .filter((plan) =>
+          plan.timelineEndFrame > fromFrame
+          && !(isRampedPlaybackPlan(plan) && plan.ramp.silent)
+        )
         .map((plan) => plan.assetId),
     ),
   ]
@@ -1690,12 +1719,24 @@ export async function startTimelineAudioPlayback(
 
     const timelineOffset = Math.max(timelineStartTime, plan.timelineStartTime)
       - plan.timelineStartTime
-    const sourceStartTime = isStretchedPlaybackPlan(plan)
-      ? plan.decodeStartTime
-        + timelineOffset * plan.stretch.rate.numerator
-          / plan.stretch.rate.denominator
+    const outputStartSample = Math.round(
+      Math.max(timelineStartTime, plan.timelineStartTime) * doc.audioSampleRate,
+    ) - plan.timelineStartSample
+    const sourceStartTime = isRampedPlaybackPlan(plan)
+      ? rampedAudioSourceSampleAtOutputSample({
+          ramp: plan.ramp,
+          frameRate: doc.frameRate,
+          sampleRate: doc.audioSampleRate,
+          timelineStartFrame: plan.timelineStartFrame,
+          clipTimelineStartFrame: plan.clipTimelineStartFrame,
+          outputStartSample,
+        }) / doc.audioSampleRate
+      : plan.stretch !== undefined
+        ? plan.decodeStartTime
+          + timelineOffset * plan.stretch.rate.numerator
+            / plan.stretch.rate.denominator
       : plan.sourceStartTime + timelineOffset
-    if (isStretchedPlaybackPlan(plan)) {
+    if (isTimeStretchedPlaybackPlan(plan)) {
       if (admittedStretchClips.size >= AUDIO_STRETCH_MAX_SESSIONS) {
         return null
       }
@@ -1706,7 +1747,7 @@ export async function startTimelineAudioPlayback(
         assetId: plan.assetId,
         startTime: sourceStartTime,
         endTime: plan.decodeEndTime,
-        ...(isStretchedPlaybackPlan(plan)
+        ...(isTimeStretchedPlaybackPlan(plan)
           ? {
               stretchLead: true as const,
               stretchSampleRate: doc.audioSampleRate,
@@ -1882,10 +1923,11 @@ export async function startTimelineAudioPlayback(
     const timelineStart = Math.max(intervalStart, plan.timelineStartTime)
     const timelineEnd = Math.min(intervalEnd, plan.timelineEndTime)
     if (timelineEnd <= timelineStart + TIME_EPSILON || stopped) return []
+    if (isRampedPlaybackPlan(plan) && plan.ramp.silent) return []
 
     const cursorState = await openCursor(plan, timelineStart)
     if (!cursorState || stopped) return []
-    if (isStretchedPlaybackPlan(plan)) {
+    if (isTimeStretchedPlaybackPlan(plan)) {
       try {
         if (!cursorState.pending) {
           const step = await cursorState.cursor.next()
@@ -1901,26 +1943,33 @@ export async function startTimelineAudioPlayback(
         const sampleRate = cursorState.pending.buffer.sampleRate
         if (
           !Number.isSafeInteger(sampleRate)
-          || ![44_100, 48_000, 96_000].includes(sampleRate)
+          || sampleRate !== doc.audioSampleRate
         ) {
           throw new RangeError(
-            'Audio stretch sample rate must be 44100, 48000, or 96000',
+            'Audio stretch buffer must use the document sample rate',
           )
         }
-        const outputStartSample = Math.round(
-          (timelineStart - plan.timelineStartTime) * sampleRate,
-        )
-        const outputEndSample = Math.round(
-          (timelineEnd - plan.timelineStartTime) * sampleRate,
-        )
+        const outputStartSample = Math.round(timelineStart * sampleRate)
+          - plan.timelineStartSample
+        const outputEndSample = Math.round(timelineEnd * sampleRate)
+          - plan.timelineStartSample
         const sampleCount = outputEndSample - outputStartSample
         if (sampleCount < 1) return []
         cursorState.stretchSampleRate = sampleRate
-        cursorState.stretchSession ??= createConstantRateAudioStretcher({
-          stretch: plan.stretch,
-          sampleRate,
-          outputStartSample,
-        })
+        cursorState.stretchSession ??= isRampedPlaybackPlan(plan)
+          ? createRampedAudioStretcher({
+              ramp: plan.ramp,
+              frameRate: doc.frameRate,
+              sampleRate,
+              timelineStartFrame: plan.timelineStartFrame,
+              clipTimelineStartFrame: plan.clipTimelineStartFrame,
+              outputStartSample,
+            })
+          : createConstantRateAudioStretcher({
+              stretch: plan.stretch,
+              sampleRate,
+              outputStartSample,
+            })
         const stretched = await cursorState.stretchSession.pull(
           sampleCount,
           (count) => readStretchSource(cursorState, count),

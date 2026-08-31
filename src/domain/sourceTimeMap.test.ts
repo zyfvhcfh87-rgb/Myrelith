@@ -150,7 +150,7 @@ describe('SourceTimeMap', () => {
     })
   })
 
-  test('mutes mixed positive ramps before freeze maps', () => {
+  test('admits mixed positive ramps and freeze maps with explicit bounded policy', () => {
     const ramp = clip()
     ramp.sourceTimeMap = {
       ...defaultSourceTimeMap(0, 20),
@@ -173,14 +173,35 @@ describe('SourceTimeMap', () => {
         ],
       },
     }
+    const zeroBoundary = clip()
+    zeroBoundary.sourceTimeMap = {
+      ...defaultSourceTimeMap(0, 20),
+      speedCurve: {
+        originFrame: 0,
+        points: [
+          { frame: 0, rate: sourceTimeSpeedRateFromPercent(0), easing: 'linear' },
+          { frame: 10, rate: sourceTimeSpeedRateFromPercent(100), easing: 'hold' },
+        ],
+      },
+    }
 
     expect(sourceTimeAudioPolicy(ramp)).toEqual({
-      status: 'muted',
-      reason: 'speed-ramp-audio-unsupported',
+      status: 'supported',
+      kind: 'ramped',
+      quality: 'edge',
+      hasSilence: false,
     })
     expect(sourceTimeAudioPolicy(freeze)).toEqual({
-      status: 'muted',
-      reason: 'freeze-audio-silence',
+      status: 'supported',
+      kind: 'ramped',
+      quality: 'edge',
+      hasSilence: true,
+    })
+    expect(sourceTimeAudioPolicy(zeroBoundary)).toEqual({
+      status: 'supported',
+      kind: 'ramped',
+      quality: 'edge',
+      hasSilence: false,
     })
   })
 
@@ -201,6 +222,11 @@ describe('SourceTimeMap', () => {
         ],
       },
     }
+    const subFrameAllUnity = clip()
+    subFrameAllUnity.sourceTimeMap = {
+      ...allUnity.sourceTimeMap,
+      sourceStartTicks: 500_000,
+    }
 
     expect(sourceTimeAudioPolicy(subFrame)).toEqual({
       status: 'muted',
@@ -209,6 +235,10 @@ describe('SourceTimeMap', () => {
     expect(sourceTimeAudioPolicy(allUnity)).toEqual({
       status: 'supported',
       kind: 'direct',
+    })
+    expect(sourceTimeAudioPolicy(subFrameAllUnity)).toEqual({
+      status: 'muted',
+      reason: 'sub-frame-origin-audio-unsupported',
     })
   })
 
@@ -331,6 +361,23 @@ describe('SourceTimeMap', () => {
     expect(sourceTicksAtTimelineOffset(invalid, 4)).toBe(6_000_000)
     const invalidClip = { ...clip(), sourceTimeMap: invalid }
     expect(sourceTimeAudioPolicy(invalidClip)).toEqual({
+      status: 'muted',
+      reason: 'invalid-speed-curve',
+    })
+    expect(sourceTimeAudioPolicy({
+      ...clip(),
+      sourceTimeMap: {
+        ...defaultSourceTimeMap(0, 10),
+        rate: { numerator: -1, denominator: 1 },
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            { frame: 0, rate: sourceTimeSpeedRateFromPercent(100), easing: 'linear' },
+            { frame: 5, rate: sourceTimeSpeedRateFromPercent(200), easing: 'linear' },
+          ],
+        },
+      },
+    })).toEqual({
       status: 'muted',
       reason: 'invalid-speed-curve',
     })

@@ -6,6 +6,7 @@ import type {
   Clip,
   ClipAnimationTrack,
   ClipId,
+  SourceTimeMap,
   TimelineDoc,
   TrackId,
   TransitionAudioCurve,
@@ -37,9 +38,12 @@ import {
 import { cloneAudioEffectStack } from './audioEffectStack'
 import {
   clipSourceTimeMap,
+  cloneSourceTimeMap,
   sourceFrameAtTimelineOffset,
   sourceTicksAtTimelineOffset,
   sourceTimeAudioPolicy,
+  sourceTimeAudioWindowIsSilent,
+  sourceTimeZeroHoldRanges,
   SOURCE_TIME_TICKS_PER_FRAME,
   type ConstantAudioStretchRate,
   type SourceTimeAudioPolicy,
@@ -140,15 +144,37 @@ export interface ConstantRateAudioStretch {
 
 export interface TimelineAudioDirectClipPlan extends TimelineAudioClipFields {
   stretch?: never
+  ramp?: never
 }
 
 export interface TimelineAudioStretchedClipPlan extends TimelineAudioClipFields {
   stretch: ConstantRateAudioStretch
+  ramp?: never
+}
+
+export interface TimelineAudioRampSilenceRange {
+  readonly startFrame: number
+  readonly endFrame: number
+}
+
+export interface RampedAudioStretch {
+  readonly sourceTimeMap: SourceTimeMap
+  readonly sourceStartTicks: number
+  readonly sourceEndTicks: number
+  readonly silenceRanges: readonly TimelineAudioRampSilenceRange[]
+  /** True when the entire contributor window is an authored 0% hold. */
+  readonly silent: boolean
+}
+
+export interface TimelineAudioRampedClipPlan extends TimelineAudioClipFields {
+  stretch?: never
+  ramp: RampedAudioStretch
 }
 
 export type TimelineAudioClipPlan =
   | TimelineAudioDirectClipPlan
   | TimelineAudioStretchedClipPlan
+  | TimelineAudioRampedClipPlan
 
 export interface TimelineAudioMixPlan {
   clips: TimelineAudioClipPlan[]
@@ -186,6 +212,11 @@ type AudioContributorDraft =
       rate: ConstantAudioStretchRate
       plan: TimelineAudioClipFields
     }
+  | {
+      kind: 'ramped'
+      clip: Clip
+      plan: TimelineAudioClipFields
+    }
 
 export function createConstantRateAudioStretch(
   rate: ConstantAudioStretchRate,
@@ -216,12 +247,29 @@ export function isStretchedAudioClipPlan(
   return plan.stretch !== undefined
 }
 
-function assertVirtualSourceRange(plan: TimelineAudioClipFields): void {
+export function isRampedAudioClipPlan(
+  plan: TimelineAudioClipPlan,
+): plan is TimelineAudioRampedClipPlan {
+  return plan.ramp !== undefined
+}
+
+export function isTimeStretchedAudioClipPlan(
+  plan: TimelineAudioClipPlan,
+): plan is TimelineAudioStretchedClipPlan | TimelineAudioRampedClipPlan {
+  return isStretchedAudioClipPlan(plan) || isRampedAudioClipPlan(plan)
+}
+
+function assertVirtualSourceRange(
+  plan: TimelineAudioClipFields,
+  allowEmpty = false,
+): void {
   if (
     !Number.isSafeInteger(plan.sourceStartFrame)
     || plan.sourceStartFrame < 0
     || !Number.isSafeInteger(plan.sourceEndFrame)
-    || plan.sourceEndFrame <= plan.sourceStartFrame
+    || (allowEmpty
+      ? plan.sourceEndFrame < plan.sourceStartFrame
+      : plan.sourceEndFrame <= plan.sourceStartFrame)
   ) {
     throw new RangeError(
       `Audio clip "${plan.clipId}" has an invalid virtual source range`,
@@ -268,6 +316,82 @@ function finishStretchedContributor(
     ),
   }
   assertVirtualSourceRange(plan)
+  return plan
+}
+
+function rampSilenceRanges(
+  map: SourceTimeMap,
+  clipTimelineStartFrame: number,
+  timelineStartFrame: number,
+  timelineEndFrame: number,
+): TimelineAudioRampSilenceRange[] {
+  const localStartFrame = timelineStartFrame - clipTimelineStartFrame
+  const localEndFrame = timelineEndFrame - clipTimelineStartFrame
+  return sourceTimeZeroHoldRanges(map, localStartFrame, localEndFrame)
+    .map((range) => ({
+      startFrame: clipTimelineStartFrame + range.startFrame,
+      endFrame: clipTimelineStartFrame + range.endFrame,
+    }))
+}
+
+export function createRampedAudioStretch(
+  clip: Clip,
+  timelineStartFrame: number,
+  timelineEndFrame: number,
+): RampedAudioStretch {
+  if (
+    !Number.isSafeInteger(timelineStartFrame)
+    || !Number.isSafeInteger(timelineEndFrame)
+    || timelineStartFrame < 0
+    || timelineEndFrame <= timelineStartFrame
+  ) throw new RangeError('Ramped audio timeline window must be non-empty and ordered')
+  const policy = sourceTimeAudioPolicy(clip)
+  if (policy.status !== 'supported' || policy.kind !== 'ramped') {
+    throw new RangeError('Ramped audio stretch requires a supported variable-speed map')
+  }
+  const map = clipSourceTimeMap(clip)
+  const localStart = timelineStartFrame - clip.timelineRange.startFrame
+  const localEnd = timelineEndFrame - clip.timelineRange.startFrame
+  const sourceStartTicks = sourceTicksAtTimelineOffset(map, localStart)
+  const sourceEndTicks = sourceTicksAtTimelineOffset(map, localEnd)
+  const silenceRanges = rampSilenceRanges(
+    map,
+    clip.timelineRange.startFrame,
+    timelineStartFrame,
+    timelineEndFrame,
+  )
+  const silent = sourceTimeAudioWindowIsSilent(map, localStart, localEnd)
+  if (sourceEndTicks < sourceStartTicks || (sourceEndTicks === sourceStartTicks && !silent)) {
+    throw new RangeError('Ramped audio source window must advance')
+  }
+  return {
+    sourceTimeMap: cloneSourceTimeMap(map),
+    sourceStartTicks,
+    sourceEndTicks,
+    silenceRanges,
+    silent,
+  }
+}
+
+function finishRampedContributor(
+  draft: TimelineAudioClipFields,
+  clip: Clip,
+): TimelineAudioRampedClipPlan {
+  const ramp = createRampedAudioStretch(
+    clip,
+    draft.timelineStartFrame,
+    draft.timelineEndFrame,
+  )
+  const ticksPerFrame = BigInt(SOURCE_TIME_TICKS_PER_FRAME)
+  const plan: TimelineAudioRampedClipPlan = {
+    ...draft,
+    sourceStartFrame: Number(BigInt(ramp.sourceStartTicks) / ticksPerFrame),
+    sourceEndFrame: Number(
+      (BigInt(ramp.sourceEndTicks) + ticksPerFrame - 1n) / ticksPerFrame,
+    ),
+    ramp,
+  }
+  assertVirtualSourceRange(plan, ramp.silent)
   return plan
 }
 
@@ -379,7 +503,9 @@ export function createTimelineAudioMixPlan(
       }
       plans.set(clip.id, retimePolicy.kind === 'direct'
         ? { kind: 'direct', clip, plan }
-        : { kind: 'stretched', clip, rate: retimePolicy.rate, plan })
+        : retimePolicy.kind === 'stretched'
+          ? { kind: 'stretched', clip, rate: retimePolicy.rate, plan }
+          : { kind: 'ramped', clip, plan })
     }
   }
 
@@ -468,7 +594,9 @@ export function createTimelineAudioMixPlan(
     )
     return draft.kind === 'direct'
       ? finishDirectContributor(draft.plan, draft.clip)
-      : finishStretchedContributor(draft.plan, draft.clip, draft.rate)
+      : draft.kind === 'stretched'
+        ? finishStretchedContributor(draft.plan, draft.clip, draft.rate)
+        : finishRampedContributor(draft.plan, draft.clip)
   })
 
   const mixer = timelineAudioMixerGraph(doc)

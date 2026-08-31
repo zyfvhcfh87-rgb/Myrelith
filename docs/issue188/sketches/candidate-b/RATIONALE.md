@@ -51,7 +51,7 @@ pending arena pick
 - We accept two domain plans in exchange for keeping the proven 1x plan free of rate fields and stretch overhead.
 - We accept one pipeline join in exchange for keeping package and runtime details out of `domain/`.
 - We accept a branded TypeScript rate that can be defeated by an explicit cast in exchange for compile-time exclusion in ordinary code.
-- We accept an 8 MiB stretch budget and an explicit resource-limit result in exchange for a finite live-memory bound.
+- This arena sketch proposed an 8 MiB stretch budget. Final implementation accounting supersedes it with 5 MiB/session and 40 MiB across the admitted eight sessions.
 - We accept live silence after a stretch runtime failure in exchange for keeping playback responsive and reasoned. Export fails instead of writing a misleading final file.
 - We accept audible artifacts at 0.25x and 4x in exchange for covering the complete authored constant-rate range with one algorithm. The quality gate can still reject the package if measured results miss the declared limits.
 - We accept linked crossfade work inside the plan slice in exchange for one mix-window authority. Dropping crossfades would make fade behavior depend on retime status.

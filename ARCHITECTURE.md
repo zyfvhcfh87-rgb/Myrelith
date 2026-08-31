@@ -633,10 +633,29 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   duplicated into both stereo legs before meter or balance routing.
 - Timing audio keeps exact integer-origin 1×, including an all-1× curve, on
   the existing decode path. Constant 0.25×–4× maps other than 1× share one
-  first-party WSOLA session for live playback and export. Pitch stays put.
-  Do not approximate stretch with browser `playbackRate`. Variable-speed
-  ramps, freezes, invalid curves, and sub-frame 1× origins stay silent with a
-  named reason. The Inspector prints `clipAudioPresentation` for every map.
+  first-party WSOLA implementation with variable-speed ramps for live playback
+  and export. Every ramp grain reads the canonical `SourceTimeMap`; pitch stays
+  put and pull boundaries cannot change PCM. Do not approximate stretch with
+  browser `playbackRate`. Authored 0× holds fade to silence, and a fully frozen
+  window opens no decoder or stretch session. Source retention/preflight also
+  excludes a whole-clip freeze unless the asset remains a visual contributor
+  or a structurally complete linked crossfade expands it into an audible
+  source-time window. Merely being linked, or being a still-silent incoming
+  pre-roll leg, retains nothing. Export builds one lazy O(n log n), per-track
+  indexed link/transition-window plan for this decision and reuses its required
+  asset set through preflight. Source capacity is resolved before cross-track
+  conflicts, in the same order as the final mixer. Its `SourceBoundsCatalog`
+  comes from immutable durable descriptors, separately from connected Blob
+  ownership, so an offline silent leg can still preserve the handle bounds of
+  its connected partner. The public 96,000-sample pull and eight-session gates
+  are paired with code-derived 5 MiB/session and 40 MiB aggregate stretch
+  working allowances. Live ramp
+  intervals subtract
+  absolute document sample boundaries; they never round a floating clip-
+  relative duration.
+  Invalid maps and sub-frame 1× origins, including all-1× curves, stay silent
+  with a named reason. The Inspector prints
+  `clipAudioPresentation` for every map.
 
 ## Editing-proxy representation and cache
 

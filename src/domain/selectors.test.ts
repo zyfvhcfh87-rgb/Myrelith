@@ -290,7 +290,7 @@ describe('outputMediaAssetIds', () => {
     ])
   })
 
-  test('includes constant stretch audio and still excludes muted speed ramps', () => {
+  test('includes constant and variable stretch audio assets', () => {
     const stretchedAudio = {
       ...makeClip('retimed-audio', 0, 5),
       assetId: 'shared-retimed',
@@ -334,7 +334,103 @@ describe('outputMediaAssetIds', () => {
       },
     }
     const rampOnly = makeDoc([makeTrack('A1', 'audio', [rampAudio])])
-    expect([...outputMediaAssetIds(rampOnly)]).toEqual([])
+    expect([...outputMediaAssetIds(rampOnly)]).toEqual(['ramped-audio-asset'])
+  })
+
+  test('skips a fully frozen audio source but preserves a same-asset video source', () => {
+    const frozen = {
+      ...makeClip('fully-frozen', 0, 10),
+      assetId: 'shared-frozen-asset',
+      sourceTimeMap: {
+        sourceStartTicks: 0,
+        sourceDurationTicks: 10_000_000,
+        rate: { numerator: 1, denominator: 1 },
+        speedCurve: {
+          originFrame: 0,
+          points: [
+            {
+              frame: 0,
+              rate: { numerator: 0, denominator: 1 },
+              easing: 'hold' as const,
+            },
+            {
+              frame: 10,
+              rate: { numerator: 1, denominator: 1 },
+              easing: 'hold' as const,
+            },
+          ],
+        },
+      },
+    }
+
+    expect([...outputMediaAssetIds(makeDoc([
+      makeTrack('A1', 'audio', [frozen]),
+    ]))]).toEqual([])
+    expect([...outputMediaAssetIds(makeDoc([
+      makeTrack('V1', 'video', [{ ...frozen, id: 'visible-video' }]),
+      makeTrack('A1', 'audio', [frozen]),
+    ]))]).toEqual(['shared-frozen-asset'])
+
+    const linkedFrozen = { ...frozen, linkGroupId: 'frozen-link' }
+    expect([...outputMediaAssetIds(makeDoc([
+      makeTrack('V1', 'video', [{
+        ...linkedFrozen,
+        id: 'hidden-linked-video',
+      }], { hidden: true }),
+      makeTrack('A1', 'audio', [linkedFrozen]),
+    ]))]).toEqual([])
+
+    const linkedOther = {
+      ...makeClip('linked-other-audio', 10, 10),
+      assetId: 'other-crossfade-asset',
+      linkGroupId: 'other-link',
+    }
+    const transitionTrack = makeTrack('V1', 'video', [
+      { ...makeClip('video-from', 0, 10), linkGroupId: 'frozen-link' },
+      { ...makeClip('video-to', 10, 10), linkGroupId: 'other-link' },
+    ], { hidden: true })
+    transitionTrack.transitions = [{
+      id: 'linked-crossfade',
+      type: 'crossfade',
+      fromClipId: 'video-from',
+      toClipId: 'video-to',
+      durationFrames: 4,
+      audio: { enabled: true, curve: 'equal-power' },
+    }]
+    expect([...outputMediaAssetIds(makeDoc([
+      transitionTrack,
+      makeTrack('A1', 'audio', [linkedFrozen]),
+      makeTrack('A2', 'audio', [linkedOther]),
+    ]))]).toEqual(['shared-frozen-asset', 'other-crossfade-asset'])
+    expect([...outputMediaAssetIds(makeDoc([
+      transitionTrack,
+      makeTrack('A1', 'audio', [linkedFrozen]),
+    ]))]).toEqual([])
+
+    const downstreamTrack = makeTrack('V1', 'video', [
+      { ...makeClip('downstream-from', 0, 10), linkGroupId: 'other-link' },
+      { ...makeClip('downstream-to', 10, 10), linkGroupId: 'frozen-link' },
+    ], { hidden: true })
+    downstreamTrack.transitions = [{
+      id: 'downstream-crossfade',
+      type: 'crossfade',
+      fromClipId: 'downstream-from',
+      toClipId: 'downstream-to',
+      durationFrames: 4,
+      audio: { enabled: true, curve: 'equal-power' },
+    }]
+    expect([...outputMediaAssetIds(makeDoc([
+      downstreamTrack,
+      makeTrack('A1', 'audio', [{
+        ...makeClip('downstream-other-audio', 0, 10),
+        assetId: 'downstream-other-asset',
+        linkGroupId: 'other-link',
+      }]),
+      makeTrack('A2', 'audio', [{
+        ...linkedFrozen,
+        timelineRange: { startFrame: 10, durationFrames: 10 },
+      }]),
+    ]))]).toEqual(['downstream-other-asset'])
   })
 
   test('includes a zero-opacity clip when its opacity animation becomes visible', () => {
