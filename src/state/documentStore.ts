@@ -1,15 +1,15 @@
 /**
- * state/documentStore.ts — Zustand store owning the TimelineDoc plus
- * undo/redo history. Phase 1.2.
+ * state/documentStore.ts — Zustand store owning the complete sequence project,
+ * its active TimelineDoc adapter, and project-wide undo/redo history.
  *
  * Layering (ARCHITECTURE.md): imports domain/ only — never ui/, engine/,
  * pipeline/, workers/, or react.
  *
- * History model: plain snapshot stacks. `past` holds older docs (most recent
- * last), `future` holds undone docs (next redo first), both capped at
- * HISTORY_LIMIT. Because domain/operations returns the SAME doc reference
- * when an edit is rejected, a rejected/no-op edit is detected with `===` and
- * pushes NO history entry — undo never has to step through non-changes.
+ * History model: plain SequenceProject snapshot stacks. `past` holds older
+ * projects (most recent last), `future` holds undone projects (next redo
+ * first), both capped at HISTORY_LIMIT. Because domain operations return the
+ * SAME active document reference when an edit is rejected, a rejected/no-op
+ * edit pushes NO history entry — undo never has to step through non-changes.
  *
  * Design note (deviation from the plan, on purpose): the plan suggested the
  * Immer middleware, but domain/operations already returns brand-new immutable
@@ -36,6 +36,7 @@ import type {
   Effect,
   EffectId,
   EffectParamValue,
+  FrameRate,
   MediaAsset,
   SourceTimeRate,
   SourceTimeSpeedEasing,
@@ -183,23 +184,56 @@ import {
   trimAdjustment as trimAdjustmentInDocument,
   updateAdjustmentEffectParamsAtFrame as updateAdjustmentEffectParamsAtFrameInDocument,
 } from '../domain/adjustmentItems'
+import {
+  chooseProjectRootSequence,
+  createProjectSequence,
+  deleteProjectSequence,
+  duplicateProjectSequence,
+  matchEmptyProjectFrameRate,
+  renameProjectSequence,
+  replaceProjectSequence,
+  sequenceById,
+  sequenceProjectFromTimeline,
+  type SequenceEntityKind,
+  type SequenceProject,
+} from '../domain/projectSequences'
 
 /** Max undo levels; snapshots beyond this fall off the old end. */
 const HISTORY_LIMIT = 100
 
 /** The DocumentActions contract (see ARCHITECTURE.md, store contracts). */
 export interface DocumentState {
-  /** The current document — the single source of truth for the timeline. */
+  /** Complete portable edit snapshot. Browser resources remain elsewhere. */
+  project: SequenceProject
+  /** Session-only active navigation; never persisted or placed in history. */
+  activeSequenceId: string
+  /** Active-sequence adapter consumed by existing timeline/render callers. */
   doc: TimelineDoc
-  /** Undo stack: older snapshots, most recent last. */
-  past: TimelineDoc[]
-  /** Redo stack: undone snapshots, next redo first. */
-  future: TimelineDoc[]
+  /** Undo stack: older whole-project snapshots, most recent last. */
+  past: SequenceProject[]
+  /** Redo stack: undone whole-project snapshots, next redo first. */
+  future: SequenceProject[]
 
-  /** Replace the whole document (project load). Clears history. */
+  /** Replace the complete project (load/recovery). Clears history. */
+  setProject: (project: SequenceProject, activeSequenceId?: string) => void
+  /** Historical/test adapter: replace with a sole-root project. */
   setDoc: (doc: TimelineDoc) => void
   /** Commit a prevalidated whole-document gesture without clearing history. */
   setDocWithHistory: (doc: TimelineDoc) => void
+  /** Navigate without persistence, dirty state, or history. */
+  switchSequence: (sequenceId: string) => boolean
+  /** Add an empty same-settings sequence and navigate to it. */
+  createSequence: (name: string) => string | null
+  /** Duplicate the active sequence with fresh project-wide ids. */
+  duplicateSequence: (sequenceId: string, name: string) => string | null
+  /** Rename one sequence through project history. */
+  renameSequence: (sequenceId: string, name: string) => boolean
+  /** Delete a non-root definition; active navigation falls back to root. */
+  deleteSequence: (sequenceId: string) => boolean
+  /** Choose the portable root/render truth through project history. */
+  chooseRootSequence: (sequenceId: string) => boolean
+  /** Match every content-empty sequence to one frame rate through history. */
+  matchProjectFrameRate: (rate: FrameRate) => boolean
   /**
    * Split every clip that the playhead falls strictly inside, across all
    * unlocked tracks. One history entry for the whole gesture. Each link
@@ -610,30 +644,171 @@ export interface DocumentState {
 }
 
 /**
- * Fold a successful edit into the state: push the outgoing doc onto `past`,
- * clear `future`. A rejected edit (same reference) changes nothing at all.
+ * Fold an active-sequence edit into the complete project: push the outgoing
+ * project onto `past`, clear `future`. A rejected edit changes nothing.
  */
 function commit(
   state: DocumentState,
   next: TimelineDoc,
-): Pick<DocumentState, 'doc' | 'past' | 'future'> | DocumentState {
+): Partial<DocumentState> | DocumentState {
   if (next === state.doc) return state
+  const project = replaceProjectSequence(
+    state.project,
+    state.activeSequenceId,
+    next,
+  )
+  if (project === state.project) return state
   return {
+    project,
     doc: next,
-    past: [...state.past, state.doc].slice(-HISTORY_LIMIT),
+    past: [...state.past, state.project].slice(-HISTORY_LIMIT),
     future: [],
   }
 }
 
+function activeSequenceFor(
+  project: SequenceProject,
+  preferredId: string,
+): { activeSequenceId: string; doc: TimelineDoc } {
+  const preferred = sequenceById(project, preferredId)
+  if (preferred) return { activeSequenceId: preferred.id, doc: preferred }
+  const root = sequenceById(project, project.rootSequenceId)
+  if (!root) throw new Error('Cannot activate a project without its root sequence')
+  return { activeSequenceId: root.id, doc: root }
+}
+
+function commitProject(
+  state: DocumentState,
+  project: SequenceProject,
+  preferredActiveId = state.activeSequenceId,
+): Partial<DocumentState> | DocumentState {
+  if (project === state.project) return state
+  return {
+    project,
+    ...activeSequenceFor(project, preferredActiveId),
+    past: [...state.past, state.project].slice(-HISTORY_LIMIT),
+    future: [],
+  }
+}
+
+function randomSequenceId(
+  kind: SequenceEntityKind,
+): string {
+  return `${kind.replace('-', '_')}_${crypto.randomUUID()}`
+}
+
+const INITIAL_DOCUMENT = createTimelineDoc(
+  'Untitled',
+  DEFAULT_PROJECT_SETTINGS,
+  'doc_default',
+)
+const INITIAL_PROJECT = sequenceProjectFromTimeline(INITIAL_DOCUMENT)
+
 export const useDocumentStore = create<DocumentState>()((set) => ({
-  doc: createTimelineDoc('Untitled', DEFAULT_PROJECT_SETTINGS, 'doc_default'),
+  project: INITIAL_PROJECT,
+  activeSequenceId: INITIAL_DOCUMENT.id,
+  doc: INITIAL_DOCUMENT,
   past: [],
   future: [],
 
-  setDoc: (doc) => set({ doc, past: [], future: [] }),
+  setProject: (project, activeSequenceId = project.rootSequenceId) => set({
+    project,
+    ...activeSequenceFor(project, activeSequenceId),
+    past: [],
+    future: [],
+  }),
+
+  setDoc: (doc) => set({
+    project: sequenceProjectFromTimeline(doc),
+    activeSequenceId: doc.id,
+    doc,
+    past: [],
+    future: [],
+  }),
 
   setDocWithHistory: (doc) =>
     set((state) => commit(state, doc)),
+
+  switchSequence: (sequenceId) => {
+    let switched = false
+    set((state) => {
+      const doc = sequenceById(state.project, sequenceId)
+      if (!doc || sequenceId === state.activeSequenceId) return state
+      switched = true
+      return { activeSequenceId: sequenceId, doc }
+    })
+    return switched
+  },
+
+  createSequence: (name) => {
+    let createdId: string | null = null
+    set((state) => {
+      const result = createProjectSequence(state.project, name, randomSequenceId)
+      createdId = result.sequenceId
+      return result.failure || !result.sequenceId
+        ? state
+        : commitProject(state, result.project, result.sequenceId)
+    })
+    return createdId
+  },
+
+  duplicateSequence: (sequenceId, name) => {
+    let duplicateId: string | null = null
+    set((state) => {
+      const result = duplicateProjectSequence(
+        state.project,
+        sequenceId,
+        name,
+        randomSequenceId,
+      )
+      duplicateId = result.sequenceId
+      return result.failure || !result.sequenceId
+        ? state
+        : commitProject(state, result.project, result.sequenceId)
+    })
+    return duplicateId
+  },
+
+  renameSequence: (sequenceId, name) => {
+    let renamed = false
+    set((state) => {
+      const result = renameProjectSequence(state.project, sequenceId, name)
+      renamed = result.failure === null
+      return result.failure ? state : commitProject(state, result.project)
+    })
+    return renamed
+  },
+
+  deleteSequence: (sequenceId) => {
+    let deleted = false
+    set((state) => {
+      const result = deleteProjectSequence(state.project, sequenceId)
+      deleted = result.failure === null
+      return result.failure ? state : commitProject(state, result.project)
+    })
+    return deleted
+  },
+
+  chooseRootSequence: (sequenceId) => {
+    let chosen = false
+    set((state) => {
+      const result = chooseProjectRootSequence(state.project, sequenceId)
+      chosen = result.failure === null
+      return result.failure ? state : commitProject(state, result.project)
+    })
+    return chosen
+  },
+
+  matchProjectFrameRate: (rate) => {
+    let matched = false
+    set((state) => {
+      const project = matchEmptyProjectFrameRate(state.project, rate)
+      if (!project) return state
+      matched = true
+      return commitProject(state, project)
+    })
+    return matched
+  },
 
   splitClipAtPlayhead: (playheadFrame) =>
     set((state) => {
@@ -1243,9 +1418,10 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       const previous = state.past[state.past.length - 1]
       if (!previous) return state
       return {
-        doc: previous,
+        project: previous,
+        ...activeSequenceFor(previous, state.activeSequenceId),
         past: state.past.slice(0, -1),
-        future: [state.doc, ...state.future].slice(0, HISTORY_LIMIT),
+        future: [state.project, ...state.future].slice(0, HISTORY_LIMIT),
       }
     }),
 
@@ -1254,8 +1430,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       const next = state.future[0]
       if (!next) return state
       return {
-        doc: next,
-        past: [...state.past, state.doc].slice(-HISTORY_LIMIT),
+        project: next,
+        ...activeSequenceFor(next, state.activeSequenceId),
+        past: [...state.past, state.project].slice(-HISTORY_LIMIT),
         future: state.future.slice(1),
       }
     }),

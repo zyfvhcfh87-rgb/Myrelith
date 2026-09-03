@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { estimateDocumentMemory, utf8ByteLength } from './documentMemory'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from './projectSettings'
+import { sequenceProjectFromTimeline } from './projectSequences'
 
 describe('document memory estimate', () => {
   test('counts UTF-8 without a browser TextEncoder', () => {
@@ -28,7 +29,14 @@ describe('document memory estimate', () => {
       )),
     }
 
-    const estimate = estimateDocumentMemory(doc, [first, second], [first])
+    const project = sequenceProjectFromTimeline(doc)
+    const firstProject = { ...project, sequences: [first] }
+    const secondProject = { ...project, sequences: [second] }
+    const estimate = estimateDocumentMemory(
+      project,
+      [firstProject, secondProject],
+      [firstProject],
+    )
 
     expect(estimate.history).toMatchObject({
       pastDepth: 2,
@@ -46,6 +54,7 @@ describe('document memory estimate', () => {
       + estimate.history.estimatedAdditionalRetainedBytes,
     )
     expect(estimate.assumptions.join(' ')).toMatch(/decoded media.*caches/i)
+    expect(estimate.assumptions.join(' ')).toMatch(/SequenceProject/)
   })
 
   test('reports an empty history without fabricating cost', () => {
@@ -54,7 +63,11 @@ describe('document memory estimate', () => {
       DEFAULT_PROJECT_SETTINGS,
       'no-history',
     )
-    const estimate = estimateDocumentMemory(doc, [], [])
+    const estimate = estimateDocumentMemory(
+      sequenceProjectFromTimeline(doc),
+      [],
+      [],
+    )
 
     expect(estimate.history).toEqual({
       pastDepth: 0,

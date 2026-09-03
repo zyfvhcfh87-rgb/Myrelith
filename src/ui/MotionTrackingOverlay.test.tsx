@@ -62,11 +62,7 @@ beforeEach(() => {
   const asset = videoAsset()
   const empty = createTimelineDoc('Tracking overlay', DEFAULT_PROJECT_SETTINGS, 'tracking-overlay')
   const clip = clipFromAsset(asset, 0)
-  useDocumentStore.setState({
-    doc: insertClip(empty, 'V1', clip),
-    past: [],
-    future: [],
-  })
+  useDocumentStore.getState().setDoc(insertClip(empty, 'V1', clip))
   useMediaStore.setState({
     descriptors: new Map(),
     assets: new Map(),

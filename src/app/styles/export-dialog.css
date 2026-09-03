@@ -104,6 +104,20 @@
   opacity: 0.35;
 }
 
+.export-sequence-target {
+  margin: 0;
+  padding: 9px 22px;
+  color: #aab6c6;
+  font-size: 11px;
+  background: #181c22;
+  border-bottom: 1px solid #2c3139;
+}
+
+.export-sequence-target strong {
+  color: #e2e9f3;
+  font-weight: 650;
+}
+
 .export-dialog-body {
   display: flex;
   flex-direction: column;

@@ -41,7 +41,7 @@ function Harness() {
 
 beforeEach(() => {
   const { clip, doc } = textFixture()
-  useDocumentStore.setState({ doc, past: [], future: [] })
+  useDocumentStore.getState().setDoc(doc)
   useTransportStore.setState({
     ...INITIAL_TRANSPORT_STATE,
     selectedClipIds: [clip.id],

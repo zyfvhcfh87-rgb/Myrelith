@@ -1,4 +1,5 @@
-import type { TimelineDoc } from '../domain/schema'
+import type { SequenceProject } from '../domain/projectSequences'
+import { projectMediaAssetIds } from '../domain/projectSequences'
 import { useMediaStore } from '../state/mediaStore'
 import {
   forgetImportedMediaHandle,
@@ -6,33 +7,31 @@ import {
 } from './mediaImportController'
 
 export function mediaAssetIsUsedOnTimeline(
-  doc: TimelineDoc,
+  project: SequenceProject,
   assetId: string,
 ): boolean {
-  return doc.tracks.some((track) => track.clips.some(
-    (clip) => clip.text === undefined && clip.assetId === assetId,
-  ))
+  return projectMediaAssetIds(project).has(assetId)
 }
 
 export function mediaAssetRemovalDisabledReason(
-  doc: TimelineDoc,
+  project: SequenceProject,
   assetId: string,
 ): string | null {
-  return mediaAssetIsUsedOnTimeline(doc, assetId)
-    ? 'Remove this media\'s clips from the timeline before removing its source.'
+  return mediaAssetIsUsedOnTimeline(project, assetId)
+    ? 'Remove this media\'s clips from every sequence before removing its source.'
     : null
 }
 
 /** Revalidate and remove one exact Media Pool target without prompting. */
 export function removeMediaAssetFromProject(
-  doc: TimelineDoc,
+  project: SequenceProject,
   assetId: string,
 ): boolean {
   const media = useMediaStore.getState()
   const descriptor = media.descriptors.get(assetId)
   const compatibility = media.compatibility.get(assetId)
   if (!descriptor && !compatibility) return false
-  if (mediaAssetRemovalDisabledReason(doc, assetId)) return false
+  if (mediaAssetRemovalDisabledReason(project, assetId)) return false
   if (!descriptor) {
     removeMediaCompatibility(assetId)
     return !useMediaStore.getState().compatibility.has(assetId)

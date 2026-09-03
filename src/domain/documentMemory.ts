@@ -1,4 +1,4 @@
-import type { TimelineDoc } from './schema'
+import type { SequenceProject } from './projectSequences'
 
 /**
  * This is an explainable comparison estimate, not a JavaScript heap claim.
@@ -37,6 +37,7 @@ export interface DocumentMemoryEstimate {
   readonly estimator: typeof DOCUMENT_MEMORY_ESTIMATOR_VERSION
   readonly assumptions: readonly string[]
   readonly authoredDocument: {
+    /** Stable artifact key; format 6 measures the complete SequenceProject. */
     readonly serializedUtf8Bytes: number
     readonly retainedGraph: RetainedDocumentGraphEstimate
   }
@@ -58,7 +59,7 @@ export interface DocumentMemoryEstimate {
 }
 
 const ESTIMATOR_ASSUMPTIONS = Object.freeze([
-  'Counts the JSON-shaped TimelineDoc and undo/redo snapshots only.',
+  'Counts the JSON-shaped SequenceProject and whole-project undo/redo snapshots only.',
   'Counts shared object and array references once across current/history graphs.',
   'Uses fixed shallow headers and reference slots; it is not a browser heap measurement.',
   'Excludes stores, Immer bookkeeping, imported bytes, decoded media, caches, canvases, and GPU allocations.',
@@ -160,19 +161,19 @@ function retainedGraphEstimate(
 }
 
 export function estimateDocumentMemory(
-  doc: TimelineDoc,
-  past: readonly TimelineDoc[],
-  future: readonly TimelineDoc[],
+  project: SequenceProject,
+  past: readonly SequenceProject[],
+  future: readonly SequenceProject[],
 ): DocumentMemoryEstimate {
-  const currentRetained = retainedGraphEstimate([doc])
+  const currentRetained = retainedGraphEstimate([project])
   const historySnapshots = [...past, ...future]
-  const allRetained = retainedGraphEstimate([doc, ...historySnapshots])
-  const independentlyRetained = [doc, ...historySnapshots]
+  const allRetained = retainedGraphEstimate([project, ...historySnapshots])
+  const independentlyRetained = [project, ...historySnapshots]
     .reduce(
       (sum, snapshot) => sum + retainedGraphEstimate([snapshot]).estimatedBytes,
       0,
     )
-  const authoredSerializedBytes = serializedUtf8Bytes(doc)
+  const authoredSerializedBytes = serializedUtf8Bytes(project)
   const historySerializedBytes = historySnapshots.reduce(
     (sum, snapshot) => sum + serializedUtf8Bytes(snapshot),
     0,

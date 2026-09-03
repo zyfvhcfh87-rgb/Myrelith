@@ -116,7 +116,7 @@ describe('text overlay document contract', () => {
     const parsed = parseProjectFile(serialized)
 
     expect(parsed.assets).toEqual([])
-    expect(parsed.document).toEqual(doc)
-    expect(findClip(parsed.document, clip.id)?.text?.content).toBe('No uploads needed')
+    expect(parsed.sequences[0]).toEqual(doc)
+    expect(findClip(parsed.sequences[0], clip.id)?.text?.content).toBe('No uploads needed')
   })
 })

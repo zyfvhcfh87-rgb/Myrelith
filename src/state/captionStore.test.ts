@@ -43,7 +43,7 @@ describe('caption document-store history', () => {
     }
     useDocumentStore.getState().setDocWithHistory(next)
     expect(useDocumentStore.getState().doc).toBe(next)
-    expect(useDocumentStore.getState().past.at(-1)).toBe(before)
+    expect(useDocumentStore.getState().past.at(-1)?.sequences[0]).toBe(before)
     useDocumentStore.getState().undo()
     expect(useDocumentStore.getState().doc).toBe(before)
   })

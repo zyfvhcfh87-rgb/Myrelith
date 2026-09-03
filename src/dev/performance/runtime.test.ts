@@ -333,7 +333,7 @@ describe('performance source-backed workloads', () => {
 
   test('builds a valid bounded export from connected 4K video, layers, transition, and audio', () => {
     const fixture = createPerformanceFixture()
-    const sourceVideo = fixture.project.document.tracks
+    const sourceVideo = fixture.project.sequences[0].tracks
       .find((track) => track.kind === 'video')?.clips[0]
     if (!sourceVideo) throw new Error('performance fixture has no source video')
     sourceVideo.effects = [createMaskEffect('fixture-mask', 'ellipse')]
@@ -359,7 +359,10 @@ describe('performance source-backed workloads', () => {
 
     expect(() => validateProjectFile({
       ...fixture.project,
-      document,
+      id: document.id,
+      name: document.name,
+      rootSequenceId: document.id,
+      sequences: [document],
     })).not.toThrow()
     expect(document.tracks.filter((track) => track.kind === 'video')).toHaveLength(3)
     expect(document.tracks.filter((track) => track.kind === 'audio')).toHaveLength(2)
@@ -641,6 +644,9 @@ describe('performance harness isolation', () => {
     })
     expect(createObjectUrl).toHaveBeenCalledTimes(11)
     expect(revokeObjectUrl).toHaveBeenCalledTimes(11)
+    expect(useDocumentStore.getState().project).toBe(initialDocument.project)
+    expect(useDocumentStore.getState().activeSequenceId)
+      .toBe(initialDocument.activeSequenceId)
     expect(useDocumentStore.getState().doc).toBe(initialDocument.doc)
     expect(useMediaStore.getState().assets).toBe(initialMedia.assets)
     expect(useProjectSessionStore.getState()).toBe(initialProjectSession)
@@ -683,9 +689,11 @@ describe('performance harness isolation', () => {
     const firstDescriptorId = canonical.media.descriptors.keys().next().value
 
     useDocumentStore.setState({
+      project: { ...canonical.document.project },
+      activeSequenceId: 'mutated-sequence',
       doc: { ...canonical.document.doc, name: 'mutated before Run' },
-      past: [canonical.document.doc],
-      future: [canonical.document.doc],
+      past: [canonical.document.project],
+      future: [canonical.document.project],
     })
     useTransportStore.getState().setZoom(42)
     const mutatedDescriptors = new Map(canonical.media.descriptors)
@@ -700,6 +708,9 @@ describe('performance harness isolation', () => {
       fingerprintPerformanceFixture,
     )
 
+    expect(useDocumentStore.getState().project).toBe(canonical.document.project)
+    expect(useDocumentStore.getState().activeSequenceId)
+      .toBe(canonical.document.activeSequenceId)
     expect(useDocumentStore.getState().doc).toBe(canonical.document.doc)
     expect(useDocumentStore.getState().past).toBe(canonical.document.past)
     expect(useDocumentStore.getState().future).toBe(canonical.document.future)

@@ -13,7 +13,7 @@ function emptyDoc() {
 }
 
 beforeEach(() => {
-  useDocumentStore.setState({ doc: emptyDoc(), past: [], future: [] })
+  useDocumentStore.getState().setDoc(emptyDoc())
   useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
@@ -52,11 +52,7 @@ describe('text overlay editing UI', () => {
 
   test('reports an overlapping range instead of silently moving it', () => {
     const first = createTextClip(emptyDoc(), 0, 90, 'First')
-    useDocumentStore.setState({
-      doc: insertClip(emptyDoc(), 'V1', first),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(insertClip(emptyDoc(), 'V1', first))
     render(<TextOverlayDialog onClose={vi.fn()} />)
 
     fireEvent.change(screen.getByLabelText('Start frame'), { target: { value: '30' } })
@@ -88,11 +84,7 @@ describe('text overlay editing UI', () => {
 
   test('commits content and style edits once, and explains invalid geometry', () => {
     const clip = createTextClip(emptyDoc(), 0, 90, 'Before')
-    useDocumentStore.setState({
-      doc: insertClip(emptyDoc(), 'V1', clip),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(insertClip(emptyDoc(), 'V1', clip))
     useTransportStore.getState().setSelectedClip(clip.id)
     render(<Inspector />)
 
@@ -117,11 +109,7 @@ describe('text overlay editing UI', () => {
 
   test('deletes a selected overlay and clears its selected state', () => {
     const clip = createTextClip(emptyDoc(), 0, 90, 'Delete me')
-    useDocumentStore.setState({
-      doc: insertClip(emptyDoc(), 'V1', clip),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(insertClip(emptyDoc(), 'V1', clip))
     useTransportStore.getState().setSelectedClip(clip.id)
     render(<Inspector />)
 

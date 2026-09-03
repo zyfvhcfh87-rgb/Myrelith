@@ -161,6 +161,8 @@ function directFileFailureMessage(cause: unknown): string {
 
 export default function ExportDialog({ onClose }: ExportDialogProps) {
   const doc = useDocumentStore((state) => state.doc)
+  const activeSequenceId = useDocumentStore((state) => state.activeSequenceId)
+  const rootSequenceId = useDocumentStore((state) => state.project.rootSequenceId)
   const hasContent = docDurationFrames(doc) > 0
   const mediaAssets = useMediaStore((state) => state.assets)
   const mediaDescriptors = useMediaStore((state) => state.descriptors)
@@ -890,6 +892,11 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
           closeButtonRef={closeButtonRef}
           onClose={closeDialog}
         />
+
+        <p className="export-sequence-target">
+          Export target: active sequence <strong>{doc.name}</strong>
+          {activeSequenceId === rootSequenceId ? ' (project root)' : ''}.
+        </p>
 
         <div className="export-dialog-body">
           <ExportConfiguration

@@ -178,6 +178,18 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 `TimelineDoc`, `Track`, `Clip`, `AdjustmentItem`, `Transform`, `Effect`,
 `Transition`, `TextProps`. Read that file for field-level docs. Key invariants:
 
+- `domain/projectSequences.ts` owns the portable `SequenceProject` collection
+  introduced by project format 6: one stable project id/name, a deterministic
+  ordered set of stable `TimelineDoc` sequence definitions, and one portable
+  `rootSequenceId`. Every sequence has the same exact rational frame rate,
+  dimensions, and audio sample rate. The root is the project's default
+  render/delivery target; the active sequence is session-only navigation. A
+  format-5 project migrates by wrapping its existing document unchanged as the
+  sole root. Validation covers active and dormant sequences before stores or
+  resources change, including the root, global ids, per-sequence invariants,
+  and aggregate project budgets. Media descriptors, connected resources, and
+  collections remain project-owned once, outside all sequences. This model
+  does not permit sequence nesting, multicam, or mixed-settings timelines.
 - `TimeRange` is **half-open** `[startFrame, startFrame + durationFrames)`;
   ranges that merely touch do not overlap. All ranges are integer frames at
   the document rate.
@@ -933,6 +945,10 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   project or Zustand state. Project dimensions, FPS, and sample rate remain
   authoritative `TimelineDoc` facts and are not duplicated into that export
   preference.
+- Export deliberately targets the active sequence. Project activation begins
+  on the portable root, and `ui/ExportDialog.tsx` names the selected sequence
+  while identifying whether it is the project root, so changing the delivery
+  target is an explicit session action rather than an inferred fallback.
 - `ui/ExportDialog.tsx` exclusively owns export view state, lazy controller
   loading, capability generations, cancellation, focus scheduling, and result
   URL lifetime. `ui/ExportDialogSections.tsx` is stateless presentation;
@@ -956,7 +972,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 ## Store action contracts
 
 - `DocumentState` — implemented in `src/state/documentStore.ts` (canonical):
-  `setDoc`, `splitClipAtPlayhead(frame)`, `splitClipAt(clipId, frame)`,
+  owns the whole `SequenceProject`, a session-only `activeSequenceId`, and a
+  `doc` adapter exposing that active sequence to existing consumers.
+  `setProject`, `switchSequence`, `createSequence`, `duplicateSequence`,
+  `renameSequence`, `deleteSequence`, `chooseRootSequence`, and
+  `matchProjectFrameRate` own collection
+  navigation and mutation. The root cannot be deleted; deleting the active
+  non-root falls back to the root. Navigation does not enter history or mark
+  the project dirty. `setDoc` remains a narrow sole-root compatibility adapter
+  for tests and legacy callers. Editing actions include
+  `splitClipAtPlayhead(frame)`, `splitClipAt(clipId, frame)`,
   `insertClip(trackId, clip)`, `insertClips([{trackId, clip}...])` (atomic
   batch, one history entry — the A/V drop path), `trimClip(clipId, edge,
   delta)`,
@@ -999,7 +1024,8 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   delegate to domain/linking wrappers, so edits apply to every member of
   a `Clip.linkGroupId` group atomically (any member rejecting rolls the
   whole edit back); transform/volume edits deliberately do NOT follow
-  links. History: `past`/`future` snapshot stacks capped at 100.
+  links. History: `past`/`future` whole-project snapshot stacks capped at 100,
+  so edits and sequence CRUD undo across the project as one linear history.
   Rejected domain ops return the SAME doc reference, so they push no
   history entry. Actions take the frame as a parameter — documentStore
   never reads transportStore (UI wiring passes the playhead in).
@@ -1083,7 +1109,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   preserving survivor order and the current primary (or promoting the latest
   survivor). Undo can restore document clips but never resurrects selection.
   `resetTransport()` restores every field to its initial value when a different
-  project is activated.
+  project or active sequence is selected.
+  The same app bridge re-conforms the single connected-media catalog when
+  undo/redo changes the common project frame rate.
 - `MediaState` — `src/state/mediaStore.ts`: `descriptors: Map<AssetId,
   PortableAssetDescriptor>` is the durable project catalog, while
   `assets: Map<AssetId, MediaAsset>` is only the currently connected subset.
@@ -1132,8 +1160,9 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   serialized recovery snapshots remain controller-local; this store may only
   expose labels, timestamps, permission state, and stable local record ids.
 - Project persistence — `src/app/projectPersistenceController.ts`: builds a
-  validated portable snapshot from `documentStore` + `mediaStore`, including
-  descriptors and ordered collection membership in project format v5, owns the
+  validated portable snapshot from the complete `documentStore.project` plus
+  `mediaStore`, including every sequence, the root id, descriptors, and ordered
+  collection membership in project format v6, owns the
   current writable handle, debounces live saves, serializes overlapping edits
   by revision, and attaches `beforeunload` only while work is dirty. `Save`
   and `Save As` request an explicit user-gesture grant when no writable handle

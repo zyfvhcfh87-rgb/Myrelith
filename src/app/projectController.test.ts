@@ -17,6 +17,10 @@ import type {
 } from '../domain/schema'
 import type { MediaCompatibilityReport } from '../domain/mediaCompatibility'
 import type { MediaCollection } from '../domain/mediaCollections'
+import {
+  duplicateProjectSequence,
+  type SequenceEntityKind,
+} from '../domain/projectSequences'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -345,14 +349,18 @@ function makeProject(
   name = 'Saved project',
   collections: readonly MediaCollection[] = [],
 ): ProjectFile {
+  const document = createTimelineDoc(
+    name,
+    DEFAULT_PROJECT_SETTINGS,
+    'doc-saved',
+  )
   return {
     format: PROJECT_FILE_FORMAT,
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-    document: createTimelineDoc(
-      name,
-      DEFAULT_PROJECT_SETTINGS,
-      'doc-saved',
-    ),
+    id: document.id,
+    name,
+    rootSequenceId: document.id,
+    sequences: [document],
     assets,
     collections: [...collections],
   }
@@ -364,16 +372,20 @@ function resumeProjectFile(
   assets: PortableAssetDescriptor[] = [],
 ): File {
   const project = makeProject(assets, name)
+  const document = { ...project.sequences[0], id: documentId, name }
   return new File([serializeProjectFile({
     ...project,
-    document: { ...project.document, id: documentId, name },
+    id: documentId,
+    name,
+    rootSequenceId: documentId,
+    sequences: [document],
   })], `${documentId}.myrelith`)
 }
 
 function makeLegacyTwoTrackProject(name: string): ProjectFile {
   const project = makeProject([], name)
-  const videoTrack = project.document.tracks.find((track) => track.id === 'V1')
-  const audioTrack = project.document.tracks.find((track) => track.id === 'A1')
+  const videoTrack = project.sequences[0].tracks.find((track) => track.id === 'V1')
+  const audioTrack = project.sequences[0].tracks.find((track) => track.id === 'A1')
   if (!videoTrack || !audioTrack) {
     throw new Error('The fresh-project fixture must contain V1 and A1')
   }
@@ -383,10 +395,10 @@ function makeLegacyTwoTrackProject(name: string): ProjectFile {
   ]
   return {
     ...project,
-    document: {
-      ...project.document,
+    sequences: [{
+      ...project.sequences[0],
       tracks,
-    },
+    }],
   }
 }
 
@@ -1042,6 +1054,35 @@ describe('portable project resume', () => {
     })
   })
 
+  test('a hostile dormant sequence is rejected before state or resources change', async () => {
+    const currentProject = useDocumentStore.getState().project
+    const oldAsset = makeAsset({ id: 'old', objectUrl: 'blob:old' })
+    useMediaStore.getState().addAsset(oldAsset)
+    const candidate = makeProject([], 'Dormant attack')
+    candidate.sequences.push({
+      ...candidate.sequences[0],
+      id: 'dormant-sequence',
+      name: 'Dormant',
+      width: 1280,
+      tracks: candidate.sequences[0].tracks.map((track, index) => ({
+        ...track,
+        id: `dormant-track-${index}`,
+      })),
+    })
+    const deps = makeDeps({ readText: vi.fn(async () => JSON.stringify(candidate)) })
+
+    await expect(openProjectFile(
+      new File(['x'], 'hostile.myrelith'),
+      deps,
+    )).resolves.toMatchObject({ status: 'failed' })
+
+    expect(useDocumentStore.getState().project).toBe(currentProject)
+    expect(useMediaStore.getState().assets.get('old')).toBe(oldAsset)
+    expect(deps.disposeExport).not.toHaveBeenCalled()
+    expect(deps.disposeTransport).not.toHaveBeenCalled()
+    expect(deps.disposePreview).not.toHaveBeenCalled()
+  })
+
   test('valid projects without media wait for explicit confirmation', async () => {
     const current = useDocumentStore.getState().doc
     const savedProject = makeLegacyTwoTrackProject('Empty saved work')
@@ -1059,7 +1100,7 @@ describe('portable project resume', () => {
     await expect(activateResumedProject(deps)).resolves.toEqual({
       status: 'activated',
     })
-    expect(useDocumentStore.getState().doc).toEqual(savedProject.document)
+    expect(useDocumentStore.getState().doc).toEqual(savedProject.sequences[0])
     expect(useProjectSessionStore.getState()).toMatchObject({
       screen: 'editor',
       activeProjectFileName: 'empty.myrelith',
@@ -1069,6 +1110,41 @@ describe('portable project resume', () => {
       persisted: true,
       projectBindingId: 'local-project:test',
     })
+  })
+
+  test('activates the explicit root from a validated multi-sequence project', async () => {
+    const savedProject = makeProject([], 'Multi-sequence work')
+    let id = 0
+    const duplicated = duplicateProjectSequence(
+      savedProject,
+      savedProject.rootSequenceId,
+      'Delivery cut',
+      (kind: SequenceEntityKind) => `delivery_${kind}_${++id}`,
+    )
+    if (duplicated.failure) throw new Error(duplicated.failure)
+    const deliveryId = duplicated.sequenceId!
+    const multiProject: ProjectFile = {
+      ...savedProject,
+      ...duplicated.project,
+      rootSequenceId: deliveryId,
+    }
+    const serialized = serializeProjectFile(multiProject)
+    const deps = makeDeps({ readText: vi.fn(async () => serialized) })
+
+    await expect(openProjectFile(
+      new File([serialized], 'multi.myrelith'),
+      deps,
+    )).resolves.toEqual({ status: 'ready' })
+    await expect(activateResumedProject(deps)).resolves.toEqual({ status: 'activated' })
+
+    expect(useDocumentStore.getState()).toMatchObject({
+      activeSequenceId: deliveryId,
+      doc: { id: deliveryId, name: 'Delivery cut' },
+      project: { rootSequenceId: deliveryId },
+    })
+    expect(useDocumentStore.getState().project.sequences).toHaveLength(2)
+    expect(useDocumentStore.getState().switchSequence('doc-saved')).toBe(true)
+    expect(useDocumentStore.getState().doc.name).toBe('Multi-sequence work')
   })
 
   test('activates saved collection membership with offline stable asset ids', async () => {
@@ -1225,7 +1301,7 @@ describe('portable project resume', () => {
     await expect(activateResumedProject(deps)).resolves.toEqual({
       status: 'activated',
     })
-    expect(useDocumentStore.getState().doc).toEqual(savedProject.document)
+    expect(useDocumentStore.getState().doc).toEqual(savedProject.sequences[0])
     expect(deps.startProjectPersistence).toHaveBeenCalledWith({
       fileName: 'Recovered.myrelith',
       persisted: false,

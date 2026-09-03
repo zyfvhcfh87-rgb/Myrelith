@@ -257,10 +257,9 @@ function pluginClip(): Clip {
 }
 
 function renderPluginToolbar() {
-  useDocumentStore.setState({
-    doc: { ...doc(), tracks: [track([pluginClip()])] },
-    past: [],
-    future: [],
+  useDocumentStore.getState().setDoc({
+    ...doc(),
+    tracks: [track([pluginClip()])],
   })
   const controller = {
     getEditorSnapshot: () => ({ effects: [{ effectInstanceId: 'plugin-effect' }] }),
@@ -358,7 +357,7 @@ beforeEach(() => {
   preparedPort()
 
   usePreferencesStore.setState({ ...INITIAL_PREFERENCES_STATE })
-  useDocumentStore.setState({ doc: doc(), past: [], future: [] })
+  useDocumentStore.getState().setDoc(doc())
   useMediaStore.setState({
     descriptors: new Map(),
     assets: new Map(),
@@ -432,6 +431,8 @@ describe('Export dialog configuration', () => {
     expect(screen.getByText('Horizontal 16:9 · 1280 × 720')).toBeInTheDocument()
     expect(screen.getByText('Timeline resolution (fixed)')).toBeInTheDocument()
     expect(screen.getByText('MP4 · H.264/AVC · AAC · stereo')).toBeInTheDocument()
+    expect(screen.getByText(/Export target: active sequence.*project root/u))
+      .toHaveTextContent('My / Rough: Cut.mp4')
     expect(profileRadio('Compatibility')).toBeChecked()
     expect(profileRadio('Auto')).not.toBeChecked()
     expect(screen.getByText('Available — selects Modern')).toBeInTheDocument()
@@ -454,17 +455,24 @@ describe('Export dialog configuration', () => {
   })
 
   test('derives a portrait ratio label from the fixed timeline dimensions', async () => {
-    useDocumentStore.setState({
-      doc: { ...doc(), width: 1080, height: 1920 },
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc({ ...doc(), width: 1080, height: 1920 })
     render(<Toolbar />)
     await openDialog()
 
     expect(screen.getByText('Vertical 9:16 · 1080 × 1920'))
       .toBeInTheDocument()
     expect(screen.getByText('Timeline resolution (fixed)')).toBeInTheDocument()
+  })
+
+  test('documents a deliberately active non-root sequence as the export target', async () => {
+    useDocumentStore.getState().createSequence('Social cut')
+    render(<Toolbar />)
+    await openDialog()
+
+    expect(screen.getByText(/Export target: active sequence/u))
+      .toHaveTextContent('Social cut')
+    expect(screen.getByText(/Export target: active sequence/u))
+      .not.toHaveTextContent('project root')
   })
 
   test('shows an explicit unsupported reason without silently falling back', async () => {
@@ -671,7 +679,7 @@ describe('Export dialog configuration', () => {
   })
 
   test('explains an empty timeline and never starts the controller', async () => {
-    useDocumentStore.setState({ doc: doc(false), past: [], future: [] })
+    useDocumentStore.getState().setDoc(doc(false))
     render(<Toolbar />)
     await openDialog()
 
@@ -714,10 +722,9 @@ describe('Export dialog configuration', () => {
       height: null,
       decoderConfigB64: null,
     }
-    useDocumentStore.setState({
-      doc: { ...doc(), tracks: [track([clip()]), audioTrack([voiceClip])] },
-      past: [],
-      future: [],
+    useDocumentStore.getState().setDoc({
+      ...doc(),
+      tracks: [track([clip()]), audioTrack([voiceClip])],
     })
     useMediaStore.getState().addAsset(voiceAsset)
     useMediaStore.getState().disconnectAsset('asset-audio')
@@ -978,11 +985,7 @@ describe('Export dialog lifecycle', () => {
 
   test('creates a typed WebM download with a dynamic filename and revokes it on close', async () => {
     const webProfile = exportPresetById('web').profile
-    useDocumentStore.setState({
-      doc: { ...doc(), name: 'CON.txt' },
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc({ ...doc(), name: 'CON.txt' })
     startMock.mockResolvedValue(exportResult(webProfile))
     render(<Toolbar />)
     const trigger = screen.getByRole('button', { name: 'Export' })

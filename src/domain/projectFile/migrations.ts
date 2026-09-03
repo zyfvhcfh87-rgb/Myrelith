@@ -625,7 +625,8 @@ function migrateLegacyAssetBounds(assetsValue: unknown): JsonRecord[] {
 
 /**
  * Upgrade a parsed historical value into the current format. Outer version 4
- * added durable stream bounds and outer version 5 adds Media Pool collections.
+ * added durable stream bounds, version 5 added Media Pool collections, and
+ * version 6 wraps the unchanged historical document as the sole root sequence.
  * Nested migrations remain independently versioned on TimelineDoc.
  */
 export function migrateProjectFile(value: unknown): unknown {
@@ -647,7 +648,7 @@ export function migrateProjectFile(value: unknown): unknown {
     fail('$.formatVersion', `unsupported future project format ${brandedProject.formatVersion}`)
   }
   if (
-    brandedProject.formatVersion < CURRENT_PROJECT_FORMAT_VERSION
+    brandedProject.formatVersion < 5
     && Object.prototype.hasOwnProperty.call(brandedProject, 'collections')
   ) {
     fail('$.collections', 'unknown field for this project format')
@@ -657,31 +658,61 @@ export function migrateProjectFile(value: unknown): unknown {
     case 2:
     case 3: {
       const assets = migrateLegacyAssetBounds(brandedProject.assets)
+      const document = migrateTimelineDocument(brandedProject.document, assets)
+      const { document: _legacyDocument, ...outer } = brandedProject
       return {
-        ...brandedProject,
+        ...outer,
         formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-        document: migrateTimelineDocument(brandedProject.document, assets),
+        id: document.id,
+        name: document.name,
+        rootSequenceId: document.id,
+        sequences: [document],
         assets,
         collections: [],
       }
     }
-    case 4:
+    case 4: {
+      const document = migrateTimelineDocument(
+        brandedProject.document,
+        brandedProject.assets,
+      )
+      const { document: _legacyDocument, ...outer } = brandedProject
       return {
-        ...brandedProject,
+        ...outer,
         formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-        document: migrateTimelineDocument(
-          brandedProject.document,
-          brandedProject.assets,
-        ),
+        id: document.id,
+        name: document.name,
+        rootSequenceId: document.id,
+        sequences: [document],
         collections: [],
       }
+    }
+    case 5: {
+      const document = migrateTimelineDocument(
+        brandedProject.document,
+        brandedProject.assets,
+      )
+      const { document: _legacyDocument, ...outer } = brandedProject
+      return {
+        ...outer,
+        formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
+        id: document.id,
+        name: document.name,
+        rootSequenceId: document.id,
+        sequences: [document],
+      }
+    }
     case CURRENT_PROJECT_FORMAT_VERSION:
+      boundedArray(
+        brandedProject.sequences,
+        '$.sequences',
+        PROJECT_FILE_LIMITS.maxSequences,
+      )
       return {
         ...brandedProject,
-        document: migrateTimelineDocument(
-          brandedProject.document,
-          brandedProject.assets,
-        ),
+        sequences: brandedProject.sequences.map((sequence) => (
+          migrateTimelineDocument(sequence, brandedProject.assets)
+        )),
       }
     default:
       return fail(

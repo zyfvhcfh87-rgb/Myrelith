@@ -81,10 +81,10 @@ export interface MediaImportDeps {
     signal: AbortSignal,
   ): Promise<MediaProbeResult>
   getDocument(): TimelineDoc
-  replaceDocument(document: TimelineDoc): void
+  getSequences(): readonly TimelineDoc[]
+  replaceProjectRate(rate: FrameRate): void
   hasAsset(assetId: string): boolean
   addAsset(asset: MediaAsset, compatibility: MediaCompatibilityItem): boolean
-  reconformAssets(rate: FrameRate): void
   startCompatibility(item: MediaCompatibilityItem): boolean
   hasCompatibility(id: string, requestId: string): boolean
   getCompatibility(id: string): MediaCompatibilityItem | undefined
@@ -108,12 +108,17 @@ const realDeps: MediaImportDeps = {
   createRequestId: () => `compat_${crypto.randomUUID()}`,
   inspect: inspectMediaFileCompatibility,
   getDocument: () => useDocumentStore.getState().doc,
-  replaceDocument: (document) => useDocumentStore.getState().setDoc(document),
+  getSequences: () => useDocumentStore.getState().project.sequences,
+  replaceProjectRate: (rate) => {
+    const state = useDocumentStore.getState()
+    if (!state.matchProjectFrameRate(rate)) {
+      throw new Error('project frame rate cannot change after any sequence has content')
+    }
+  },
   hasAsset: (assetId) => useMediaStore.getState().descriptors.has(assetId),
   addAsset: (asset, compatibility) => (
     useMediaStore.getState().addAsset(asset, compatibility)
   ),
-  reconformAssets: (rate) => useMediaStore.getState().reconformAssets(rate),
   startCompatibility: (item) => (
     useMediaStore.getState().startCompatibility(item)
   ),
@@ -403,6 +408,7 @@ async function importSelectedMedia(
         file.name,
         decisionDocument,
         readyAsset.frameRate,
+        deps.getSequences(),
       )
       setUi({
         phase: 'awaiting-decision',
@@ -445,6 +451,7 @@ async function importSelectedMedia(
       commitDocument,
       readyAsset.frameRate,
       decision,
+      deps.getSequences(),
     )
     if (rateDecision.kind === 'rejected') {
       throw new Error(rateDecision.message)
@@ -472,11 +479,7 @@ async function importSelectedMedia(
     retainedImports.delete(itemId)
 
     if (decision === 'match-source-rate') {
-      deps.replaceDocument({
-        ...commitDocument,
-        frameRate: { num: finalRate.num, den: finalRate.den },
-      })
-      deps.reconformAssets(finalRate)
+      deps.replaceProjectRate(finalRate)
     }
 
     if (activeImport === operation) {

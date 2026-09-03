@@ -9,6 +9,7 @@ import { createColorAdjustEffect } from '../domain/effectStack'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
+import { resetDocumentStoreForTest } from '../test/storeFixtures'
 import AdjustmentDialog from './AdjustmentDialog'
 import Inspector from './Inspector'
 import AdjustmentView from './timeline/AdjustmentView'
@@ -34,7 +35,7 @@ function documentWithAdjustment(includeUnknown = false) {
 
 beforeEach(() => {
   const document = createTimelineDoc('Empty', DEFAULT_PROJECT_SETTINGS, 'empty')
-  useDocumentStore.setState({ doc: document, past: [], future: [] })
+  resetDocumentStoreForTest(document)
   useTransportStore.getState().resetTransport()
 })
 
@@ -44,7 +45,7 @@ describe('adjustment editor surfaces', () => {
       ...DEFAULT_PROJECT_SETTINGS,
       frameRate: { num: 30_000, den: 1_001 },
     }, 'ntsc')
-    useDocumentStore.setState({ doc, past: [], future: [] })
+    resetDocumentStoreForTest(doc)
 
     render(<AdjustmentDialog onClose={vi.fn()} />)
 
@@ -84,7 +85,7 @@ describe('adjustment editor surfaces', () => {
 
   test('edits opacity/effects and exposes a portable unknown effect as bypassed', () => {
     const { document, item } = documentWithAdjustment(true)
-    useDocumentStore.setState({ doc: document, past: [], future: [] })
+    resetDocumentStoreForTest(document)
     useTransportStore.getState().setPlayheadFrame(20)
     useTransportStore.getState().setSelectedAdjustment(item.id)
     render(<Inspector />)
@@ -105,7 +106,7 @@ describe('adjustment editor surfaces', () => {
 
   test('keyboard move and split each commit one history entry', () => {
     const { document, item } = documentWithAdjustment()
-    useDocumentStore.setState({ doc: document, past: [], future: [] })
+    resetDocumentStoreForTest(document)
     useTransportStore.getState().setPlayheadFrame(20)
     render(
       <AdjustmentView

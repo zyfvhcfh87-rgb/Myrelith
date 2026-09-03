@@ -119,11 +119,12 @@ const trackById = (id: string) =>
   doc().doc.tracks.find((t) => t.id === id) as TrackData
 
 function fillHistoryToCapacity(): TimelineDoc {
-  const current = doc().doc
+  const state = doc()
+  const current = state.doc
   useDocumentStore.setState({
     doc: current,
     past: Array.from({ length: 100 }, (_, index) => ({
-      ...current,
+      ...state.project,
       name: `history-${index}`,
     })),
     future: [],
@@ -249,7 +250,7 @@ describe('placeImportedAsset', () => {
       .toEqual({ status: 'placed', assetId: 'asset-9' })
     expect(doc().doc).not.toBe(current)
     expect(doc().past).toHaveLength(100)
-    expect(doc().past[99]).toBe(current)
+    expect(doc().past[99].sequences[0]).toBe(current)
     expect(trackById('V1').clips).toHaveLength(1)
   })
 

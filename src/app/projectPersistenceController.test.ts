@@ -189,7 +189,7 @@ describe('project persistence', () => {
       projectName: 'My edit',
       projectFileName: null,
     })
-    expect(parseProjectFile(recovery.serializedProject).document.id)
+    expect(parseProjectFile(recovery.serializedProject).sequences[0].id)
       .toBe('doc-save-test')
     expect(useProjectSessionStore.getState()).toMatchObject({
       hasUnsavedChanges: true,
@@ -273,6 +273,37 @@ describe('project persistence', () => {
     expect(deps.appendRecoverySnapshot).toHaveBeenCalledOnce()
   })
 
+  test('persists every sequence while active navigation stays clean and session-only', async () => {
+    const handle = makeHandle()
+    const deps = makeDeps(handle)
+    controller = new ProjectPersistenceController(deps)
+    controller.startSession({ fileName: 'Opened.myrelith', persisted: true })
+
+    const alternateId = useDocumentStore.getState().createSequence('Alternate cut')!
+    expect(useProjectSessionStore.getState().hasUnsavedChanges).toBe(true)
+    await expect(controller.saveAs()).resolves.toMatchObject({ status: 'saved' })
+    expect(parseProjectFile(handle.writes[0]).sequences.map((sequence) => sequence.name))
+      .toEqual(['My edit', 'Alternate cut'])
+
+    vi.mocked(deps.appendRecoverySnapshot).mockClear()
+    expect(useDocumentStore.getState().switchSequence('doc-save-test')).toBe(true)
+    expect(useProjectSessionStore.getState().hasUnsavedChanges).toBe(false)
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+    expect(deps.appendRecoverySnapshot).not.toHaveBeenCalled()
+
+    expect(useDocumentStore.getState().switchSequence(alternateId)).toBe(true)
+    useDocumentStore.getState().renameSequence(alternateId, 'Alternate final')
+    expect(useProjectSessionStore.getState().hasUnsavedChanges).toBe(true)
+    await vi.advanceTimersByTimeAsync(RECOVERY_SAVE_DELAY_MS)
+
+    const recovered = parseProjectFile(
+      vi.mocked(deps.appendRecoverySnapshot).mock.calls[0][0].serializedProject,
+    )
+    expect(recovered.sequences.map((sequence) => sequence.name))
+      .toEqual(['My edit', 'Alternate final'])
+    expect(recovered).not.toHaveProperty('activeSequenceId')
+  })
+
   test('collection edits become dirty and persist in recovery and project saves', async () => {
     const handle = makeHandle()
     const deps = makeDeps(handle)
@@ -326,7 +357,7 @@ describe('project persistence', () => {
 
     expect(appendRecoverySnapshot).toHaveBeenCalledTimes(2)
     const newest = appendRecoverySnapshot.mock.calls[1][0]
-    expect(parseProjectFile(newest.serializedProject).document.tracks)
+    expect(parseProjectFile(newest.serializedProject).sequences[0].tracks)
       .toEqual(expectedTracks)
   })
 
@@ -539,7 +570,7 @@ describe('project persistence', () => {
     expect(handle.createWritable).toHaveBeenCalledOnce()
     expect(handle.closes[0]).toHaveBeenCalledOnce()
     const saved = parseProjectFile(handle.writes[0])
-    expect(saved.document.name).toBe('My edit')
+    expect(saved.sequences[0].name).toBe('My edit')
     expect(saved.assets[0]).toMatchObject({
       id: 'asset-video',
       fileName: 'source.mp4',
@@ -567,7 +598,7 @@ describe('project persistence', () => {
 
     expect(deps.pickSaveFile).toHaveBeenCalledOnce()
     expect(handle.createWritable).toHaveBeenCalledTimes(2)
-    expect(parseProjectFile(handle.writes[1]).document.tracks)
+    expect(parseProjectFile(handle.writes[1]).sequences[0].tracks)
       .toEqual(expectedTracks)
   })
 
@@ -669,7 +700,7 @@ describe('project persistence', () => {
     await vi.advanceTimersByTimeAsync(1)
 
     expect(handle.createWritable).toHaveBeenCalledTimes(2)
-    expect(parseProjectFile(handle.writes[1]).document.tracks)
+    expect(parseProjectFile(handle.writes[1]).sequences[0].tracks)
       .toEqual(expectedTracks)
     expect(useProjectSessionStore.getState().hasUnsavedChanges).toBe(false)
   })
@@ -760,7 +791,7 @@ describe('project persistence', () => {
 
     await vi.advanceTimersByTimeAsync(LIVE_SAVE_DELAY_MS)
     expect(writes).toHaveLength(2)
-    expect(parseProjectFile(writes[1]).document.tracks)
+    expect(parseProjectFile(writes[1]).sequences[0].tracks)
       .toEqual(expectedTracks)
     expect(useProjectSessionStore.getState().hasUnsavedChanges).toBe(false)
   })
@@ -781,7 +812,7 @@ describe('project persistence', () => {
     expect(deps.pickSaveFile).toHaveBeenCalledWith('My edit.myrelith')
     expect(download).not.toHaveBeenCalled()
     expect(handle.createWritable).toHaveBeenCalledOnce()
-    expect(parseProjectFile(handle.writes[0]).document.name).toBe('My edit')
+    expect(parseProjectFile(handle.writes[0]).sequences[0].name).toBe('My edit')
     expect(useProjectSessionStore.getState()).toMatchObject({
       hasUnsavedChanges: false,
       liveSaveEnabled: true,
@@ -806,7 +837,7 @@ describe('project persistence', () => {
 
     expect(deps.pickSaveFile).not.toHaveBeenCalled()
     expect(download).toHaveBeenCalledOnce()
-    expect(parseProjectFile(download.mock.calls[0][0]).document.name).toBe('My edit')
+    expect(parseProjectFile(download.mock.calls[0][0]).sequences[0].name).toBe('My edit')
     expect(useProjectSessionStore.getState()).toMatchObject({
       hasUnsavedChanges: true,
       liveSaveEnabled: false,

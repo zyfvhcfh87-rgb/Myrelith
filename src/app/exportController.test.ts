@@ -25,6 +25,7 @@ import { VideoEffectStageExecutionError } from '../pipeline/videoEffectStageExec
 import type { ExportFileDestinationCapability } from './exportFilePicker'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { resetDocumentStoreForTest } from '../test/storeFixtures'
 import {
   cancelExport,
   disposeExport,
@@ -306,7 +307,7 @@ function preparedController(
 
 beforeEach(() => {
   URL.revokeObjectURL = vi.fn() as typeof URL.revokeObjectURL
-  useDocumentStore.setState({ doc: DOC, past: [], future: [] })
+  useDocumentStore.getState().setDoc(DOC)
   useMediaStore.setState({
     descriptors: new Map(),
     assets: new Map(),
@@ -343,8 +344,7 @@ describe('exportController wiring and completion', () => {
     const sourceTrack = DOC.tracks[0]
     const sourceClip = sourceTrack?.clips[0]
     if (!sourceTrack || !sourceClip) throw new Error('export budget fixture missing')
-    useDocumentStore.setState({
-      doc: {
+    useDocumentStore.getState().setDoc({
         ...DOC,
         tracks: [{
           ...sourceTrack,
@@ -354,9 +354,6 @@ describe('exportController wiring and completion', () => {
             timelineRange: { ...sourceClip.timelineRange, durationFrames: 5_000_001 },
           }],
         }],
-      },
-      past: [],
-      future: [],
     })
 
     await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
@@ -435,7 +432,7 @@ describe('exportController wiring and completion', () => {
         })),
       })),
     }
-    useDocumentStore.setState({ doc: pluginDoc })
+    useDocumentStore.getState().setDoc(pluginDoc)
 
     await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
       /requires a prepared one-shot attempt/,
@@ -781,11 +778,7 @@ describe('exportController wiring and completion', () => {
       audioSampleRate: null,
       audioChannels: null,
     }
-    useDocumentStore.setState({
-      doc: docWithSourceClipOn('audio'),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(docWithSourceClipOn('audio'))
     useMediaStore.setState({
       assets: new Map([[videoOnly.id, videoOnly]]),
     })
@@ -809,11 +802,7 @@ describe('exportController wiring and completion', () => {
       audioSampleRate: null,
       audioChannels: null,
     }
-    useDocumentStore.setState({
-      doc: docWithSourceClipOn('audio'),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(docWithSourceClipOn('audio'))
     useMediaStore.setState({
       assets: new Map([[videoOnly.id, videoOnly]]),
     })
@@ -837,11 +826,7 @@ describe('exportController wiring and completion', () => {
   })
 
   test('audio-off does not require reconnecting an otherwise contributing audio source', async () => {
-    useDocumentStore.setState({
-      doc: docWithSourceClipOn('audio'),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(docWithSourceClipOn('audio'))
     useMediaStore.getState().disconnectAsset(ASSET.id)
     const h = makeHarness()
     const audioOff = updateExportProfile(SETTINGS, {
@@ -869,7 +854,7 @@ describe('exportController wiring and completion', () => {
         rate: { numerator: 2, denominator: 1 },
       },
     }
-    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    useDocumentStore.getState().setDoc(audioDoc)
     useMediaStore.getState().disconnectAsset(ASSET.id)
     const h = makeHarness()
 
@@ -893,7 +878,7 @@ describe('exportController wiring and completion', () => {
         rate: { numerator: 2, denominator: 1 },
       },
     }
-    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    useDocumentStore.getState().setDoc(audioDoc)
     const h = makeHarness()
 
     await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
@@ -928,7 +913,7 @@ describe('exportController wiring and completion', () => {
         id: 'hidden-linked-video',
       }],
     })
-    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    resetDocumentStoreForTest(audioDoc)
     useMediaStore.getState().disconnectAsset(ASSET.id)
     const h = makeHarness()
 
@@ -959,7 +944,7 @@ describe('exportController wiring and completion', () => {
       { ...audioDoc.tracks[0], id: 'V1', kind: 'video', clips: [video] },
       { ...audioDoc.tracks[0], id: 'A1', kind: 'audio', clips: [frozen] },
     ]
-    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    resetDocumentStoreForTest(audioDoc)
     useMediaStore.getState().disconnectAsset(ASSET.id)
     const h = makeHarness()
 
@@ -1047,7 +1032,7 @@ describe('exportController wiring and completion', () => {
         },
       ],
     }
-    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    resetDocumentStoreForTest(audioDoc)
     const h = makeHarness()
 
     await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
@@ -1187,7 +1172,7 @@ describe('exportController wiring and completion', () => {
         },
       ],
     }
-    useDocumentStore.setState({ doc: audioDoc, past: [], future: [] })
+    resetDocumentStoreForTest(audioDoc)
     const h = makeHarness()
 
     await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(
@@ -1209,7 +1194,7 @@ describe('exportController wiring and completion', () => {
         rate: { numerator: 2, denominator: 1 },
       },
     }
-    useDocumentStore.setState({ doc: videoDoc, past: [], future: [] })
+    useDocumentStore.getState().setDoc(videoDoc)
     const h = makeHarness()
 
     await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
@@ -1235,11 +1220,7 @@ describe('exportController wiring and completion', () => {
       height: null,
       decoderConfigB64: null,
     }
-    useDocumentStore.setState({
-      doc: docWithSourceClipOn('video', audioOnly.fileName),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(docWithSourceClipOn('video', audioOnly.fileName))
     useMediaStore.setState({
       assets: new Map([[audioOnly.id, audioOnly]]),
     })
@@ -1257,11 +1238,9 @@ describe('exportController wiring and completion', () => {
 
   test('does not block export for an output-suppressed offline source', async () => {
     useMediaStore.getState().disconnectAsset(ASSET.id)
-    useDocumentStore.setState({
-      doc: {
+    useDocumentStore.getState().setDoc({
         ...DOC,
         tracks: DOC.tracks.map((track) => ({ ...track, hidden: true })),
-      },
     })
     const h = makeHarness(() => completedRun())
 
@@ -1287,7 +1266,7 @@ describe('exportController wiring and completion', () => {
       expect(h.fetchBlob).toHaveBeenCalledWith(ASSET.objectUrl)
     })
     mutableSettings.videoBitrate = 1
-    useDocumentStore.setState({ doc: { ...DOC, name: 'Edited later' } })
+    useDocumentStore.getState().setDoc({ ...DOC, name: 'Edited later' })
     useMediaStore.getState().removeAsset(ASSET.id)
     expect(URL.revokeObjectURL).toHaveBeenCalledWith(ASSET.objectUrl)
 

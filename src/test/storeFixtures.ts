@@ -34,7 +34,7 @@ export function resetTransportStoreForTest(
 /** Install a document without carrying history between tests. */
 export function resetDocumentStoreForTest(document: TimelineDoc): void {
   act(() => {
-    useDocumentStore.setState({ doc: document, past: [], future: [] })
+    useDocumentStore.getState().setDoc(document)
   })
 }
 

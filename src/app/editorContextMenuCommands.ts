@@ -630,7 +630,10 @@ export function resolveEditorContextMenu(
           item(
             'asset.remove',
             'Remove from project',
-            unavailable ?? mediaAssetRemovalDisabledReason(doc, target.assetId),
+            unavailable ?? mediaAssetRemovalDisabledReason(
+              useDocumentStore.getState().project,
+              target.assetId,
+            ),
             { danger: true, separatorBefore: true },
           ),
         ],
@@ -782,9 +785,9 @@ export function executeEditorContextMenuItem(
       return { executed: true, reason: null }
     case 'asset.remove':
       if (target.kind !== 'asset') return executionFailure(null)
-      return removeMediaAssetFromProject(before, target.assetId)
+      return removeMediaAssetFromProject(document.project, target.assetId)
         ? { executed: true, reason: null }
-        : executionFailure(mediaAssetRemovalDisabledReason(before, target.assetId))
+        : executionFailure(mediaAssetRemovalDisabledReason(document.project, target.assetId))
   }
   return useDocumentStore.getState().doc === before
     ? executionFailure('The project changed before this command could be applied.')

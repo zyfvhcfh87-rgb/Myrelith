@@ -204,8 +204,7 @@ interface Fixture {
   currentDocument(): TimelineDoc
   setDocument(document: TimelineDoc): void
   inspect: ReturnType<typeof vi.fn<MediaImportDeps['inspect']>>
-  replaceDocument: ReturnType<typeof vi.fn<MediaImportDeps['replaceDocument']>>
-  reconformAssets: ReturnType<typeof vi.fn<MediaImportDeps['reconformAssets']>>
+  replaceProjectRate: ReturnType<typeof vi.fn<MediaImportDeps['replaceProjectRate']>>
   rememberMediaHandle: ReturnType<
     typeof vi.fn<MediaImportDeps['rememberMediaHandle']>
   >
@@ -229,10 +228,8 @@ function makeFixture(
     _rate: FrameRate,
     assetId: string,
   ) => readyProbe({ ...analyzed, id: assetId }))
-  const replaceDocument = vi.fn((next: TimelineDoc) => {
-    document = next
-  })
-  const reconformAssets = vi.fn((rate: FrameRate) => {
+  const replaceProjectRate = vi.fn((rate: FrameRate) => {
+    document = { ...document, frameRate: { ...rate } }
     for (const [id, asset] of assets) {
       assets.set(id, {
         ...asset,
@@ -250,7 +247,8 @@ function makeFixture(
     createRequestId: () => `request-${++requestCount}`,
     inspect,
     getDocument: () => document,
-    replaceDocument,
+    getSequences: () => [document],
+    replaceProjectRate,
     hasAsset: (id) => assets.has(id),
     addAsset: (asset, readyCompatibility) => {
       if (assets.has(asset.id)) return false
@@ -264,7 +262,6 @@ function makeFixture(
       compatibility.set(asset.id, readyCompatibility)
       return true
     },
-    reconformAssets,
     startCompatibility: (item) => {
       const current = compatibility.get(item.id)
       if (current?.status === 'checking' || assets.has(item.id)) return false
@@ -296,8 +293,7 @@ function makeFixture(
       document = next
     },
     inspect,
-    replaceDocument,
-    reconformAssets,
+    replaceProjectRate,
     rememberMediaHandle,
     revokeObjectURL,
   }
@@ -408,7 +404,7 @@ describe('mediaImportController', () => {
       durationFrames: 60,
       frameRate: F30,
     })
-    expect(fixture.replaceDocument).not.toHaveBeenCalled()
+    expect(fixture.replaceProjectRate).not.toHaveBeenCalled()
     expect(fixture.revokeObjectURL).not.toHaveBeenCalled()
     expect(useMediaImportStore.getState().phase).toBe('idle')
     expect(fixture.compatibility.get('asset-new')).toMatchObject({
@@ -580,7 +576,6 @@ describe('mediaImportController', () => {
     })
     expect(fixture.currentDocument().frameRate).toEqual(F30)
     expect(fixture.assets.get('asset-new')?.durationFrames).toBe(60)
-    expect(fixture.reconformAssets).not.toHaveBeenCalled()
   })
 
   test('Match changes an empty project and re-conforms all unused media', async () => {
@@ -602,8 +597,7 @@ describe('mediaImportController', () => {
     expect(fixture.currentDocument().tracks.map((track) => track.id)).toEqual([
       'V1', 'V2', 'V3', 'V4', 'A1', 'A2', 'A3', 'A4',
     ])
-    expect(fixture.replaceDocument).toHaveBeenCalledOnce()
-    expect(fixture.reconformAssets).toHaveBeenCalledWith(F60)
+    expect(fixture.replaceProjectRate).toHaveBeenCalledOnce()
     expect(fixture.assets.get('existing')?.durationFrames).toBe(120)
     expect(fixture.assets.get('asset-new')?.durationFrames).toBe(120)
   })
@@ -643,7 +637,7 @@ describe('mediaImportController', () => {
 
     expect(useMediaImportStore.getState().prompt).toMatchObject({
       canMatchSource: false,
-      matchUnavailableReason: expect.stringContaining('clips have been added'),
+      matchUnavailableReason: expect.stringContaining('timed content'),
     })
     expect(resolveMediaImportDecision('match-source-rate')).toBe(false)
     expect(cancelMediaImport()).toBe(true)
@@ -886,8 +880,7 @@ describe('mediaImportController', () => {
     })
 
     expect(fixture.inspect).toHaveBeenCalledTimes(2)
-    expect(fixture.replaceDocument).not.toHaveBeenCalled()
-    expect(fixture.reconformAssets).not.toHaveBeenCalled()
+    expect(fixture.replaceProjectRate).not.toHaveBeenCalled()
     expect(fixture.assets.get('asset-new')).toMatchObject({
       objectUrl: 'blob:limited-audio-confirmed',
       kind: 'audio',

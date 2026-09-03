@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { estimateDocumentMemory } from '../../domain/documentMemory'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../../domain/projectSettings'
+import { sequenceProjectFromTimeline } from '../../domain/projectSequences'
 import {
   PERFORMANCE_ARTIFACT_SCHEMA_VERSION,
   PERFORMANCE_HARNESS_VERSION,
@@ -252,7 +253,11 @@ describe('performance evidence contract', () => {
       },
       telemetry: {
         documentMemory: estimateDocumentMemory(
-          createTimelineDoc('Telemetry', DEFAULT_PROJECT_SETTINGS, 'telemetry'),
+          sequenceProjectFromTimeline(createTimelineDoc(
+            'Telemetry',
+            DEFAULT_PROJECT_SETTINGS,
+            'telemetry',
+          )),
           [],
           [],
         ),

@@ -213,7 +213,7 @@ describe('media import frame-rate decisions', () => {
       name: 'edited timeline',
       document: withTimelineClip(makeDocument()),
       sourceRate: F60,
-      reason: 'Matching is unavailable after clips have been added to the timeline.',
+      reason: 'Matching is unavailable after timed content has been added to any sequence.',
     },
   ])('keeps Match visible but unavailable for $name', ({
     document,
@@ -223,6 +223,21 @@ describe('media import frame-rate decisions', () => {
     expect(createMediaImportPrompt('source.mp4', document, sourceRate)).toMatchObject({
       canMatchSource: false,
       matchUnavailableReason: reason,
+    })
+  })
+
+  test('disables matching when a dormant sequence contains timed content', () => {
+    const active = makeDocument()
+    const dormant = withTimelineClip({ ...makeDocument(), id: 'dormant' })
+    expect(createMediaImportPrompt(
+      'source.mp4',
+      active,
+      F60,
+      [active, dormant],
+    )).toMatchObject({
+      canMatchSource: false,
+      matchUnavailableReason:
+        'Matching is unavailable after timed content has been added to any sequence.',
     })
   })
 
@@ -312,7 +327,7 @@ describe('media import frame-rate decisions', () => {
       expected: {
         kind: 'rejected',
         reason: 'source-rate-unavailable',
-        message: 'Matching is unavailable after clips have been added to the timeline.',
+        message: 'Matching is unavailable after timed content has been added to any sequence.',
       },
     },
   ])('revalidates Match for an $name', ({ document, sourceRate, expected }) => {
