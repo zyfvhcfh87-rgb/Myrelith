@@ -1006,12 +1006,24 @@ describe('previewController', () => {
     ])
   })
 
-  test('projects nested child clip effects into preview status', async () => {
+  test('projects nested child effects at mapped time across repeated instances', async () => {
     const { deps, bridge } = makeDeps()
     const image = seedImageAsset({ id: 'nested-effect-still' })
     const effect = createColorAdjustEffect('fx-nested-child')
     const childClip = makeStillClip('nested-effect-clip', image.id)
-    childClip.effects = [effect]
+    const mask = createMaskEffect('fx-nested-mask', 'rectangle')
+    childClip.effects = [effect, mask]
+    childClip.animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: mask.id,
+        parameter: 'width',
+        keyframes: [
+          { frame: 0, value: 1, easing: { type: 'hold' } },
+          { frame: 5, value: 0.5, easing: { type: 'hold' } },
+        ],
+      }],
+    }
     const child: TimelineDoc = {
       ...initialDoc,
       id: 'nested-effect-child',
@@ -1044,8 +1056,8 @@ describe('previewController', () => {
           id: 'nested-effect-use',
           name: 'Nested effect use',
           sequenceId: child.id,
-          sourceStartFrame: 0,
-          timelineRange: { startFrame: 0, durationFrames: 10 },
+          sourceStartFrame: 3,
+          timelineRange: { startFrame: 20, durationFrames: 6 },
         }],
         adjustments: [],
         transitions: [],
@@ -1055,6 +1067,15 @@ describe('previewController', () => {
         locked: false,
       }],
     }
+    root.tracks.push({
+      ...root.tracks[0],
+      id: 'nested-effect-root-V2',
+      sequenceInstances: [{
+        ...root.tracks[0].sequenceInstances![0],
+        id: 'nested-effect-use-again',
+        sourceStartFrame: 0,
+      }],
+    })
     useDocumentStore.getState().setProject({
       id: 'nested-effect-project',
       name: 'Nested effect project',
@@ -1070,6 +1091,26 @@ describe('previewController', () => {
     bridge.onRendererCapabilities?.({ canvasFilter: true, canvasPixelAccess: true })
 
     expect(usePreviewStatusStore.getState().effectStatuses.get(effect.id))
+      .toMatchObject({ status: 'ready' })
+    bridge.onRendererCapabilities?.({ canvasFilter: false, canvasPixelAccess: false })
+    useTransportStore.getState().setPlayheadFrame(20)
+    await nextFrame()
+    expect(usePreviewStatusStore.getState().effectStatuses.get(mask.id))
+      .toMatchObject({ status: 'ready' })
+    useTransportStore.getState().setPlayheadFrame(22)
+    await nextFrame()
+    expect(usePreviewStatusStore.getState().effectStatuses.get(mask.id))
+      .toMatchObject({ status: 'unsupported' })
+    // Capability refresh must use the same mapped time as the rendered frame.
+    bridge.onRendererCapabilities?.({ canvasFilter: true, canvasPixelAccess: true })
+    expect(usePreviewStatusStore.getState().effectStatuses.get(mask.id))
+      .toMatchObject({ status: 'ready' })
+    bridge.onRendererCapabilities?.({ canvasFilter: false, canvasPixelAccess: false })
+    expect(usePreviewStatusStore.getState().effectStatuses.get(mask.id))
+      .toMatchObject({ status: 'unsupported' })
+    useTransportStore.getState().setPlayheadFrame(20)
+    await nextFrame()
+    expect(usePreviewStatusStore.getState().effectStatuses.get(mask.id))
       .toMatchObject({ status: 'ready' })
   })
 

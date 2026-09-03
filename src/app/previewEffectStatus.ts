@@ -12,6 +12,7 @@ import {
   resolveClipAnimationAtFrame,
 } from '../domain/clipAnimation'
 import type { Clip, EffectId, TimelineDoc } from '../domain/schema'
+import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import type {
   PreviewEffectStatus,
 } from '../state/previewStatusStore'
@@ -106,6 +107,57 @@ export function projectIndexedPreviewEffectStatuses(
   const projected = new Map<EffectId, PreviewEffectStatus>()
   projectClips(index.effectClips, capabilities, timelineFrame, projected)
   return projected
+}
+
+const STATUS_PRIORITY: Record<PreviewEffectStatus['status'], number> = {
+  ready: 0,
+  disabled: 1,
+  unsupported: 2,
+  invalid: 3,
+}
+
+/** Nested leaves already carry animation resolved at their exact child frame. */
+export function projectPlannedPreviewEffectStatuses(
+  plan: VideoCompositionPlan,
+  capabilities: RenderWorkerCapabilities | null,
+  current: ReadonlyMap<EffectId, PreviewEffectStatus>,
+): ReadonlyMap<EffectId, PreviewEffectStatus> {
+  if (!plan.items.some((item) => item.kind === 'sequence-background')) return current
+  const available = previewCapabilities(capabilities)
+  const planned = new Map<EffectId, PreviewEffectStatus>()
+  for (const item of plan.items) {
+    const clips = item.kind === 'clip' ? [item.request.clip]
+      : item.kind === 'text' ? [item.clip]
+        : item.kind === 'crossfade' ? item.requests.map((request) => request.clip)
+          : []
+    for (const clip of clips) {
+      for (const resolution of resolveEffectStack(clip.effects, available)) {
+        const previous = planned.get(resolution.effect.id)
+        // One durable effect can be active at different times in two instances.
+        // Report an unavailable instance even if another instance is ready.
+        if (previous && STATUS_PRIORITY[previous.status] >= STATUS_PRIORITY[resolution.status]) {
+          continue
+        }
+        planned.set(resolution.effect.id, {
+          label: resolution.label,
+          status: resolution.status,
+          detail: previewDetail(resolution.status, resolution.detail, capabilities),
+        })
+      }
+    }
+  }
+  let projected: Map<EffectId, PreviewEffectStatus> | null = null
+  for (const [id, next] of planned) {
+    const previous = current.get(id)
+    if (
+      previous?.label === next.label
+      && previous.status === next.status
+      && previous.detail === next.detail
+    ) continue
+    projected ??= new Map(current)
+    projected.set(id, next)
+  }
+  return projected ?? current
 }
 
 /** Refresh only effect owners whose scalar parameters can change at the playhead. */

@@ -99,6 +99,7 @@ import {
 import {
   createPreviewEffectStatusIndex,
   projectIndexedPreviewEffectStatuses,
+  projectPlannedPreviewEffectStatuses,
   refreshAnimatedPreviewEffectStatuses,
   type PreviewEffectStatusIndex,
 } from './previewEffectStatus'
@@ -590,9 +591,14 @@ function publishPreviewEffectStatuses(
 ): void {
   const index = state.effectStatusIndex
   if (!index) return
+  const indexed = projectIndexedPreviewEffectStatuses(index, capabilities, timelineFrame)
+  const hasInstances = useDocumentStore.getState().doc.tracks.some(
+    (track) => sequenceInstances(track).length > 0,
+  )
+  const plan = hasInstances ? state.visualPlanner?.planFrame(timelineFrame) : null
   usePreviewStatusStore.getState().setEffectProjection(
     capabilities,
-    projectIndexedPreviewEffectStatuses(index, capabilities, timelineFrame),
+    plan ? projectPlannedPreviewEffectStatuses(plan, capabilities, indexed) : indexed,
   )
 }
 
@@ -628,25 +634,28 @@ function scheduleRender(deps: PreviewDeps): void {
     const transport = useTransportStore.getState()
     const previewStatus = usePreviewStatusStore.getState()
     const effectStatusIndex = state.effectStatusIndex
+    let effectStatuses = previewStatus.effectStatuses
     if (effectStatusIndex?.animatedEffectClips.length) {
-      const refreshed = refreshAnimatedPreviewEffectStatuses(
+      effectStatuses = refreshAnimatedPreviewEffectStatuses(
         effectStatusIndex,
         previewStatus.rendererCapabilities,
         transport.playheadFrame,
-        previewStatus.effectStatuses,
+        effectStatuses,
       )
-      if (refreshed !== previewStatus.effectStatuses) {
-        previewStatus.setEffectProjection(
-          previewStatus.rendererCapabilities,
-          refreshed,
-        )
-      }
     }
     const media = useMediaStore.getState()
     const offlineIds: AssetId[] = []
     const seen = new Set<AssetId>()
     const visualPlan = state.visualPlanner?.planFrame(transport.playheadFrame)
     if (!visualPlan) return
+    effectStatuses = projectPlannedPreviewEffectStatuses(
+      visualPlan,
+      previewStatus.rendererCapabilities,
+      effectStatuses,
+    )
+    if (effectStatuses !== previewStatus.effectStatuses) {
+      previewStatus.setEffectProjection(previewStatus.rendererCapabilities, effectStatuses)
+    }
     for (const request of videoCompositionRequests(visualPlan)) {
       const id = request.clip.assetId
       if (
