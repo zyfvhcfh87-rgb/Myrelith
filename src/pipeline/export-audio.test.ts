@@ -19,6 +19,7 @@ import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { splitClipAtFrame, trimClip } from '../domain/operations'
 import { docDurationFrames } from '../domain/selectors'
 import { createNoiseGateEffect } from '../domain/audioEffectStack'
+import { createTimelineAudioMixPlan } from '../domain/audioMixPlan'
 import {
   audioSampleBoundary,
   EXPORT_AUDIO_BLOCK_SAMPLES,
@@ -114,7 +115,7 @@ function makeDoc(
   audioSampleRate = 48_000,
 ): TimelineDoc {
   return {
-    schemaVersion: 18,
+    schemaVersion: 19,
     id: 'doc',
     name: 'Audio export test',
     frameRate,
@@ -263,7 +264,7 @@ function crossfadeFixture(options: {
         options.frameRate ?? { num: 1, den: 1 },
         options.audioSampleRate ?? 4_096,
       ),
-      schemaVersion: 18,
+      schemaVersion: 19,
     },
     catalog: new Map(
       [...new Set(assetIds)].map((assetId) => [assetId, exactBounds()]),
@@ -1047,6 +1048,63 @@ describe('TimelineAudioMixer selection and mapping', () => {
     // clip 0.5 * track 0.5 * master 0.5 = 0.125, full left, silent right
     expect(left).toBeCloseTo(0.125)
     expect(right).toBeCloseTo(0)
+  })
+
+  test('routes a nested leaf through child track, child master, parent track, then root master', async () => {
+    const doc = makeDoc(
+      [makeTrack('A1', 'audio', [makeClip('tone', 0, 1)])],
+      { num: 1, den: 1 },
+      8,
+    )
+    const flat = createTimelineAudioMixPlan(doc, new Map())
+    const nestedPlan = {
+      ...flat,
+      clips: flat.clips.map((clip) => ({ ...clip, trackId: 'child-A1' })),
+      tracks: [
+        {
+          trackId: 'child-A1',
+          parentTrackId: 'child-master',
+          volume: 0.5,
+          balance: 0,
+          leftGain: 1,
+          rightGain: 1,
+          audioEffects: [],
+        },
+        {
+          trackId: 'child-master',
+          parentTrackId: 'A1',
+          volume: 0.5,
+          balance: 0,
+          leftGain: 1,
+          rightGain: 1,
+          audioEffects: [],
+        },
+        {
+          trackId: 'A1',
+          volume: 0.5,
+          balance: 0,
+          leftGain: 1,
+          rightGain: 1,
+          audioEffects: [],
+        },
+      ],
+      master: { ...flat.master, volume: 0.5 },
+    }
+    const h = makeSource((_request, sampleCount) => [
+      filled(sampleCount, 1),
+      filled(sampleCount, 1),
+    ])
+    const mixer = new TimelineAudioMixer(doc, h.source, new Map(), undefined, nestedPlan)
+    let sample = 0
+    try {
+      await mixer.writeFrame(0, async (block) => {
+        sample = block.channels[0][0]
+      })
+    } finally {
+      await mixer.close()
+    }
+
+    expect(sample).toBeCloseTo(0.0625)
   })
 
   test('master mute zeros the mix after the track sum', async () => {

@@ -57,7 +57,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 18,
+    schemaVersion: 19,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -599,6 +599,8 @@ describe('videoCompositionPlanAtFrame', () => {
                 weight: null,
               }]
           : item.kind === 'adjustment'
+            ? []
+          : item.kind === 'sequence-background'
             ? []
         : item.requests
             .filter((request) => request.opacity > 0 && request.weight > 0)

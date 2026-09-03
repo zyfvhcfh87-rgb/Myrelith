@@ -149,7 +149,7 @@ function makeCrossfadeAudibleDoc(): TimelineDoc {
   }]
   return {
     ...makeDoc(),
-    schemaVersion: 18,
+    schemaVersion: 19,
     tracks: [
       videoTrack,
       makeTrack('A-from', [audioFrom], 'audio'),
@@ -291,7 +291,7 @@ function deferred<T>() {
 /** One 120-frame clip at 30fps → duration 120, last frame 119. */
 function makeDoc(durationFrames = 120): TimelineDoc {
   return {
-    schemaVersion: 18,
+    schemaVersion: 19,
     id: 'doc-transport',
     name: 'transport fixture',
     frameRate: { num: 30, den: 1 },
@@ -713,6 +713,20 @@ describe('live audio integration', () => {
 
     expect(fake.startAudio).toHaveBeenCalledTimes(2)
     expect(second.stop).not.toHaveBeenCalled()
+  })
+
+  test('sequence navigation stops the active audio owner before changing context', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const session = makeAudioSession(0)
+    fake.startAudio.mockResolvedValueOnce(session)
+
+    play()
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+    expect(useDocumentStore.getState().createSequence('Nested edit')).not.toBeNull()
+
+    expect(session.stop).toHaveBeenCalledOnce()
+    expect(transport().isPlaying).toBe(false)
+    expect(fake.pendingCount()).toBe(0)
   })
 
   test('transition, link, and source-bound edits replace live crossfade audio generations', async () => {

@@ -1,11 +1,14 @@
 /** App-owned document-generation/CAS seam for explicit plugin migration. */
 
 import type { TimelineDoc } from '../domain/schema'
+import type { SequenceProject } from '../domain/projectSequences'
 import { useDocumentStore, type DocumentState } from '../state/documentStore'
 
 export interface PluginDocumentSnapshot {
   readonly generation: number
   readonly document: TimelineDoc
+  readonly project?: SequenceProject
+  readonly sequenceId?: string
 }
 
 export interface PluginDocumentGenerationController {
@@ -20,6 +23,7 @@ export interface PluginDocumentGenerationController {
 
 export interface PluginDocumentStoreAdapter {
   getState(): Pick<DocumentState, 'doc' | 'setDocWithHistory'>
+    & Partial<Pick<DocumentState, 'project' | 'activeSequenceId'>>
   subscribe(
     listener: (state: DocumentState, previous: DocumentState) => void,
   ): () => void
@@ -36,7 +40,14 @@ export function createPluginDocumentGenerationController(
 
   return Object.freeze({
     getDocumentSnapshot() {
-      return Object.freeze({ generation, document: store.getState().doc })
+      const state = store.getState()
+      return Object.freeze({
+        generation,
+        document: state.doc,
+        ...(state.project && state.activeSequenceId
+          ? { project: state.project, sequenceId: state.activeSequenceId }
+          : {}),
+      })
     },
     commitDocument(
       expectedGeneration: number,

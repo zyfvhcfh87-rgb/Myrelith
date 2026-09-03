@@ -27,6 +27,7 @@ import {
 } from './sourceTimeMap'
 import { rangeContains, rangeEnd } from './time'
 import { adjustmentItems } from './adjustmentItems'
+import type { SequenceProject } from './projectSequences'
 
 /**
  * Total document length in frames: the end of the last timeline item across all
@@ -38,6 +39,10 @@ export function docDurationFrames(doc: TimelineDoc): number {
   for (const track of doc.tracks) {
     for (const clip of track.clips) {
       const end = rangeEnd(clip.timelineRange)
+      if (end > last) last = end
+    }
+    for (const instance of track.sequenceInstances ?? []) {
+      const end = rangeEnd(instance.timelineRange)
       if (end > last) last = end
     }
     for (const adjustment of adjustmentItems(track)) {
@@ -219,6 +224,35 @@ export function documentHasOutputPluginEffects(doc: TimelineDoc): boolean {
   ))
 }
 
+export function projectReachableSequences(
+  project: SequenceProject,
+  sequenceId = project.rootSequenceId,
+): readonly TimelineDoc[] {
+  const documents: TimelineDoc[] = []
+  const visited = new Set<string>()
+  const queue = [sequenceId]
+  while (queue.length > 0) {
+    const currentId = queue.shift()!
+    if (visited.has(currentId)) continue
+    visited.add(currentId)
+    const document = project.sequences.find((candidate) => candidate.id === currentId)
+    if (!document) continue
+    documents.push(document)
+    for (const track of document.tracks) {
+      for (const instance of track.sequenceInstances ?? []) queue.push(instance.sequenceId)
+    }
+  }
+  return documents
+}
+
+export function projectHasOutputPluginEffects(
+  project: SequenceProject,
+  sequenceId = project.rootSequenceId,
+): boolean {
+  return projectReachableSequences(project, sequenceId)
+    .some(documentHasOutputPluginEffects)
+}
+
 /** Media sources that can contribute pixels or optionally samples to export. */
 export function outputMediaAssetIds(
   doc: TimelineDoc,
@@ -248,6 +282,25 @@ export function outputMediaAssetIds(
         )) ids.add(clip.assetId)
       }
     }
+  }
+  return ids
+}
+
+export function projectOutputMediaAssetIds(
+  project: SequenceProject,
+  sequenceId = project.rootSequenceId,
+  includeAudio = true,
+): Set<AssetId> {
+  const ids = new Set<AssetId>()
+  for (const document of projectReachableSequences(project, sequenceId)) {
+    const crossfadeWindows = includeAudio
+      ? createCrossfadeAudioWindowIndex(document)
+      : undefined
+    for (const assetId of outputMediaAssetIds(
+      document,
+      includeAudio,
+      crossfadeWindows,
+    )) ids.add(assetId)
   }
   return ids
 }

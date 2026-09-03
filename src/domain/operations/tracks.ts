@@ -62,6 +62,7 @@ export function addTrack(doc: TimelineDoc, kind: TrackKind): TimelineDoc {
     kind,
     name: label,
     clips: [],
+    sequenceInstances: [],
     adjustments: [],
     transitions: [],
     hidden: false,

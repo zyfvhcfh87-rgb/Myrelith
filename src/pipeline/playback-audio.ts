@@ -44,6 +44,7 @@ import {
   type TimelineAudioMasterBus,
   type TimelineAudioStretchedClipPlan,
   type TimelineAudioRampedClipPlan,
+  type TimelineAudioMixPlan,
   type TimelineAudioTrackBus,
 } from '../domain/audioMixPlan'
 import { timelineAudioMixerGraph } from '../domain/audioMixer'
@@ -387,6 +388,8 @@ export interface StartTimelineAudioOptions {
   signal?: AbortSignal
   onWarning?: (warning: TimelineAudioPlaybackWarning) => void
   sourceBoundsCatalog?: SourceBoundsCatalog
+  /** Pre-expanded project graph; absent preserves the one-document seam. */
+  mixPlan?: TimelineAudioMixPlan
 }
 
 interface PlaybackAudioClipFields {
@@ -546,11 +549,12 @@ function assertClipRange(clip: Clip): void {
 function buildAudioClipPlans(
   doc: TimelineDoc,
   catalog: SourceBoundsCatalog = EMPTY_SOURCE_BOUNDS,
+  mixPlan?: TimelineAudioMixPlan,
 ): AudioClipPlan[] {
   for (const track of audibleTracks(doc)) {
     for (const clip of track.clips) assertClipRange(clip)
   }
-  return createTimelineAudioMixPlan(doc, catalog).clips
+  return (mixPlan ?? createTimelineAudioMixPlan(doc, catalog)).clips
     .map((plan) => {
       const timelineStartTime = framesToSeconds(
         plan.timelineStartFrame,
@@ -606,7 +610,18 @@ function buildAudioClipPlans(
 export function audioPlaybackPlanKey(
   doc: TimelineDoc,
   catalog: SourceBoundsCatalog = EMPTY_SOURCE_BOUNDS,
+  mixPlan?: TimelineAudioMixPlan,
 ): string {
+  if (mixPlan) {
+    const assetIds = [...new Set(mixPlan.clips.map((clip) => clip.assetId))].sort()
+    return JSON.stringify({
+      rate: doc.frameRate,
+      sampleRate: doc.audioSampleRate,
+      durationFrames: docDurationFrames(doc),
+      mixPlan,
+      sourceBounds: assetIds.map((assetId) => [assetId, catalog.get(assetId) ?? null]),
+    })
+  }
   const assetIds = [...new Set(
     doc.tracks.flatMap((track) => track.clips.map((clip) => clip.assetId)),
   )].sort()
@@ -658,11 +673,12 @@ export function audioPlaybackAssetIds(
   doc: TimelineDoc,
   fromFrame = 0,
   catalog: SourceBoundsCatalog = EMPTY_SOURCE_BOUNDS,
+  mixPlan?: TimelineAudioMixPlan,
 ): AssetId[] {
   if (!Number.isSafeInteger(fromFrame) || fromFrame < 0) return []
   return [
     ...new Set(
-      buildAudioClipPlans(doc, catalog)
+      buildAudioClipPlans(doc, catalog, mixPlan)
         .filter((plan) =>
           plan.timelineEndFrame > fromFrame
           && !(isRampedPlaybackPlan(plan) && plan.ramp.silent)
@@ -676,9 +692,10 @@ export function hasAudioPlaybackContent(
   doc: TimelineDoc,
   fromFrame: number,
   catalog: SourceBoundsCatalog = EMPTY_SOURCE_BOUNDS,
+  mixPlan?: TimelineAudioMixPlan,
 ): boolean {
   if (!Number.isSafeInteger(fromFrame) || fromFrame < 0) return false
-  return buildAudioClipPlans(doc, catalog).some(
+  return buildAudioClipPlans(doc, catalog, mixPlan).some(
     (plan) => plan.timelineEndFrame > fromFrame,
   )
 }
@@ -1341,7 +1358,6 @@ export function createWebAudioPlaybackOutput(
       input.connect(balance.input)
       balance.output.connect(fx.input)
       fx.output.connect(meter.input)
-      meter.output.connect(masterSum)
       const bus: TrackPlaybackBus = {
         input,
         meter,
@@ -1349,6 +1365,19 @@ export function createWebAudioPlaybackOutput(
       }
       trackBuses.set(track.trackId, bus)
       graphNodes.push(...bus.nodes)
+    }
+    for (const track of mixer.tracks) {
+      const bus = trackBuses.get(track.trackId)
+      if (!bus) continue
+      const parent = track.parentTrackId
+        ? trackBuses.get(track.parentTrackId)?.input
+        : masterSum
+      if (!parent) {
+        throw new RangeError(
+          `Audio bus "${track.trackId}" has missing parent "${track.parentTrackId}"`,
+        )
+      }
+      bus.meter.output.connect(parent)
     }
     clipDestination = masterSum
   } else {
@@ -1651,12 +1680,16 @@ export async function startTimelineAudioPlayback(
   const plans = buildAudioClipPlans(
     doc,
     options.sourceBoundsCatalog ?? EMPTY_SOURCE_BOUNDS,
+    options.mixPlan,
   ).filter(
     (plan) => plan.timelineEndFrame > fromFrame,
   )
   const fromTime = framesToSeconds(fromFrame, doc.frameRate)
   const durationTime = framesToSeconds(durationFrames, doc.frameRate)
-  const output = deps.createOutput(context, timelineAudioMixerGraph(doc))
+  const output = deps.createOutput(
+    context,
+    options.mixPlan ?? timelineAudioMixerGraph(doc),
+  )
   const media = deps.createMediaSource(resolveAsset)
   const cursorStates = new Map<ClipId, ClipCursorState>()
   const failedClips = new Set<ClipId>()

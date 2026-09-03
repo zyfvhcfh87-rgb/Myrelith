@@ -8,6 +8,7 @@ export const SEQUENCE_PROJECT_LIMITS = Object.freeze({
   maxSequences: 256,
   maxTotalTracks: 4_096,
   maxTotalClips: 100_000,
+  maxTotalSequenceInstances: 100_000,
   maxTotalAdjustments: 100_000,
   maxTotalTransitions: 100_000,
   maxTotalMarkers: 100_000,

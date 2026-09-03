@@ -1,4 +1,4 @@
-import type { AdjustmentAnimationKeyframe, AdjustmentItem, CaptionItem, CaptionTrack, Clip, MasterAudioSettings, TimelineDoc, TimelineMarker, Track } from '../schema';
+import type { AdjustmentAnimationKeyframe, AdjustmentItem, CaptionItem, CaptionTrack, Clip, MasterAudioSettings, SequenceInstance, TimelineDoc, TimelineMarker, Track } from '../schema';
 import { adjustmentAnimationValidationError, adjustmentItemValidationError } from '../adjustmentItems';
 import { MAX_ANIMATED_FINITE_MAGNITUDE, MAX_KEYFRAME_FRAME, MAX_KEYFRAMES_PER_TRACK } from '../clipAnimation';
 import { CAPTION_LIMITS, CAPTION_STYLE_PRESETS, CAPTION_TRACK_ROLES, captionDocumentValidationError, captionTrackValidationError, compareCaptionItems } from '../captions';
@@ -107,6 +107,50 @@ import {
   SEQUENCE_PROJECT_LIMITS,
   sequenceSettingsEqual,
 } from '../projectSequences';
+import { analyzeNestedSequenceGraph } from '../nestedSequences';
+
+function validateSequenceInstance(
+  value: unknown,
+  path: string,
+  context: ValidationContext,
+): SequenceInstance {
+  const instance = record(value, path)
+  exactKeys(
+    instance,
+    ['kind', 'id', 'name', 'sequenceId', 'sourceStartFrame', 'timelineRange'],
+    ['linkGroupId'],
+    path,
+  )
+  if (instance.kind !== 'sequence') fail(`${path}.kind`, 'expected sequence')
+  stringValue(instance.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (context.timelineItemIds.has(instance.id)) {
+    fail(`${path}.id`, 'duplicate timeline item id')
+  }
+  context.timelineItemIds.add(instance.id)
+  stringValue(instance.name, `${path}.name`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  stringValue(
+    instance.sequenceId,
+    `${path}.sequenceId`,
+    PROJECT_FILE_LIMITS.maxIdCharacters,
+  )
+  safeInteger(instance.sourceStartFrame, `${path}.sourceStartFrame`, 0)
+  validateRange(instance.timelineRange, `${path}.timelineRange`, 1)
+  const typed = instance as unknown as SequenceInstance
+  const sourceEnd = typed.sourceStartFrame + typed.timelineRange.durationFrames
+  if (!Number.isSafeInteger(sourceEnd)) fail(path, 'source range must end at a safe integer')
+  if (instance.linkGroupId !== undefined) {
+    stringValue(
+      instance.linkGroupId,
+      `${path}.linkGroupId`,
+      PROJECT_FILE_LIMITS.maxIdCharacters,
+    )
+    context.linkGroupCounts.set(
+      instance.linkGroupId,
+      (context.linkGroupCounts.get(instance.linkGroupId) ?? 0) + 1,
+    )
+  }
+  return typed
+}
 
 function validateTimelineMarker(
   value: unknown,
@@ -277,7 +321,7 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   const track = record(value, path)
   exactKeys(
     track,
-    ['id', 'kind', 'name', 'clips', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked', 'volume', 'balance', 'audioEffects'],
+    ['id', 'kind', 'name', 'clips', 'sequenceInstances', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked', 'volume', 'balance', 'audioEffects'],
     [],
     path,
   )
@@ -305,13 +349,44 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
     previousEnd = clip.timelineRange.startFrame + clip.timelineRange.durationFrames
     clipIndexById.set(clip.id, index)
   }
+  boundedArray(
+    track.sequenceInstances,
+    `${path}.sequenceInstances`,
+    PROJECT_FILE_LIMITS.maxSequenceInstances,
+  )
+  context.sequenceInstanceCount += track.sequenceInstances.length
+  if (context.sequenceInstanceCount > PROJECT_FILE_LIMITS.maxSequenceInstances) {
+    fail(
+      '$.sequences',
+      `exceeds ${PROJECT_FILE_LIMITS.maxSequenceInstances} sequence instances in total`,
+    )
+  }
+  const allItemRanges = (track.clips as Clip[]).map((clip) => clip.timelineRange)
+  let previousInstanceEnd = -1
+  for (let index = 0; index < track.sequenceInstances.length; index++) {
+    const itemPath = `${path}.sequenceInstances[${index}]`
+    const item = validateSequenceInstance(
+      track.sequenceInstances[index],
+      itemPath,
+      context,
+    )
+    if (item.timelineRange.startFrame < previousInstanceEnd) {
+      fail(itemPath, 'sequence instances must be sorted and non-overlapping')
+    }
+    if (allItemRanges.some((range) => (
+      item.timelineRange.startFrame < range.startFrame + range.durationFrames
+      && range.startFrame < item.timelineRange.startFrame + item.timelineRange.durationFrames
+    ))) fail(itemPath, 'sequence instance overlaps another item on the owning track')
+    previousInstanceEnd = item.timelineRange.startFrame
+      + item.timelineRange.durationFrames
+    allItemRanges.push(item.timelineRange)
+  }
   boundedArray(track.adjustments, `${path}.adjustments`, PROJECT_FILE_LIMITS.maxAdjustments)
   context.adjustmentCount += track.adjustments.length
   if (context.adjustmentCount > PROJECT_FILE_LIMITS.maxAdjustments) {
     fail('$.sequences', `exceeds ${PROJECT_FILE_LIMITS.maxAdjustments} adjustments in total`)
   }
   let previousAdjustmentEnd = -1
-  const allItemRanges = (track.clips as Clip[]).map((clip) => clip.timelineRange)
   for (let index = 0; index < track.adjustments.length; index++) {
     const itemPath = `${path}.adjustments[${index}]`
     const item = validateAdjustment(track.adjustments[index], itemPath, track.kind, context)
@@ -498,6 +573,7 @@ export function validateProjectFile(value: unknown): ProjectFile {
     transitionIds: new Set(),
     linkGroupCounts: new Map(),
     clipCount: 0,
+    sequenceInstanceCount: 0,
     adjustmentCount: 0,
     effectCount: 0,
     effectParamCount: 0,
@@ -562,6 +638,14 @@ export function validateProjectFile(value: unknown): ProjectFile {
   }
   if (totalCaptionItems > SEQUENCE_PROJECT_LIMITS.maxTotalCaptionItems) {
     fail('$.sequences', `exceeds ${SEQUENCE_PROJECT_LIMITS.maxTotalCaptionItems} caption items in total`)
+  }
+  try {
+    analyzeNestedSequenceGraph(project as unknown as ProjectFile)
+  } catch (cause) {
+    fail(
+      '$.sequences',
+      cause instanceof Error ? cause.message : 'invalid nested sequence graph',
+    )
   }
   return project as unknown as ProjectFile
 }

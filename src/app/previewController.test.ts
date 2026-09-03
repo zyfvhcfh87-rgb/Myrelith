@@ -9,6 +9,9 @@ import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import {
+  createProjectVideoCompositionPlanner,
+} from '../domain/projectVideoCompositionPlan'
+import {
   createVideoCompositionPlanner,
   type VideoCompositionPlan,
 } from '../domain/videoCompositionPlan'
@@ -24,6 +27,7 @@ import type {
   Clip,
   FrameRate,
   MediaAsset,
+  SequenceInstance,
   TimelineDoc,
   Track,
 } from '../domain/schema'
@@ -922,6 +926,84 @@ describe('previewController', () => {
     seedAsset({ id: 'audio-poke', kind: 'audio', frameRate: null })
     await flush()
     expect(bridge.openedImages).toHaveLength(1)
+  })
+
+  test('resolves nested plans and worker resources through the project seam', async () => {
+    const { deps, bridge } = makeDeps()
+    const image = seedImageAsset({ id: 'nested-still' })
+    const child: TimelineDoc = {
+      ...initialDoc,
+      id: 'nested-child',
+      name: 'Nested child',
+      tracks: [{
+        id: 'nested-child-V1',
+        kind: 'video',
+        name: 'V1',
+        clips: [makeStillClip('nested-child-clip', image.id)],
+        sequenceInstances: [],
+        adjustments: [],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      }],
+    }
+    const instance: SequenceInstance = {
+      kind: 'sequence',
+      id: 'nested-use',
+      name: 'Nested use',
+      sequenceId: child.id,
+      sourceStartFrame: 0,
+      timelineRange: { startFrame: 0, durationFrames: 10 },
+    }
+    const root: TimelineDoc = {
+      ...initialDoc,
+      id: 'nested-root',
+      name: 'Nested root',
+      tracks: [{
+        id: 'nested-root-V1',
+        kind: 'video',
+        name: 'V1',
+        clips: [],
+        sequenceInstances: [instance],
+        adjustments: [],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      }],
+    }
+    useDocumentStore.getState().setProject({
+      id: 'nested-project',
+      name: 'Nested project',
+      rootSequenceId: root.id,
+      sequences: [root, child],
+    })
+    deps.createProjectVisualPlanner = (project, sequenceId, catalog, plugins) => {
+      bridge.catalogs.push(new Map(catalog))
+      return createProjectVideoCompositionPlanner(
+        project,
+        sequenceId,
+        catalog,
+        plugins,
+      )
+    }
+
+    initPreview(canvasEl(), deps)
+    await flush()
+    await nextFrame()
+
+    expect(bridge.docs[0].tracks.map((track) => track.id)).toEqual([
+      'nested-root-V1',
+      'nested-child-V1',
+    ])
+    expect(bridge.openedImages.map((entry) => entry.assetId)).toEqual([image.id])
+    expect(bridge.renderPlans.at(-1)?.items.map((item) => item.kind)).toEqual([
+      'sequence-background',
+      'clip',
+    ])
   })
 
   test('keeps an unreferenced still out of the worker', async () => {

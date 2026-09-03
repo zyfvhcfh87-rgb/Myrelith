@@ -32,6 +32,7 @@ import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { VideoScopeAnalysis } from '../domain/videoScopes'
 import {
   videoCompositionRequests,
+  videoCompositionRequestKey,
   type VideoCompositionPlan,
 } from '../domain/videoCompositionPlan'
 import type {
@@ -541,7 +542,7 @@ export class RenderWorkerBridge {
       if (source.kind === 'image') {
         entries.push({
           kind: 'image',
-          clipId: clip.id,
+          clipId: videoCompositionRequestKey(request),
           assetId: clip.assetId,
           sourceFrame: 0,
           targetTimestampUs: 0,
@@ -549,7 +550,7 @@ export class RenderWorkerBridge {
       } else {
         entries.push({
           kind: 'video',
-          clipId: clip.id,
+          clipId: videoCompositionRequestKey(request),
           assetId: clip.assetId,
           sourceFrame: request.sourceFrame,
           targetTimestampUs: framesToMicroseconds(request.sourceFrame, doc.frameRate),

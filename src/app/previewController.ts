@@ -37,6 +37,13 @@ import {
   type PresentationViewport,
 } from '../domain/presentationProfile'
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
+import {
+  replaceProjectSequence,
+  sequenceById,
+  type SequenceProject,
+} from '../domain/projectSequences'
+import { createProjectVideoCompositionPlanner } from '../domain/projectVideoCompositionPlan'
+import { sequenceInstances } from '../domain/nestedSequences'
 import type { VideoScopeAnalysis } from '../domain/videoScopes'
 import { updateClipVisualAtFrame } from '../domain/operations'
 import {
@@ -146,6 +153,12 @@ export interface PreviewDeps {
   createBridge(pluginEffectHandler: PluginEffectBridgeHandler): BridgeLike
   createVisualPlanner(
     doc: TimelineDoc,
+    catalog: SourceBoundsCatalog,
+    pluginContributions?: PluginVideoEffectContributionSnapshot,
+  ): VideoCompositionPlanner
+  createProjectVisualPlanner?(
+    project: SequenceProject,
+    sequenceId: string,
     catalog: SourceBoundsCatalog,
     pluginContributions?: PluginVideoEffectContributionSnapshot,
   ): VideoCompositionPlanner
@@ -263,6 +276,7 @@ const realDeps: PreviewDeps = {
   createVisualPlanner: (doc, catalog, pluginContributions) => (
     createVideoCompositionPlanner(doc, catalog, pluginContributions)
   ),
+  createProjectVisualPlanner: createProjectVideoCompositionPlanner,
   transferCanvas: (canvas) => canvas.transferControlToOffscreen(),
   init: (bridge, offscreen) => (bridge as RenderWorkerBridge).init(offscreen),
   fetchBlob: (url) => fetch(url).then((r) => r.blob()),
@@ -345,6 +359,20 @@ function createCurrentVisualPlanner(
   pluginContributions = currentPluginContributions(),
 ): VideoCompositionPlanner {
   state.pluginCatalogGeneration = pluginContributions?.catalogGeneration ?? null
+  if (deps.createProjectVisualPlanner) {
+    const documentState = useDocumentStore.getState()
+    const project = replaceProjectSequence(
+      documentState.project,
+      documentState.activeSequenceId,
+      doc,
+    )
+    return deps.createProjectVisualPlanner(
+      project,
+      documentState.activeSequenceId,
+      catalog,
+      pluginContributions,
+    )
+  }
   return deps.createVisualPlanner(doc, catalog, pluginContributions)
 }
 
@@ -531,6 +559,31 @@ function currentPreviewDocument(): TimelineDoc {
   )
 }
 
+function currentPreviewRenderDocument(doc: TimelineDoc): TimelineDoc {
+  if (!state.deps?.createProjectVisualPlanner) return doc
+  const documentState = useDocumentStore.getState()
+  const project = replaceProjectSequence(
+    documentState.project,
+    documentState.activeSequenceId,
+    doc,
+  )
+  const tracks = [] as TimelineDoc['tracks']
+  const visited = new Set<string>()
+  const queue = [documentState.activeSequenceId]
+  while (queue.length > 0) {
+    const sequenceId = queue.shift()!
+    if (visited.has(sequenceId)) continue
+    visited.add(sequenceId)
+    const sequence = sequenceById(project, sequenceId)
+    if (!sequence) continue
+    tracks.push(...sequence.tracks)
+    for (const track of sequence.tracks) {
+      for (const instance of sequenceInstances(track)) queue.push(instance.sequenceId)
+    }
+  }
+  return visited.size === 1 ? doc : { ...doc, tracks }
+}
+
 function publishPreviewEffectStatuses(
   capabilities = usePreviewStatusStore.getState().rendererCapabilities,
   timelineFrame = useTransportStore.getState().playheadFrame,
@@ -551,7 +604,7 @@ function rebuildPreviewEffectStatusIndex(doc: TimelineDoc): void {
 function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {
   const doc = currentPreviewDocument()
   state.visualPlanner = createCurrentVisualPlanner(deps, doc)
-  bridge.setDoc(doc)
+  bridge.setDoc(currentPreviewRenderDocument(doc))
   rebuildPreviewEffectStatusIndex(doc)
   syncPresentationProfile(bridge, doc)
 }
@@ -844,13 +897,32 @@ function documentAssetIds(doc: TimelineDoc): Set<AssetId> {
   return ids
 }
 
+function currentProjectAssetIds(): Set<AssetId> {
+  const documentState = useDocumentStore.getState()
+  const ids = new Set<AssetId>()
+  const visited = new Set<string>()
+  const queue = [documentState.activeSequenceId]
+  while (queue.length > 0) {
+    const sequenceId = queue.shift()!
+    if (visited.has(sequenceId)) continue
+    visited.add(sequenceId)
+    const sequence = sequenceById(documentState.project, sequenceId)
+    if (!sequence) continue
+    for (const assetId of documentAssetIds(sequence)) ids.add(assetId)
+    for (const track of sequence.tracks) {
+      for (const instance of sequenceInstances(track)) queue.push(instance.sequenceId)
+    }
+  }
+  return ids
+}
+
 /** Reconcile worker-owned sources with connected media + document references. */
 function syncAssets(deps: PreviewDeps): void {
   const bridge = state.bridge
   if (!bridge) return
   const media = useMediaStore.getState()
   const assets = media.assets
-  const referencedIds = documentAssetIds(useDocumentStore.getState().doc)
+  const referencedIds = currentProjectAssetIds()
   const desiredIds = new Set<AssetId>()
 
   for (const [assetId, descriptor] of media.descriptors) {
@@ -971,7 +1043,7 @@ export function initPreview(
   const initialBounds = currentSourceBoundsCatalog()
   state.visualPlanner = createCurrentVisualPlanner(deps, initialDoc, initialBounds)
   state.effectStatusIndex = createPreviewEffectStatusIndex(initialDoc)
-  bridge.setDoc(initialDoc)
+  bridge.setDoc(currentPreviewRenderDocument(initialDoc))
   publishPreviewEffectStatuses(null)
   syncPresentationProfile(bridge, initialDoc)
   const scopes = useVideoScopesStore.getState()
@@ -979,7 +1051,11 @@ export function initPreview(
 
   state.unsubscribes.push(
     useDocumentStore.subscribe((s, prev) => {
-      if (s.doc !== prev.doc) {
+      if (
+        s.project !== prev.project
+        || s.activeSequenceId !== prev.activeSequenceId
+        || s.doc !== prev.doc
+      ) {
         syncPreviewDocument(bridge, deps)
         syncAssets(deps)
         scheduleRender(deps)

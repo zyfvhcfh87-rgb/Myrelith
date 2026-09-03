@@ -10,7 +10,9 @@ import {
 } from 'mediabunny'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { TimelineDoc } from '../domain/schema'
-import { docDurationFrames } from '../domain/selectors'
+import type { SequenceProject } from '../domain/projectSequences'
+import type { TimelineAudioMixPlan } from '../domain/audioMixPlan'
+import { docDurationFrames, projectReachableSequences } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
 import { exportAudioEncoderSampleRate } from '../domain/exportProfile'
 import {
@@ -157,6 +159,11 @@ export async function createMediabunnyExportSink(
   resolveAsset: ExportAssetResolver,
   sourceBounds: SourceBoundsCatalog = new Map(),
   fileDestination?: PreparedExportFileCapability,
+  projectMixPlan?: TimelineAudioMixPlan,
+  projectTarget?: Readonly<{
+    project: SequenceProject
+    sequenceId: string
+  }>,
 ): Promise<ExportVideoSink> {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -171,9 +178,11 @@ export async function createMediabunnyExportSink(
       'Browser download export cannot use a direct file destination',
     )
   }
-  const hasTimelineAudio = doc.tracks.some(
-    (track) => track.kind === 'audio' && track.clips.length > 0,
-  )
+  const hasTimelineAudio = projectMixPlan
+    ? projectMixPlan.clips.length > 0 || projectMixPlan.mutedClips.length > 0
+    : doc.tracks.some(
+        (track) => track.kind === 'audio' && track.clips.length > 0,
+      )
   const audioSettings = settings.audioChannelLayout === 'off' || !hasTimelineAudio
     ? null
     : settings
@@ -199,7 +208,17 @@ export async function createMediabunnyExportSink(
     throw new Error('OffscreenCanvas is not supported in this browser')
   }
 
-  if (documentHasUnsupportedLensCorrection(doc)) {
+  const lensDocument = projectTarget
+    ? {
+        ...doc,
+        tracks: projectReachableSequences(
+          projectTarget.project,
+          projectTarget.sequenceId,
+        ).flatMap((sequence) => sequence.tracks),
+      }
+    : doc
+
+  if (documentHasUnsupportedLensCorrection(lensDocument)) {
     throw new LensRemapUnavailableError(
       'Export is blocked because this project contains a preserved future lens-correction version.',
     )
@@ -207,7 +226,7 @@ export async function createMediabunnyExportSink(
 
   let lensBackend: WebGl2LensRemapBackend | null = null
   try {
-    if (documentHasSupportedLensCorrection(doc)) {
+    if (documentHasSupportedLensCorrection(lensDocument)) {
       lensBackend = new WebGl2LensRemapBackend()
     }
   } catch (cause) {
@@ -220,7 +239,7 @@ export async function createMediabunnyExportSink(
   let lensRemapProvider
   try {
     lensRemapProvider = createDocumentLensRemapProvider(
-      doc,
+      lensDocument,
       lensBackend,
       doc.width,
       doc.height,
@@ -282,6 +301,8 @@ export async function createMediabunnyExportSink(
           doc,
           createMediabunnyExportAudioSource(resolveAsset),
           sourceBounds,
+          undefined,
+          projectMixPlan,
         )
       : null
     source = new CanvasSource(canvas, {

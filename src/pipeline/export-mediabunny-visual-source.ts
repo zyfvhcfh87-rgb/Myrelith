@@ -12,12 +12,15 @@ import {
 } from '../codecs/mediaCodecFallbacks'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { AssetId, TimelineDoc } from '../domain/schema'
+import type { SequenceProject } from '../domain/projectSequences'
+import { createProjectVideoCompositionPlanner } from '../domain/projectVideoCompositionPlan'
 import type { PluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import { docDurationFrames } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
 import {
   createVideoCompositionPlanner,
   videoCompositionRequests,
+  type VideoCompositionPlanner,
 } from '../domain/videoCompositionPlan'
 import type {
   ExportFrameLease,
@@ -111,7 +114,7 @@ function yieldExportSchedule(): Promise<void> {
 
 async function videoRequestSchedule(
   doc: TimelineDoc,
-  planner: ReturnType<typeof createVideoCompositionPlanner>,
+  planner: VideoCompositionPlanner,
   closed: () => boolean,
 ): Promise<VideoRequestSchedule> {
   const frameCount = docDurationFrames(doc)
@@ -145,6 +148,10 @@ export function createMediabunnyExportMediaSource(
   resolveAsset: ExportAssetResolver,
   sourceBounds: SourceBoundsCatalog,
   pluginSnapshot?: PluginVideoEffectContributionSnapshot,
+  projectTarget?: Readonly<{
+    project: SequenceProject
+    sequenceId: string
+  }>,
 ): ExportMediaSource {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -153,7 +160,14 @@ export function createMediabunnyExportMediaSource(
   framesToSeconds(0, doc.frameRate)
   const sessions = new Map<AssetId, Promise<DecodedVisualAsset>>()
   const openInputs = new Set<Input>()
-  const planner = createVideoCompositionPlanner(doc, sourceBounds, pluginSnapshot)
+  const planner = projectTarget
+    ? createProjectVideoCompositionPlanner(
+        projectTarget.project,
+        projectTarget.sequenceId,
+        sourceBounds,
+        pluginSnapshot,
+      )
+    : createVideoCompositionPlanner(doc, sourceBounds, pluginSnapshot)
   const imageAbort = new AbortController()
   let closed = false
   let closePromise: Promise<void> | null = null

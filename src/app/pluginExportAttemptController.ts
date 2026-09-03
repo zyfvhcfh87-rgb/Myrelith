@@ -3,6 +3,7 @@
 import { validateExportProfile, type ExportProfile } from '../domain/exportProfile'
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import type { TimelineDoc } from '../domain/schema'
+import { sequenceById, type SequenceProject } from '../domain/projectSequences'
 import {
   createPluginVideoEffectContributionSnapshot,
   createVideoEffectStagePlanner,
@@ -115,12 +116,18 @@ export interface PluginPreparedExportExecution {
   readonly settings: Readonly<ExportProfile>
   readonly pluginSnapshot: PluginVideoEffectContributionSnapshot
   readonly videoEffectStageExecutor: VideoEffectStageExecutor
+  readonly projectTarget?: Readonly<{
+    project: SequenceProject
+    sequenceId: string
+  }>
   close(reason: string): Promise<void>
 }
 
 export interface PluginExportDocumentSnapshot {
   readonly generation: number
   readonly document: TimelineDoc
+  readonly project?: SequenceProject
+  readonly sequenceId?: string
 }
 
 export interface PluginExportAttemptControllerDependencies {
@@ -158,6 +165,10 @@ interface FrozenEffect {
 interface FrozenPlan {
   readonly document: TimelineDoc
   readonly documentGeneration: number
+  readonly projectTarget?: Readonly<{
+    project: SequenceProject
+    sequenceId: string
+  }>
   readonly settings: Readonly<ExportProfile>
   readonly catalog: PluginDeclarationCatalogSnapshot
   readonly catalogFingerprint: string
@@ -331,12 +342,33 @@ function maximumExportSurface(document: TimelineDoc): FrozenPlan['maximumSurface
 }
 
 function effectKey(
+  sequenceIndex: number,
   trackIndex: number,
   clipIndex: number,
   effectIndex: number,
   descriptorId: string,
 ): string {
-  return `${trackIndex}:${clipIndex}:${effectIndex}:${descriptorId}`
+  const local = `${trackIndex}:${clipIndex}:${effectIndex}:${descriptorId}`
+  return sequenceIndex === 0 ? local : `sequence-${sequenceIndex}:${local}`
+}
+
+function exportDocuments(snapshot: PluginExportDocumentSnapshot): readonly TimelineDoc[] {
+  if (!snapshot.project || !snapshot.sequenceId) return [snapshot.document]
+  const documents: TimelineDoc[] = []
+  const visited = new Set<string>()
+  const queue = [snapshot.sequenceId]
+  while (queue.length > 0) {
+    const sequenceId = queue.shift()!
+    if (visited.has(sequenceId)) continue
+    visited.add(sequenceId)
+    const sequence = sequenceById(snapshot.project, sequenceId)
+    if (!sequence) throw new RangeError(`Missing plugin export sequence "${sequenceId}"`)
+    documents.push(sequence)
+    for (const track of sequence.tracks) {
+      for (const instance of track.sequenceInstances ?? []) queue.push(instance.sequenceId)
+    }
+  }
+  return documents
 }
 
 function freezePlan(
@@ -354,38 +386,46 @@ function freezePlan(
     pluginSnapshot.declarations.map((declaration) => [declaration.effectType, declaration]),
   )
   const effects: FrozenEffect[] = []
-  for (const [trackIndex, track] of snapshot.document.tracks.entries()) {
-    if (track.kind !== 'video' || track.hidden) continue
-    for (const [clipIndex, clip] of track.clips.entries()) {
-      const plan = planner.planClip(clip, clip.timelineRange.startFrame)
-      if (!plan) continue
-      for (const [effectIndex, stage] of plan.stages.entries()) {
-        if (stage.kind !== 'plugin') continue
-        const execution = stage.execution
-        const declaration = declarationsByType.get(stage.effect.type)
-        const key = effectKey(trackIndex, clipIndex, effectIndex, stage.effect.id)
-        effects.push(Object.freeze({
-          fact: Object.freeze({
-            key,
-            descriptorId: stage.effect.id,
-            effectType: stage.effect.type,
-            enabled: stage.effect.enabled,
-            pluginId: execution?.pluginId ?? declaration?.pluginId ?? null,
-            pluginVersion: execution?.pluginVersion ?? declaration?.pluginVersion ?? null,
-            packageDigest: execution?.packageDigest ?? declaration?.packageDigest ?? null,
-            signerFingerprint: execution?.signerFingerprint
-              ?? declaration?.signerFingerprint
-              ?? null,
-            contributionId: execution?.contributionId ?? declaration?.contributionId ?? null,
-            contributionVersion: execution?.contributionVersion
-              ?? declaration?.contributionVersion
-              ?? null,
-            descriptorVersion: stage.effect.version,
-            status: stage.status,
-            reason: boundedReason(stage.detail),
-          }),
-          execution,
-        }))
+  for (const [sequenceIndex, document] of exportDocuments(snapshot).entries()) {
+    for (const [trackIndex, track] of document.tracks.entries()) {
+      if (track.kind !== 'video' || track.hidden) continue
+      for (const [clipIndex, clip] of track.clips.entries()) {
+        const plan = planner.planClip(clip, clip.timelineRange.startFrame)
+        if (!plan) continue
+        for (const [effectIndex, stage] of plan.stages.entries()) {
+          if (stage.kind !== 'plugin') continue
+          const execution = stage.execution
+          const declaration = declarationsByType.get(stage.effect.type)
+          const key = effectKey(
+            sequenceIndex,
+            trackIndex,
+            clipIndex,
+            effectIndex,
+            stage.effect.id,
+          )
+          effects.push(Object.freeze({
+            fact: Object.freeze({
+              key,
+              descriptorId: stage.effect.id,
+              effectType: stage.effect.type,
+              enabled: stage.effect.enabled,
+              pluginId: execution?.pluginId ?? declaration?.pluginId ?? null,
+              pluginVersion: execution?.pluginVersion ?? declaration?.pluginVersion ?? null,
+              packageDigest: execution?.packageDigest ?? declaration?.packageDigest ?? null,
+              signerFingerprint: execution?.signerFingerprint
+                ?? declaration?.signerFingerprint
+                ?? null,
+              contributionId: execution?.contributionId ?? declaration?.contributionId ?? null,
+              contributionVersion: execution?.contributionVersion
+                ?? declaration?.contributionVersion
+                ?? null,
+              descriptorVersion: stage.effect.version,
+              status: stage.status,
+              reason: boundedReason(stage.detail),
+            }),
+            execution,
+          }))
+        }
       }
     }
   }
@@ -395,6 +435,14 @@ function freezePlan(
   return Object.freeze({
     document: snapshot.document,
     documentGeneration: snapshot.generation,
+    ...(snapshot.project && snapshot.sequenceId
+      ? {
+          projectTarget: Object.freeze({
+            project: snapshot.project,
+            sequenceId: snapshot.sequenceId,
+          }),
+        }
+      : {}),
     settings: validatedSettings,
     catalog,
     catalogFingerprint: catalogFingerprint(catalog),
@@ -686,7 +734,14 @@ export function createPluginExportAttemptController(
     if (tornDown) fail('closed', 'Plugin export attempt controller is closed')
     if (ownEpoch !== epoch) fail('stale-attempt', 'A newer plugin export attempt replaced this one')
     const current = dependencies.getDocumentSnapshot()
-    if (current.generation !== plan.documentGeneration || current.document !== plan.document) {
+    if (
+      current.generation !== plan.documentGeneration
+      || current.document !== plan.document
+      || (plan.projectTarget !== undefined && (
+        current.project !== plan.projectTarget.project
+        || current.sequenceId !== plan.projectTarget.sequenceId
+      ))
+    ) {
       fail('stale-attempt', 'The document changed during plugin export preparation')
     }
   }
@@ -878,7 +933,11 @@ export function createPluginExportAttemptController(
           !== state.binding) fail('stale-attempt', 'Plugin export attempt binding changed')
         const current = dependencies.getDocumentSnapshot()
         if (current.generation !== state.plan.documentGeneration
-          || current.document !== state.plan.document) {
+          || current.document !== state.plan.document
+          || (state.plan.projectTarget !== undefined && (
+            current.project !== state.plan.projectTarget.project
+            || current.sequenceId !== state.plan.projectTarget.sequenceId
+          ))) {
           fail('stale-attempt', 'The document changed before export started')
         }
         const catalog = await dependencies.getDeclarationCatalog(linked.signal)
@@ -914,6 +973,9 @@ export function createPluginExportAttemptController(
         settings: state.plan.settings,
         pluginSnapshot,
         videoEffectStageExecutor: createExecutor(session, state.abort.signal),
+        ...(state.plan.projectTarget
+          ? { projectTarget: state.plan.projectTarget }
+          : {}),
         close(reason: string) {
           if (closePromise) return closePromise
           closePromise = closeState(state, reason)

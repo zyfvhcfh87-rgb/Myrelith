@@ -135,6 +135,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #189 — audio automation, mixer, and effects** | ✅ merged in PR #215 as `138db35` | schema-16 automation, schema-17 mixer, schema-18 clip/track/master effects; shared live/export signal order; loudness and presets; exact-head CI/review green |
 | **Post-MVP #190 — bounded adjustment layers** | ✅ merged in PR #214 as `024ea9b` | schema-15 resource-free video-track items; full history/edit/persistence/recovery; safe post-composite color effects and bounded animation; deterministic shared preview/export order; zero additional compositor surfaces; Chromium interaction/undo/redo/responsive gate clean |
 | **Post-MVP #191 — multiple project sequences** | ✅ implementation and acceptance complete; delivery via PR #218 | project-format-6 same-settings sequence collection; explicit portable root/session active; whole-project history, CRUD UI, validation, persistence/recovery/media reconciliation, and explicit export target; Bugbot's project-identity and adjustment-only Match findings fixed; 3,732 total Vitest and 17 runner tests plus build/lint/audit green; in-app Chromium v5 migration/CRUD/root/undo/redo/export/recovery/720px gate clean; repaired code head CI/Bugbot green |
+| **Post-MVP #192 — bounded live compound sequences** | ✅ implementation and acceptance complete locally | schema-19 live sequence instances; depth-8 / 4,096-leaf whole-project admission; atomic compound edits and independent reminting; shared immutable preview/playback/export plans; black/silent gaps; portable recovery/relink; 3,758 Vitest, 17 runner, and 15 Chromium tests green plus live compound/recovery/relink QA |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Current public preview — `v0.2.0-alpha.1` First Light** | ✅ published | annotated tag resolves to `2a845c8`; verified 43-file web archive `sha256:aef2445b…`; public Linux AMD64/ARM64 GHCR index `sha256:ee060a7e…`; exact-head PR + master CI, 3,335 Vitest tests, 17 runner tests, and 10 Chromium tests passed |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
@@ -5293,3 +5294,43 @@ surface; it is not a second zoom and never enters document history.
   a project begins at the root.
 - The user authorized publication and merge on 2026-09-03, contingent on a
   rebased exact-head validation pass and completed Bugbot review.
+
+## Post-MVP issue #192 - bounded live compound and nested sequences
+
+**IMPLEMENTATION AND LOCAL ACCEPTANCE COMPLETE (2026-09-03); PUBLICATION NOT AUTHORIZED.**
+
+- Timeline schema 19 adds resource-free sequence instances to video/audio
+  tracks. One complete-project validator checks active and dormant definitions,
+  exact settings, references, source/timeline ranges, global ids and link
+  groups, cycles, depth 8, aggregate counts, and a conservative 4,096-leaf
+  visual/audio expansion ceiling before stores or resources change.
+- Creating a compound moves selected clips into one central child definition
+  and replaces them with linked parent instances as one project-history edit.
+  Open/back preserves exact parent and child frames. Move, trim, split,
+  duplicate, and delete reuse one atomic domain seam; Make independent clones
+  the selected reachable subgraph and remints every sequence, track, item,
+  effect, transition, marker, caption, and link identity.
+- Preview, playback, captions, adjustments, transitions, effects, plugins,
+  proxies, and export resolve the same exact child frames through immutable
+  leaf plans. Repeated instances receive distinct request keys. Uncovered child
+  video is explicit black and uncovered audio contributes no leaf. Browser
+  loans remain owned by the established render/decode/audio/export owners;
+  graph and plan data contain no browser objects.
+- Persistence, recovery, relink, plugin generation, media reachability, lens
+  provider lookup, dirty tracking, and export targeting operate across the
+  reachable sequence graph. Navigating to a child cancels the prior playback
+  owner so dormant sequence audio cannot continue.
+- Headed Chromium on strict port 41892 created and duplicated a live text
+  compound, proved a shared edit, reminted only the selected copy, and rendered
+  `UPDATED SHARED CHILD` at frame 0 versus `INDEPENDENT CHILD` at frame 200.
+  Browser-side probes proved frozen distinct instance paths, explicit black and
+  silent gaps, atomic depth-9 rejection with unchanged state, deterministic
+  three-sequence serialization, and crash-style IndexedDB recovery. A separate
+  real PNG import -> compound -> offline -> one-time relink restored the same
+  asset identity and painted the nested frame. Both sessions had zero console
+  warnings or errors.
+- The authoritative gate passes 268 Vitest files / 3,758 tests plus all 17
+  repository runner checks, production build/typecheck (4,955 modules), clean
+  oxlint, production dependency audit, diff hygiene, and all 15 repository
+  Chromium tests. Vite retains only the established non-fatal large-chunk
+  notice.

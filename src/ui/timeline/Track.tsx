@@ -34,6 +34,7 @@ import {
   visiblePlacementPreviewRange,
 } from '../../app/mediaPlacementController'
 import { useDocumentStore } from '../../state/documentStore'
+import { useSequenceInstanceSelectionStore } from '../../state/sequenceInstanceSelectionStore'
 import { useTransportStore } from '../../state/transportStore'
 import {
   ASSET_DRAG_TYPE,
@@ -45,6 +46,7 @@ import { extractDroppedFiles, isFileDrag } from '../fileDrag'
 import { isPrimaryEditingPointer } from '../pointerButtons'
 import ClipView from './ClipView'
 import AdjustmentView from './AdjustmentView'
+import SequenceInstanceView from './SequenceInstanceView'
 import TransitionSeam from './TransitionSeam'
 import {
   frameAtTimelineClientX,
@@ -226,6 +228,7 @@ function Track({
         // target, so they never land here (Phase 4.2 selection).
         if (e.target === e.currentTarget) {
           useTransportStore.getState().setSelectedClip(null)
+          useSequenceInstanceSelectionStore.getState().setSelectedInstanceId(null)
         }
       }}
       onContextMenu={(event) => {
@@ -319,6 +322,16 @@ function Track({
         <ClipView
           key={clip.id}
           clip={clip}
+          trackId={track.id}
+          trackKind={track.kind}
+          timelineOriginFrame={timelineOriginFrame}
+          timelineWindowEndFrame={timelineWindowEndFrame}
+        />
+      ))}
+      {(track.sequenceInstances ?? []).map((instance) => (
+        <SequenceInstanceView
+          key={instance.id}
+          instance={instance}
           trackId={track.id}
           trackKind={track.kind}
           timelineOriginFrame={timelineOriginFrame}

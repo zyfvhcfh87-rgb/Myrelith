@@ -25,6 +25,8 @@ import {
   type SourceBoundsCatalog,
 } from '../domain/crossfadePlan'
 import { docDurationFrames } from '../domain/selectors'
+import { createProjectTimelineAudioMixPlan } from '../domain/projectAudioMixPlan'
+import type { TimelineAudioMixPlan } from '../domain/audioMixPlan'
 import {
   AUDIO_METER_FFT_SIZE,
   AUDIO_METER_UPDATE_INTERVAL_MS,
@@ -341,9 +343,10 @@ function captureAudioRuntimeGuards(
   fromFrame: number,
   assets: ReadonlyMap<AssetId, MediaAsset>,
   catalog: SourceBoundsCatalog,
+  mixPlan?: TimelineAudioMixPlan,
 ): Map<AssetId, MediaRuntimeGuard> {
   const guards = new Map<AssetId, MediaRuntimeGuard>()
-  for (const assetId of audioPlaybackAssetIds(doc, fromFrame, catalog)) {
+  for (const assetId of audioPlaybackAssetIds(doc, fromFrame, catalog, mixPlan)) {
     const asset = assets.get(assetId)
     const guard = captureMediaRuntimeGuard(assetId)
     if (asset && guard?.objectUrl === asset.objectUrl) {
@@ -358,8 +361,9 @@ function audioAssetsKey(
   fromFrame: number,
   assets: ReadonlyMap<AssetId, MediaAsset>,
   catalog: SourceBoundsCatalog,
+  mixPlan?: TimelineAudioMixPlan,
 ): string {
-  return audioPlaybackAssetIds(doc, fromFrame, catalog)
+  return audioPlaybackAssetIds(doc, fromFrame, catalog, mixPlan)
     .map((id) => `${id}:${assets.get(id)?.objectUrl ?? '<missing>'}`)
     .join('|')
 }
@@ -367,6 +371,17 @@ function audioAssetsKey(
 function currentSourceBoundsCatalog(): SourceBoundsCatalog {
   return createSourceBoundsCatalog(
     useMediaStore.getState().descriptors.values(),
+  )
+}
+
+function currentProjectAudioMixPlan(
+  catalog: SourceBoundsCatalog,
+): TimelineAudioMixPlan {
+  const documentState = useDocumentStore.getState()
+  return createProjectTimelineAudioMixPlan(
+    documentState.project,
+    documentState.activeSequenceId,
+    catalog,
   )
 }
 
@@ -464,13 +479,24 @@ function ensureEngine(): PlaybackEngine {
       if (s.isScrubbing && !prev.isScrubbing) pause()
     }),
     useDocumentStore.subscribe((s, prev) => {
+      if (s.activeSequenceId !== prev.activeSequenceId) {
+        cancelPlaybackWork()
+        useTransportStore.getState().setIsPlaying(false)
+        return
+      }
       if (
-        s.doc !== prev.doc
+        s.project !== prev.project
         && useTransportStore.getState().isPlaying
-        && audioPlaybackPlanKey(s.doc, currentSourceBoundsCatalog())
-          !== state.audioPlanKey
       ) {
-        restartPlayback()
+        const catalog = currentSourceBoundsCatalog()
+        const mixPlan = createProjectTimelineAudioMixPlan(
+          s.project,
+          s.activeSequenceId,
+          catalog,
+        )
+        if (audioPlaybackPlanKey(s.doc, catalog, mixPlan) !== state.audioPlanKey) {
+          restartPlayback()
+        }
       }
     }),
     useMediaStore.subscribe((s, prev) => {
@@ -480,9 +506,10 @@ function ensureEngine(): PlaybackEngine {
       ) {
         const doc = useDocumentStore.getState().doc
         const catalog = createSourceBoundsCatalog(s.descriptors.values())
+        const mixPlan = currentProjectAudioMixPlan(catalog)
         if (
-          audioPlaybackPlanKey(doc, catalog) !== state.audioPlanKey
-          || audioAssetsKey(doc, 0, s.assets, catalog)
+          audioPlaybackPlanKey(doc, catalog, mixPlan) !== state.audioPlanKey
+          || audioAssetsKey(doc, 0, s.assets, catalog, mixPlan)
           !== state.audioAssetsKey
         ) {
           restartPlayback()
@@ -509,7 +536,8 @@ function startPlayback(
   unlockedContext?: Promise<unknown>,
 ): void {
   const transport = useTransportStore.getState()
-  const doc = useDocumentStore.getState().doc
+  const documentState = useDocumentStore.getState()
+  const doc = documentState.doc
   const durationFrames = docDurationFrames(doc)
   if (durationFrames <= 0) {
     transport.setIsPlaying(false)
@@ -541,12 +569,23 @@ function startPlayback(
   const media = useMediaStore.getState()
   const assets = new Map(media.assets)
   const catalog = createSourceBoundsCatalog(media.descriptors.values())
-  const runtimeGuards = captureAudioRuntimeGuards(doc, from, assets, catalog)
-  state.audioPlanKey = audioPlaybackPlanKey(doc, catalog)
+  const mixPlan = createProjectTimelineAudioMixPlan(
+    documentState.project,
+    documentState.activeSequenceId,
+    catalog,
+  )
+  const runtimeGuards = captureAudioRuntimeGuards(
+    doc,
+    from,
+    assets,
+    catalog,
+    mixPlan,
+  )
+  state.audioPlanKey = audioPlaybackPlanKey(doc, catalog, mixPlan)
   // Keep the media fingerprint stable as the playhead advances; otherwise an
   // unrelated media-pool edit after an early clip ends would look like a
   // playback-asset removal and cause an unnecessary restart.
-  state.audioAssetsKey = audioAssetsKey(doc, 0, assets, catalog)
+  state.audioAssetsKey = audioAssetsKey(doc, 0, assets, catalog, mixPlan)
   publishAudioMeter('priming', 'Preparing playback levels')
 
   let resumePromise: Promise<unknown>
@@ -568,7 +607,7 @@ function startPlayback(
     useTransportStore.getState().setIsPlaying(false)
   })
 
-  if (!hasAudioPlaybackContent(doc, from, catalog)) {
+  if (!hasAudioPlaybackContent(doc, from, catalog, mixPlan)) {
     state.startupAbort = null
     stopAudioMeter('unavailable', 'No audible audio at the playhead')
     engine.start(from, durationFrames, doc.frameRate, context.currentTime)
@@ -585,6 +624,7 @@ function startPlayback(
       {
         signal: abort.signal,
         sourceBoundsCatalog: catalog,
+        mixPlan,
         onWarning: (warning) => {
           warnAudio(audioWarningMessage(warning), warning.cause)
           if (warning.scope !== 'media') return

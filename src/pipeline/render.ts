@@ -50,6 +50,7 @@ import { wrapTextLines } from '../domain/textLayout'
 import { textPropsValidationError } from '../domain/textOverlay'
 import {
   videoCompositionRequests,
+  videoCompositionRequestKey,
   type PlannedCrossfadeFrameRequest,
   type PlannedVideoFrameRequest,
   type VideoCompositionPlan,
@@ -285,9 +286,9 @@ export async function compositeFrame(
   )
   // videoCompositionRequests deliberately removes compositor-only plan fields,
   // so request object identity is not stable for plugin-planned items.
-  const imagesByClipId = new Map<ClipId, RenderFrameSource | null>()
+  const imagesByRequestKey = new Map<string, RenderFrameSource | null>()
   for (let index = 0; index < requests.length; index++) {
-    imagesByClipId.set(requests[index].clip.id, images[index])
+    imagesByRequestKey.set(videoCompositionRequestKey(requests[index]), images[index])
   }
 
   // Phase 3 — draw in paint order. Ordered plugin stages may yield; FrameSource
@@ -310,6 +311,18 @@ export async function compositeFrame(
     ctx.fillRect(0, 0, doc.width, doc.height)
 
     for (const item of plan.items) {
+      if (item.kind === 'sequence-background') {
+        ctx.save()
+        try {
+          ctx.globalAlpha = 1
+          ctx.globalCompositeOperation = 'source-over'
+          ctx.fillStyle = '#000000'
+          ctx.fillRect(0, 0, doc.width, doc.height)
+        } finally {
+          ctx.restore()
+        }
+        continue
+      }
       if (item.kind === 'adjustment') {
         try {
           compositePostCompositeAdjustment(
@@ -335,13 +348,13 @@ export async function compositeFrame(
           transitionSurfaceProvider,
           item.requests,
           item.blendMode,
-          imagesByClipId,
+          imagesByRequestKey,
           drawn,
           missing,
           presentationScale,
           lensRemapProvider,
           videoEffectStageExecutor,
-          plan.frame,
+          item.frame,
         )
         continue
       }
@@ -358,7 +371,7 @@ export async function compositeFrame(
             presentationScale,
             item.effectStagePlan,
             videoEffectStageExecutor,
-            plan.frame,
+            item.frame,
           )
           drawn.push(item.clip.id)
         } catch (e) {
@@ -396,7 +409,7 @@ export async function compositeFrame(
 
       const request = item.request
       const clip = request.clip
-      const image = imagesByClipId.get(clip.id) ?? null
+      const image = imagesByRequestKey.get(videoCompositionRequestKey(request)) ?? null
       if (!image) {
         missing.push(clip.id)
         continue
@@ -418,7 +431,7 @@ export async function compositeFrame(
             presentationScale,
             effectStagePlan,
             videoEffectStageExecutor,
-            plan.frame,
+            item.frame,
           )
         } else if (
           effectStagePlan?.requiresOrderedPixelPath
@@ -624,7 +637,7 @@ async function compositeTransitionGroup(
   surfaceProvider: TransitionSurfaceProvider,
   requests: readonly [PlannedCrossfadeFrameRequest, PlannedCrossfadeFrameRequest],
   blendMode: BlendModeResolution,
-  imagesByClipId: ReadonlyMap<ClipId, RenderFrameSource | null>,
+  imagesByRequestKey: ReadonlyMap<string, RenderFrameSource | null>,
   drawn: ClipId[],
   missing: ClipId[],
   presentationScale: { readonly x: number; readonly y: number },
@@ -646,7 +659,7 @@ async function compositeTransitionGroup(
 
     for (const request of requests) {
       if (request.opacity <= 0 || request.weight <= 0) continue
-      const image = imagesByClipId.get(request.clip.id) ?? null
+      const image = imagesByRequestKey.get(videoCompositionRequestKey(request)) ?? null
       if (!image) {
         missing.push(request.clip.id)
         continue

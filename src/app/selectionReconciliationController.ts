@@ -21,6 +21,7 @@ import { adjustmentItems } from '../domain/adjustmentItems'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
+import { useSequenceInstanceSelectionStore } from '../state/sequenceInstanceSelectionStore'
 import { rateEquals } from '../domain/time'
 
 function collectClipIds(document: TimelineDoc): ReadonlySet<ClipId> {
@@ -54,6 +55,15 @@ function reconcileSelection(document: TimelineDoc): void {
   if (transport.selectedAdjustmentId !== null) {
     transport.reconcileAdjustmentSelection(collectAdjustmentIds(document))
   }
+  const instanceSelection = useSequenceInstanceSelectionStore.getState()
+  if (
+    instanceSelection.selectedInstanceId !== null
+    && !document.tracks.some((track) => (
+      (track.sequenceInstances ?? []).some((instance) => (
+        instance.id === instanceSelection.selectedInstanceId
+      ))
+    ))
+  ) instanceSelection.setSelectedInstanceId(null)
 }
 
 /**

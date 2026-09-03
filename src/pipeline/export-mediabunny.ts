@@ -7,6 +7,8 @@ import { createMediabunnyExportSink } from './export-mediabunny-sink'
 import type { ExportAssetResolver } from './export-mediabunny-common'
 import { compositeFrame } from './render'
 import type { VideoEffectStageExecutor } from './videoEffectStageExecution'
+import type { TimelineAudioMixPlan } from '../domain/audioMixPlan'
+import type { SequenceProject } from '../domain/projectSequences'
 
 export type {
   ExportAssetResolver,
@@ -22,6 +24,11 @@ export function createMediabunnyExportDeps(
   sourceBounds: SourceBoundsCatalog = new Map(),
   fileDestination?: PreparedExportFileCapability,
   videoEffectStageExecutor?: VideoEffectStageExecutor | null,
+  projectMixPlan?: TimelineAudioMixPlan,
+  projectTarget?: Readonly<{
+    project: SequenceProject
+    sequenceId: string
+  }>,
 ): ExportDeps {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -36,6 +43,8 @@ export function createMediabunnyExportDeps(
         resolveAsset,
         sourceBounds,
         fileDestination,
+        projectMixPlan,
+        projectTarget,
       ),
   }
 }

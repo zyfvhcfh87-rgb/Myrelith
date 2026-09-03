@@ -197,6 +197,12 @@ import {
   type SequenceEntityKind,
   type SequenceProject,
 } from '../domain/projectSequences'
+import {
+  applySequenceInstanceEdit as applyProjectSequenceInstanceEdit,
+  createCompoundSequenceFromClips,
+  makeSequenceInstanceIndependent as makeProjectSequenceInstanceIndependent,
+  type SequenceInstanceEditCommand,
+} from '../domain/sequenceInstanceOperations'
 
 /** Max undo levels; snapshots beyond this fall off the old end. */
 const HISTORY_LIMIT = 100
@@ -207,6 +213,8 @@ export interface DocumentState {
   project: SequenceProject
   /** Session-only active navigation; never persisted or placed in history. */
   activeSequenceId: string
+  /** Session-only breadcrumb stack for exact Open compound / Back navigation. */
+  sequenceNavigation: readonly SequenceNavigationEntry[]
   /** Active-sequence adapter consumed by existing timeline/render callers. */
   doc: TimelineDoc
   /** Undo stack: older whole-project snapshots, most recent last. */
@@ -222,6 +230,17 @@ export interface DocumentState {
   setDocWithHistory: (doc: TimelineDoc) => void
   /** Navigate without persistence, dirty state, or history. */
   switchSequence: (sequenceId: string) => boolean
+  openSequenceInstance: (
+    instanceId: string,
+    parentPlayheadFrame: number,
+  ) => number | null
+  returnToParentSequence: () => SequenceNavigationEntry | null
+  createCompoundFromClips: (
+    selectedClipIds: readonly ClipId[],
+    name: string,
+  ) => Readonly<{ sequenceId: string; instanceId: string }> | null
+  editSequenceInstance: (command: SequenceInstanceEditCommand) => boolean
+  makeSequenceInstanceIndependent: (instanceId: string) => string | null
   /** Add an empty same-settings sequence and navigate to it. */
   createSequence: (name: string) => string | null
   /** Duplicate the active sequence with fresh project-wide ids. */
@@ -643,6 +662,11 @@ export interface DocumentState {
   redo: () => void
 }
 
+export interface SequenceNavigationEntry {
+  readonly sequenceId: string
+  readonly playheadFrame: number
+}
+
 /**
  * Fold an active-sequence edit into the complete project: push the outgoing
  * project onto `past`, clear `future`. A rejected edit changes nothing.
@@ -707,6 +731,7 @@ const INITIAL_PROJECT = sequenceProjectFromTimeline(INITIAL_DOCUMENT)
 export const useDocumentStore = create<DocumentState>()((set) => ({
   project: INITIAL_PROJECT,
   activeSequenceId: INITIAL_DOCUMENT.id,
+  sequenceNavigation: [],
   doc: INITIAL_DOCUMENT,
   past: [],
   future: [],
@@ -714,6 +739,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   setProject: (project, activeSequenceId = project.rootSequenceId) => set({
     project,
     ...activeSequenceFor(project, activeSequenceId),
+    sequenceNavigation: [],
     past: [],
     future: [],
   }),
@@ -721,6 +747,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   setDoc: (doc) => set({
     project: sequenceProjectFromTimeline(doc),
     activeSequenceId: doc.id,
+    sequenceNavigation: [],
     doc,
     past: [],
     future: [],
@@ -735,9 +762,107 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       const doc = sequenceById(state.project, sequenceId)
       if (!doc || sequenceId === state.activeSequenceId) return state
       switched = true
-      return { activeSequenceId: sequenceId, doc }
+      return { activeSequenceId: sequenceId, doc, sequenceNavigation: [] }
     })
     return switched
+  },
+
+  openSequenceInstance: (instanceId, parentPlayheadFrame) => {
+    let childPlayheadFrame: number | null = null
+    set((state) => {
+      const instance = state.doc.tracks.flatMap((track) => (
+        track.sequenceInstances ?? []
+      )).find((candidate) => candidate.id === instanceId)
+      if (!instance) return state
+      const doc = sequenceById(state.project, instance.sequenceId)
+      if (!doc) return state
+      const offset = parentPlayheadFrame >= instance.timelineRange.startFrame
+        && parentPlayheadFrame < instance.timelineRange.startFrame
+          + instance.timelineRange.durationFrames
+        ? parentPlayheadFrame - instance.timelineRange.startFrame
+        : 0
+      childPlayheadFrame = instance.sourceStartFrame + offset
+      return {
+        activeSequenceId: doc.id,
+        doc,
+        sequenceNavigation: [
+          ...state.sequenceNavigation,
+          Object.freeze({
+            sequenceId: state.activeSequenceId,
+            playheadFrame: Math.max(0, Math.round(parentPlayheadFrame)),
+          }),
+        ],
+      }
+    })
+    return childPlayheadFrame
+  },
+
+  returnToParentSequence: () => {
+    let returned: SequenceNavigationEntry | null = null
+    set((state) => {
+      const parent = state.sequenceNavigation.at(-1)
+      if (!parent) return state
+      const doc = sequenceById(state.project, parent.sequenceId)
+      if (!doc) return { ...state, sequenceNavigation: [] }
+      returned = parent
+      return {
+        activeSequenceId: parent.sequenceId,
+        doc,
+        sequenceNavigation: state.sequenceNavigation.slice(0, -1),
+      }
+    })
+    return returned
+  },
+
+  createCompoundFromClips: (selectedClipIds, name) => {
+    let created: Readonly<{ sequenceId: string; instanceId: string }> | null = null
+    set((state) => {
+      const result = createCompoundSequenceFromClips(
+        state.project,
+        state.activeSequenceId,
+        selectedClipIds,
+        name,
+        randomSequenceId,
+      )
+      if (result.failure || !result.sequenceId || !result.instanceId) return state
+      created = Object.freeze({
+        sequenceId: result.sequenceId,
+        instanceId: result.instanceId,
+      })
+      return commitProject(state, result.project)
+    })
+    return created
+  },
+
+  editSequenceInstance: (command) => {
+    let edited = false
+    set((state) => {
+      const result = applyProjectSequenceInstanceEdit(
+        state.project,
+        state.activeSequenceId,
+        command,
+        randomSequenceId,
+      )
+      edited = result.failure === null
+      return result.failure ? state : commitProject(state, result.project)
+    })
+    return edited
+  },
+
+  makeSequenceInstanceIndependent: (instanceId) => {
+    let sequenceId: string | null = null
+    set((state) => {
+      const result = makeProjectSequenceInstanceIndependent(
+        state.project,
+        state.activeSequenceId,
+        instanceId,
+        randomSequenceId,
+      )
+      if (result.failure || !result.sequenceId) return state
+      sequenceId = result.sequenceId
+      return commitProject(state, result.project)
+    })
+    return sequenceId
   },
 
   createSequence: (name) => {

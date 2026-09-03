@@ -20,6 +20,7 @@ import {
 } from './projectLimits'
 import { proceduralTextAssetId } from './textOverlay'
 import { SEQUENCE_PROJECT_LIMITS } from './sequenceProjectLimits'
+import { analyzeNestedSequenceGraph } from './nestedSequences'
 
 export { SEQUENCE_PROJECT_LIMITS } from './sequenceProjectLimits'
 
@@ -38,6 +39,7 @@ export type SequenceEntityKind =
   | 'sequence'
   | 'track'
   | 'clip'
+  | 'sequence-instance'
   | 'adjustment'
   | 'effect'
   | 'audio-effect'
@@ -55,6 +57,7 @@ export type SequenceIdFactory = (
 
 export type SequenceProjectEditFailure =
   | 'sequence-not-found'
+  | 'sequence-referenced'
   | 'root-sequence-protected'
   | 'invalid-name'
   | 'sequence-limit'
@@ -71,6 +74,7 @@ export interface SequenceProjectEditResult {
 interface SequenceProjectCounts {
   tracks: number
   clips: number
+  sequenceInstances: number
   adjustments: number
   transitions: number
   markers: number
@@ -160,6 +164,7 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
   const counts: SequenceProjectCounts = {
     tracks: 0,
     clips: 0,
+    sequenceInstances: 0,
     adjustments: 0,
     transitions: 0,
     markers: 0,
@@ -187,6 +192,7 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
     }
     for (const track of sequence.tracks) {
       counts.clips += track.clips.length
+      counts.sequenceInstances += track.sequenceInstances?.length ?? 0
       counts.adjustments += track.adjustments?.length ?? 0
       counts.transitions += track.transitions.length
       for (const effect of track.audioEffects ?? []) {
@@ -248,6 +254,7 @@ function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
   let sequenceCount = 0
   let trackCount = 0
   let clipCount = 0
+  let sequenceInstanceCount = 0
   let adjustmentCount = 0
   let effectCount = 0
   let audioEffectCount = 0
@@ -259,7 +266,7 @@ function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
   for (const sequence of project.sequences) {
     sequenceCount++
     audioEffectCount += sequence.masterAudio?.audioEffects?.length ?? 0
-    const sequenceLinkGroups = new Set<string>()
+    const sequenceLinkGroups = new Map<string, number>()
     for (const track of sequence.tracks) {
       trackCount++
       adjustmentCount += track.adjustments?.length ?? 0
@@ -269,7 +276,21 @@ function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
         clipCount++
         effectCount += clip.effects.length
         audioEffectCount += clip.audioEffects?.length ?? 0
-        if (clip.linkGroupId) sequenceLinkGroups.add(clip.linkGroupId)
+        if (clip.linkGroupId) {
+          sequenceLinkGroups.set(
+            clip.linkGroupId,
+            (sequenceLinkGroups.get(clip.linkGroupId) ?? 0) + 1,
+          )
+        }
+      }
+      for (const instance of track.sequenceInstances ?? []) {
+        sequenceInstanceCount++
+        if (instance.linkGroupId) {
+          sequenceLinkGroups.set(
+            instance.linkGroupId,
+            (sequenceLinkGroups.get(instance.linkGroupId) ?? 0) + 1,
+          )
+        }
       }
       for (const adjustment of track.adjustments ?? []) {
         effectCount += adjustment.effects.length
@@ -280,14 +301,15 @@ function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
       captionTrackCount++
       captionItemCount += track.items.length
     }
-    for (const linkGroupId of sequenceLinkGroups) {
+    for (const linkGroupId of sequenceLinkGroups.keys()) {
       if (projectLinkGroups.has(linkGroupId)) return false
       projectLinkGroups.add(linkGroupId)
     }
+    if ([...sequenceLinkGroups.values()].some((members) => members < 2)) return false
   }
   return ids.sequence.size === sequenceCount
     && ids.track.size === trackCount
-    && ids.timelineItem.size === clipCount + adjustmentCount
+    && ids.timelineItem.size === clipCount + sequenceInstanceCount + adjustmentCount
     && ids.effect.size === effectCount
     && ids.audioEffect.size === audioEffectCount
     && ids.transition.size === transitionCount
@@ -309,9 +331,16 @@ export function sequenceProjectWithinEditBudget(
     || !project.sequences.every((sequence) => sequenceSettingsEqual(root, sequence))
     || !sequenceProjectIdsAreUnique(project)
   ) return false
+  try {
+    analyzeNestedSequenceGraph(project)
+  } catch {
+    return false
+  }
   const counts = collectCounts(project)
   return counts.tracks <= SEQUENCE_PROJECT_LIMITS.maxTotalTracks
     && counts.clips <= SEQUENCE_PROJECT_LIMITS.maxTotalClips
+    && counts.sequenceInstances
+      <= SEQUENCE_PROJECT_LIMITS.maxTotalSequenceInstances
     && counts.adjustments <= SEQUENCE_PROJECT_LIMITS.maxTotalAdjustments
     && counts.transitions <= SEQUENCE_PROJECT_LIMITS.maxTotalTransitions
     && counts.markers <= SEQUENCE_PROJECT_LIMITS.maxTotalMarkers
@@ -342,6 +371,9 @@ export function matchEmptyProjectFrameRate(
     || frameRate.den <= 0
     || project.sequences.some((sequence) => (
       sequence.tracks.some((track) => track.clips.length > 0)
+      || sequence.tracks.some((track) => (
+        (track.sequenceInstances?.length ?? 0) > 0
+      ))
       || sequence.tracks.some((track) => (track.adjustments?.length ?? 0) > 0)
       || (sequence.markers?.length ?? 0) > 0
       || (sequence.captionTracks ?? []).some((track) => track.items.length > 0)
@@ -401,6 +433,10 @@ function collectUsedIds(project: SequenceProject): UsedIds {
         for (const effect of clip.effects) used.effect.add(effect.id)
         for (const effect of clip.audioEffects ?? []) used.audioEffect.add(effect.id)
       }
+      for (const instance of track.sequenceInstances ?? []) {
+        used.timelineItem.add(instance.id)
+        if (instance.linkGroupId) used.linkGroup.add(instance.linkGroupId)
+      }
       for (const adjustment of track.adjustments ?? []) {
         used.timelineItem.add(adjustment.id)
         for (const effect of adjustment.effects) used.effect.add(effect.id)
@@ -421,6 +457,7 @@ function idSet(used: UsedIds, kind: SequenceEntityKind): Set<string> {
     case 'sequence': return used.sequence
     case 'track': return used.track
     case 'clip': return used.timelineItem
+    case 'sequence-instance': return used.timelineItem
     case 'adjustment': return used.timelineItem
     case 'effect': return used.effect
     case 'audio-effect': return used.audioEffect
@@ -509,6 +546,30 @@ function remapDuplicateIds(
       for (const track of clip.animation?.effectTracks ?? []) {
         const effectId = effectIds.get(track.effectId)
         if (effectId) track.effectId = effectId
+      }
+    }
+    for (const instance of track.sequenceInstances ?? []) {
+      const instanceId = allocateId(
+        used,
+        factory,
+        'sequence-instance',
+        instance.id,
+      )
+      if (!instanceId) return null
+      instance.id = instanceId
+      if (instance.linkGroupId) {
+        let linkGroupId = linkGroupIds.get(instance.linkGroupId)
+        if (!linkGroupId) {
+          linkGroupId = allocateId(
+            used,
+            factory,
+            'link-group',
+            instance.linkGroupId,
+          ) ?? undefined
+          if (!linkGroupId) return null
+          linkGroupIds.set(instance.linkGroupId, linkGroupId)
+        }
+        instance.linkGroupId = linkGroupId
       }
     }
     for (const adjustment of track.adjustments ?? []) {
@@ -659,6 +720,11 @@ export function deleteProjectSequence(
   if (project.rootSequenceId === sequenceId) {
     return unchanged(project, 'root-sequence-protected')
   }
+  if (project.sequences.some((sequence) => sequence.tracks.some((track) => (
+    (track.sequenceInstances ?? []).some((instance) => (
+      instance.sequenceId === sequenceId
+    ))
+  )))) return unchanged(project, 'sequence-referenced')
   return accepted({
     ...project,
     sequences: project.sequences.filter((sequence) => sequence.id !== sequenceId),

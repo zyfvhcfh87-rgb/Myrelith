@@ -1,7 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
+import type { Clip, TimelineDoc } from '../domain/schema'
+import { defaultSourceTimeMap } from '../domain/sourceTimeMap'
 import { useDocumentStore } from '../state/documentStore'
+import { useTransportStore } from '../state/transportStore'
+import { useSequenceInstanceSelectionStore } from '../state/sequenceInstanceSelectionStore'
 import SequenceControls from './SequenceControls'
 
 describe('SequenceControls', () => {
@@ -12,6 +16,8 @@ describe('SequenceControls', () => {
       'sequence-main',
     ))
     vi.stubGlobal('confirm', vi.fn(() => true))
+    useTransportStore.getState().setSelectedClip(null)
+    useSequenceInstanceSelectionStore.getState().setSelectedInstanceId(null)
   })
 
   test('creates, navigates, renames, duplicates, roots, and deletes definitions', () => {
@@ -72,5 +78,71 @@ describe('SequenceControls', () => {
     expect(useDocumentStore.getState().project.sequences).toHaveLength(1)
     expect(useDocumentStore.getState().past).toHaveLength(0)
     expect(screen.getByRole('status')).toHaveTextContent('cannot be empty')
+  })
+
+  test('creates a compound from selection and navigates into it and back', () => {
+    const clip: Clip = {
+      id: 'scene-clip',
+      assetId: 'asset-scene',
+      name: 'Scene clip',
+      sourceMode: 'timed',
+      sourceRange: { startFrame: 0, durationFrames: 12 },
+      sourceTimeMap: defaultSourceTimeMap(0, 12),
+      timelineRange: { startFrame: 8, durationFrames: 12 },
+      transform: {
+        x: 0,
+        y: 0,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        anchorX: 0.5,
+        anchorY: 0.5,
+      },
+      opacity: 1,
+      volume: 1,
+      effects: [],
+    }
+    const base = createTimelineDoc('Main edit', DEFAULT_PROJECT_SETTINGS, 'sequence-main')
+    const doc: TimelineDoc = {
+      ...base,
+      tracks: [{ ...base.tracks[0], clips: [clip] }],
+    }
+    useDocumentStore.getState().setDoc(doc)
+    useTransportStore.getState().setClipSelection(['scene-clip'], 'scene-clip')
+    render(<SequenceControls />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create compound' }))
+    fireEvent.change(screen.getByLabelText('Create compound'), {
+      target: { value: 'Opening scene' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    const state = useDocumentStore.getState()
+    expect(state.project.sequences).toHaveLength(2)
+    const instance = state.doc.tracks[0].sequenceInstances?.[0]
+    expect(instance).toMatchObject({
+      name: 'Opening scene',
+      timelineRange: { startFrame: 8, durationFrames: 12 },
+    })
+    expect(state.past).toHaveLength(1)
+    expect(useSequenceInstanceSelectionStore.getState().selectedInstanceId)
+      .toBe(instance?.id)
+
+    act(() => useTransportStore.getState().setPlayheadFrame(13))
+    fireEvent.click(screen.getByRole('button', { name: 'Open compound' }))
+    expect(useDocumentStore.getState().activeSequenceId).toBe(instance?.sequenceId)
+    expect(useTransportStore.getState().playheadFrame).toBe(5)
+    expect(screen.getByRole('button', { name: 'Back to parent' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to parent' }))
+    expect(useDocumentStore.getState().activeSequenceId).toBe('sequence-main')
+    expect(useTransportStore.getState().playheadFrame).toBe(13)
+
+    useDocumentStore.getState().undo()
+    expect(useDocumentStore.getState().project.sequences).toHaveLength(1)
+    expect(useDocumentStore.getState().doc.tracks[0].clips).toHaveLength(1)
+    useDocumentStore.getState().redo()
+    expect(useDocumentStore.getState().project.sequences).toHaveLength(2)
+    expect(useDocumentStore.getState().doc.tracks[0].sequenceInstances).toHaveLength(1)
   })
 })

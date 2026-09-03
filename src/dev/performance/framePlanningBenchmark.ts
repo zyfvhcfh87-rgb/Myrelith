@@ -355,6 +355,9 @@ function planChecksum(plan: VideoCompositionPlan): number {
     else if (item.kind === 'adjustment') {
       checksum += item.adjustment.opacity + item.adjustment.id.length
     }
+    else if (item.kind === 'sequence-background') {
+      checksum += item.instanceId.length + item.instancePath.length
+    }
     else {
       checksum += item.requests[0].sourceFrame + item.requests[0].weight
         + item.requests[1].sourceFrame + item.requests[1].weight

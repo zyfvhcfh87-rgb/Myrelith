@@ -9,7 +9,7 @@ import {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 18,
+    schemaVersion: 19,
     id: 'doc-audio-status',
     name: 'Audio status',
     frameRate: { num: 30, den: 1 },

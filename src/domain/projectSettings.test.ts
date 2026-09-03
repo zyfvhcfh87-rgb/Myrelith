@@ -27,6 +27,7 @@ function expectedEmptyTrack(id: string, kind: 'video' | 'audio') {
     kind,
     name: id,
     clips: [],
+    sequenceInstances: [],
     adjustments: [],
     transitions: [],
     hidden: false,
@@ -299,7 +300,7 @@ describe('createTimelineDoc', () => {
     const doc = createTimelineDoc('  Demo project  ', settings, 'project-123')
 
     expect(doc).toEqual({
-      schemaVersion: 18,
+      schemaVersion: 19,
       id: 'project-123',
       name: 'Demo project',
       frameRate: { num: 60_000, den: 1_001 },
@@ -320,6 +321,7 @@ describe('createTimelineDoc', () => {
     expect(doc.tracks.every(Object.isFrozen)).toBe(true)
     expect(doc.tracks.every((track) => (
       Object.isFrozen(track.clips)
+      && Object.isFrozen(track.sequenceInstances)
       && Object.isFrozen(track.adjustments)
       && Object.isFrozen(track.transitions)
     ))).toBe(true)
@@ -346,6 +348,8 @@ describe('createTimelineDoc', () => {
     for (let index = 0; index < first.tracks.length; index++) {
       expect(first.tracks[index]).not.toBe(second.tracks[index])
       expect(first.tracks[index].clips).not.toBe(second.tracks[index].clips)
+      expect(first.tracks[index].sequenceInstances)
+        .not.toBe(second.tracks[index].sequenceInstances)
       expect(first.tracks[index].adjustments)
         .not.toBe(second.tracks[index].adjustments)
       expect(first.tracks[index].transitions)
@@ -354,6 +358,7 @@ describe('createTimelineDoc', () => {
         .not.toBe(first.tracks[index].transitions)
     }
     expect(new Set(first.tracks.map((track) => track.clips)).size).toBe(8)
+    expect(new Set(first.tracks.map((track) => track.sequenceInstances)).size).toBe(8)
     expect(new Set(first.tracks.map((track) => track.adjustments)).size).toBe(8)
     expect(new Set(first.tracks.map((track) => track.transitions)).size).toBe(8)
 
@@ -370,7 +375,7 @@ describe('createTimelineDoc', () => {
     )
 
     expect(JSON.stringify(doc)).toBe(JSON.stringify({
-      schemaVersion: 18,
+      schemaVersion: 19,
       id: 'doc_default',
       name: 'Untitled',
       frameRate: { num: 30, den: 1 },
