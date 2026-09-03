@@ -513,7 +513,7 @@ export function moveClipsByDelta(
         return reject(doc, op, 'move would overlap a clip on an affected track')
       }
     }
-    if (clipsOverlapAdjustments(clips, before.adjustments)) {
+    if (clipsOverlapAdjustments(clips, before.adjustments, before.sequenceInstances)) {
       return reject(doc, op, 'move would overlap a clip on an affected track')
     }
     tracks[trackIndex] = reconcileTransitions(before, { ...before, clips })
@@ -573,7 +573,7 @@ export function rippleDelete(doc: TimelineDoc, clipId: ClipId): TimelineDoc {
   if (adjustments === null) {
     return reject(doc, op, 'ripple would move an adjustment outside safe timeline bounds')
   }
-  if (clipsOverlapAdjustments(clips, adjustments)) {
+  if (clipsOverlapAdjustments(clips, adjustments, loc.track.sequenceInstances)) {
     return reject(doc, op, 'ripple would overlap an adjustment on the track')
   }
 
@@ -777,7 +777,7 @@ export function slideClip(
       return reject(doc, op, 'slide would overlap another clip')
     }
   }
-  if (clipsOverlapAdjustments(clips, track.adjustments)) {
+  if (clipsOverlapAdjustments(clips, track.adjustments, track.sequenceInstances)) {
     return reject(doc, op, 'slide would overlap another clip')
   }
 
@@ -880,7 +880,7 @@ export function rippleTrim(
   if (adjustments === null) {
     return reject(doc, op, 'ripple would move an adjustment outside safe timeline bounds')
   }
-  if (clipsOverlapAdjustments(clips, adjustments)) {
+  if (clipsOverlapAdjustments(clips, adjustments, loc.track.sequenceInstances)) {
     return reject(doc, op, 'ripple would overlap an adjustment on the track')
   }
 

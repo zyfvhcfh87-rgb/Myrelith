@@ -130,6 +130,12 @@ describe('sequence-instance edit seam', () => {
     )).size).toBe(1)
     const child = result.project.sequences[1]
     expect(child.name).toBe('Scene one')
+    expect(child.masterAudio).toEqual({
+      volume: 1,
+      balance: 0,
+      muted: false,
+      audioEffects: [],
+    })
     expect(child.tracks.flatMap((item) => item.clips).map((item) => (
       item.timelineRange.startFrame
     ))).toEqual([0, 0])

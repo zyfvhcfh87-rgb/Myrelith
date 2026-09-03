@@ -1006,6 +1006,73 @@ describe('previewController', () => {
     ])
   })
 
+  test('projects nested child clip effects into preview status', async () => {
+    const { deps, bridge } = makeDeps()
+    const image = seedImageAsset({ id: 'nested-effect-still' })
+    const effect = createColorAdjustEffect('fx-nested-child')
+    const childClip = makeStillClip('nested-effect-clip', image.id)
+    childClip.effects = [effect]
+    const child: TimelineDoc = {
+      ...initialDoc,
+      id: 'nested-effect-child',
+      name: 'Nested effect child',
+      tracks: [{
+        id: 'nested-effect-child-V1',
+        kind: 'video',
+        name: 'V1',
+        clips: [childClip],
+        sequenceInstances: [],
+        adjustments: [],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      }],
+    }
+    const root: TimelineDoc = {
+      ...initialDoc,
+      id: 'nested-effect-root',
+      name: 'Nested effect root',
+      tracks: [{
+        id: 'nested-effect-root-V1',
+        kind: 'video',
+        name: 'V1',
+        clips: [],
+        sequenceInstances: [{
+          kind: 'sequence',
+          id: 'nested-effect-use',
+          name: 'Nested effect use',
+          sequenceId: child.id,
+          sourceStartFrame: 0,
+          timelineRange: { startFrame: 0, durationFrames: 10 },
+        }],
+        adjustments: [],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      }],
+    }
+    useDocumentStore.getState().setProject({
+      id: 'nested-effect-project',
+      name: 'Nested effect project',
+      rootSequenceId: root.id,
+      sequences: [root, child],
+    })
+    deps.createProjectVisualPlanner = (project, sequenceId, catalog, plugins) => (
+      createProjectVideoCompositionPlanner(project, sequenceId, catalog, plugins)
+    )
+
+    initPreview(canvasEl(), deps)
+    await flush()
+    bridge.onRendererCapabilities?.({ canvasFilter: true, canvasPixelAccess: true })
+
+    expect(usePreviewStatusStore.getState().effectStatuses.get(effect.id))
+      .toMatchObject({ status: 'ready' })
+  })
+
   test('keeps an unreferenced still out of the worker', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)

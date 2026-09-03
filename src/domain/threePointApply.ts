@@ -262,7 +262,7 @@ function shiftTracksFrom(
     if (trackClipsOverlap(clips)) return null
     const adjustments = shiftLaterAdjustments(track.adjustments, fromFrame, deltaFrames)
     if (adjustments === null) return null
-    if (clipsOverlapAdjustments(clips, adjustments)) return null
+    if (clipsOverlapAdjustments(clips, adjustments, track.sequenceInstances)) return null
     const changed = clips.some((clip, index) => clip !== track.clips[index])
       || adjustments !== track.adjustments
     tracks.push(

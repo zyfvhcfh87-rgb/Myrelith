@@ -196,4 +196,40 @@ describe('nested sequence graph seam', () => {
     expect(() => analyzeNestedSequenceGraph(project(root, child)))
       .toThrow(/nested video expansion exceeds 4096 leaf requests/u)
   })
+
+  test('counts muted and hidden tracks in the worst-case leaf budget', () => {
+    const child = sequence('child', Array.from(
+      { length: 128 },
+      (_, index) => ({
+        ...track(`child-track-${index}`, 'video', [clip(`clip-${index}`)]),
+        hidden: true,
+      }),
+    ))
+    const parentTrackCount = Math.floor(MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME / 128) + 1
+    const root = sequence('root', Array.from(
+      { length: parentTrackCount },
+      (_, index) => track(`root-track-${index}`, 'video', [], [
+        instance(`instance-${index}`, 'child'),
+      ]),
+    ))
+
+    expect(() => analyzeNestedSequenceGraph(project(root, child)))
+      .toThrow(/nested video expansion exceeds 4096 leaf requests/u)
+
+    const mutedChild = sequence('muted-child', Array.from(
+      { length: 128 },
+      (_, index) => ({
+        ...track(`muted-track-${index}`, 'audio', [clip(`audio-${index}`)]),
+        muted: true,
+      }),
+    ))
+    const mutedRoot = sequence('muted-root', Array.from(
+      { length: parentTrackCount },
+      (_, index) => track(`muted-root-${index}`, 'audio', [], [
+        instance(`muted-instance-${index}`, 'muted-child'),
+      ]),
+    ))
+    expect(() => analyzeNestedSequenceGraph(project(mutedRoot, mutedChild)))
+      .toThrow(/nested audio expansion exceeds 4096 leaf requests/u)
+  })
 })

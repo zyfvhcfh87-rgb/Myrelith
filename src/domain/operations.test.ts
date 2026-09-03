@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import type { Clip, Effect, MediaAsset, TimelineDoc, Track, Transition } from './schema'
+import type { Clip, Effect, MediaAsset, SequenceInstance, TimelineDoc, Track, Transition } from './schema'
 import { defaultTextProps } from './textOverlay'
 import { createColorAdjustEffect } from './effectStack'
 import { EFFECT_STACK_LIMITS } from './effectBounds'
@@ -1019,6 +1019,45 @@ describe('insertClip', () => {
     const doc = makeDoc()
     expect(insertClip(doc, 'V2', makeClip('clipA', 500, 10))).toBe(doc)
     expect(warnSpy).toHaveBeenCalledTimes(1)
+  })
+
+  test('rejects insert, move, trim, and ripple that occupy a sequence instance', () => {
+    const instance: SequenceInstance = {
+      kind: 'sequence',
+      id: 'nested-scene',
+      name: 'Nested scene',
+      sequenceId: 'child',
+      sourceStartFrame: 0,
+      timelineRange: { startFrame: 40, durationFrames: 20 },
+    }
+    const occupied = deepFreeze({
+      ...makeDoc(),
+      tracks: makeDoc().tracks.map((track) => (
+        track.id === 'V2'
+          ? { ...track, sequenceInstances: [instance] }
+          : track
+      )),
+    })
+    expect(insertClip(occupied, 'V2', makeClip('over-instance', 50, 10))).toBe(occupied)
+    expect(moveClip(occupied, 'clipC', 'V2', 40)).toBe(occupied)
+
+    const v1Instance = deepFreeze({
+      ...makeDoc(),
+      tracks: makeDoc().tracks.map((track) => (
+        track.id === 'V1'
+          ? {
+              ...track,
+              sequenceInstances: [{
+                ...instance,
+                timelineRange: { startFrame: 150, durationFrames: 50 },
+              }],
+            }
+          : track
+      )),
+    })
+    expect(trimClip(v1Instance, 'clipB', 'end', 10)).toBe(v1Instance)
+    expect(rippleTrim(v1Instance, 'clipB', 'end', 10)).toBe(v1Instance)
+    expect(rippleDelete(v1Instance, 'clipB')).toBe(v1Instance)
   })
 
   test('bad geometry is rejected: dur < 1, floats, negatives, speed != 1.0', () => {

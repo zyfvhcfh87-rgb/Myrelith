@@ -603,9 +603,10 @@ function rebuildPreviewEffectStatusIndex(doc: TimelineDoc): void {
 
 function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {
   const doc = currentPreviewDocument()
+  const renderDoc = currentPreviewRenderDocument(doc)
   state.visualPlanner = createCurrentVisualPlanner(deps, doc)
-  bridge.setDoc(currentPreviewRenderDocument(doc))
-  rebuildPreviewEffectStatusIndex(doc)
+  bridge.setDoc(renderDoc)
+  rebuildPreviewEffectStatusIndex(renderDoc)
   syncPresentationProfile(bridge, doc)
 }
 
@@ -1041,9 +1042,10 @@ export function initPreview(
 
   const initialDoc = currentPreviewDocument()
   const initialBounds = currentSourceBoundsCatalog()
+  const initialRenderDoc = currentPreviewRenderDocument(initialDoc)
   state.visualPlanner = createCurrentVisualPlanner(deps, initialDoc, initialBounds)
-  state.effectStatusIndex = createPreviewEffectStatusIndex(initialDoc)
-  bridge.setDoc(currentPreviewRenderDocument(initialDoc))
+  state.effectStatusIndex = createPreviewEffectStatusIndex(initialRenderDoc)
+  bridge.setDoc(initialRenderDoc)
   publishPreviewEffectStatuses(null)
   syncPresentationProfile(bridge, initialDoc)
   const scopes = useVideoScopesStore.getState()

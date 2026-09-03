@@ -17,6 +17,7 @@ import {
   type SequenceIdFactory,
   type SequenceProject,
 } from './projectSequences'
+import { defaultMasterAudio } from './audioMixer'
 import { MAX_PROJECT_NAME_CHARACTERS } from './projectLimits'
 import { MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME } from './nestedSequences'
 import { rangeEnd } from './time'
@@ -446,6 +447,7 @@ export function createCompoundSequenceFromClips(
     tracks: childTracks,
     markers: [],
     captionTracks: [],
+    masterAudio: defaultMasterAudio(),
   }
   const nextParent = { ...parent, tracks: parentTracks }
   const candidate = {

@@ -197,7 +197,7 @@ export function analyzeNestedSequenceGraph(
     for (const sequenceId of topologicalOrder) {
       const sequence = sequenceById(project, sequenceId)!
       let sequenceMaximum = 0
-      for (const track of tracksForKind(sequence, mediaKind)) {
+      for (const track of tracksOfKind(sequence, mediaKind)) {
         let trackMaximum = track.clips.length > 0
           ? mediaKind === 'video' && track.transitions.length > 0 ? 2 : 1
           : 0
@@ -260,6 +260,10 @@ function activeClipAt(track: Track, frame: number): Clip | null {
     if (clip.timelineRange.startFrame > frame) break
   }
   return null
+}
+
+function tracksOfKind(sequence: TimelineDoc, mediaKind: TrackKind): readonly Track[] {
+  return sequence.tracks.filter((track) => track.kind === mediaKind)
 }
 
 function tracksForKind(sequence: TimelineDoc, mediaKind: TrackKind): readonly Track[] {
