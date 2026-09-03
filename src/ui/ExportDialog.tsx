@@ -27,8 +27,8 @@ import {
 import type { TimelineDoc } from '../domain/schema'
 import {
   docDurationFrames,
-  documentHasOutputPluginEffects,
-  outputMediaAssetIds,
+  projectHasOutputPluginEffects,
+  projectOutputMediaAssetIds,
 } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -163,6 +163,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   const doc = useDocumentStore((state) => state.doc)
   const activeSequenceId = useDocumentStore((state) => state.activeSequenceId)
   const rootSequenceId = useDocumentStore((state) => state.project.rootSequenceId)
+  const project = useDocumentStore((state) => state.project)
   const hasContent = docDurationFrames(doc) > 0
   const mediaAssets = useMediaStore((state) => state.assets)
   const mediaDescriptors = useMediaStore((state) => state.descriptors)
@@ -424,8 +425,9 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     }),
   ]
 
-  const offline = [...outputMediaAssetIds(
-    doc,
+  const offline = [...projectOutputMediaAssetIds(
+    project,
+    activeSequenceId,
     displayProfile.audioChannelLayout !== 'off',
   )].filter((assetId) => !mediaAssets.has(assetId))
   const offlineExportMessage = offline.length === 0
@@ -442,7 +444,10 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     && selectedSupported === true
     && activeProfile !== null
     && advancedDraftsValid
-  const requiresPreparedExport = documentHasOutputPluginEffects(doc)
+  const requiresPreparedExport = projectHasOutputPluginEffects(
+    project,
+    activeSequenceId,
+  )
   const estimatedSize = formatEstimatedFileSize(
     estimateExportBytes(doc, displayProfile),
   )

@@ -109,6 +109,8 @@ export type AssetId = string
 export type TrackId = string
 /** Unique id of a clip within a document. */
 export type ClipId = string
+/** Unique id of a live sequence instance placed on one timeline lane. */
+export type SequenceInstanceId = string
 /** Unique id of a full-frame post-composite adjustment item. */
 export type AdjustmentItemId = string
 /** Unique id of an effect instance on a clip. */
@@ -598,6 +600,24 @@ export interface AdjustmentItem {
   effects: EffectDescriptor[]
 }
 
+/**
+ * One lane of a live compound/nested sequence reference. Video and audio
+ * lanes may share a linkGroupId so one normal edit targets the A/V pair.
+ * The referenced definition remains central in SequenceProject.sequences.
+ */
+export interface SequenceInstance {
+  kind: 'sequence'
+  id: SequenceInstanceId
+  name: string
+  sequenceId: string
+  /** First child-sequence frame represented at timelineRange.startFrame. */
+  sourceStartFrame: number
+  /** Exact authored parent interval; child gaps do not change its duration. */
+  timelineRange: TimeRange
+  /** Optional A/V pairing identity, governed by the normal link invariant. */
+  linkGroupId?: string
+}
+
 /** What a track holds; a track only accepts clips compatible with its kind. */
 export type TrackKind = 'video' | 'audio'
 
@@ -617,6 +637,12 @@ export interface Track {
    * non-overlapping (operations.ts rejects edits that would violate this).
    */
   clips: Clip[]
+  /**
+   * Live same-settings sequence references on this lane. Optional typing keeps
+   * historical in-memory fixtures source-compatible; schema-19 files always
+   * include the array.
+   */
+  sequenceInstances?: SequenceInstance[]
   /**
    * Full-frame post-composite items on this lane. Current schema-15 project
    * files always include the array; optional typing keeps historical pure

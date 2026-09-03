@@ -9,6 +9,9 @@ import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import {
+  createProjectVideoCompositionPlanner,
+} from '../domain/projectVideoCompositionPlan'
+import {
   createVideoCompositionPlanner,
   type VideoCompositionPlan,
 } from '../domain/videoCompositionPlan'
@@ -24,6 +27,7 @@ import type {
   Clip,
   FrameRate,
   MediaAsset,
+  SequenceInstance,
   TimelineDoc,
   Track,
 } from '../domain/schema'
@@ -922,6 +926,192 @@ describe('previewController', () => {
     seedAsset({ id: 'audio-poke', kind: 'audio', frameRate: null })
     await flush()
     expect(bridge.openedImages).toHaveLength(1)
+  })
+
+  test('resolves nested plans and worker resources through the project seam', async () => {
+    const { deps, bridge } = makeDeps()
+    const image = seedImageAsset({ id: 'nested-still' })
+    const child: TimelineDoc = {
+      ...initialDoc,
+      id: 'nested-child',
+      name: 'Nested child',
+      tracks: [{
+        id: 'nested-child-V1',
+        kind: 'video',
+        name: 'V1',
+        clips: [makeStillClip('nested-child-clip', image.id)],
+        sequenceInstances: [],
+        adjustments: [],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      }],
+    }
+    const instance: SequenceInstance = {
+      kind: 'sequence',
+      id: 'nested-use',
+      name: 'Nested use',
+      sequenceId: child.id,
+      sourceStartFrame: 0,
+      timelineRange: { startFrame: 0, durationFrames: 10 },
+    }
+    const root: TimelineDoc = {
+      ...initialDoc,
+      id: 'nested-root',
+      name: 'Nested root',
+      tracks: [{
+        id: 'nested-root-V1',
+        kind: 'video',
+        name: 'V1',
+        clips: [],
+        sequenceInstances: [instance],
+        adjustments: [],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      }],
+    }
+    useDocumentStore.getState().setProject({
+      id: 'nested-project',
+      name: 'Nested project',
+      rootSequenceId: root.id,
+      sequences: [root, child],
+    })
+    deps.createProjectVisualPlanner = (project, sequenceId, catalog, plugins) => {
+      bridge.catalogs.push(new Map(catalog))
+      return createProjectVideoCompositionPlanner(
+        project,
+        sequenceId,
+        catalog,
+        plugins,
+      )
+    }
+
+    initPreview(canvasEl(), deps)
+    await flush()
+    await nextFrame()
+
+    expect(bridge.docs[0].tracks.map((track) => track.id)).toEqual([
+      'nested-root-V1',
+      'nested-child-V1',
+    ])
+    expect(bridge.openedImages.map((entry) => entry.assetId)).toEqual([image.id])
+    expect(bridge.renderPlans.at(-1)?.items.map((item) => item.kind)).toEqual([
+      'sequence-background',
+      'clip',
+    ])
+  })
+
+  test('projects nested child effects at mapped time across repeated instances', async () => {
+    const { deps, bridge } = makeDeps()
+    const image = seedImageAsset({ id: 'nested-effect-still' })
+    const effect = createColorAdjustEffect('fx-nested-child')
+    const childClip = makeStillClip('nested-effect-clip', image.id)
+    const mask = createMaskEffect('fx-nested-mask', 'rectangle')
+    childClip.effects = [effect, mask]
+    childClip.animation = {
+      tracks: [],
+      effectTracks: [{
+        effectId: mask.id,
+        parameter: 'width',
+        keyframes: [
+          { frame: 0, value: 1, easing: { type: 'hold' } },
+          { frame: 5, value: 0.5, easing: { type: 'hold' } },
+        ],
+      }],
+    }
+    const child: TimelineDoc = {
+      ...initialDoc,
+      id: 'nested-effect-child',
+      name: 'Nested effect child',
+      tracks: [{
+        id: 'nested-effect-child-V1',
+        kind: 'video',
+        name: 'V1',
+        clips: [childClip],
+        sequenceInstances: [],
+        adjustments: [],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      }],
+    }
+    const root: TimelineDoc = {
+      ...initialDoc,
+      id: 'nested-effect-root',
+      name: 'Nested effect root',
+      tracks: [{
+        id: 'nested-effect-root-V1',
+        kind: 'video',
+        name: 'V1',
+        clips: [],
+        sequenceInstances: [{
+          kind: 'sequence',
+          id: 'nested-effect-use',
+          name: 'Nested effect use',
+          sequenceId: child.id,
+          sourceStartFrame: 3,
+          timelineRange: { startFrame: 20, durationFrames: 6 },
+        }],
+        adjustments: [],
+        transitions: [],
+        hidden: false,
+        muted: false,
+        solo: false,
+        locked: false,
+      }],
+    }
+    root.tracks.push({
+      ...root.tracks[0],
+      id: 'nested-effect-root-V2',
+      sequenceInstances: [{
+        ...root.tracks[0].sequenceInstances![0],
+        id: 'nested-effect-use-again',
+        sourceStartFrame: 0,
+      }],
+    })
+    useDocumentStore.getState().setProject({
+      id: 'nested-effect-project',
+      name: 'Nested effect project',
+      rootSequenceId: root.id,
+      sequences: [root, child],
+    })
+    deps.createProjectVisualPlanner = (project, sequenceId, catalog, plugins) => (
+      createProjectVideoCompositionPlanner(project, sequenceId, catalog, plugins)
+    )
+
+    initPreview(canvasEl(), deps)
+    await flush()
+    bridge.onRendererCapabilities?.({ canvasFilter: true, canvasPixelAccess: true })
+
+    expect(usePreviewStatusStore.getState().effectStatuses.get(effect.id))
+      .toMatchObject({ status: 'ready' })
+    bridge.onRendererCapabilities?.({ canvasFilter: false, canvasPixelAccess: false })
+    useTransportStore.getState().setPlayheadFrame(20)
+    await nextFrame()
+    expect(usePreviewStatusStore.getState().effectStatuses.get(mask.id))
+      .toMatchObject({ status: 'ready' })
+    useTransportStore.getState().setPlayheadFrame(22)
+    await nextFrame()
+    expect(usePreviewStatusStore.getState().effectStatuses.get(mask.id))
+      .toMatchObject({ status: 'unsupported' })
+    // Capability refresh must use the same mapped time as the rendered frame.
+    bridge.onRendererCapabilities?.({ canvasFilter: true, canvasPixelAccess: true })
+    expect(usePreviewStatusStore.getState().effectStatuses.get(mask.id))
+      .toMatchObject({ status: 'ready' })
+    bridge.onRendererCapabilities?.({ canvasFilter: false, canvasPixelAccess: false })
+    expect(usePreviewStatusStore.getState().effectStatuses.get(mask.id))
+      .toMatchObject({ status: 'unsupported' })
+    useTransportStore.getState().setPlayheadFrame(20)
+    await nextFrame()
+    expect(usePreviewStatusStore.getState().effectStatuses.get(mask.id))
+      .toMatchObject({ status: 'ready' })
   })
 
   test('keeps an unreferenced still out of the worker', async () => {

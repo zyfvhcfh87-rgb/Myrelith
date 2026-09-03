@@ -114,6 +114,7 @@ function track(
     kind,
     name: `${id} lane`,
     clips,
+    sequenceInstances: [],
     adjustments: [],
     transitions: [],
     hidden: kind === 'video',

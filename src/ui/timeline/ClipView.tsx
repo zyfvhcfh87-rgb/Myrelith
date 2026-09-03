@@ -32,6 +32,7 @@ import { findClip } from '../../domain/selectors'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
+import { useSequenceInstanceSelectionStore } from '../../state/sequenceInstanceSelectionStore'
 import ClipAutomationLane from './ClipAutomationLane'
 import {
   clipAutomationMarkers,
@@ -233,7 +234,10 @@ function ClipView({
             : `translate(${localStartPx}px, ${previewTrackOffsetY}px)`,
         width: hasVisibleSlice ? displayedDurationFrames * zoom : 1,
       }}
-      onPointerDown={onBodyPointerDown}
+      onPointerDown={(event) => {
+        useSequenceInstanceSelectionStore.getState().setSelectedInstanceId(null)
+        onBodyPointerDown(event)
+      }}
       onContextMenu={(event) => {
         const currentClip = findClip(useDocumentStore.getState().doc, clip.id)
         if (!currentClip) return

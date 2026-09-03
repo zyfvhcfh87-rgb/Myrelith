@@ -188,8 +188,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   sole root. Validation covers active and dormant sequences before stores or
   resources change, including the root, global ids, per-sequence invariants,
   and aggregate project budgets. Media descriptors, connected resources, and
-  collections remain project-owned once, outside all sequences. This model
-  does not permit sequence nesting, multicam, or mixed-settings timelines.
+  collections remain project-owned once, outside all sequences. Schema 19 adds
+  live `Track.sequenceInstances` referencing those central definitions with
+  exact same-settings, integer-frame source/parent ranges. Whole-project graph
+  admission includes dormant definitions, rejects cycles and missing references,
+  and bounds depth to eight and worst-case expansion to 4,096 leaves per media
+  kind, including hidden/muted tracks. Shared project visual/audio planners
+  flatten immutable leaves; uncovered ranges remain explicit black/silence.
+  Preview effect status uses those same resolved child-frame visual leaves for
+  active instances. Multicam and mixed-settings timelines remain unsupported.
 - `TimeRange` is **half-open** `[startFrame, startFrame + durationFrames)`;
   ranges that merely touch do not overlap. All ranges are integer frames at
   the document rate.

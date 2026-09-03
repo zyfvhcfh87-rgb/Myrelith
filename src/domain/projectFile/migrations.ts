@@ -510,6 +510,16 @@ function migrateAudioEffectStacks(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 18, tracks, masterAudio }
 }
 
+function migrateSequenceInstances(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    return { ...track, sequenceInstances: [] }
+  })
+  return { ...document, schemaVersion: 19, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -579,6 +589,9 @@ function migrateTimelineDocument(
   }
   if (migrated.schemaVersion === 17) {
     migrated = migrateAudioEffectStacks(migrated)
+  }
+  if (migrated.schemaVersion === 18) {
+    migrated = migrateSequenceInstances(migrated)
   }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {

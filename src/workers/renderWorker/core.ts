@@ -8,7 +8,10 @@
 import { FrameRingBuffer } from '../../engine/frame-cache';
 import type { AssetId, ClipId, TimelineDoc } from '../../domain/schema';
 import { fullResolutionPresentationProfile, presentationProfileMatchesDocument, type PresentationProfile } from '../../domain/presentationProfile';
-import { videoCompositionRequests } from '../../domain/videoCompositionPlan';
+import {
+  videoCompositionRequests,
+  videoCompositionRequestKey,
+} from '../../domain/videoCompositionPlan';
 import { supportsCanvasEffectFilter, supportsCanvasEffectPixels } from '../../domain/effectStack';
 import { analyzeVideoScopes, VIDEO_SCOPE_SAMPLE_HEIGHT, VIDEO_SCOPE_SAMPLE_WIDTH } from '../../domain/videoScopes';
 import { assertRenderSurfaceBudget } from '../../domain/renderSurfaceBudget';
@@ -1846,7 +1849,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       // Queue clip-keyed entries in the exact order carried by the plan.
       const queues = new Map<string, Array<StreamingCompositeSourceEntry | null>>()
       for (const request of videoCompositionRequests(msg.plan)) {
-        const entry = entriesByClip.get(request.clip.id)
+        const entry = entriesByClip.get(videoCompositionRequestKey(request))
         const key = `${request.clip.assetId}@${request.sourceFrame}`
         const queue = queues.get(key) ?? []
         queue.push(

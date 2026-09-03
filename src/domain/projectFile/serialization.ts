@@ -109,6 +109,17 @@ function portableTimelineSnapshot(document: TimelineDoc): TimelineDoc {
           ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
           ...(clip.linkGroupId === undefined ? {} : { linkGroupId: clip.linkGroupId }),
         })),
+        sequenceInstances: (track.sequenceInstances ?? []).map((instance) => ({
+          kind: instance.kind,
+          id: instance.id,
+          name: instance.name,
+          sequenceId: instance.sequenceId,
+          sourceStartFrame: instance.sourceStartFrame,
+          timelineRange: { ...instance.timelineRange },
+          ...(instance.linkGroupId === undefined
+            ? {}
+            : { linkGroupId: instance.linkGroupId }),
+        })),
         adjustments: (track.adjustments ?? []).map((adjustment) => ({
           kind: adjustment.kind,
           id: adjustment.id,

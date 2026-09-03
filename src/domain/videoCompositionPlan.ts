@@ -6,6 +6,7 @@ import type {
   Clip,
   TimelineDoc,
   TrackId,
+  SequenceInstanceId,
 } from './schema'
 import {
   activeCaptionItemsAtFrame,
@@ -47,13 +48,27 @@ export interface OrdinaryVideoPlanItem {
 }
 
 export interface PlannedVideoFrameRequest extends VideoFrameRequest {
+  /** Plan-local identity when one durable clip is reached through multiple instances. */
+  requestKey?: string
   /** Present only for authored stacks containing a plugin-prefixed descriptor. */
   effectStagePlan?: VideoEffectStagePlan
 }
 
 export interface PlannedCrossfadeFrameRequest extends CrossfadeFrameRequest {
+  /** Plan-local identity when one durable clip is reached through multiple instances. */
+  requestKey?: string
   /** Planned independently after resolving this exact transition leg's animation. */
   effectStagePlan?: VideoEffectStagePlan
+}
+
+export type PlannedVideoDecodeRequest = VideoFrameRequest & {
+  readonly requestKey?: string
+}
+
+export function videoCompositionRequestKey(
+  request: PlannedVideoDecodeRequest,
+): string {
+  return request.requestKey ?? request.clip.id
 }
 
 export interface TextOverlayPlanItem {
@@ -88,11 +103,23 @@ export interface CaptionPlanItem {
   paint: CaptionPaint
 }
 
+/** Opaque black base of one live nested-sequence video instance. */
+export interface SequenceBackgroundCompositionItem {
+  kind: 'sequence-background'
+  trackId: TrackId
+  /** Frame in the immediate parent sequence. */
+  frame: number
+  instanceId: SequenceInstanceId
+  sequenceId: string
+  instancePath: readonly SequenceInstanceId[]
+}
+
 export type VideoCompositionItem =
   | OrdinaryVideoPlanItem
   | TextOverlayPlanItem
   | AdjustmentCompositionItem
   | CaptionPlanItem
+  | SequenceBackgroundCompositionItem
   | CrossfadeCompositionItem
 
 /** One transferable, paint-ordered plan for one exact document frame. */
@@ -294,8 +321,8 @@ export function videoCompositionPlanAtFrame(
 /** Exact decode requests in compositor call order; invisible legs need none. */
 export function videoCompositionRequests(
   plan: VideoCompositionPlan,
-): VideoFrameRequest[] {
-  const requests: VideoFrameRequest[] = []
+): PlannedVideoDecodeRequest[] {
+  const requests: PlannedVideoDecodeRequest[] = []
   for (const item of plan.items) {
     if (item.kind === 'clip') {
       if (!Object.prototype.hasOwnProperty.call(item.request, 'effectStagePlan')) {
@@ -311,6 +338,7 @@ export function videoCompositionRequests(
       item.kind === 'text'
       || item.kind === 'caption'
       || item.kind === 'adjustment'
+      || item.kind === 'sequence-background'
     ) continue
     for (const request of item.requests) {
       if (request.opacity <= 0 || request.weight <= 0) continue

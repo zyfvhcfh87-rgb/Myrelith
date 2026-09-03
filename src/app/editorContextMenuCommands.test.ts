@@ -70,7 +70,7 @@ function track(
 
 function documentFixture(overrides: Partial<TimelineDoc> = {}): TimelineDoc {
   return {
-    schemaVersion: 18,
+    schemaVersion: 19,
     id: 'doc-context-menu',
     name: 'Context menu fixture',
     frameRate: { num: 30, den: 1 },

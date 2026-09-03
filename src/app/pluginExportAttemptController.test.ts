@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import { DEFAULT_EXPORT_PROFILE } from '../domain/exportProfile'
 import type { TimelineDoc } from '../domain/schema'
+import type { SequenceProject } from '../domain/projectSequences'
 import type { PluginDeclarationCatalogSnapshot } from './pluginInstallController'
 import {
   PluginExportPreflightError,
@@ -58,7 +59,7 @@ function catalog(
 
 function document(): TimelineDoc {
   return {
-    schemaVersion: 18,
+    schemaVersion: 19,
     id: 'plugin-export-doc',
     name: 'Plugin export',
     frameRate: { num: 30, den: 1 },
@@ -238,6 +239,56 @@ function deferred<T>() {
 }
 
 describe('plugin export attempt controller', () => {
+  test('preflights reachable child plugin effects and carries the exact project target', async () => {
+    const child = { ...document(), schemaVersion: 19, id: 'child' }
+    const root: TimelineDoc = {
+      ...child,
+      id: 'root',
+      tracks: [{
+        ...child.tracks[0],
+        id: 'root-V1',
+        clips: [],
+        sequenceInstances: [{
+          kind: 'sequence',
+          id: 'child-use',
+          name: 'Child use',
+          sequenceId: 'child',
+          sourceStartFrame: 0,
+          timelineRange: { startFrame: 0, durationFrames: 1 },
+        }],
+      }],
+    }
+    const project: SequenceProject = {
+      id: 'project',
+      name: 'Project',
+      rootSequenceId: 'root',
+      sequences: [root, child],
+    }
+    const runtime = runtimeHarness()
+    const controller = createPluginExportAttemptController({
+      getDocumentSnapshot: () => ({
+        generation: 1,
+        document: root,
+        project,
+        sequenceId: 'root',
+      }),
+      getDeclarationCatalog: async () => catalog(),
+      runtime: runtime.runtime,
+    })
+
+    const prepared = await controller.prepare(DEFAULT_EXPORT_PROFILE)
+    expect(prepared.status).toBe('ready')
+    if (prepared.status !== 'ready') throw new Error('expected ready attempt')
+    expect(prepared.snapshot.effects.map((effect) => effect.descriptorId)).toEqual([
+      'effect-first',
+      'effect-second',
+    ])
+    expect(runtime.requests[0].requiredEffects).toHaveLength(2)
+    const execution = await controller.consume(prepared.token)
+    expect(execution.projectTarget).toEqual({ project, sequenceId: 'root' })
+    await execution.close('test-complete')
+  })
+
   test('preflights unaffected ready plugins while returning every static blocker', async () => {
     const h = controllerHarness({ catalog: catalog(5, 'incompatible') })
 

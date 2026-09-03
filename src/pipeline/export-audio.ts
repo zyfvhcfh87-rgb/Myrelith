@@ -17,6 +17,7 @@ import {
   type TimelineAudioEnvelope,
   type TimelineAudioMasterBus,
   type TimelineAudioTrackBus,
+  type TimelineAudioMixPlan,
   writeClipAudioGainsAtLocalFrame,
 } from '../domain/audioMixPlan'
 import { createAudioEffectChain } from '../domain/audioEffectStack'
@@ -484,7 +485,7 @@ export class TimelineAudioMixer {
   private readonly source: ExportAudioMediaSource
   private readonly durationFrames: number
   private readonly mixPlans: SampleAudioClipPlan[]
-  private readonly trackGains: ReadonlyMap<string, TimelineAudioTrackBus>
+  private readonly trackOrder: readonly TimelineAudioTrackBus[]
   private readonly master: TimelineAudioMasterBus
   private readonly readers = new Map<ClipId, ActiveReader>()
   private readonly clipChains = new Map<ClipId, AudioEffectChain>()
@@ -507,16 +508,15 @@ export class TimelineAudioMixer {
     source: ExportAudioMediaSource,
     catalog: SourceBoundsCatalog = new Map(),
     signal?: AbortSignal,
+    projectMixPlan?: TimelineAudioMixPlan,
   ) {
     this.doc = doc
     this.source = source
     this.signal = signal
     throwIfAudioAborted(signal)
     this.durationFrames = docDurationFrames(doc)
-    const mixPlan = createTimelineAudioMixPlan(doc, catalog)
-    this.trackGains = new Map(
-      mixPlan.tracks.map((track) => [track.trackId, track]),
-    )
+    const mixPlan = projectMixPlan ?? createTimelineAudioMixPlan(doc, catalog)
+    this.trackOrder = mixPlan.tracks
     this.master = mixPlan.master
     const sampleRate = doc.audioSampleRate
     for (const track of mixPlan.tracks) {
@@ -549,9 +549,11 @@ export class TimelineAudioMixer {
         })),
       }))
     assertStretchSessionLimit(this.mixPlans)
-    this.hasAudio = doc.tracks.some(
-      (track) => track.kind === 'audio' && track.clips.length > 0,
-    )
+    this.hasAudio = projectMixPlan
+      ? mixPlan.clips.length > 0 || mixPlan.mutedClips.length > 0
+      : doc.tracks.some(
+          (track) => track.kind === 'audio' && track.clips.length > 0,
+        )
 
     audioSampleBoundary(0, doc)
     audioSampleBoundary(this.durationFrames, doc)
@@ -814,11 +816,10 @@ export class TimelineAudioMixer {
           trackMix.right[i] += clipRight[i]
         }
       }
-      for (const [trackId, mix] of byTrack) {
-        const track = this.trackGains.get(trackId)
-        if (!track) {
-          throw new Error(`Audio track bus for "${trackId}" is missing`)
-        }
+      for (const track of this.trackOrder) {
+        const trackId = track.trackId
+        const mix = byTrack.get(trackId)
+        if (!mix) continue
         for (let i = 0; i < sampleCount; i++) {
           mix.left[i] *= track.volume * track.leftGain
           mix.right[i] *= track.volume * track.rightGain
@@ -827,9 +828,24 @@ export class TimelineAudioMixer {
           ?? createAudioEffectChain(track.audioEffects, this.doc.audioSampleRate)
         this.trackChains.set(trackId, trackChain)
         trackChain.process(mix.left, mix.right)
-        for (let i = 0; i < sampleCount; i++) {
-          left[i] += mix.left[i]
-          right[i] += mix.right[i]
+        if (track.parentTrackId) {
+          let parentMix = byTrack.get(track.parentTrackId)
+          if (!parentMix) {
+            parentMix = {
+              left: new Float32Array(sampleCount),
+              right: new Float32Array(sampleCount),
+            }
+            byTrack.set(track.parentTrackId, parentMix)
+          }
+          for (let i = 0; i < sampleCount; i++) {
+            parentMix.left[i] += mix.left[i]
+            parentMix.right[i] += mix.right[i]
+          }
+        } else {
+          for (let i = 0; i < sampleCount; i++) {
+            left[i] += mix.left[i]
+            right[i] += mix.right[i]
+          }
         }
       }
       if (this.master.muted) {

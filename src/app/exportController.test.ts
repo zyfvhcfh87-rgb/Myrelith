@@ -77,7 +77,7 @@ function fileDestination(
 }
 
 const DOC: TimelineDoc = {
-  schemaVersion: 18,
+  schemaVersion: 19,
   id: 'doc-export-controller',
   name: 'Export controller fixture',
   frameRate: { num: 30, den: 1 },

@@ -285,6 +285,7 @@ function track(
     kind,
     name: id,
     clips,
+    sequenceInstances: [],
     adjustments: [],
     transitions,
     hidden: false,

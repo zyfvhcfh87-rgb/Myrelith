@@ -4953,3 +4953,31 @@ Validation: 259 Vitest files / 3,702 tests, all 17 repository runner checks,
 production build/typecheck (4,946 modules), clean oxlint, zero-vulnerability
 production high audit, clean diff hygiene, and all 15 headed repository
 Chromium tests. Vite retains only the established non-fatal large-chunk notice.
+
+## Post-MVP issue #192 - bounded live compound and nested sequences
+
+**IMPLEMENTATION AND LOCAL ACCEPTANCE COMPLETE (2026-09-03).**
+
+- [x] Advance timeline schema 18→19 with stable, resource-free video/audio
+  sequence instances and a migration that installs empty instance arrays.
+- [x] Validate the complete active+dormant graph before mutation: same settings,
+  exact ranges/references, globally unique identities, paired links, cycles,
+  depth 8, project counts, and 4,096 visual/audio leaves per frame.
+- [x] Add atomic create/open/edit/trim/move/split/duplicate/delete operations and
+  one-history compound creation. Make independent clones only the selected
+  reachable subgraph and remints all durable identities and links.
+- [x] Flatten exact child frames through shared immutable video/audio plans used
+  by preview, playback, captions, effects, transitions, adjustments, plugins,
+  proxies, and export. Give repeated leaves distinct request keys; render child
+  gaps as black/silence without moving resource ownership into domain data.
+- [x] Preserve project-wide save, recovery, relink, media reachability, plugin
+  generation, lens provider lookup, export targeting, and playback cleanup.
+- [x] Browser-verify shared child propagation, independent divergence, explicit
+  gaps, depth rejection without mutation, deterministic save round-trip,
+  crash-style recovery, and real nested PNG relink on strict port 41892 with a
+  clean console. Pass the complete 15-test Chromium suite.
+- [x] Pass all 268 Vitest files / 3,758 tests plus all 17 runner checks,
+  production build/typecheck (4,955 modules), clean lint, production audit, and
+  diff hygiene.
+- [ ] Push/publish only after explicit authorization; do not merge or close
+  Issue #192 from this local implementation turn.

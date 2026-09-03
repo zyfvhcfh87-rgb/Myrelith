@@ -19,6 +19,14 @@ import {
 } from '../domain/crossfadePlan'
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
+import type { SequenceProject } from '../domain/projectSequences'
+import {
+  sequenceById,
+  sequenceProjectFromTimeline,
+} from '../domain/projectSequences'
+import { sequenceInstances } from '../domain/nestedSequences'
+import { createProjectTimelineAudioMixPlan } from '../domain/projectAudioMixPlan'
+import type { TimelineAudioMixPlan } from '../domain/audioMixPlan'
 import type { PluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import { selectMediaRepresentation } from '../domain/proxyCache'
 import {
@@ -66,6 +74,11 @@ import type { VideoEffectStageExecutor } from '../pipeline/videoEffectStageExecu
 
 export type { ExportResult, ExportSettings } from '../pipeline/export'
 
+interface ProjectExportTarget {
+  readonly project: SequenceProject
+  readonly sequenceId: string
+}
+
 type ExportRun = AsyncGenerator<number, ExportResult | undefined, void>
 
 export interface ExportRunOptions {
@@ -91,12 +104,15 @@ export interface ExportControllerDeps {
     resolveAsset: ExportAssetResolver,
     sourceBounds: SourceBoundsCatalog,
     pluginSnapshot?: PluginVideoEffectContributionSnapshot,
+    projectTarget?: ProjectExportTarget,
   ): ExportMediaSource
   createPipelineDeps(
     resolveAsset: ExportAssetResolver,
     sourceBounds: SourceBoundsCatalog,
     fileDestination?: ExportFileDestinationCapability,
     videoEffectStageExecutor?: VideoEffectStageExecutor | null,
+    projectMixPlan?: TimelineAudioMixPlan,
+    projectTarget?: ProjectExportTarget,
   ): PipelineExportDeps
   runExport(
     doc: TimelineDoc,
@@ -130,12 +146,16 @@ const realDeps: ExportControllerDeps = {
     sourceBounds,
     fileDestination,
     videoEffectStageExecutor,
+    projectMixPlan,
+    projectTarget,
   ) =>
     createMediabunnyExportDeps(
       resolveAsset,
       sourceBounds,
       fileDestination,
       videoEffectStageExecutor,
+      projectMixPlan,
+      projectTarget,
     ),
   runExport: exportTimeline,
 }
@@ -324,28 +344,67 @@ interface CapturedExportInputs {
   readonly retainedAssetIds: readonly AssetId[]
   readonly sourceBounds: SourceBoundsCatalog
   readonly runtimeGuards: Map<AssetId, MediaRuntimeGuard>
+  readonly audioMixPlan: TimelineAudioMixPlan
+}
+
+function reachableSequences(target: ProjectExportTarget): readonly TimelineDoc[] {
+  const reachable: TimelineDoc[] = []
+  const visited = new Set<string>()
+  const queue = [target.sequenceId]
+  while (queue.length > 0) {
+    const sequenceId = queue.shift()!
+    if (visited.has(sequenceId)) continue
+    visited.add(sequenceId)
+    const sequence = sequenceById(target.project, sequenceId)
+    if (!sequence) throw new RangeError(`Missing export sequence "${sequenceId}"`)
+    reachable.push(sequence)
+    for (const track of sequence.tracks) {
+      for (const instance of sequenceInstances(track)) queue.push(instance.sequenceId)
+    }
+  }
+  return reachable
 }
 
 function captureExportInputs(
   doc: TimelineDoc,
   settings: Readonly<ExportSettings>,
+  projectTarget: ProjectExportTarget,
 ): CapturedExportInputs {
+  if (doc.id !== projectTarget.sequenceId) {
+    throw new RangeError('Export document does not match the project target')
+  }
   const mediaState = useMediaStore.getState()
   const assets = new Map(mediaState.assets)
   const sourceBounds = createSourceBoundsCatalog(mediaState.descriptors.values())
   const includeAudio = settings.audioChannelLayout !== 'off'
-  const hasSilentRamp = includeAudio && audibleTracks(doc).some((track) => (
-    track.clips.some(clipHasWholeWindowSilentRampedAudio)
-  ))
-  const crossfadeWindows = hasSilentRamp
-    ? createCrossfadeAudioWindowIndex(doc, sourceBounds)
-    : undefined
-  const retainedAssetIds = [...outputMediaAssetIds(
-    doc,
-    includeAudio,
-    crossfadeWindows,
-  )]
-  const offline = retainedAssetIds.filter(
+  const audioMixPlan = createProjectTimelineAudioMixPlan(
+    projectTarget.project,
+    projectTarget.sequenceId,
+    sourceBounds,
+  )
+  const retainedAssetIds = new Set<AssetId>()
+  const reachable = reachableSequences(projectTarget)
+  for (const sequence of reachable) {
+    const hasSilentRamp = includeAudio && audibleTracks(sequence).some((track) => (
+      track.clips.some(clipHasWholeWindowSilentRampedAudio)
+    ))
+    const crossfadeWindows = hasSilentRamp
+      ? createCrossfadeAudioWindowIndex(sequence, sourceBounds)
+      : undefined
+    for (const assetId of outputMediaAssetIds(
+      sequence,
+      includeAudio,
+      crossfadeWindows,
+    )) retainedAssetIds.add(assetId)
+  }
+  if (includeAudio) {
+    for (const plan of audioMixPlan.clips) {
+      if (plan.ramp?.silent) continue
+      retainedAssetIds.add(plan.assetId)
+    }
+  }
+  const retainedAssetIdList = [...retainedAssetIds]
+  const offline = retainedAssetIdList.filter(
     (assetId) => !assets.has(assetId),
   )
   if (offline.length > 0) {
@@ -356,18 +415,24 @@ function captureExportInputs(
       `Reconnect ${offline.length} offline source${offline.length === 1 ? '' : 's'} before exporting: ${names.join(', ')}.`,
     )
   }
-  const trackConflict = partialTrackConflict(
-    doc,
-    assets,
-    includeAudio,
-    crossfadeWindows,
-  )
-  if (trackConflict) throw new Error(trackConflict)
+  for (const sequence of reachable) {
+    const crossfadeWindows = includeAudio
+      ? createCrossfadeAudioWindowIndex(sequence, sourceBounds)
+      : undefined
+    const trackConflict = partialTrackConflict(
+      sequence,
+      assets,
+      includeAudio,
+      crossfadeWindows,
+    )
+    if (trackConflict) throw new Error(trackConflict)
+  }
   return Object.freeze({
     assets,
-    retainedAssetIds: Object.freeze(retainedAssetIds),
+    retainedAssetIds: Object.freeze(retainedAssetIdList),
     sourceBounds,
     runtimeGuards: captureExportRuntimeGuards(assets),
+    audioMixPlan,
   })
 }
 
@@ -506,10 +571,12 @@ function isPluginAttemptCancellation(cause: unknown): boolean {
 async function preflightAndRunExport(
   lifecycle: ExportLifecycle,
   doc: TimelineDoc,
+  projectTarget: ProjectExportTarget,
   settings: ExportSettings,
   assets: ReadonlyMap<AssetId, MediaAsset>,
   retainedAssetIds: readonly AssetId[],
   sourceBounds: SourceBoundsCatalog,
+  audioMixPlan: TimelineAudioMixPlan,
   callbacks: ExportCallbacks,
   deps: ExportControllerDeps,
   pluginExecution?: Pick<
@@ -565,12 +632,15 @@ async function preflightAndRunExport(
       sourceBounds,
       callbacks.fileDestination,
       pluginExecution?.videoEffectStageExecutor,
+      audioMixPlan,
+      projectTarget,
     )
     media = deps.createMediaSource(
       doc,
       resolveAsset,
       sourceBounds,
       pluginExecution?.pluginSnapshot,
+      projectTarget,
     )
     if (lifecycle.cancelRequested) {
       await media.close()
@@ -623,7 +693,12 @@ export function startExport(
     return Promise.reject(new Error('An export is already in progress'))
   }
 
-  const doc = useDocumentStore.getState().doc
+  const documentState = useDocumentStore.getState()
+  const doc = documentState.doc
+  const projectTarget = Object.freeze({
+    project: documentState.project,
+    sequenceId: documentState.activeSequenceId,
+  })
   let runSettings: Readonly<ExportSettings>
   let runOptions: Readonly<ExportRunOptions>
   let captured: CapturedExportInputs
@@ -631,10 +706,10 @@ export function startExport(
     runSettings = validateExportProfile(settings)
     runOptions = freezeRunOptions(callbacks)
     assertDestinationCapability(runSettings, runOptions)
-    if (documentHasOutputPluginEffects(doc)) {
+    if (reachableSequences(projectTarget).some(documentHasOutputPluginEffects)) {
       throw new Error('Plugin-aware export requires a prepared one-shot attempt')
     }
-    captured = captureExportInputs(doc, runSettings)
+    captured = captureExportInputs(doc, runSettings, projectTarget)
   } catch (cause) {
     return Promise.reject(cause)
   }
@@ -650,10 +725,12 @@ export function startExport(
     () => preflightAndRunExport(
       lifecycle,
       doc,
+      projectTarget,
       runSettings,
       captured.assets,
       captured.retainedAssetIds,
       captured.sourceBounds,
+      captured.audioMixPlan,
       runOptions,
       deps,
     ),
@@ -701,17 +778,34 @@ export function startPreparedExport(
         )
         lifecycle.pluginExecution = execution
         assertDestinationCapability(execution.settings, runOptions)
-        const captured = captureExportInputs(execution.document, execution.settings)
+        const documentState = useDocumentStore.getState()
+        const projectTarget = execution.projectTarget
+          ?? (documentState.doc === execution.document
+          ? Object.freeze({
+              project: documentState.project,
+              sequenceId: documentState.activeSequenceId,
+            })
+          : Object.freeze({
+              project: sequenceProjectFromTimeline(execution.document),
+              sequenceId: execution.document.id,
+            }))
+        const captured = captureExportInputs(
+          execution.document,
+          execution.settings,
+          projectTarget,
+        )
         for (const [assetId, guard] of captured.runtimeGuards) {
           runtimeGuards.set(assetId, guard)
         }
         const result = await preflightAndRunExport(
           lifecycle,
           execution.document,
+          projectTarget,
           execution.settings,
           captured.assets,
           captured.retainedAssetIds,
           captured.sourceBounds,
+          captured.audioMixPlan,
           runOptions,
           deps,
           execution,

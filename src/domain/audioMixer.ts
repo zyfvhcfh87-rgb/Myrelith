@@ -38,6 +38,8 @@ export interface MixerGains {
 
 export interface TimelineAudioTrackBus extends MixerGains {
   readonly trackId: TrackId
+  /** Nested graphs route this bus into another bus; absent means root master. */
+  readonly parentTrackId?: TrackId
   readonly audioEffects: readonly AudioEffectDescriptor[]
 }
 

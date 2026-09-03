@@ -17,7 +17,7 @@ import {
 
 function makeDoc(includeAudio = true): TimelineDoc {
   return {
-    schemaVersion: 18,
+    schemaVersion: 19,
     id: 'capability-doc',
     name: 'Capability fixture',
     frameRate: { num: 30_000, den: 1_001 },

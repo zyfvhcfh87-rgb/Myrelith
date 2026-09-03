@@ -108,6 +108,46 @@
   gap: 3px;
 }
 
+.sequence-instance-actions {
+  position: absolute;
+  z-index: 21;
+  top: calc(100% + 7px);
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: min(720px, calc(100vw - 20px));
+  padding: 8px;
+  border: 1px solid #55466f;
+  border-radius: 7px;
+  background: #181326;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 48%);
+}
+
+.sequence-instance-actions > span {
+  max-width: 140px;
+  overflow: hidden;
+  color: #d9c9ff;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sequence-instance-actions button {
+  padding: 4px 7px;
+  border: 1px solid #55466f;
+  border-radius: 4px;
+  color: #e8def8;
+  background: #302741;
+  cursor: pointer;
+}
+
+.sequence-instance-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .sequence-buttons button,
 .sequence-name-editor button {
   height: 25px;

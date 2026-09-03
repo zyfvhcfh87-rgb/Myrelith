@@ -40,7 +40,7 @@ function track(id: string, kind: Track['kind'], clips: Clip[] = []): Track {
 
 function documentFixture(): TimelineDoc {
   return {
-    schemaVersion: 18,
+    schemaVersion: 19,
     id: 'doc-sequence',
     name: 'Sequence fixture',
     frameRate: { num: 30, den: 1 },
