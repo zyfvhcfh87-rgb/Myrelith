@@ -207,7 +207,7 @@ beforeEach(() => {
   })
   vi.stubGlobal('ResizeObserver', MockResizeObserver)
   useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
-  useDocumentStore.setState({ doc: makeDoc(), past: [], future: [] })
+  useDocumentStore.getState().setDoc(makeDoc())
 })
 
 afterEach(() => {
@@ -255,11 +255,7 @@ describe('TimelineZoomControls', () => {
   })
 
   test('Full resets a long-project virtual origin and scroll without overwriting Custom', () => {
-    useDocumentStore.setState({
-      doc: makeDoc(LONG_PROJECT_FRAMES),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(makeDoc(LONG_PROJECT_FRAMES))
     const { scroller } = renderHarness()
     act(() => {
       useTransportStore.getState().setZoom(7.25)
@@ -301,11 +297,7 @@ describe('TimelineZoomControls', () => {
   })
 
   test('Detail keeps the exact eleven-second scale and centers a far playhead on a bounded surface', () => {
-    useDocumentStore.setState({
-      doc: makeDoc(LONG_PROJECT_FRAMES),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(makeDoc(LONG_PROJECT_FRAMES))
     const { scroller, measured } = renderHarness()
     act(() =>
       useTransportStore.getState().setPlayheadFrame(FAR_PLAYHEAD_FRAME),
@@ -370,11 +362,7 @@ describe('TimelineZoomControls', () => {
   })
 
   test('Custom restores its exact value and recenters a far playhead after presets', () => {
-    useDocumentStore.setState({
-      doc: makeDoc(LONG_PROJECT_FRAMES),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(makeDoc(LONG_PROJECT_FRAMES))
     const { scroller } = renderHarness()
     act(() => {
       useTransportStore.getState().setPlayheadFrame(FAR_PLAYHEAD_FRAME)
@@ -433,11 +421,7 @@ describe('TimelineZoomControls', () => {
   })
 
   test('the exact 1.8-second maximum centers a far playhead while the physical surface stays bounded', () => {
-    useDocumentStore.setState({
-      doc: makeDoc(LONG_PROJECT_FRAMES),
-      past: [],
-      future: [],
-    })
+    useDocumentStore.getState().setDoc(makeDoc(LONG_PROJECT_FRAMES))
     const { scroller, measured } = renderHarness()
     act(() =>
       useTransportStore.getState().setPlayheadFrame(FAR_PLAYHEAD_FRAME),
@@ -546,7 +530,7 @@ describe('TimelineZoomControls', () => {
   })
 
   test('empty projects stay finite and clamped', () => {
-    useDocumentStore.setState({ doc: makeDoc(0), past: [], future: [] })
+    useDocumentStore.getState().setDoc(makeDoc(0))
     const { scroller } = renderHarness()
 
     fireEvent.click(screen.getByRole('button', { name: 'Full Extent Zoom' }))
@@ -659,9 +643,16 @@ describe('TimelineZoomControls', () => {
 
   test('zoom actions never mutate playhead, document, or undo history', () => {
     const doc = makeDoc()
-    const past = [makeDoc(100)]
-    const future = [makeDoc(200)]
-    useDocumentStore.setState({ doc, past, future })
+    const state = useDocumentStore.getState()
+    const past = [{ ...state.project, sequences: [makeDoc(100)] }]
+    const future = [{ ...state.project, sequences: [makeDoc(200)] }]
+    useDocumentStore.setState({
+      project: { ...state.project, rootSequenceId: doc.id, sequences: [doc] },
+      activeSequenceId: doc.id,
+      doc,
+      past,
+      future,
+    })
     act(() => useTransportStore.getState().setPlayheadFrame(123))
     act(() => useTransportStore.getState().setSelectedClip('clipA'))
     renderHarness()

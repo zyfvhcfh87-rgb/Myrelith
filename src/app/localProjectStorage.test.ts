@@ -58,22 +58,26 @@ function serializedProject(
   documentId: string,
   projectName = `Project ${documentId}`,
 ): string {
+  const document = {
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
+    id: documentId,
+    name: projectName,
+    frameRate: { num: 30, den: 1 },
+    width: 1920,
+    height: 1080,
+    audioSampleRate: 48_000,
+    tracks: [],
+    markers: [],
+    captionTracks: [],
+    masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
+  }
   const project: ProjectFile = {
     format: PROJECT_FILE_FORMAT,
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-    document: {
-      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
-      id: documentId,
-      name: projectName,
-      frameRate: { num: 30, den: 1 },
-      width: 1920,
-      height: 1080,
-      audioSampleRate: 48_000,
-      tracks: [],
-      markers: [],
-      captionTracks: [],
-      masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
-    },
+    id: documentId,
+    name: projectName,
+    rootSequenceId: documentId,
+    sequences: [document],
     assets: [],
     collections: [],
   }
@@ -215,7 +219,7 @@ describe('recovery journal storage', () => {
     const backend = createMapLocalProjectStorageBackend()
     const storage = createLocalProjectStorage(backend)
     const project = parseProjectFile(serializedProject('doc-markers'))
-    project.document.markers = [{
+    project.sequences[0].markers = [{
       id: 'marker-recovery',
       frame: 240,
       label: 'Recovery beat',
@@ -231,7 +235,7 @@ describe('recovery journal storage', () => {
 
     const journal = await storage.getRecoveryJournal('journal-markers')
     const recovered = parseProjectFile(journal?.generations[0].serializedProject ?? '')
-    expect(recovered.document.markers).toEqual(project.document.markers)
+    expect(recovered.sequences[0].markers).toEqual(project.sequences[0].markers)
   })
 
   test('writes each full journal atomically and retains only three generations', async () => {

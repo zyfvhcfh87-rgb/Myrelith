@@ -204,8 +204,7 @@ interface Fixture {
   currentDocument(): TimelineDoc
   setDocument(document: TimelineDoc): void
   inspect: ReturnType<typeof vi.fn<MediaImportDeps['inspect']>>
-  replaceDocument: ReturnType<typeof vi.fn<MediaImportDeps['replaceDocument']>>
-  reconformAssets: ReturnType<typeof vi.fn<MediaImportDeps['reconformAssets']>>
+  replaceProjectRate: ReturnType<typeof vi.fn<MediaImportDeps['replaceProjectRate']>>
   rememberMediaHandle: ReturnType<
     typeof vi.fn<MediaImportDeps['rememberMediaHandle']>
   >
@@ -219,6 +218,7 @@ function makeFixture(
     DEFAULT_PROJECT_SETTINGS,
     'doc-import',
   ),
+  projectId?: string,
 ): Fixture {
   let document = startingDocument
   const assets = new Map<string, MediaAsset>()
@@ -229,10 +229,8 @@ function makeFixture(
     _rate: FrameRate,
     assetId: string,
   ) => readyProbe({ ...analyzed, id: assetId }))
-  const replaceDocument = vi.fn((next: TimelineDoc) => {
-    document = next
-  })
-  const reconformAssets = vi.fn((rate: FrameRate) => {
+  const replaceProjectRate = vi.fn((rate: FrameRate) => {
+    document = { ...document, frameRate: { ...rate } }
     for (const [id, asset] of assets) {
       assets.set(id, {
         ...asset,
@@ -250,7 +248,9 @@ function makeFixture(
     createRequestId: () => `request-${++requestCount}`,
     inspect,
     getDocument: () => document,
-    replaceDocument,
+    getProjectId: () => projectId ?? document.id,
+    getSequences: () => [document],
+    replaceProjectRate,
     hasAsset: (id) => assets.has(id),
     addAsset: (asset, readyCompatibility) => {
       if (assets.has(asset.id)) return false
@@ -264,7 +264,6 @@ function makeFixture(
       compatibility.set(asset.id, readyCompatibility)
       return true
     },
-    reconformAssets,
     startCompatibility: (item) => {
       const current = compatibility.get(item.id)
       if (current?.status === 'checking' || assets.has(item.id)) return false
@@ -296,8 +295,7 @@ function makeFixture(
       document = next
     },
     inspect,
-    replaceDocument,
-    reconformAssets,
+    replaceProjectRate,
     rememberMediaHandle,
     revokeObjectURL,
   }
@@ -408,7 +406,7 @@ describe('mediaImportController', () => {
       durationFrames: 60,
       frameRate: F30,
     })
-    expect(fixture.replaceDocument).not.toHaveBeenCalled()
+    expect(fixture.replaceProjectRate).not.toHaveBeenCalled()
     expect(fixture.revokeObjectURL).not.toHaveBeenCalled()
     expect(useMediaImportStore.getState().phase).toBe('idle')
     expect(fixture.compatibility.get('asset-new')).toMatchObject({
@@ -580,7 +578,6 @@ describe('mediaImportController', () => {
     })
     expect(fixture.currentDocument().frameRate).toEqual(F30)
     expect(fixture.assets.get('asset-new')?.durationFrames).toBe(60)
-    expect(fixture.reconformAssets).not.toHaveBeenCalled()
   })
 
   test('Match changes an empty project and re-conforms all unused media', async () => {
@@ -602,8 +599,7 @@ describe('mediaImportController', () => {
     expect(fixture.currentDocument().tracks.map((track) => track.id)).toEqual([
       'V1', 'V2', 'V3', 'V4', 'A1', 'A2', 'A3', 'A4',
     ])
-    expect(fixture.replaceDocument).toHaveBeenCalledOnce()
-    expect(fixture.reconformAssets).toHaveBeenCalledWith(F60)
+    expect(fixture.replaceProjectRate).toHaveBeenCalledOnce()
     expect(fixture.assets.get('existing')?.durationFrames).toBe(120)
     expect(fixture.assets.get('asset-new')?.durationFrames).toBe(120)
   })
@@ -643,7 +639,7 @@ describe('mediaImportController', () => {
 
     expect(useMediaImportStore.getState().prompt).toMatchObject({
       canMatchSource: false,
-      matchUnavailableReason: expect.stringContaining('clips have been added'),
+      matchUnavailableReason: expect.stringContaining('timed content'),
     })
     expect(resolveMediaImportDecision('match-source-rate')).toBe(false)
     expect(cancelMediaImport()).toBe(true)
@@ -886,8 +882,7 @@ describe('mediaImportController', () => {
     })
 
     expect(fixture.inspect).toHaveBeenCalledTimes(2)
-    expect(fixture.replaceDocument).not.toHaveBeenCalled()
-    expect(fixture.reconformAssets).not.toHaveBeenCalled()
+    expect(fixture.replaceProjectRate).not.toHaveBeenCalled()
     expect(fixture.assets.get('asset-new')).toMatchObject({
       objectUrl: 'blob:limited-audio-confirmed',
       kind: 'audio',
@@ -1136,6 +1131,34 @@ describe('mediaImportController', () => {
     )
   })
 
+  test('retry still belongs to the project after a sequence switch', async () => {
+    const fixture = makeFixture(
+      makeAsset({ frameRate: F30 }),
+      createTimelineDoc('Alternate cut', DEFAULT_PROJECT_SETTINGS, 'seq-alt'),
+      'project-import',
+    )
+    fixture.inspect
+      .mockResolvedValueOnce({
+        status: 'unsupported',
+        asset: null,
+        compatibility: makeCompatibility('unsupported'),
+      })
+      .mockResolvedValueOnce(readyProbe(makeAsset({ frameRate: F30 })))
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toMatchObject({
+      status: 'unsupported',
+    })
+    fixture.setDocument({
+      ...fixture.currentDocument(),
+      id: 'seq-root',
+    })
+
+    await expect(retryMediaCompatibility('asset-new')).resolves.toEqual({
+      status: 'imported',
+      assetId: 'asset-new',
+    })
+  })
+
   test('removing a checking row aborts and late work cannot resurrect it', async () => {
     const pending = deferred<MediaProbeResult>()
     const fixture = makeFixture()
@@ -1178,6 +1201,51 @@ describe('mediaImportController', () => {
     })
     expect(fixture.assets).toHaveLength(0)
     expect(fixture.revokeObjectURL).toHaveBeenCalledWith('blob:source')
+  })
+
+  test('a handle-aware import on a non-root sequence remembers the project id', async () => {
+    const fixture = makeFixture(
+      makeAsset({ frameRate: F30 }),
+      createTimelineDoc('Alternate cut', DEFAULT_PROJECT_SETTINGS, 'seq-alt'),
+      'project-import',
+    )
+    const selected = file()
+    const handle = {
+      kind: 'file',
+      name: selected.name,
+      getFile: vi.fn(async () => selected),
+    } as unknown as LocalMediaFileHandle
+
+    await expect(
+      importMediaFromHandle(selected, handle, fixture.deps),
+    ).resolves.toMatchObject({ status: 'imported' })
+
+    expect(fixture.rememberMediaHandle).toHaveBeenCalledWith(
+      'project-import',
+      'asset-new',
+      handle,
+    )
+  })
+
+  test('switching sequences while the prompt is open does not treat the project as stale', async () => {
+    const fixture = makeFixture(
+      makeAsset(),
+      createTimelineDoc('Alternate cut', DEFAULT_PROJECT_SETTINGS, 'seq-alt'),
+      'project-import',
+    )
+    const result = importMedia(file(), fixture.deps)
+    await waitForImportPhase('awaiting-decision')
+    fixture.setDocument({
+      ...fixture.currentDocument(),
+      id: 'seq-root',
+    })
+
+    expect(resolveMediaImportDecision('keep-project-rate')).toBe(true)
+    await expect(result).resolves.toEqual({
+      status: 'imported',
+      assetId: 'asset-new',
+    })
+    expect(fixture.assets.has('asset-new')).toBe(true)
   })
 
   test('settings change while the prompt is open rejects the stale choice', async () => {

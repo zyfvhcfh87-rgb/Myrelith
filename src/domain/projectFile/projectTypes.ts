@@ -1,12 +1,13 @@
-import type { AssetKind, FrameRate, MediaSourceBounds, TimelineDoc, PartialTrackImportSelection } from '../schema';
+import type { AssetKind, FrameRate, MediaSourceBounds, PartialTrackImportSelection } from '../schema';
 import { MAX_TIMELINE_MARKERS } from '../timelineMarkers';
-import { MAX_TOTAL_ANIMATION_KEYFRAMES } from '../clipAnimation';
 import { TEXT_OVERLAY_LIMITS } from '../textOverlay';
 import { MAX_DOCUMENT_ID_CHARACTERS, MAX_PROJECT_NAME_CHARACTERS } from '../projectLimits';
 import { MEDIA_COLLECTION_LIMITS, type MediaCollection } from '../mediaCollections';
 import { EFFECT_STACK_LIMITS } from '../effectBounds'
 import { AUDIO_EFFECT_STACK_LIMITS } from '../audioEffectBounds';
 import { MAX_SOURCE_TIME_SPEED_POINTS } from '../sourceTimeMap';
+import type { SequenceProject } from '../projectSequences';
+import { SEQUENCE_PROJECT_LIMITS } from '../sequenceProjectLimits';
 
 export const PROJECT_FILE_FORMAT = 'myrelith-project' as const
 /** Serialized format marker used by releases published before the rebrand. */
@@ -18,35 +19,41 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   PROJECT_FILE_EXTENSION,
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
-export const CURRENT_PROJECT_FORMAT_VERSION = 5 as const
+export const CURRENT_PROJECT_FORMAT_VERSION = 6 as const
 export const CURRENT_TIMELINE_SCHEMA_VERSION = 18 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
   maxSerializedCharacters: 10_000_000,
   maxAssets: 50_000,
+  maxSequences: SEQUENCE_PROJECT_LIMITS.maxSequences,
+  maxTotalTracks: SEQUENCE_PROJECT_LIMITS.maxTotalTracks,
+  maxTotalMarkers: SEQUENCE_PROJECT_LIMITS.maxTotalMarkers,
+  maxTotalCaptionTracks: SEQUENCE_PROJECT_LIMITS.maxTotalCaptionTracks,
+  maxTotalCaptionItems: SEQUENCE_PROJECT_LIMITS.maxTotalCaptionItems,
   maxCollections: MEDIA_COLLECTION_LIMITS.maxCollections,
   maxCollectionMemberships: MEDIA_COLLECTION_LIMITS.maxMembershipsPerCollection,
   maxTotalCollectionMemberships: MEDIA_COLLECTION_LIMITS.maxTotalMemberships,
   maxCollectionNameCharacters: MEDIA_COLLECTION_LIMITS.maxNameCharacters,
   maxTracks: 256,
   maxClips: 100_000,
-  maxAdjustments: 100_000,
+  maxAdjustments: SEQUENCE_PROJECT_LIMITS.maxTotalAdjustments,
   maxEffectsPerClip: EFFECT_STACK_LIMITS.maxEffectsPerClip,
   maxEffectParams: EFFECT_STACK_LIMITS.maxEffectParams,
-  maxTotalEffects: EFFECT_STACK_LIMITS.maxTotalEffects,
-  maxTotalEffectParams: EFFECT_STACK_LIMITS.maxTotalEffectParams,
-  maxTotalEffectStringCharacters: EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters,
+  maxTotalEffects: SEQUENCE_PROJECT_LIMITS.maxTotalEffects,
+  maxTotalEffectParams: SEQUENCE_PROJECT_LIMITS.maxTotalEffectParams,
+  maxTotalEffectStringCharacters:
+    SEQUENCE_PROJECT_LIMITS.maxTotalEffectStringCharacters,
   maxAudioEffectsPerStack: AUDIO_EFFECT_STACK_LIMITS.maxEffectsPerStack,
   maxTotalAudioEffects: AUDIO_EFFECT_STACK_LIMITS.maxTotalEffects,
   maxTotalAudioEffectParams: AUDIO_EFFECT_STACK_LIMITS.maxTotalEffectParams,
   maxTotalAudioEffectStringCharacters: AUDIO_EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters,
   maxTransitions: 100_000,
   maxMarkers: MAX_TIMELINE_MARKERS,
-  maxTotalKeyframes: MAX_TOTAL_ANIMATION_KEYFRAMES,
+  maxTotalKeyframes: SEQUENCE_PROJECT_LIMITS.maxTotalKeyframes,
   maxSpeedPointsPerClip: MAX_SOURCE_TIME_SPEED_POINTS,
-  maxTotalSpeedPoints: 100_000,
-  maxTotalTextCharacters: 10_000_000,
+  maxTotalSpeedPoints: SEQUENCE_PROJECT_LIMITS.maxTotalSpeedPoints,
+  maxTotalTextCharacters: SEQUENCE_PROJECT_LIMITS.maxTotalTextCharacters,
   maxLensIntentDepth: 8,
   maxLensIntentEntries: 256,
   maxLensIntentKeyCharacters: 128,
@@ -84,15 +91,14 @@ export interface PortableAssetDescriptor {
   audioChannels: number | null
 }
 
-export interface ProjectFileV5 {
+export interface ProjectFileV6 extends SequenceProject {
   format: typeof PROJECT_FILE_FORMAT
   formatVersion: typeof CURRENT_PROJECT_FORMAT_VERSION
-  document: TimelineDoc
   assets: PortableAssetDescriptor[]
   collections: MediaCollection[]
 }
 
-export type ProjectFile = ProjectFileV5
+export type ProjectFile = ProjectFileV6
 
 export class ProjectFileError extends Error {
   constructor(message: string) {

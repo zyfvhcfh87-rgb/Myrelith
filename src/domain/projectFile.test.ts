@@ -45,6 +45,10 @@ import {
   DEFAULT_MANUAL_LENS_CORRECTION,
   type LensCorrectionIntent,
 } from './lensCorrection'
+import {
+  duplicateProjectSequence,
+  type SequenceEntityKind,
+} from './projectSequences'
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -225,12 +229,49 @@ function makeDocument(): TimelineDoc {
 }
 
 function makeProject(): ProjectFile {
+  const document = makeDocument()
   return {
     format: PROJECT_FILE_FORMAT,
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-    document: makeDocument(),
+    id: document.id,
+    name: document.name,
+    rootSequenceId: document.id,
+    sequences: [document],
     assets: makeAssets(),
     collections: [],
+  }
+}
+
+function makeMultiSequenceProject(): ProjectFile {
+  const project = makeProject()
+  let index = 0
+  const duplicated = duplicateProjectSequence(
+    project,
+    project.rootSequenceId,
+    'Alternate cut',
+    (kind: SequenceEntityKind) => `alternate_${kind}_${++index}`,
+  )
+  if (duplicated.failure) throw new Error(duplicated.failure)
+  return {
+    ...project,
+    ...duplicated.project,
+  }
+}
+
+function makeOuterLegacyProject(formatVersion: 1 | 2 | 3 | 4 | 5): {
+  format: string
+  formatVersion: number
+  document: TimelineDoc
+  assets: Array<Record<string, unknown>>
+  collections?: unknown
+} {
+  const current = clone(makeProject())
+  return {
+    format: current.format,
+    formatVersion,
+    document: current.sequences[0],
+    assets: current.assets as unknown as Array<Record<string, unknown>>,
+    ...(formatVersion >= 5 ? { collections: current.collections } : {}),
   }
 }
 
@@ -246,7 +287,7 @@ describe('portable project file', () => {
       { id: 'collection-selects', name: 'Selects', assetIds: ['video-z', 'image-a'] },
       { id: 'collection-broll', name: 'B-roll', assetIds: ['video-z'] },
     ]
-    original.document.markers = [
+    original.sequences[0].markers = [
       { id: 'marker-intro', frame: 0, label: 'Intro', color: 'blue' },
       {
         id: 'marker-beat',
@@ -260,46 +301,114 @@ describe('portable project file', () => {
 
     expect(parsed.format).toBe('myrelith-project')
     expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
-    expect(parsed.document).toEqual(original.document)
+    expect(parsed.sequences[0]).toEqual(original.sequences[0])
     expect(parsed.assets.map((asset) => asset.id)).toEqual(['image-a', 'video-z'])
     expect(parsed.assets.find((asset) => asset.id === 'video-z')).toEqual(original.assets[0])
     expect(parsed.collections).toEqual(original.collections)
-    expect(parsed.document.tracks[0].clips[0]).toMatchObject({
-      effects: original.document.tracks[0].clips[0].effects,
+    expect(parsed.sequences[0].tracks[0].clips[0]).toMatchObject({
+      effects: original.sequences[0].tracks[0].clips[0].effects,
       linkGroupId: 'linked-av',
-      transform: original.document.tracks[0].clips[0].transform,
+      transform: original.sequences[0].tracks[0].clips[0].transform,
     })
-    expect(parsed.document.tracks[0].clips[2].text).toEqual(
-      original.document.tracks[0].clips[2].text,
+    expect(parsed.sequences[0].tracks[0].clips[2].text).toEqual(
+      original.sequences[0].tracks[0].clips[2].text,
     )
-    expect(parsed.document.tracks[0].transitions).toEqual(
-      original.document.tracks[0].transitions,
+    expect(parsed.sequences[0].tracks[0].transitions).toEqual(
+      original.sequences[0].tracks[0].transitions,
     )
-    expect(parsed.document.markers).toEqual(original.document.markers)
+    expect(parsed.sequences[0].markers).toEqual(original.sequences[0].markers)
+  })
+
+  test('migrates the last single-document format into its byte-equivalent sole root', () => {
+    const legacy = makeOuterLegacyProject(5)
+    const originalDocument = clone(legacy.document)
+    const parsed = parseProjectFile(JSON.stringify(legacy))
+
+    expect(parsed).toMatchObject({
+      formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
+      id: originalDocument.id,
+      name: originalDocument.name,
+      rootSequenceId: originalDocument.id,
+    })
+    expect(parsed.sequences).toHaveLength(1)
+    expect(parsed.sequences[0]).toEqual(originalDocument)
+  })
+
+  test('round-trips multiple definitions in deterministic order with one asset catalog', () => {
+    const original = makeMultiSequenceProject()
+    original.sequences[1].markers = [{
+      id: 'alternate-marker',
+      frame: 12,
+      label: 'Alt beat',
+      color: 'orange',
+    }]
+    original.rootSequenceId = original.sequences[1].id
+
+    const parsed = parseProjectFile(serializeProjectFile(original))
+
+    expect(parsed.sequences.map((sequence) => sequence.id)).toEqual(
+      original.sequences.map((sequence) => sequence.id),
+    )
+    expect(parsed.sequences).toEqual(original.sequences)
+    expect(parsed.rootSequenceId).toBe(original.sequences[1].id)
+    expect(parsed.assets.map((asset) => asset.id)).toEqual(['image-a', 'video-z'])
+    expect(new Set(parsed.assets.map((asset) => asset.id))).toEqual(
+      new Set(original.assets.map((asset) => asset.id)),
+    )
+  })
+
+  test('rejects hostile dormant definitions and project-wide id collisions', () => {
+    const missingRoot = makeMultiSequenceProject()
+    missingRoot.rootSequenceId = 'missing-sequence'
+    expect(() => validateProjectFile(missingRoot)).toThrow(/missing root sequence/i)
+
+    const mixedSettings = makeMultiSequenceProject()
+    mixedSettings.sequences[1].width = 1280
+    expect(() => validateProjectFile(mixedSettings)).toThrow(/settings must match/i)
+
+    const duplicateTrack = makeMultiSequenceProject()
+    duplicateTrack.sequences[1].tracks[0].id = duplicateTrack.sequences[0].tracks[0].id
+    expect(() => validateProjectFile(duplicateTrack)).toThrow(/duplicate track id/i)
+
+    const duplicateLinkGroup = makeMultiSequenceProject()
+    duplicateLinkGroup.sequences[1].tracks[0].clips[0].linkGroupId = 'linked-av'
+    duplicateLinkGroup.sequences[1].tracks[1].clips[0].linkGroupId = 'linked-av'
+    expect(() => validateProjectFile(duplicateLinkGroup)).toThrow(/duplicate link group id/i)
+
+    const danglingDormantAsset = makeMultiSequenceProject()
+    danglingDormantAsset.sequences[1].tracks[0].clips[0].assetId = 'missing-asset'
+    expect(() => validateProjectFile(danglingDormantAsset)).toThrow(/unknown asset/i)
+
+    const tooManySequences = makeProject()
+    tooManySequences.sequences = Array.from(
+      { length: PROJECT_FILE_LIMITS.maxSequences + 1 },
+      (_, index) => ({ ...tooManySequences.sequences[0], id: `sequence-${index}` }),
+    )
+    expect(() => validateProjectFile(tooManySequences)).toThrow(/exceeds 256 entries/i)
   })
 
   test('migrates schema-9 through versioned effects and exact 1x maps without changing intent', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 9
-    legacy.document.tracks[0].clips[0].animation = {
+    legacy.sequences[0].schemaVersion = 9
+    legacy.sequences[0].tracks[0].clips[0].animation = {
       tracks: [{
         property: 'opacity',
         keyframes: [{ frame: 2, value: 0.5, easing: { type: 'linear' } }],
       }],
     }
-    const originalRanges = legacy.document.tracks.flatMap((item) => item.clips).map(
+    const originalRanges = legacy.sequences[0].tracks.flatMap((item) => item.clips).map(
       (clip) => ({ sourceRange: clip.sourceRange, timelineRange: clip.timelineRange }),
     )
-    for (const legacyTrack of legacy.document.tracks) {
+    for (const legacyTrack of legacy.sequences[0].tracks) {
       for (const legacyClip of legacyTrack.clips) {
         Reflect.deleteProperty(legacyClip, 'sourceTimeMap')
       }
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
-    const clips = parsed.document.tracks.flatMap((item) => item.clips)
+    const clips = parsed.sequences[0].tracks.flatMap((item) => item.clips)
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(clips.map((clip) => ({
       sourceRange: clip.sourceRange,
       timelineRange: clip.timelineRange,
@@ -318,15 +427,15 @@ describe('portable project file', () => {
 
   test('migrates schema-10 effect documents through schema-12 speed-curve intent', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 10
-    legacy.document.tracks[0].clips[0].animation = {
+    legacy.sequences[0].schemaVersion = 10
+    legacy.sequences[0].tracks[0].clips[0].animation = {
       tracks: [{
         property: 'opacity',
         keyframes: [{ frame: 2, value: 0.5, easing: { type: 'linear' } }],
       }],
     }
-    const effects = clone(legacy.document.tracks[0].clips[0].effects)
-    for (const legacyTrack of legacy.document.tracks) {
+    const effects = clone(legacy.sequences[0].tracks[0].clips[0].effects)
+    for (const legacyTrack of legacy.sequences[0].tracks) {
       for (const legacyClip of legacyTrack.clips) {
         Reflect.deleteProperty(legacyClip, 'sourceTimeMap')
       }
@@ -334,18 +443,18 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.tracks[0].clips[0].effects).toEqual(effects)
-    expect(parsed.document.tracks[0].clips[0].sourceTimeMap).toEqual(
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].tracks[0].clips[0].effects).toEqual(effects)
+    expect(parsed.sequences[0].tracks[0].clips[0].sourceTimeMap).toEqual(
       defaultSourceTimeMap(5, 10),
     )
-    expect(parsed.document.tracks[0].clips[0].animation?.tracks[0].keyframes[0])
+    expect(parsed.sequences[0].tracks[0].clips[0].animation?.tracks[0].keyframes[0])
       .toMatchObject({ frame: 2, sourceTimeTicks: 7_000_000 })
   })
 
   test('round-trips a non-unity rational source-time map exactly', () => {
     const project = makeProject()
-    const retimed = project.document.tracks[0].clips[1]
+    const retimed = project.sequences[0].tracks[0].clips[1]
     retimed.timelineRange = { startFrame: 10, durationFrames: 5 }
     retimed.sourceTimeMap = {
       sourceStartTicks: 15_000_000,
@@ -356,7 +465,7 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(serializeProjectFile(project))
 
-    expect(parsed.document.tracks[0].clips[1]).toMatchObject({
+    expect(parsed.sequences[0].tracks[0].clips[1]).toMatchObject({
       sourceRange: { startFrame: 15, durationFrames: 10 },
       timelineRange: { startFrame: 10, durationFrames: 5 },
       sourceTimeMap: {
@@ -370,8 +479,8 @@ describe('portable project file', () => {
 
   test('migrates schema-11 constant retiming to an explicit empty speed curve', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 11
-    for (const legacyTrack of legacy.document.tracks) {
+    legacy.sequences[0].schemaVersion = 11
+    for (const legacyTrack of legacy.sequences[0].tracks) {
       for (const legacyClip of legacyTrack.clips) {
         Reflect.deleteProperty(legacyClip.sourceTimeMap ?? {}, 'speedCurve')
       }
@@ -379,24 +488,24 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    for (const parsedClip of parsed.document.tracks.flatMap((item) => item.clips)) {
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    for (const parsedClip of parsed.sequences[0].tracks.flatMap((item) => item.clips)) {
       expect(parsedClip.sourceTimeMap?.speedCurve).toEqual({ originFrame: 0, points: [] })
     }
   })
 
   test('migrates schema-12 clips with omitted animation to canonical effect tracks', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 12
-    for (const clip of legacy.document.tracks.flatMap((track) => track.clips)) {
+    legacy.sequences[0].schemaVersion = 12
+    for (const clip of legacy.sequences[0].tracks.flatMap((track) => track.clips)) {
       Reflect.deleteProperty(clip, 'animation')
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.tracks.flatMap((track) => track.clips).map((clip) => clip.animation))
-      .toEqual(parsed.document.tracks.flatMap((track) => track.clips).map(() => ({
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].tracks.flatMap((track) => track.clips).map((clip) => clip.animation))
+      .toEqual(parsed.sequences[0].tracks.flatMap((track) => track.clips).map(() => ({
         tracks: [],
         effectTracks: [],
       })))
@@ -404,52 +513,52 @@ describe('portable project file', () => {
 
   test('migrates schema-13 clips to explicit absent manual lens correction', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 13
-    for (const clip of legacy.document.tracks.flatMap((track) => track.clips)) {
+    legacy.sequences[0].schemaVersion = 13
+    for (const clip of legacy.sequences[0].tracks.flatMap((track) => track.clips)) {
       Reflect.deleteProperty(clip, 'lensCorrection')
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.tracks.flatMap((track) => track.clips).map(
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].tracks.flatMap((track) => track.clips).map(
       (clip) => clip.lensCorrection,
-    )).toEqual(parsed.document.tracks.flatMap((track) => track.clips).map(() => null))
+    )).toEqual(parsed.sequences[0].tracks.flatMap((track) => track.clips).map(() => null))
   })
 
   test('migrates schema-14 documents to schema 15 without rewriting clips', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 14
+    legacy.sequences[0].schemaVersion = 14
     const before = JSON.stringify(
-      legacy.document.tracks.flatMap((item) => item.clips),
+      legacy.sequences[0].tracks.flatMap((item) => item.clips),
     )
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(JSON.stringify(parsed.document.tracks.flatMap((item) => item.clips)))
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(JSON.stringify(parsed.sequences[0].tracks.flatMap((item) => item.clips)))
       .toBe(before)
   })
 
   test('migrates schema-15 documents through schema 18 with mixer defaults', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 15
-    for (const item of legacy.document.tracks) {
+    legacy.sequences[0].schemaVersion = 15
+    for (const item of legacy.sequences[0].tracks) {
       Reflect.deleteProperty(item, 'volume')
       Reflect.deleteProperty(item, 'balance')
     }
-    Reflect.deleteProperty(legacy.document, 'masterAudio')
+    Reflect.deleteProperty(legacy.sequences[0], 'masterAudio')
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.masterAudio).toEqual({
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].masterAudio).toEqual({
       volume: 1,
       balance: 0,
       muted: false,
       audioEffects: [],
     })
-    expect(parsed.document.tracks.map((item) => ({
+    expect(parsed.sequences[0].tracks.map((item) => ({
       id: item.id,
       volume: item.volume,
       balance: item.balance,
@@ -461,24 +570,24 @@ describe('portable project file', () => {
 
   test('migrates schema-16 documents through schema 18 with empty audio-effect stacks', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 16
-    for (const item of legacy.document.tracks) {
+    legacy.sequences[0].schemaVersion = 16
+    for (const item of legacy.sequences[0].tracks) {
       Reflect.deleteProperty(item, 'audioEffects')
       for (const clip of item.clips) {
         Reflect.deleteProperty(clip, 'audioEffects')
       }
     }
-    if (legacy.document.masterAudio) {
-      Reflect.deleteProperty(legacy.document.masterAudio, 'audioEffects')
+    if (legacy.sequences[0].masterAudio) {
+      Reflect.deleteProperty(legacy.sequences[0].masterAudio, 'audioEffects')
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.masterAudio?.audioEffects).toEqual([])
-    expect(parsed.document.tracks.every((item) => item.audioEffects?.length === 0)).toBe(true)
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].masterAudio?.audioEffects).toEqual([])
+    expect(parsed.sequences[0].tracks.every((item) => item.audioEffects?.length === 0)).toBe(true)
     expect(
-      parsed.document.tracks.every((item) =>
+      parsed.sequences[0].tracks.every((item) =>
         item.clips.every((clip) => clip.audioEffects?.length === 0),
       ),
     ).toBe(true)
@@ -486,21 +595,21 @@ describe('portable project file', () => {
 
   test('migrates schema-17 mixer documents to schema 18 audio-effect stacks', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 17
-    for (const item of legacy.document.tracks) {
+    legacy.sequences[0].schemaVersion = 17
+    for (const item of legacy.sequences[0].tracks) {
       Reflect.deleteProperty(item, 'audioEffects')
       for (const clip of item.clips) Reflect.deleteProperty(clip, 'audioEffects')
     }
-    if (legacy.document.masterAudio) {
-      Reflect.deleteProperty(legacy.document.masterAudio, 'audioEffects')
+    if (legacy.sequences[0].masterAudio) {
+      Reflect.deleteProperty(legacy.sequences[0].masterAudio, 'audioEffects')
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.masterAudio?.audioEffects).toEqual([])
-    expect(parsed.document.tracks.every((item) => item.audioEffects?.length === 0)).toBe(true)
-    expect(parsed.document.tracks.every((item) => (
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].masterAudio?.audioEffects).toEqual([])
+    expect(parsed.sequences[0].tracks.every((item) => item.audioEffects?.length === 0)).toBe(true)
+    expect(parsed.sequences[0].tracks.every((item) => (
       item.clips.every((clip) => clip.audioEffects?.length === 0)
     ))).toBe(true)
   })
@@ -514,7 +623,7 @@ describe('portable project file', () => {
       enabled: false,
       params: { sparkle: 0.4, keep: true },
     }
-    project.document.tracks[1].clips[0].audioEffects = [{
+    project.sequences[0].tracks[1].clips[0].audioEffects = [{
       id: 'afx-clip-eq',
       type: 'builtin.eq',
       version: 1,
@@ -538,8 +647,8 @@ describe('portable project file', () => {
         band4Gain: 0,
       },
     }]
-    project.document.tracks[1].audioEffects = [unknown]
-    project.document.masterAudio = {
+    project.sequences[0].tracks[1].audioEffects = [unknown]
+    project.sequences[0].masterAudio = {
       volume: 1,
       balance: 0,
       muted: false,
@@ -554,20 +663,20 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(serializeProjectFile(project))
 
-    expect(parsed.document.tracks[1].clips[0].audioEffects).toEqual(
-      project.document.tracks[1].clips[0].audioEffects,
+    expect(parsed.sequences[0].tracks[1].clips[0].audioEffects).toEqual(
+      project.sequences[0].tracks[1].clips[0].audioEffects,
     )
-    expect(parsed.document.tracks[1].audioEffects).toEqual([unknown])
-    expect(parsed.document.masterAudio?.audioEffects).toEqual(
-      project.document.masterAudio.audioEffects,
+    expect(parsed.sequences[0].tracks[1].audioEffects).toEqual([unknown])
+    expect(parsed.sequences[0].masterAudio?.audioEffects).toEqual(
+      project.sequences[0].masterAudio?.audioEffects,
     )
   })
 
   test('round-trips authored track and master mixer fields', () => {
     const project = makeProject()
-    project.document.tracks[1].volume = 0.4
-    project.document.tracks[1].balance = -0.5
-    project.document.masterAudio = {
+    project.sequences[0].tracks[1].volume = 0.4
+    project.sequences[0].tracks[1].balance = -0.5
+    project.sequences[0].masterAudio = {
       volume: 1.25,
       balance: 0.25,
       muted: true,
@@ -576,9 +685,9 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(serializeProjectFile(project))
 
-    expect(parsed.document.tracks[1].volume).toBe(0.4)
-    expect(parsed.document.tracks[1].balance).toBe(-0.5)
-    expect(parsed.document.masterAudio).toEqual({
+    expect(parsed.sequences[0].tracks[1].volume).toBe(0.4)
+    expect(parsed.sequences[0].tracks[1].balance).toBe(-0.5)
+    expect(parsed.sequences[0].masterAudio).toEqual({
       volume: 1.25,
       balance: 0.25,
       muted: true,
@@ -588,7 +697,7 @@ describe('portable project file', () => {
 
   test('round-trips volume and balance animation tracks on audio clips', () => {
     const project = makeProject()
-    project.document.tracks[1].clips[0].animation = {
+    project.sequences[0].tracks[1].clips[0].animation = {
       tracks: [{
         property: 'volume',
         keyframes: [
@@ -610,21 +719,21 @@ describe('portable project file', () => {
     }
 
     const parsed = parseProjectFile(serializeProjectFile(project))
-    expect(parsed.document.tracks[1].clips[0].animation).toEqual(
-      project.document.tracks[1].clips[0].animation,
+    expect(parsed.sequences[0].tracks[1].clips[0].animation).toEqual(
+      project.sequences[0].tracks[1].clips[0].animation,
     )
   })
 
   test('round-trips supported and bounded future lens intent without substitution', () => {
     const supported = makeProject()
-    supported.document.tracks[0].clips[0].lensCorrection = {
+    supported.sequences[0].tracks[0].clips[0].lensCorrection = {
       ...DEFAULT_MANUAL_LENS_CORRECTION,
       k1: 0.16,
       k2: 0.025,
       outputScale: 1.24,
     }
-    expect(parseProjectFile(serializeProjectFile(supported)).document.tracks[0]
-      .clips[0].lensCorrection).toEqual(supported.document.tracks[0].clips[0].lensCorrection)
+    expect(parseProjectFile(serializeProjectFile(supported)).sequences[0].tracks[0]
+      .clips[0].lensCorrection).toEqual(supported.sequences[0].tracks[0].clips[0].lensCorrection)
 
     const future = makeProject()
     const futureIntent = {
@@ -632,11 +741,11 @@ describe('portable project file', () => {
       solver: 'future-grid',
       calibration: { points: [[0.1, 0.2], [0.8, 0.7]], exact: true },
     }
-    future.document.tracks[0].clips[0].lensCorrection = futureIntent
+    future.sequences[0].tracks[0].clips[0].lensCorrection = futureIntent
     const parsed = parseProjectFile(serializeProjectFile(future))
-    expect(parsed.document.tracks[0].clips[0].lensCorrection).toEqual(futureIntent)
-    expect(parsed.document.tracks[0].clips[0].lensCorrection)
-      .not.toBe(future.document.tracks[0].clips[0].lensCorrection)
+    expect(parsed.sequences[0].tracks[0].clips[0].lensCorrection).toEqual(futureIntent)
+    expect(parsed.sequences[0].tracks[0].clips[0].lensCorrection)
+      .not.toBe(future.sequences[0].tracks[0].clips[0].lensCorrection)
   })
 
   test('preserves magic keys in bounded future lens intent', () => {
@@ -644,10 +753,10 @@ describe('portable project file', () => {
     const futureIntent = JSON.parse(
       '{"version":2,"__proto__":{"calibration":"future"}}',
     ) as LensCorrectionIntent
-    future.document.tracks[0].clips[0].lensCorrection = futureIntent
+    future.sequences[0].tracks[0].clips[0].lensCorrection = futureIntent
 
     const parsed = parseProjectFile(serializeProjectFile(future))
-    const parsedIntent = parsed.document.tracks[0].clips[0].lensCorrection as
+    const parsedIntent = parsed.sequences[0].tracks[0].clips[0].lensCorrection as
       Record<string, unknown>
 
     expect(Object.prototype.hasOwnProperty.call(parsedIntent, '__proto__')).toBe(true)
@@ -656,7 +765,7 @@ describe('portable project file', () => {
 
   test('rejects invalid v1 and unbounded future lens intent', () => {
     const invalidV1 = makeProject()
-    invalidV1.document.tracks[0].clips[0].lensCorrection = {
+    invalidV1.sequences[0].tracks[0].clips[0].lensCorrection = {
       ...DEFAULT_MANUAL_LENS_CORRECTION,
       outputScale: 0.5,
     }
@@ -667,7 +776,7 @@ describe('portable project file', () => {
     for (let depth = 0; depth <= PROJECT_FILE_LIMITS.maxLensIntentDepth; depth++) {
       nested = { nested }
     }
-    tooDeep.document.tracks[0].clips[0].lensCorrection = {
+    tooDeep.sequences[0].tracks[0].clips[0].lensCorrection = {
       version: 2,
       nested,
     }
@@ -676,7 +785,7 @@ describe('portable project file', () => {
 
   test('requires bounded effect tracks in current saves while retaining dangling intent', () => {
     const current = makeProject()
-    current.document.tracks[0].clips[0].animation = {
+    current.sequences[0].tracks[0].clips[0].animation = {
       tracks: [],
       effectTracks: [{
         effectId: 'future-effect',
@@ -690,15 +799,15 @@ describe('portable project file', () => {
       }],
     }
     const parsed = parseProjectFile(serializeProjectFile(current))
-    expect(parsed.document.tracks[0].clips[0].animation?.effectTracks)
-      .toEqual(current.document.tracks[0].clips[0].animation.effectTracks)
+    expect(parsed.sequences[0].tracks[0].clips[0].animation?.effectTracks)
+      .toEqual(current.sequences[0].tracks[0].clips[0].animation.effectTracks)
 
     const missing = clone(current)
-    Reflect.deleteProperty(missing.document.tracks[0].clips[0].animation!, 'effectTracks')
+    Reflect.deleteProperty(missing.sequences[0].tracks[0].clips[0].animation!, 'effectTracks')
     expect(() => validateProjectFile(missing)).toThrow(/missing field effectTracks/)
 
     const overlong = clone(current)
-    overlong.document.tracks[0].clips[0].animation!.effectTracks![0].parameter = 'x'.repeat(
+    overlong.sequences[0].tracks[0].clips[0].animation!.effectTracks![0].parameter = 'x'.repeat(
       PROJECT_FILE_LIMITS.maxNameCharacters + 1,
     )
     expect(() => validateProjectFile(overlong)).toThrow(/exceeds/)
@@ -710,7 +819,7 @@ describe('portable project file', () => {
     const remainingKeyframes = PROJECT_FILE_LIMITS.maxTotalKeyframes
       - (fullTrackCount * 1_024)
       + 1
-    current.document.tracks[0].clips[0].animation = {
+    current.sequences[0].tracks[0].clips[0].animation = {
       tracks: [],
       effectTracks: Array.from(
         { length: fullTrackCount + 1 },
@@ -736,7 +845,7 @@ describe('portable project file', () => {
 
   test('round-trips a deterministic piecewise speed curve exactly', () => {
     const project = makeProject()
-    const retimed = project.document.tracks[0].clips[1]
+    const retimed = project.sequences[0].tracks[0].clips[1]
     retimed.sourceTimeMap = {
       ...retimed.sourceTimeMap!,
       speedCurve: {
@@ -752,7 +861,7 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(serializeProjectFile(project))
 
-    expect(parsed.document.tracks[0].clips[1].sourceTimeMap).toEqual(
+    expect(parsed.sequences[0].tracks[0].clips[1].sourceTimeMap).toEqual(
       retimed.sourceTimeMap,
     )
   })
@@ -783,7 +892,7 @@ describe('portable project file', () => {
     },
   ])('rejects $label without mutating the input', ({ points, message }) => {
     const project = makeProject()
-    project.document.tracks[0].clips[1].sourceTimeMap!.speedCurve = {
+    project.sequences[0].tracks[0].clips[1].sourceTimeMap!.speedCurve = {
       originFrame: 0,
       points,
     }
@@ -795,20 +904,20 @@ describe('portable project file', () => {
 
   test('migrates schema-6 projects to explicit empty marker defaults', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 6
-    Reflect.deleteProperty(legacy.document, 'markers')
+    legacy.sequences[0].schemaVersion = 6
+    Reflect.deleteProperty(legacy.sequences[0], 'markers')
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.markers).toEqual([])
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].markers).toEqual([])
   })
 
   test('migrates schema-7 projects through caption and blend defaults', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 7
-    Reflect.deleteProperty(legacy.document, 'captionTracks')
-    for (const legacyTrack of legacy.document.tracks) {
+    legacy.sequences[0].schemaVersion = 7
+    Reflect.deleteProperty(legacy.sequences[0], 'captionTracks')
+    for (const legacyTrack of legacy.sequences[0].tracks) {
       for (const legacyClip of legacyTrack.clips) {
         Reflect.deleteProperty(legacyClip, 'blendMode')
       }
@@ -816,16 +925,16 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.captionTracks).toEqual([])
-    expect(parsed.document.tracks.flatMap((item) => item.clips).map((item) => item.blendMode))
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].captionTracks).toEqual([])
+    expect(parsed.sequences[0].tracks.flatMap((item) => item.clips).map((item) => item.blendMode))
       .toEqual(['normal', 'normal', 'normal', 'normal'])
   })
 
   test('migrates schema-8 captions intact while adding normal blend intent', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 8
-    legacy.document.captionTracks = [{
+    legacy.sequences[0].schemaVersion = 8
+    legacy.sequences[0].captionTracks = [{
       id: 'captions-en',
       name: 'English CC',
       language: 'en-US',
@@ -836,7 +945,7 @@ describe('portable project file', () => {
         { id: 'caption-a', range: { startFrame: 3, durationFrames: 20 }, text: 'Hello' },
       ],
     }]
-    for (const legacyTrack of legacy.document.tracks) {
+    for (const legacyTrack of legacy.sequences[0].tracks) {
       for (const legacyClip of legacyTrack.clips) {
         Reflect.deleteProperty(legacyClip, 'blendMode')
       }
@@ -844,16 +953,16 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.captionTracks).toEqual(legacy.document.captionTracks)
-    expect(parsed.document.tracks.flatMap((item) => item.clips).map((item) => item.blendMode))
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].captionTracks).toEqual(legacy.sequences[0].captionTracks)
+    expect(parsed.sequences[0].tracks.flatMap((item) => item.clips).map((item) => item.blendMode))
       .toEqual(['normal', 'normal', 'normal', 'normal'])
   })
 
   test('migrates schema-9 effect descriptors and preserves opaque legacy payloads', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 9
-    legacy.document.tracks[0].clips[0].effects = [
+    legacy.sequences[0].schemaVersion = 9
+    legacy.sequences[0].tracks[0].clips[0].effects = [
       {
         id: 'effect-owned',
         type: COLOR_ADJUST_EFFECT_TYPE,
@@ -869,14 +978,14 @@ describe('portable project file', () => {
         params: { seed: 42, mode: 'prismatic', preserveAlpha: true },
       },
     ]
-    for (const effect of legacy.document.tracks[0].clips[0].effects) {
+    for (const effect of legacy.sequences[0].tracks[0].clips[0].effects) {
       Reflect.deleteProperty(effect, 'version')
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.tracks[0].clips[0].effects).toEqual([
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].tracks[0].clips[0].effects).toEqual([
       {
         id: 'effect-owned',
         type: COLOR_ADJUST_EFFECT_TYPE,
@@ -919,10 +1028,10 @@ describe('portable project file', () => {
         params: { radius: 12.5, colorSpace: 'oklab' },
       },
     ]
-    original.document.tracks[0].clips[0].effects = effects
+    original.sequences[0].tracks[0].clips[0].effects = effects
 
     const parsed = parseProjectFile(serializeProjectFile(original))
-    expect(parsed.document.tracks[0].clips[0].effects).toEqual(effects)
+    expect(parsed.sequences[0].tracks[0].clips[0].effects).toEqual(effects)
   })
 
   test('preserves a disabled plugin descriptor without installing or executing it', () => {
@@ -934,11 +1043,11 @@ describe('portable project file', () => {
       enabled: false,
       params: { strength: 0.5, mode: 'soft', preserveAlpha: true },
     }
-    original.document.tracks[0].clips[0].effects = [descriptor]
+    original.sequences[0].tracks[0].clips[0].effects = [descriptor]
 
     const serialized = serializeProjectFile(original)
     const parsed = parseProjectFile(serialized)
-    expect(parsed.document.tracks[0].clips[0].effects).toEqual([descriptor])
+    expect(parsed.sequences[0].tracks[0].clips[0].effects).toEqual([descriptor])
     expect(serialized).not.toContain('https://')
     expect(serialized).not.toContain('.wasm')
   })
@@ -952,42 +1061,42 @@ describe('portable project file', () => {
       enabled: true,
       params: { exposure: 0.5, contrast: -0.2, saturation: 0.1 },
     }
-    original.document.tracks[0].clips[0].effects = [existing]
+    original.sequences[0].tracks[0].clips[0].effects = [existing]
 
     const parsed = parseProjectFile(serializeProjectFile(original))
-    expect(parsed.document.tracks[0].clips[0].effects).toEqual([existing])
+    expect(parsed.sequences[0].tracks[0].clips[0].effects).toEqual([existing])
   })
 
   test('every accepted exact-limit live effect edit remains serializable', () => {
     const project = makeProject()
-    const clip = project.document.tracks[0].clips[0]
+    const clip = project.sequences[0].tracks[0].clips[0]
     clip.effects = []
     const params: EffectDescriptor['params'] = Object.fromEntries(Array.from(
       { length: EFFECT_STACK_LIMITS.maxEffectParams },
       (_value, index) => [`parameter-${index}`, index],
     ))
     params['parameter-0'] = 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters)
-    const edited = addEffect(project.document, clip.id, {
+    const edited = addEffect(project.sequences[0], clip.id, {
       id: 'i'.repeat(EFFECT_STACK_LIMITS.maxIdCharacters),
       type: 't'.repeat(EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters),
       version: Number.MAX_SAFE_INTEGER,
       enabled: true,
       params,
     })
-    expect(edited).not.toBe(project.document)
-    const acceptedProject = { ...project, document: edited }
+    expect(edited).not.toBe(project.sequences[0])
+    const acceptedProject = { ...project, sequences: [edited] }
     const serialized = serializeProjectFile(acceptedProject)
-    expect(parseProjectFile(serialized).document).toEqual(edited)
+    expect(parseProjectFile(serialized).sequences[0]).toEqual(edited)
 
     const effectId = edited.tracks[0].clips[0].effects[0].id
     const rejected = updateEffectParams(edited, clip.id, effectId, { overflow: true })
     expect(rejected).toBe(edited)
-    expect(() => serializeProjectFile({ ...project, document: rejected })).not.toThrow()
+    expect(() => serializeProjectFile({ ...project, sequences: [rejected] })).not.toThrow()
   })
 
   test('round-trips semantic captions and rejects malformed persisted cues', () => {
     const project = makeProject()
-    project.document.captionTracks = [{
+    project.sequences[0].captionTracks = [{
       id: 'captions-en',
       name: 'English CC',
       language: 'en-US',
@@ -1000,42 +1109,42 @@ describe('portable project file', () => {
       ],
     }]
 
-    expect(parseProjectFile(serializeProjectFile(project)).document.captionTracks)
-      .toEqual(project.document.captionTracks)
+    expect(parseProjectFile(serializeProjectFile(project)).sequences[0].captionTracks)
+      .toEqual(project.sequences[0].captionTracks)
 
     const malformed = clone(project)
-    malformed.document.captionTracks![0]!.items[0]!.text = '<b>Hello</b>'
+    malformed.sequences[0].captionTracks![0]!.items[0]!.text = '<b>Hello</b>'
     expect(() => validateProjectFile(malformed)).toThrow(/markup/u)
   })
 
   test('round-trips supported and unsupported blend intent without substitution', () => {
     const original = makeProject()
-    original.document.tracks[0].clips[0].blendMode = 'multiply'
-    original.document.tracks[0].clips[1].blendMode = 'future-soft-light'
+    original.sequences[0].tracks[0].clips[0].blendMode = 'multiply'
+    original.sequences[0].tracks[0].clips[1].blendMode = 'future-soft-light'
 
     const parsed = parseProjectFile(serializeProjectFile(original))
 
-    expect(parsed.document.tracks[0].clips[0].blendMode).toBe('multiply')
-    expect(parsed.document.tracks[0].clips[1].blendMode).toBe('future-soft-light')
+    expect(parsed.sequences[0].tracks[0].clips[0].blendMode).toBe('multiply')
+    expect(parsed.sequences[0].tracks[0].clips[1].blendMode).toBe('future-soft-light')
   })
 
   test('rejects invalid, duplicate, and unsorted marker records', () => {
     const invalid = makeProject()
-    invalid.document.markers = [
+    invalid.sequences[0].markers = [
       { id: 'late', frame: 20, label: 'Late', color: 'yellow' },
       { id: 'early', frame: 10, label: 'Early', color: 'yellow' },
     ]
     expect(() => validateProjectFile(invalid)).toThrow(/sorted by frame then id/)
 
     const duplicate = makeProject()
-    duplicate.document.markers = [
+    duplicate.sequences[0].markers = [
       { id: 'same', frame: 10, label: 'One', color: 'yellow' },
       { id: 'same', frame: 20, label: 'Two', color: 'red' },
     ]
     expect(() => validateProjectFile(duplicate)).toThrow(/duplicate marker id/)
 
     const badFrame = makeProject()
-    badFrame.document.markers = [
+    badFrame.sequences[0].markers = [
       { id: 'bad', frame: 1.5, label: 'Bad', color: 'yellow' },
     ]
     expect(() => validateProjectFile(badFrame)).toThrow(/safe integer/)
@@ -1044,15 +1153,15 @@ describe('portable project file', () => {
   test('migrates a legacy branded project and procedural text id', () => {
     const legacy = clone(makeProject()) as unknown as {
       format: string
-      document: TimelineDoc
+      sequences: TimelineDoc[]
     }
     legacy.format = LEGACY_PROJECT_FILE_FORMAT
-    legacy.document.tracks[0].clips[2].assetId = '__webcut_text__:clip-title'
+    legacy.sequences[0].tracks[0].clips[2].assetId = '__webcut_text__:clip-title'
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
     expect(parsed.format).toBe(PROJECT_FILE_FORMAT)
-    expect(parsed.document.tracks[0].clips[2].assetId).toBe(
+    expect(parsed.sequences[0].tracks[0].clips[2].assetId).toBe(
       '__myrelith_text__:clip-title',
     )
     expect(serializeProjectFile(parsed)).not.toContain('webcut')
@@ -1066,7 +1175,7 @@ describe('portable project file', () => {
 
   test('round-trips keyframes and custom easing without changing order or precision', () => {
     const original = makeProject()
-    original.document.tracks[0].clips[0].animation = {
+    original.sequences[0].tracks[0].clips[0].animation = {
       effectTracks: [],
       tracks: [
         {
@@ -1106,19 +1215,19 @@ describe('portable project file', () => {
 
     const parsed = parseProjectFile(serializeProjectFile(original))
 
-    expect(parsed.document.tracks[0].clips[0].animation)
-      .toEqual(original.document.tracks[0].clips[0].animation)
+    expect(parsed.sequences[0].tracks[0].clips[0].animation)
+      .toEqual(original.sequences[0].tracks[0].clips[0].animation)
   })
 
   test('round-trips dynamic zoom output as ordinary transform keyframes', () => {
     const original = makeProject()
-    original.document = applyDynamicZoom(
-      original.document,
+    original.sequences[0] = applyDynamicZoom(
+      original.sequences[0],
       'clip-a',
       { width: 3_840, height: 2_160 },
       dynamicZoomRequestFromPreset('reframe-left-right', 90),
     )
-    const authored = original.document.tracks[0].clips[0].animation
+    const authored = original.sequences[0].tracks[0].clips[0].animation
 
     const parsed = parseProjectFile(serializeProjectFile(original))
 
@@ -1128,27 +1237,27 @@ describe('portable project file', () => {
       'scale-x',
       'scale-y',
     ])
-    expect(parsed.document.tracks[0].clips[0].animation).toEqual(authored)
+    expect(parsed.sequences[0].tracks[0].clips[0].animation).toEqual(authored)
   })
 
   test('migrates schema-5 clips to canonical empty animation tracks', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 5
-    for (const item of legacy.document.tracks.flatMap((track) => track.clips)) {
+    legacy.sequences[0].schemaVersion = 5
+    for (const item of legacy.sequences[0].tracks.flatMap((track) => track.clips)) {
       Reflect.deleteProperty(item, 'animation')
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.tracks.flatMap((track) => track.clips)
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].tracks.flatMap((track) => track.clips)
       .every((item) => JSON.stringify(item.animation) === '{"tracks":[],"effectTracks":[]}'))
       .toBe(true)
   })
 
   test('rejects non-canonical duplicate times and invalid easing control points', () => {
     const duplicate = makeProject()
-    duplicate.document.tracks[0].clips[0].animation = {
+    duplicate.sequences[0].tracks[0].clips[0].animation = {
       effectTracks: [],
       tracks: [{
         property: 'position-x',
@@ -1159,7 +1268,7 @@ describe('portable project file', () => {
       }],
     }
     const badEasing = makeProject()
-    badEasing.document.tracks[0].clips[0].animation = {
+    badEasing.sequences[0].tracks[0].clips[0].animation = {
       effectTracks: [],
       tracks: [{
         property: 'position-x',
@@ -1178,7 +1287,7 @@ describe('portable project file', () => {
 
   test('requires bounded durable source-time intent on current keyframes', () => {
     const missing = makeProject()
-    missing.document.tracks[0].clips[0].animation = {
+    missing.sequences[0].tracks[0].clips[0].animation = {
       effectTracks: [],
       tracks: [{
         property: 'opacity',
@@ -1186,10 +1295,10 @@ describe('portable project file', () => {
       }],
     }
     const unsafe = clone(missing)
-    unsafe.document.tracks[0].clips[0].animation!.tracks[0].keyframes[0]
+    unsafe.sequences[0].tracks[0].clips[0].animation!.tracks[0].keyframes[0]
       .sourceTimeTicks = Number.MAX_SAFE_INTEGER + 1
     const unknown = clone(missing)
-    const unknownKeyframe = unknown.document.tracks[0].clips[0]
+    const unknownKeyframe = unknown.sequences[0].tracks[0].clips[0]
       .animation!.tracks[0].keyframes[0] as unknown as Record<string, unknown>
     unknownKeyframe.sourceTimeTicks = 5_000_000
     unknownKeyframe.futureTiming = true
@@ -1212,25 +1321,19 @@ describe('portable project file', () => {
     height,
   }) => {
     const project = makeProject()
-    project.document.width = width
-    project.document.height = height
+    project.sequences[0].width = width
+    project.sequences[0].height = height
 
     const parsed = parseProjectFile(serializeProjectFile(project))
 
     expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.width).toBe(width)
-    expect(parsed.document.height).toBe(height)
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].width).toBe(width)
+    expect(parsed.sequences[0].height).toBe(height)
   })
 
   test('migrates v1 projects to the current format without inventing a partial-track choice', () => {
-    const legacy = clone(makeProject()) as unknown as {
-      formatVersion: number
-      assets: Array<Record<string, unknown>>
-      document: TimelineDoc
-    }
-    legacy.formatVersion = 1
-    Reflect.deleteProperty(legacy, 'collections')
+    const legacy = makeOuterLegacyProject(1)
     legacy.document.schemaVersion = 1
     for (const asset of legacy.assets) delete asset.partialTrackSelection
     for (const track of legacy.document.tracks) {
@@ -1240,16 +1343,16 @@ describe('portable project file', () => {
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
     expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(parsed.assets).toHaveLength(2)
     expect(
       parsed.assets.every((asset) => asset.partialTrackSelection === undefined),
     ).toBe(true)
     expect(
-      parsed.document.tracks.flatMap((track) => track.clips)
+      parsed.sequences[0].tracks.flatMap((track) => track.clips)
         .every((clip) => clip.sourceMode === 'timed'),
     ).toBe(true)
-    expect(parsed.document.tracks[0].clips[2]).toMatchObject({
+    expect(parsed.sequences[0].tracks[0].clips[2]).toMatchObject({
       assetId: expect.stringMatching(/^__myrelith_text__:/),
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
@@ -1258,12 +1361,7 @@ describe('portable project file', () => {
   })
 
   test('migrates v4 projects to an empty portable collection catalog', () => {
-    const legacy = clone(makeProject()) as unknown as {
-      formatVersion: number
-      collections?: unknown
-    }
-    legacy.formatVersion = 4
-    delete legacy.collections
+    const legacy = makeOuterLegacyProject(4)
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
@@ -1273,11 +1371,11 @@ describe('portable project file', () => {
 
   test('migrates schema-4 clip Inspector defaults and preserves legacy scale signs as flips', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 4
-    const first = legacy.document.tracks[0].clips[0]
+    legacy.sequences[0].schemaVersion = 4
+    const first = legacy.sequences[0].tracks[0].clips[0]
     first.transform.scaleX = -1.5
     first.transform.scaleY = 0.75
-    for (const track of legacy.document.tracks) {
+    for (const track of legacy.sequences[0].tracks) {
       for (const clip of track.clips) {
         delete clip.visual
         delete clip.audio
@@ -1285,10 +1383,10 @@ describe('portable project file', () => {
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
-    const migrated = parsed.document.tracks[0].clips[0]
+    const migrated = parsed.sequences[0].tracks[0].clips[0]
 
     expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(migrated.transform).toMatchObject({ scaleX: 1.5, scaleY: 0.75 })
     expect(migrated.visual).toEqual({
       crop: { left: 0, right: 0, top: 0, bottom: 0 },
@@ -1297,26 +1395,17 @@ describe('portable project file', () => {
       scaleLocked: false,
     })
     expect(migrated.audio).toEqual(defaultClipAudioSettings())
-    expect(parsed.document.tracks.flatMap((track) => track.clips).every(
+    expect(parsed.sequences[0].tracks.flatMap((track) => track.clips).every(
       (clip) => clip.visual !== undefined && clip.audio !== undefined,
     )).toBe(true)
   })
 
   test('migrates v3 bounds and transition audio conservatively', () => {
-    const legacy = clone(makeProject()) as unknown as {
-      formatVersion: number
-      assets: Array<Record<string, unknown>>
-      document: {
-        schemaVersion: number
-        tracks: Array<{ transitions: Array<Record<string, unknown>> }>
-      }
-    }
-    legacy.formatVersion = 3
-    Reflect.deleteProperty(legacy, 'collections')
+    const legacy = makeOuterLegacyProject(3)
     legacy.document.schemaVersion = 2
     for (const asset of legacy.assets) delete asset.sourceBounds
     for (const track of legacy.document.tracks) {
-      for (const transition of track.transitions) delete transition.audio
+      for (const transition of track.transitions) Reflect.deleteProperty(transition, 'audio')
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
@@ -1328,18 +1417,16 @@ describe('portable project file', () => {
       })
     expect(parsed.assets.find((asset) => asset.id === 'image-a')?.sourceBounds)
       .toEqual({ video: null, audio: null })
-    expect(parsed.document.tracks[0].transitions[0].audio).toEqual({
+    expect(parsed.sequences[0].tracks[0].transitions[0].audio).toEqual({
       enabled: false,
       curve: 'equal-power',
     })
   })
 
   test('migrates dormant schema-3 text into a procedural bounded overlay', () => {
-    const legacy = clone(makeProject()) as unknown as {
-      document: TimelineDoc
-    }
-    legacy.document.schemaVersion = 3
-    const title = legacy.document.tracks[0].clips[2]
+    const legacy = clone(makeProject())
+    legacy.sequences[0].schemaVersion = 3
+    const title = legacy.sequences[0].tracks[0].clips[2]
     title.assetId = 'image-a'
     title.text = {
       content: 'Legacy title',
@@ -1352,7 +1439,7 @@ describe('portable project file', () => {
     } as typeof title.text
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
-    const migrated = parsed.document.tracks[0].clips[2]
+    const migrated = parsed.sequences[0].tracks[0].clips[2]
     expect(migrated).toMatchObject({
       assetId: expect.stringMatching(/^__myrelith_text__:/),
       sourceMode: 'timed',
@@ -1369,11 +1456,9 @@ describe('portable project file', () => {
   })
 
   test('rejects an unsupported legacy text font instead of substituting it', () => {
-    const legacy = clone(makeProject()) as unknown as {
-      document: TimelineDoc
-    }
-    legacy.document.schemaVersion = 3
-    const title = legacy.document.tracks[0].clips[2]
+    const legacy = clone(makeProject())
+    legacy.sequences[0].schemaVersion = 3
+    const title = legacy.sequences[0].tracks[0].clips[2]
     title.assetId = 'image-a'
     title.text = {
       content: 'Legacy title',
@@ -1391,12 +1476,7 @@ describe('portable project file', () => {
   })
 
   test('migrates a v2 image clip to one still source frame without changing its timeline', () => {
-    const legacy = clone(makeProject()) as unknown as {
-      formatVersion: number
-      document: TimelineDoc
-    }
-    legacy.formatVersion = 2
-    Reflect.deleteProperty(legacy, 'collections')
+    const legacy = makeOuterLegacyProject(2)
     legacy.document.schemaVersion = 1
     const title = legacy.document.tracks[0].clips[2]
     delete title.text
@@ -1406,24 +1486,24 @@ describe('portable project file', () => {
     }
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
-    const migrated = parsed.document.tracks[0].clips[2]
+    const migrated = parsed.sequences[0].tracks[0].clips[2]
 
     expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(migrated.sourceMode).toBe('still')
     expect(migrated.sourceRange).toEqual({ startFrame: 0, durationFrames: 1 })
     expect(migrated.timelineRange).toEqual({
       startFrame: 24,
       durationFrames: 20,
     })
-    expect(parsed.document.tracks[0].clips[0].sourceMode).toBe('timed')
+    expect(parsed.sequences[0].tracks[0].clips[0].sourceMode).toBe('timed')
   })
 
   test('migrates shipped v3 schema-1 documents by asset kind, including image-backed text', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 1
-    const video = legacy.document.tracks[0].clips[0]
-    const imageBackedText = legacy.document.tracks[0].clips[2]
+    legacy.sequences[0].schemaVersion = 1
+    const video = legacy.sequences[0].tracks[0].clips[0]
+    const imageBackedText = legacy.sequences[0].tracks[0].clips[2]
     imageBackedText.assetId = 'image-a'
     video.sourceMode = 'still'
     imageBackedText.sourceMode = 'still'
@@ -1431,13 +1511,13 @@ describe('portable project file', () => {
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
     expect(parsed.formatVersion).toBe(CURRENT_PROJECT_FORMAT_VERSION)
-    expect(parsed.document.schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
-    expect(parsed.document.tracks[0].clips[0]).toMatchObject({
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
+    expect(parsed.sequences[0].tracks[0].clips[0]).toMatchObject({
       assetId: 'video-z',
       sourceMode: 'timed',
       sourceRange: { startFrame: 5, durationFrames: 10 },
     })
-    expect(parsed.document.tracks[0].clips[2]).toMatchObject({
+    expect(parsed.sequences[0].tracks[0].clips[2]).toMatchObject({
       assetId: expect.stringMatching(/^__myrelith_text__:/),
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
@@ -1447,17 +1527,17 @@ describe('portable project file', () => {
 
   test('migrates image-backed text beyond the nominal image duration', () => {
     const legacy = clone(makeProject())
-    legacy.document.schemaVersion = 1
+    legacy.sequences[0].schemaVersion = 1
     const imageDescriptor = legacy.assets.find((asset) => asset.id === 'image-a')
     if (!imageDescriptor) throw new Error('missing image fixture')
     imageDescriptor.durationMicroseconds = 100_000
-    const imageBackedText = legacy.document.tracks[0].clips[2]
+    const imageBackedText = legacy.sequences[0].tracks[0].clips[2]
     imageBackedText.assetId = 'image-a'
     removeSourceMode(imageBackedText)
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
 
-    expect(parsed.document.tracks[0].clips[2]).toMatchObject({
+    expect(parsed.sequences[0].tracks[0].clips[2]).toMatchObject({
       assetId: expect.stringMatching(/^__myrelith_text__:/),
       sourceMode: 'timed',
       sourceRange: { startFrame: 0, durationFrames: 20 },
@@ -1468,7 +1548,7 @@ describe('portable project file', () => {
 
   test('round-trips explicit still source semantics in the current format', () => {
     const project = makeProject()
-    const title = project.document.tracks[0].clips[2]
+    const title = project.sequences[0].tracks[0].clips[2]
     delete title.text
     title.assetId = 'image-a'
     title.sourceMode = 'still'
@@ -1476,7 +1556,7 @@ describe('portable project file', () => {
     title.sourceTimeMap = defaultSourceTimeMap(0)
 
     const parsed = parseProjectFile(serializeProjectFile(project))
-    expect(parsed.document.tracks[0].clips[2]).toMatchObject({
+    expect(parsed.sequences[0].tracks[0].clips[2]).toMatchObject({
       sourceMode: 'still',
       sourceRange: { startFrame: 0, durationFrames: 1 },
       timelineRange: { startFrame: 24, durationFrames: 20 },
@@ -1627,7 +1707,7 @@ describe('portable project file', () => {
     document.name = 'Mutated after capture'
     assets[0].fileName = 'mutated.mov'
 
-    expect(snapshot.document.name).toBe('Portable edit')
+    expect(snapshot.sequences[0].name).toBe('Portable edit')
     expect(snapshot.assets.map((asset) => asset.id)).toEqual(['image-a', 'video-z'])
     expect(snapshot.assets.find((asset) => asset.id === 'video-z')).toMatchObject({
       fileName: 'camera.mov',
@@ -1646,7 +1726,7 @@ describe('portable project file', () => {
     const left = makeProject()
     const right = clone(left)
     right.assets.reverse()
-    right.document.tracks[0].clips[0].effects[0].params = {
+    right.sequences[0].tracks[0].clips[0].effects[0].params = {
       preserveHighlights: true,
       mode: 'soft',
       amount: 0.5,
@@ -1682,12 +1762,12 @@ describe('portable project file', () => {
     ]) {
       expect(serialized).not.toContain(forbidden)
     }
-    expect(parseProjectFile(serialized).document).toEqual(makeDocument())
+    expect(parseProjectFile(serialized).sequences[0]).toEqual(makeDocument())
   })
 
   test('rejects unsafe effect parameter keys before cloning for serialization', () => {
     const project = makeProject()
-    project.document.tracks[0].clips[0].effects[0].params = JSON.parse(
+    project.sequences[0].tracks[0].clips[0].effects[0].params = JSON.parse(
       '{"__proto__":true}',
     ) as Record<string, string | number | boolean>
     expect(() => serializeProjectFile(project)).toThrow(/unsafe parameter key/)
@@ -1706,15 +1786,15 @@ describe('portable project file', () => {
     ).toThrow(/exceeds/)
 
     const longName = makeProject()
-    longName.document.name = 'x'.repeat(PROJECT_FILE_LIMITS.maxNameCharacters + 1)
+    longName.sequences[0].name = 'x'.repeat(PROJECT_FILE_LIMITS.maxNameCharacters + 1)
     expect(() => serializeProjectFile(longName)).toThrow(/characters/)
 
     const whitespaceName = makeProject()
-    whitespaceName.document.name = ' '.repeat(PROJECT_FILE_LIMITS.maxNameCharacters + 1)
+    whitespaceName.sequences[0].name = ' '.repeat(PROJECT_FILE_LIMITS.maxNameCharacters + 1)
     expect(() => serializeProjectFile(whitespaceName)).toThrow(/exceeds/)
 
     const tooManyTracks = makeProject()
-    tooManyTracks.document.tracks = Array.from(
+    tooManyTracks.sequences[0].tracks = Array.from(
       { length: PROJECT_FILE_LIMITS.maxTracks + 1 },
       (_value, index) => track(`V${index}`, 'video', []),
     )
@@ -1723,8 +1803,8 @@ describe('portable project file', () => {
 
   test('rejects a canvas allocation that exceeds the render memory budget', () => {
     const unsafe = makeProject()
-    unsafe.document.width = PROJECT_FILE_LIMITS.maxDimension
-    unsafe.document.height = PROJECT_FILE_LIMITS.maxDimension
+    unsafe.sequences[0].width = PROJECT_FILE_LIMITS.maxDimension
+    unsafe.sequences[0].height = PROJECT_FILE_LIMITS.maxDimension
 
     expect(() => parseProjectFile(JSON.stringify(unsafe))).toThrow(
       /render surface|render memory|pixel limit/i,
@@ -1750,7 +1830,7 @@ describe('portable project file', () => {
       )
       return clip
     })
-    tooManyEffects.document.tracks.push(track('V2', 'video', effectClips))
+    tooManyEffects.sequences[0].tracks.push(track('V2', 'video', effectClips))
     expect(() => validateProjectFile(tooManyEffects)).toThrow(/effects in total/)
 
     const tooManyParams = makeProject()
@@ -1763,7 +1843,7 @@ describe('portable project file', () => {
     const parameterEffectCount = Math.floor(
       PROJECT_FILE_LIMITS.maxTotalEffectParams / PROJECT_FILE_LIMITS.maxEffectParams,
     ) + 1
-    tooManyParams.document.tracks[0].clips[0].effects = Array.from(
+    tooManyParams.sequences[0].tracks[0].clips[0].effects = Array.from(
       { length: parameterEffectCount },
       (_value, index) => ({
         id: `parameter-effect-${index}`,
@@ -1777,7 +1857,7 @@ describe('portable project file', () => {
 
     const tooManyEffectStringCharacters = makeProject()
     const largeEffectString = 'x'.repeat(PROJECT_FILE_LIMITS.maxEffectStringCharacters)
-    tooManyEffectStringCharacters.document.tracks[0].clips[0].effects = [
+    tooManyEffectStringCharacters.sequences[0].tracks[0].clips[0].effects = [
       {
         id: 'large-string-effect',
         type: 'test',
@@ -1799,7 +1879,7 @@ describe('portable project file', () => {
     )
 
     const tooMuchText = makeProject()
-    const title = tooMuchText.document.tracks[0].clips[2].text
+    const title = tooMuchText.sequences[0].tracks[0].clips[2].text
     if (!title) throw new Error('title fixture missing')
     const sharedText = {
       ...title,
@@ -1814,26 +1894,26 @@ describe('portable project file', () => {
       clip.text = sharedText
       return clip
     })
-    tooMuchText.document.tracks.push(track('V2', 'video', textClips))
+    tooMuchText.sequences[0].tracks.push(track('V2', 'video', textClips))
     expect(() => validateProjectFile(tooMuchText)).toThrow(/text characters in total/)
   })
 
   test('aborts deterministic serialization at the project-file character budget', () => {
     const project = makeProject()
-    const title = project.document.tracks[0].clips[2].text
+    const title = project.sequences[0].tracks[0].clips[2].text
     if (!title) throw new Error('title fixture missing')
     const sharedText = {
       ...title,
       content: 'x'.repeat(PROJECT_FILE_LIMITS.maxTextCharacters),
     }
-    delete project.document.tracks[0].clips[2].text
-    project.document.tracks[0].clips[2].assetId = 'image-a'
-    project.document.tracks[0].clips[2].sourceMode = 'still'
-    project.document.tracks[0].clips[2].sourceRange = {
+    delete project.sequences[0].tracks[0].clips[2].text
+    project.sequences[0].tracks[0].clips[2].assetId = 'image-a'
+    project.sequences[0].tracks[0].clips[2].sourceMode = 'still'
+    project.sequences[0].tracks[0].clips[2].sourceRange = {
       startFrame: 0,
       durationFrames: 1,
     }
-    project.document.tracks[0].clips[2].sourceTimeMap = defaultSourceTimeMap(0)
+    project.sequences[0].tracks[0].clips[2].sourceTimeMap = defaultSourceTimeMap(0)
     const textClipCount = Math.floor(
       PROJECT_FILE_LIMITS.maxTotalTextCharacters / PROJECT_FILE_LIMITS.maxTextCharacters,
     )
@@ -1843,7 +1923,7 @@ describe('portable project file', () => {
       clip.text = sharedText
       return clip
     })
-    project.document.tracks.push(track('V2', 'video', textClips))
+    project.sequences[0].tracks.push(track('V2', 'video', textClips))
 
     expect(() => serializeProjectFile(project)).toThrow(/serialized project exceeds/)
   })
@@ -1854,16 +1934,16 @@ describe('portable project file', () => {
     expect(() => validateProjectFile(duplicateAsset)).toThrow(/duplicate asset id/)
 
     const duplicateTrack = makeProject()
-    duplicateTrack.document.tracks[1].id = 'V1'
+    duplicateTrack.sequences[0].tracks[1].id = 'V1'
     expect(() => validateProjectFile(duplicateTrack)).toThrow(/duplicate track id/)
 
     const duplicateClip = makeProject()
-    duplicateClip.document.tracks[1].clips[0].id = 'clip-a'
+    duplicateClip.sequences[0].tracks[1].clips[0].id = 'clip-a'
     expect(() => validateProjectFile(duplicateClip)).toThrow(/duplicate clip id/)
 
     const duplicateEffect = makeProject()
-    duplicateEffect.document.tracks[0].clips[1].effects = [
-      clone(duplicateEffect.document.tracks[0].clips[0].effects[0]),
+    duplicateEffect.sequences[0].tracks[0].clips[1].effects = [
+      clone(duplicateEffect.sequences[0].tracks[0].clips[0].effects[0]),
     ]
     expect(() => validateProjectFile(duplicateEffect)).toThrow(/duplicate effect id/)
 
@@ -1874,22 +1954,22 @@ describe('portable project file', () => {
     ])
     secondVideo.transitions = [
       {
-        ...duplicateTransition.document.tracks[0].transitions[0],
+        ...duplicateTransition.sequences[0].tracks[0].transitions[0],
         fromClipId: 'clip-v2a',
         toClipId: 'clip-v2b',
       },
     ]
-    duplicateTransition.document.tracks.push(secondVideo)
+    duplicateTransition.sequences[0].tracks.push(secondVideo)
     expect(() => validateProjectFile(duplicateTransition)).toThrow(/duplicate transition id/)
   })
 
   test('rejects dangling asset references and orphaned link groups', () => {
     const dangling = makeProject()
-    dangling.document.tracks[0].clips[0].assetId = 'missing-asset'
+    dangling.sequences[0].tracks[0].clips[0].assetId = 'missing-asset'
     expect(() => validateProjectFile(dangling)).toThrow(/unknown asset/)
 
     const orphaned = makeProject()
-    delete orphaned.document.tracks[1].clips[0].linkGroupId
+    delete orphaned.sequences[0].tracks[1].clips[0].linkGroupId
     expect(() => validateProjectFile(orphaned)).toThrow(/has no partner/)
   })
 
@@ -1925,29 +2005,29 @@ describe('portable project file', () => {
     expect(() => validateProjectFile(unsafe)).toThrow(/safe integer/)
 
     const unreduced = makeProject()
-    unreduced.document.frameRate = { num: 60_000, den: 2_002 }
+    unreduced.sequences[0].frameRate = { num: 60_000, den: 2_002 }
     expect(() => validateProjectFile(unreduced)).toThrow(/exact rational/)
   })
 
   test('rejects malformed clip and transition geometry', () => {
     const overlap = makeProject()
-    overlap.document.tracks[0].clips[1].timelineRange.startFrame = 9
+    overlap.sequences[0].tracks[0].clips[1].timelineRange.startFrame = 9
     expect(() => validateProjectFile(overlap)).toThrow(/sorted and non-overlapping/)
 
     const mismatchedDurations = makeProject()
-    mismatchedDurations.document.tracks[0].clips[0].sourceRange.durationFrames = 9
+    mismatchedDurations.sequences[0].tracks[0].clips[0].sourceRange.durationFrames = 9
     expect(() => validateProjectFile(mismatchedDurations)).toThrow(/durations must match/)
 
     const badTransition = makeProject()
-    badTransition.document.tracks[0].transitions[0].durationFrames = 100
+    badTransition.sequences[0].tracks[0].transitions[0].durationFrames = 100
     expect(() => validateProjectFile(badTransition)).toThrow(/does not fit/)
 
     const missingEndpoint = makeProject()
-    missingEndpoint.document.tracks[0].transitions[0].toClipId = 'not-a-clip'
+    missingEndpoint.sequences[0].tracks[0].transitions[0].toClipId = 'not-a-clip'
     expect(() => validateProjectFile(missingEndpoint)).toThrow(/adjacent clips/)
 
     const badAudioCurve = makeProject()
-    Object.assign(badAudioCurve.document.tracks[0].transitions[0].audio, {
+    Object.assign(badAudioCurve.sequences[0].tracks[0].transitions[0].audio, {
       curve: 'logarithmic',
     })
     expect(() => validateProjectFile(badAudioCurve)).toThrow(
@@ -1957,17 +2037,17 @@ describe('portable project file', () => {
 
   test('requires valid explicit timed/still source semantics in current files', () => {
     const legacyNestedSchema = makeProject()
-    legacyNestedSchema.document.schemaVersion = 1
+    legacyNestedSchema.sequences[0].schemaVersion = 1
     expect(() => validateProjectFile(legacyNestedSchema)).toThrow(
       /unsupported timeline schema 1/,
     )
 
     const missingMode = makeProject()
-    removeSourceMode(missingMode.document.tracks[0].clips[0])
+    removeSourceMode(missingMode.sequences[0].tracks[0].clips[0])
     expect(() => validateProjectFile(missingMode)).toThrow(/missing field sourceMode/)
 
     const timedImage = makeProject()
-    const imageClip = timedImage.document.tracks[0].clips[2]
+    const imageClip = timedImage.sequences[0].tracks[0].clips[2]
     delete imageClip.text
     imageClip.assetId = 'image-a'
     expect(() => validateProjectFile(timedImage)).toThrow(
@@ -1975,7 +2055,7 @@ describe('portable project file', () => {
     )
 
     const malformedStill = makeProject()
-    const still = malformedStill.document.tracks[0].clips[2]
+    const still = malformedStill.sequences[0].tracks[0].clips[2]
     delete still.text
     still.assetId = 'image-a'
     still.sourceMode = 'still'
@@ -1999,13 +2079,13 @@ describe('portable project file', () => {
     const project = makeProject()
     expect(() => validateProjectFile(project)).not.toThrow()
 
-    project.document.tracks[0].clips[2].sourceRange.durationFrames = 19
+    project.sequences[0].tracks[0].clips[2].sourceRange.durationFrames = 19
     expect(() => validateProjectFile(project)).toThrow(/durations must match/)
   })
 
   test('rejects text clips that reuse a real media asset id', () => {
     const project = makeProject()
-    project.document.tracks[0].clips[2].assetId = 'image-a'
+    project.sequences[0].tracks[0].clips[2].assetId = 'image-a'
     expect(() => validateProjectFile(project)).toThrow(/reserved procedural asset id/)
   })
 
@@ -2016,7 +2096,7 @@ describe('portable project file', () => {
       video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 1 },
       audio: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 1 },
     }
-    for (const track of project.document.tracks) {
+    for (const track of project.sequences[0].tracks) {
       track.transitions = []
       for (const clip of track.clips) {
         if (clip.assetId !== 'video-z') continue
@@ -2042,7 +2122,7 @@ describe('portable project file', () => {
     )
 
     const futureDocument = makeProject()
-    futureDocument.document.schemaVersion = CURRENT_TIMELINE_SCHEMA_VERSION + 1
+    futureDocument.sequences[0].schemaVersion = CURRENT_TIMELINE_SCHEMA_VERSION + 1
     expect(() => parseProjectFile(JSON.stringify(futureDocument))).toThrow(
       /unsupported future timeline schema/,
     )

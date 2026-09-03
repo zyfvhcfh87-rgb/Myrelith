@@ -14,7 +14,7 @@ function textDocument() {
 
 beforeEach(() => {
   const { doc } = textDocument()
-  useDocumentStore.setState({ doc, past: [], future: [] })
+  useDocumentStore.getState().setDoc(doc)
   useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
 })
 

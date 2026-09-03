@@ -17,17 +17,20 @@ describe('adjustment project-file schema 15', () => {
     ))
     const current = createProjectFileSnapshot(document, [])
     const legacy = structuredClone(current) as unknown as {
-      document: { schemaVersion: number; tracks: Array<Record<string, unknown>> }
+      sequences: Array<{
+        schemaVersion: number
+        tracks: Array<Record<string, unknown>>
+      }>
     }
-    legacy.document.schemaVersion = 14
-    for (const track of legacy.document.tracks) delete track.adjustments
+    legacy.sequences[0]!.schemaVersion = 14
+    for (const track of legacy.sequences[0]!.tracks) delete track.adjustments
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
-    expect(parsed.document.schemaVersion).toBe(18)
-    expect(parsed.document.tracks.every((track) => track.adjustments?.length === 0))
+    expect(parsed.sequences[0].schemaVersion).toBe(18)
+    expect(parsed.sequences[0].tracks.every((track) => track.adjustments?.length === 0))
       .toBe(true)
-    expect(parsed.document.name).toBe(document.name)
-    expect(parsed.document.tracks.map((track) => track.clips)).toEqual(
+    expect(parsed.sequences[0].name).toBe(document.name)
+    expect(parsed.sequences[0].tracks.map((track) => track.clips)).toEqual(
       document.tracks.map((track) => track.clips),
     )
   })
@@ -65,7 +68,7 @@ describe('adjustment project-file schema 15', () => {
     const project = createProjectFileSnapshot(document, [])
     const parsed = parseProjectFile(serializeProjectFile(project))
 
-    expect(parsed.document.tracks[0]!.adjustments).toEqual([item])
+    expect(parsed.sequences[0].tracks[0]!.adjustments).toEqual([item])
     expect(serializeProjectFile(parsed)).toBe(serializeProjectFile(project))
   })
 
@@ -87,7 +90,7 @@ describe('adjustment project-file schema 15', () => {
         )) },
         [],
       ),
-      document,
+      sequences: [document],
     }
 
     expect(() => serializeProjectFile(project)).toThrow(/assetId: unknown field|video track/i)

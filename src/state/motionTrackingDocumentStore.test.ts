@@ -91,12 +91,14 @@ describe('motion tracking document history', () => {
     const result = useDocumentStore.getState().applyMotionTracking(plan, false)
 
     expect(result).toMatchObject({ ok: true, changed: true })
-    expect(useDocumentStore.getState().past).toEqual([before])
+    expect(useDocumentStore.getState().past.map((project) => project.sequences[0]))
+      .toEqual([before])
     const authored = useDocumentStore.getState().doc
     expect(authored).not.toBe(before)
 
     useDocumentStore.getState().undo()
     expect(useDocumentStore.getState().doc).toBe(before)
-    expect(useDocumentStore.getState().future).toEqual([authored])
+    expect(useDocumentStore.getState().future.map((project) => project.sequences[0]))
+      .toEqual([authored])
   })
 })

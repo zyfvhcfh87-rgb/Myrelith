@@ -155,7 +155,7 @@ export function validateClipAnimation(
     context.keyframeCount += track.keyframes.length
     if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
       fail(
-        '$.document.tracks',
+        '$.sequences',
         `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`,
       )
     }
@@ -219,7 +219,7 @@ export function validateClipAnimation(
     context.keyframeCount += track.keyframes.length
     if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
       fail(
-        '$.document.tracks',
+        '$.sequences',
         `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`,
       )
     }
@@ -278,7 +278,7 @@ export function validateEffect(
   context.effectParamCount += budget.params
   if (context.effectParamCount > PROJECT_FILE_LIMITS.maxTotalEffectParams) {
     fail(
-      '$.document.tracks',
+      '$.sequences',
       `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffectParams} effect parameters in total`,
     )
   }
@@ -288,7 +288,7 @@ export function validateEffect(
     PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters
   ) {
     fail(
-      '$.document.tracks',
+      '$.sequences',
       `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffectStringCharacters} effect-string characters in total`,
     )
   }
@@ -312,7 +312,7 @@ export function validateAudioEffect(
   context.audioEffectParamCount += budget.params
   if (context.audioEffectParamCount > PROJECT_FILE_LIMITS.maxTotalAudioEffectParams) {
     fail(
-      '$.document',
+      '$.sequences',
       `exceeds ${PROJECT_FILE_LIMITS.maxTotalAudioEffectParams} audio-effect parameters in total`,
     )
   }
@@ -322,7 +322,7 @@ export function validateAudioEffect(
     PROJECT_FILE_LIMITS.maxTotalAudioEffectStringCharacters
   ) {
     fail(
-      '$.document',
+      '$.sequences',
       `exceeds ${PROJECT_FILE_LIMITS.maxTotalAudioEffectStringCharacters} audio-effect-string characters in total`,
     )
   }
@@ -337,7 +337,7 @@ export function validateAudioEffectStack(
   context.audioEffectCount += value.length
   if (context.audioEffectCount > PROJECT_FILE_LIMITS.maxTotalAudioEffects) {
     fail(
-      '$.document',
+      '$.sequences',
       `exceeds ${PROJECT_FILE_LIMITS.maxTotalAudioEffects} audio effects in total`,
     )
   }
@@ -498,7 +498,7 @@ export function validateSourceTimeMap(
   )
   context.speedPointCount += speedCurve.points.length
   if (context.speedPointCount > PROJECT_FILE_LIMITS.maxTotalSpeedPoints) {
-    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxTotalSpeedPoints} speed points in total`)
+    fail('$.sequences', `exceeds ${PROJECT_FILE_LIMITS.maxTotalSpeedPoints} speed points in total`)
   }
   for (let index = 0; index < speedCurve.points.length; index++) {
     const pointPath = `${path}.speedCurve.points[${index}]`
@@ -614,7 +614,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
     fail(`${path}.sourceMode`, 'still source mode requires an image media clip')
   }
   if (context.documentFrameRate === null) {
-    fail('$.document.frameRate', 'must be validated before clips')
+    fail('$.sequences', 'frame rate must be validated before clips')
   }
   const assetDurationFrames = asset
     ? microsecondsDurationToFrames(
@@ -659,7 +659,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   context.effectCount += clip.effects.length
   if (context.effectCount > PROJECT_FILE_LIMITS.maxTotalEffects) {
     fail(
-      '$.document.tracks',
+      '$.sequences',
       `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffects} effects in total`,
     )
   }
@@ -672,7 +672,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
     context.textCharacterCount += clip.text.content.length
     if (context.textCharacterCount > PROJECT_FILE_LIMITS.maxTotalTextCharacters) {
       fail(
-        '$.document.tracks',
+        '$.sequences',
         `exceeds ${PROJECT_FILE_LIMITS.maxTotalTextCharacters} text characters in total`,
       )
     }

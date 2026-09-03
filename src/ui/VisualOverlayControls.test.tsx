@@ -62,7 +62,7 @@ beforeEach(() => {
   const empty = createTimelineDoc('Visual controls', DEFAULT_PROJECT_SETTINGS, 'doc-visual-controls')
   const clip = clipFromAsset(asset, 0)
   const doc = insertClip(empty, 'V1', clip)
-  useDocumentStore.setState({ doc, past: [], future: [] })
+  useDocumentStore.getState().setDoc(doc)
   useMediaStore.setState({
     descriptors: new Map(),
     assets: new Map(),
@@ -300,13 +300,11 @@ describe('VisualOverlayControls', () => {
 
   test('locked clips remain selectable but reject pointer, keyboard, and flip edits', async () => {
     const current = useDocumentStore.getState().doc
-    useDocumentStore.setState({
-      doc: {
-        ...current,
-        tracks: current.tracks.map((track) => track.kind === 'video'
-          ? { ...track, locked: true }
-          : track),
-      },
+    useDocumentStore.getState().setDoc({
+      ...current,
+      tracks: current.tracks.map((track) => track.kind === 'video'
+        ? { ...track, locked: true }
+        : track),
     })
     render(<Harness />)
     const body = await screen.findByRole('button', { name: /selected visual clip/i })

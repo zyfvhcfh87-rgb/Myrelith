@@ -195,6 +195,7 @@ export interface ArtifactDocumentMemoryEstimate {
   readonly estimator: 'json-retained-graph-v1'
   readonly assumptions: readonly string[]
   readonly authoredDocument: {
+    /** Stable schema-5 key; format 6 measures the complete sequence project. */
     readonly serializedUtf8Bytes: number
     readonly retainedGraph: ArtifactRetainedDocumentGraphEstimate
   }
@@ -657,7 +658,7 @@ export function performanceArtifactMarkdown(artifact: PerformanceArtifact): stri
     `Device: ${host.platform} ${host.osRelease ?? 'unknown'}/${host.architecture ?? 'unknown'}, ${host.cpuModel ?? 'unknown CPU'}, ${host.logicalProcessors ?? 'unknown'} logical processors, ${host.totalMemoryGiB ?? 'unknown'} GiB host memory (${artifact.metadata.browser.deviceMemoryGiB ?? 'unknown'} GiB browser-reported)`,
     `GPU: ${gpuValue(gpu.renderer)}; vendor: ${gpuValue(gpu.vendor)}; driver: ${gpuValue(gpu.driverVendor)} ${gpuValue(gpu.driverVersion)}; acceleration: ${acceleration}; source: ${gpu.source}`,
     `Memory provenance: ${memoryProvenance}. Scope: ${memoryEvidence.scope}`,
-    `Document/history estimate: ${documentMemory.authoredDocument.serializedUtf8Bytes} authored UTF-8 bytes; ${documentMemory.history.pastDepth}/${documentMemory.history.futureDepth} undo/redo snapshots; ${documentMemory.totals.estimatedRetainedBytes} explainable retained-graph bytes (${documentMemory.estimator}, not a heap measurement).`,
+    `Project/history estimate: ${documentMemory.authoredDocument.serializedUtf8Bytes} project UTF-8 bytes; ${documentMemory.history.pastDepth}/${documentMemory.history.futureDepth} undo/redo snapshots; ${documentMemory.totals.estimatedRetainedBytes} explainable retained-graph bytes (${documentMemory.estimator}, not a heap measurement).`,
     `Runtime telemetry: ${telemetry.healthSamples.length} phase samples; cache drain ${telemetry.cacheDrain.status}; long animation frames ${telemetry.longAnimationFrames.status}; measureUserAgentSpecificMemory ${telemetry.userAgentSpecificMemory.status}.`,
     '',
     '## Fixture',

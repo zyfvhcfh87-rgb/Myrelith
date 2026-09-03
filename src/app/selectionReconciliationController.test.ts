@@ -10,6 +10,7 @@ import {
 } from '../domain/projectFile'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
+import { useMediaStore } from '../state/mediaStore'
 import {
   INITIAL_TRANSPORT_STATE,
   useTransportStore,
@@ -112,7 +113,7 @@ let warnSpy: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  useDocumentStore.setState({ doc: makeDoc(), past: [], future: [] })
+  useDocumentStore.getState().setDoc(makeDoc())
   useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
 })
 
@@ -178,7 +179,7 @@ describe('selection reconciliation lifecycle', () => {
       ]),
       makeTrack('V2', [makeClip('clipD', 20, 30)]),
     ]
-    useDocumentStore.setState({ doc: linkedDoc, past: [], future: [] })
+    useDocumentStore.getState().setDoc(linkedDoc)
     dispose = initSelectionReconciliation()
     transportState().toggleClipSelection('clipD')
     transportState().toggleClipSelection('clipB')
@@ -294,6 +295,50 @@ describe('selection reconciliation lifecycle', () => {
       selectedClipIds: [],
       selectedClipId: null,
     })
+  })
+
+  test('sequence navigation clears transport and selection instead of carrying stale ids', () => {
+    dispose = initSelectionReconciliation()
+    transportState().setPlayheadFrame(75)
+    transportState().setSelectedClip('clipA')
+
+    const alternateId = documentState().createSequence('Alternate')!
+    expect(documentState().activeSequenceId).toBe(alternateId)
+    expect(transportState()).toMatchObject({
+      playheadFrame: 0,
+      selectedClipIds: [],
+      selectedClipId: null,
+      selectedMarkerId: null,
+    })
+
+    transportState().setPlayheadFrame(20)
+    expect(documentState().switchSequence('doc-selection-reconciliation')).toBe(true)
+    expect(transportState().playheadFrame).toBe(0)
+    expect(documentState().past).toHaveLength(1)
+  })
+
+  test('re-conforms shared media when project-rate history moves backward or forward', () => {
+    const empty = {
+      ...makeDoc(),
+      tracks: makeDoc().tracks.map((track) => ({
+        ...track,
+        clips: [],
+        transitions: [],
+      })),
+    }
+    documentState().setDoc(empty)
+    documentState().createSequence('Scene two')
+    dispose = initSelectionReconciliation()
+    const reconform = vi.spyOn(useMediaStore.getState(), 'reconformAssets')
+
+    expect(documentState().matchProjectFrameRate({ num: 60, den: 1 })).toBe(true)
+    expect(reconform).toHaveBeenLastCalledWith({ num: 60, den: 1 })
+
+    documentState().undo()
+    expect(reconform).toHaveBeenLastCalledWith({ num: 30, den: 1 })
+    documentState().redo()
+    expect(reconform).toHaveBeenLastCalledWith({ num: 60, den: 1 })
+    reconform.mockRestore()
   })
 
   test('selection changes are absent from document history and serialized projects', () => {

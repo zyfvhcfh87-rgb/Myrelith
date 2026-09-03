@@ -258,10 +258,10 @@ export class ProjectPersistenceController {
     this.recoveryJournalId = session.recoveryJournalId
       ?? this.deps.createRecoveryJournalId()
     this.projectBindingId = session.projectBindingId
-      ?? legacyLocalProjectBindingId(useDocumentStore.getState().doc.id)
+      ?? legacyLocalProjectBindingId(useDocumentStore.getState().project.id)
     this.recoveryFollowUp = false
     this.unsubscribeDocument = useDocumentStore.subscribe((state, previous) => {
-      if (state.doc !== previous.doc) this.markDirty()
+      if (state.project !== previous.project) this.markDirty()
     })
     this.unsubscribeMedia = useMediaStore.subscribe((state, previous) => {
       if (
@@ -422,15 +422,15 @@ export class ProjectPersistenceController {
     const revision = this.revision
     const media = useMediaStore.getState()
     const project = createProjectFileSnapshot(
-      useDocumentStore.getState().doc,
+      useDocumentStore.getState().project,
       media.descriptors.values(),
       media.collections,
     )
     return {
       serialized: serializeProjectFile(project),
       revision,
-      documentId: project.document.id,
-      projectName: project.document.name,
+      documentId: project.id,
+      projectName: project.name,
     }
   }
 

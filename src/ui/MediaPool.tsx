@@ -1049,13 +1049,13 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
               removeMediaCompatibility(id)
               return
             }
-            const document = useDocumentStore.getState().doc
-            const reason = mediaAssetRemovalDisabledReason(document, id)
+            const project = useDocumentStore.getState().project
+            const reason = mediaAssetRemovalDisabledReason(project, id)
             if (reason) {
               window.alert(reason)
               return
             }
-            removeMediaAssetFromProject(document, id)
+            removeMediaAssetFromProject(project, id)
           }}
         >
           <X aria-hidden="true" size={14} weight="bold" />

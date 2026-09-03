@@ -474,12 +474,12 @@ describe('mediaVisualsController', () => {
       },
     })
     try {
-      useDocumentStore.setState({ doc: instrumentedDocument })
+      useDocumentStore.getState().setDoc(instrumentedDocument)
       trackReads = 0
       setMediaVisualTimelineViewport({ startFrame: 10, endFrame: 20 })
       expect(trackReads).toBe(1)
     } finally {
-      useDocumentStore.setState({ doc: originalDocument })
+      useDocumentStore.getState().setDoc(originalDocument)
     }
 
     releaseStrip(strip)
@@ -589,12 +589,12 @@ describe('mediaVisualsController', () => {
       },
     })
     try {
-      useDocumentStore.setState({ doc: instrumentedDocument })
+      useDocumentStore.getState().setDoc(instrumentedDocument)
       setMediaVisualTimelineViewport({ startFrame: 10, endFrame: 20 })
 
       expect(trackReads).toBe(0)
     } finally {
-      useDocumentStore.setState({ doc: originalDocument })
+      useDocumentStore.getState().setDoc(originalDocument)
     }
   })
 

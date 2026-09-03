@@ -25,6 +25,7 @@ import {
 } from '../../domain/textOverlay'
 import type { PerformanceFixtureSummary } from './contract'
 import { defaultSourceTimeMap } from '../../domain/sourceTimeMap'
+import { rootSequence } from '../../domain/projectSequences'
 
 export const PERFORMANCE_FIXTURE_VERSION = 'stress-100x8-30m-v1' as const
 export const PERFORMANCE_FIXTURE_RATE: Readonly<FrameRate> = Object.freeze({
@@ -364,10 +365,11 @@ function fixtureDocument(
 function fixtureSummary(
   project: ProjectFile,
 ): Omit<PerformanceFixtureSummary, 'fingerprint'> {
+  const document = rootSequence(project)
   let clipCount = 0
   let transitionCount = 0
   let textClipCount = 0
-  for (const track of project.document.tracks) {
+  for (const track of document.tracks) {
     clipCount += track.clips.length
     transitionCount += track.transitions.length
     textClipCount += track.clips.filter((clip) => clip.text !== undefined).length
@@ -384,16 +386,16 @@ function fixtureSummary(
     representative4kAssetCount: project.assets.filter(
       (asset) => asset.width === 3_840 && asset.height === 2_160,
     ).length,
-    trackCount: project.document.tracks.length,
-    videoTrackCount: project.document.tracks.filter((item) => item.kind === 'video').length,
-    audioTrackCount: project.document.tracks.filter((item) => item.kind === 'audio').length,
+    trackCount: document.tracks.length,
+    videoTrackCount: document.tracks.filter((item) => item.kind === 'video').length,
+    audioTrackCount: document.tracks.filter((item) => item.kind === 'audio').length,
     clipCount,
     transitionCount,
     textClipCount,
     durationFrames: PERFORMANCE_FIXTURE_DURATION_FRAMES,
     durationSeconds: PERFORMANCE_FIXTURE_DURATION_FRAMES / PERFORMANCE_FIXTURE_RATE.num,
-    width: project.document.width,
-    height: project.document.height,
+    width: document.width,
+    height: document.height,
     frameRate: `${PERFORMANCE_FIXTURE_RATE.num}/${PERFORMANCE_FIXTURE_RATE.den}`,
   }
 }
@@ -431,7 +433,7 @@ export function expectedFixtureDrawnClipIds(
     ...fixture.connectedVideoAssetIds,
     ...fixture.connectedImageAssetIds,
   ])
-  return fixture.project.document.tracks.flatMap((track) => {
+  return rootSequence(fixture.project).tracks.flatMap((track) => {
     if (track.kind !== 'video' || track.hidden) return []
     return track.clips.flatMap((clip) => {
       const { startFrame, durationFrames } = clip.timelineRange
@@ -452,10 +454,14 @@ export function createPerformanceFixture(): PerformanceFixture {
   const imageAssets = Array.from({ length: IMAGE_ASSET_COUNT }, (_, index) => (
     imageDescriptor(index)
   ))
+  const document = fixtureDocument(videoAssets, audioAssets, imageAssets)
   const project: ProjectFile = {
     format: PROJECT_FILE_FORMAT,
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-    document: fixtureDocument(videoAssets, audioAssets, imageAssets),
+    id: document.id,
+    name: document.name,
+    rootSequenceId: document.id,
+    sequences: [document],
     assets: [...videoAssets, ...audioAssets, ...imageAssets],
     collections: [],
   }

@@ -54,9 +54,150 @@
 .area-workspace {
   grid-area: workspace;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   padding: 0 10px;
   background: #0b1624;
   border-bottom: 1px solid #26364a;
+}
+
+.sequence-controls {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: #a9bdd5;
+  font-size: 11px;
+}
+
+.sequence-picker {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sequence-picker > span,
+.sequence-root {
+  white-space: nowrap;
+}
+
+.sequence-picker select {
+  width: clamp(130px, 15vw, 240px);
+  height: 26px;
+  padding: 0 24px 0 8px;
+  color: #e2ebf5;
+  background: #122238;
+  border: 1px solid #36506f;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.sequence-root {
+  max-width: 150px;
+  overflow: hidden;
+  color: #7f9dbc;
+  text-overflow: ellipsis;
+}
+
+.sequence-buttons {
+  display: flex;
+  gap: 3px;
+}
+
+.sequence-buttons button,
+.sequence-name-editor button {
+  height: 25px;
+  padding: 0 7px;
+  color: #cbd9e9;
+  background: #15283e;
+  border: 1px solid #334b67;
+  border-radius: 5px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sequence-buttons button:hover:not(:disabled),
+.sequence-name-editor button:hover:not(:disabled) {
+  color: #fff;
+  background: #203b59;
+  border-color: #587aa0;
+}
+
+.sequence-buttons button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.sequence-name-editor {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 7px);
+  right: 0;
+  display: flex;
+  align-items: end;
+  gap: 6px;
+  padding: 9px;
+  background: #101e2e;
+  border: 1px solid #3c5878;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 35%);
+}
+
+.sequence-name-editor label {
+  display: grid;
+  gap: 4px;
+  color: #9eb3cc;
+}
+
+.sequence-name-editor input {
+  width: 220px;
+  height: 27px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  color: #f1f5fa;
+  background: #0c1724;
+  border: 1px solid #466585;
+  border-radius: 5px;
+  font: inherit;
+}
+
+@media (max-width: 1050px) {
+  .app-shell {
+    grid-template-rows:
+      56px
+      66px
+      minmax(220px, 1fr)
+      48px
+      10px
+      var(--workspace-timeline-height, 360px);
+  }
+
+  .area-workspace {
+    flex-wrap: wrap;
+    align-content: center;
+    column-gap: 10px;
+    row-gap: 2px;
+  }
+
+  .sequence-controls {
+    flex: 1 0 100%;
+    margin-left: 0;
+  }
+
+  .sequence-picker select {
+    width: clamp(150px, 30vw, 240px);
+  }
+}
+
+@media (max-width: 760px) {
+  .sequence-picker > span,
+  .sequence-root {
+    display: none;
+  }
 }
 
 .area-media-pool {

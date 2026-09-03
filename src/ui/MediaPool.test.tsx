@@ -1140,7 +1140,7 @@ describe('MediaPool presentation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove beach.mp4' }))
 
     expect(alert).toHaveBeenCalledWith(
-      'Remove this media\'s clips from the timeline before removing its source.',
+      'Remove this media\'s clips from every sequence before removing its source.',
     )
     expect(useMediaStore.getState().assets.get(asset.id)).toBe(asset)
   })

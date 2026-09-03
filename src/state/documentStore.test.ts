@@ -140,6 +140,8 @@ function makeTransitionDoc(
 }
 
 const getState = () => useDocumentStore.getState()
+const pastDocs = () => getState().past.map((project) => project.sequences[0])
+const futureDocs = () => getState().future.map((project) => project.sequences[0])
 
 let warnSpy: ReturnType<typeof vi.spyOn>
 
@@ -150,6 +152,98 @@ beforeEach(() => {
 
 afterEach(() => {
   warnSpy.mockRestore()
+})
+
+describe('project-wide sequence history', () => {
+  test('edits separate definitions through one history while navigation stays session-only', () => {
+    const rootId = getState().doc.id
+    const createdId = getState().createSequence('Scene two')
+    expect(createdId).not.toBeNull()
+    expect(getState().activeSequenceId).toBe(createdId)
+    expect(getState().past).toHaveLength(1)
+
+    const alternateTrackId = getState().doc.tracks[0].id
+    getState().renameTrack(alternateTrackId, 'Alternate picture')
+    expect(getState().past).toHaveLength(2)
+    const projectAfterAlternateEdit = getState().project
+
+    expect(getState().switchSequence(rootId)).toBe(true)
+    expect(getState().project).toBe(projectAfterAlternateEdit)
+    expect(getState().past).toHaveLength(2)
+
+    getState().renameTrack(getState().doc.tracks[0].id, 'Root picture')
+    expect(getState().past).toHaveLength(3)
+    expect(getState().project.sequences.find((sequence) => sequence.id === createdId)
+      ?.tracks[0].name).toBe('Alternate picture')
+
+    getState().undo()
+    expect(getState().activeSequenceId).toBe(rootId)
+    expect(getState().doc.tracks[0].name).toBe('V1')
+    expect(getState().project.sequences.find((sequence) => sequence.id === createdId)
+      ?.tracks[0].name).toBe('Alternate picture')
+
+    getState().undo()
+    expect(getState().activeSequenceId).toBe(rootId)
+    expect(getState().project.sequences.find((sequence) => sequence.id === createdId)
+      ?.tracks[0].name).toBe('V1')
+
+    getState().redo()
+    expect(getState().activeSequenceId).toBe(rootId)
+    expect(getState().project.sequences.find((sequence) => sequence.id === createdId)
+      ?.tracks[0].name).toBe('Alternate picture')
+  })
+
+  test('protects the root and falls active navigation back safely after delete and undo', () => {
+    const rootId = getState().doc.id
+    const createdId = getState().createSequence('Disposable')!
+
+    expect(getState().deleteSequence(rootId)).toBe(false)
+    expect(getState().past).toHaveLength(1)
+    expect(getState().deleteSequence(createdId)).toBe(true)
+    expect(getState().activeSequenceId).toBe(rootId)
+    expect(getState().doc.id).toBe(rootId)
+
+    getState().undo()
+    expect(getState().project.sequences.some((sequence) => sequence.id === createdId)).toBe(true)
+    expect(getState().activeSequenceId).toBe(rootId)
+
+    expect(getState().chooseRootSequence(createdId)).toBe(true)
+    expect(getState().project.rootSequenceId).toBe(createdId)
+    expect(getState().deleteSequence(createdId)).toBe(false)
+    expect(getState().deleteSequence(rootId)).toBe(true)
+    expect(getState().doc.id).toBe(createdId)
+  })
+
+  test('matches every empty sequence rate through the shared undo history', () => {
+    const empty = {
+      ...makeDoc(),
+      tracks: makeDoc().tracks.map((track) => ({
+        ...track,
+        clips: [],
+        transitions: [],
+      })),
+    }
+    getState().setDoc(empty)
+    const createdId = getState().createSequence('Scene two')!
+
+    expect(getState().matchProjectFrameRate({ num: 60, den: 1 })).toBe(true)
+    expect(getState().past).toHaveLength(2)
+    expect(getState().project.sequences.every(
+      (sequence) => sequence.frameRate.num === 60,
+    )).toBe(true)
+
+    getState().undo()
+    expect(getState().project.sequences).toHaveLength(2)
+    expect(getState().project.sequences.every(
+      (sequence) => sequence.frameRate.num === 30,
+    )).toBe(true)
+    expect(getState().activeSequenceId).toBe(createdId)
+
+    getState().redo()
+    expect(getState().project.sequences.every(
+      (sequence) => sequence.frameRate.num === 60,
+    )).toBe(true)
+  })
 })
 
 test('an unsafe retime end is a same-reference no-op with no history entry', () => {
@@ -237,12 +331,12 @@ describe('undo/redo round-trip', () => {
 
     getState().undo()
     expect(getState().doc).toBe(extended)
-    expect(getState().future).toEqual([split])
+    expect(futureDocs()).toEqual([split])
 
     getState().slipClip('still', 50)
     expect(getState().doc).toBe(extended)
-    expect(getState().past).toEqual([initial])
-    expect(getState().future).toEqual([split])
+    expect(pastDocs()).toEqual([initial])
+    expect(futureDocs()).toEqual([split])
     expect(warnSpy).not.toHaveBeenCalled()
 
     getState().redo()
@@ -289,7 +383,7 @@ describe('history behavior', () => {
     expect(getState().doc.tracks[0].clips.map(
       (clip) => clip.timelineRange.startFrame,
     )).toEqual([50, 150, 500])
-    expect(getState().past).toEqual([initial])
+    expect(pastDocs()).toEqual([initial])
     getState().undo()
     expect(getState().doc).toBe(initial)
   })
@@ -365,7 +459,7 @@ describe('transition action history', () => {
     const generatedId = authored.tracks[0].transitions[0].id
 
     expect(generatedId).toMatch(/^transition_/)
-    expect(getState().past).toEqual([initial])
+    expect(pastDocs()).toEqual([initial])
     expect(getState().future).toEqual([])
 
     getState().undo()
@@ -386,7 +480,7 @@ describe('transition action history', () => {
     expect(getState().doc.tracks[0].transitions[0]).toEqual(
       crossfade('t1', 'A', 'B', 5),
     )
-    expect(getState().past).toEqual([initial])
+    expect(pastDocs()).toEqual([initial])
     const updated = getState().doc
 
     getState().undo()
@@ -423,7 +517,7 @@ describe('transition action history', () => {
       durationFrames: 5,
       audio: { enabled: true, curve: 'linear' },
     })
-    expect(getState().past).toEqual([initial])
+    expect(pastDocs()).toEqual([initial])
 
     getState().setCrossfadeSettings(
       'V1',
@@ -440,7 +534,7 @@ describe('transition action history', () => {
       durationFrames: 7,
       audio: { enabled: false, curve: 'equal-power' },
     })
-    expect(getState().past).toEqual([initial, authored])
+    expect(pastDocs()).toEqual([initial, authored])
 
     getState().undo()
     expect(getState().doc).toBe(authored)
@@ -469,7 +563,7 @@ describe('transition action history', () => {
     const removed = getState().doc
     const removedJson = JSON.stringify(removed)
     expect(removed.tracks[0].transitions).toEqual([])
-    expect(getState().past).toEqual([initial])
+    expect(pastDocs()).toEqual([initial])
 
     getState().undo()
     expect(getState().doc).toBe(initial)
@@ -528,24 +622,27 @@ describe('transition action history', () => {
     })
   })
 
-  test('same transition id on two tracks updates/removes only the requested track', () => {
+  test('project guard blocks edits that preserve an id collision but permits repair', () => {
     const sharedId = 'shared-transition'
     getState().setDoc(makeTransitionDoc(
       [crossfade(sharedId, 'A', 'B')],
       [crossfade(sharedId, 'X', 'Y')],
     ))
 
+    const invalid = getState().doc
     getState().setCrossfadeDuration('V2', sharedId, 5)
+    expect(getState().doc).toBe(invalid)
     expect(getState().doc.tracks[0].transitions[0].durationFrames).toBe(3)
-    expect(getState().doc.tracks[1].transitions[0].durationFrames).toBe(5)
-    expect(getState().past).toHaveLength(1)
+    expect(getState().doc.tracks[1].transitions[0].durationFrames).toBe(3)
+    expect(getState().past).toHaveLength(0)
 
     getState().removeTransition('V1', sharedId)
+    expect(getState().doc).not.toBe(invalid)
     expect(getState().doc.tracks[0].transitions).toEqual([])
     expect(getState().doc.tracks[1].transitions).toEqual([
-      crossfade(sharedId, 'X', 'Y', 5),
+      crossfade(sharedId, 'X', 'Y'),
     ])
-    expect(getState().past).toHaveLength(2)
+    expect(getState().past).toHaveLength(1)
   })
 })
 
@@ -949,7 +1046,7 @@ describe('Phase 4.2 editing actions', () => {
       flipVertical: true,
       scaleLocked: true,
     })
-    expect(getState().past).toEqual([before])
+    expect(pastDocs()).toEqual([before])
 
     getState().updateClipVisual('clipA', { opacity: 0.7 })
     expect(getState().past).toHaveLength(1)
@@ -1106,7 +1203,7 @@ describe('track actions', () => {
     getState().removeTrack('V1')
     const removed = getState().doc
     const survivor = removed.tracks.find((track) => track.id === 'A1')?.clips[0]
-    expect(getState().past).toEqual([initial])
+    expect(pastDocs()).toEqual([initial])
     expect(removed.tracks.some((track) => track.id === 'V1')).toBe(false)
     expect(survivor).toBeDefined()
     expect('linkGroupId' in (survivor as Clip)).toBe(false)
@@ -1117,7 +1214,7 @@ describe('track actions', () => {
 
     getState().redo()
     expect(getState().doc).toBe(removed)
-    expect(getState().past).toEqual([initial])
+    expect(pastDocs()).toEqual([initial])
   })
 
   test('locked linked survivor rejects track removal without touching redo', () => {
@@ -1397,18 +1494,18 @@ describe('manual linkClips action', () => {
       for (let index = 2; index < initial.tracks.length; index++) {
         expect(authored.tracks[index]).toBe(initial.tracks[index])
       }
-      expect(getState().past).toEqual([initial])
+      expect(pastDocs()).toEqual([initial])
       expect(getState().future).toEqual([])
       expect(uuidSpy).toHaveBeenCalledTimes(1)
 
       getState().undo()
       expect(getState().doc).toBe(initial)
-      expect(getState().future).toEqual([authored])
+      expect(futureDocs()).toEqual([authored])
 
       getState().redo()
       expect(getState().doc).toBe(authored)
       expect(getState().doc.tracks[0].clips[0].linkGroupId).toBe(expectedGroupId)
-      expect(getState().past).toEqual([initial])
+      expect(pastDocs()).toEqual([initial])
       expect(getState().future).toEqual([])
       expect(uuidSpy).toHaveBeenCalledTimes(1)
     } finally {
@@ -1427,7 +1524,7 @@ describe('manual linkClips action', () => {
       getState().linkClips('vManual', 'aManual')
       const abandoned = getState().doc
       getState().undo()
-      expect(getState().future).toEqual([abandoned])
+      expect(futureDocs()).toEqual([abandoned])
 
       getState().linkClips('vSecondManual', 'aSecondManual')
       expect(getState().future).toEqual([])

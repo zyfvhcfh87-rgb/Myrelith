@@ -525,7 +525,7 @@ describe('selection (select tool)', () => {
       170,
       280,
     ])
-    expect(doc().past).toEqual([before])
+    expect(doc().past.map((project) => project.sequences[0])).toEqual([before])
     expect(transport().dragPreview).toBeNull()
   })
 
@@ -548,7 +548,7 @@ describe('selection (select tool)', () => {
       151,
       280,
     ])
-    expect(doc().past).toEqual([before])
+    expect(doc().past.map((project) => project.sequences[0])).toEqual([before])
     expect(transport().selectedClipIds).toEqual(['clipA', 'clipB'])
 
     act(() => doc().undo())
@@ -1046,7 +1046,7 @@ describe('linked gesture bounds', () => {
       timelineRange: { startFrame: 0, durationFrames: 42 },
       sourceRange: { startFrame: 20, durationFrames: 42 },
     })
-    expect(doc().past).toEqual([before])
+    expect(doc().past.map((project) => project.sequences[0])).toEqual([before])
     expect(warnSpy).not.toHaveBeenCalled()
     expectCurrentDocumentToRemainPortable()
   })
@@ -1083,7 +1083,7 @@ describe('linked gesture bounds', () => {
       timelineRange: { startFrame: 35, durationFrames: 42 },
       sourceRange: { startFrame: 0, durationFrames: 42 },
     })
-    expect(doc().past).toEqual([before])
+    expect(doc().past.map((project) => project.sequences[0])).toEqual([before])
     expect(warnSpy).not.toHaveBeenCalled()
     expectCurrentDocumentToRemainPortable()
   })
@@ -1114,7 +1114,7 @@ describe('linked gesture bounds', () => {
     expect(videoClip.sourceRange).toEqual({ startFrame: 11, durationFrames: 43 })
     expect(audioClip.sourceRange).toEqual({ startFrame: 22, durationFrames: 43 })
     expect(audioClip.sourceRange.startFrame + audioClip.sourceRange.durationFrames).toBe(65)
-    expect(doc().past).toEqual([before])
+    expect(doc().past.map((project) => project.sequences[0])).toEqual([before])
     expect(warnSpy).not.toHaveBeenCalled()
     expectCurrentDocumentToRemainPortable()
   })
@@ -1189,7 +1189,7 @@ describe('linked gesture bounds', () => {
       startFrame: 22,
       durationFrames: 43,
     })
-    expect(doc().past).toEqual([before])
+    expect(doc().past.map((project) => project.sequences[0])).toEqual([before])
     expect(warnSpy).not.toHaveBeenCalled()
     expectCurrentDocumentToRemainPortable()
   })
@@ -1216,7 +1216,7 @@ describe('linked gesture bounds', () => {
       startFrame: 25,
       durationFrames: 40,
     })
-    expect(doc().past).toEqual([before])
+    expect(doc().past.map((project) => project.sequences[0])).toEqual([before])
     expect(warnSpy).not.toHaveBeenCalled()
     expectCurrentDocumentToRemainPortable()
   })
@@ -1247,7 +1247,7 @@ describe('linked gesture bounds', () => {
       startFrame: 0,
       durationFrames: 40,
     })
-    expect(doc().past).toEqual([before])
+    expect(doc().past.map((project) => project.sequences[0])).toEqual([before])
     expect(warnSpy).not.toHaveBeenCalled()
     expectCurrentDocumentToRemainPortable()
   })

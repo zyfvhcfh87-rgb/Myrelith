@@ -38,22 +38,28 @@ function cloneRate(rate: FrameRate): FrameRate {
   return { num: rate.num, den: rate.den }
 }
 
-function timelineHasClips(document: TimelineDoc): boolean {
-  return document.tracks.some((track) => track.clips.length > 0)
+function timelinesHaveTimedContent(documents: readonly TimelineDoc[]): boolean {
+  return documents.some((document) => (
+    document.tracks.some((track) => track.clips.length > 0)
+    || document.tracks.some((track) => (track.adjustments?.length ?? 0) > 0)
+    || (document.markers?.length ?? 0) > 0
+    || (document.captionTracks ?? []).some((track) => track.items.length > 0)
+  ))
 }
 
 export function createMediaImportPrompt(
   fileName: string,
   document: TimelineDoc,
   sourceRate: FrameRate,
+  projectSequences: readonly TimelineDoc[] = [document],
 ): MediaImportPrompt {
   let matchUnavailableReason: string | null = null
   if (!isProjectFrameRatePreset(sourceRate)) {
     matchUnavailableReason =
       'This source rate is not one of the supported project presets.'
-  } else if (timelineHasClips(document)) {
+  } else if (timelinesHaveTimedContent(projectSequences)) {
     matchUnavailableReason =
-      'Matching is unavailable after clips have been added to the timeline.'
+      'Matching is unavailable after timed content has been added to any sequence.'
   }
   return {
     fileName,
@@ -118,14 +124,15 @@ export type MediaImportCommitValidation =
   | { kind: 'current' }
   | { kind: 'stale-project-settings' }
 
-/** Check the document identity and rate captured before the decision wait. */
+/** Check the project identity and rate captured before the decision wait. */
 export function validateMediaImportCommitDocument(
   document: TimelineDoc,
-  expectedDocumentId: string,
+  expectedProjectId: string,
   expectedRate: FrameRate,
+  currentProjectId: string = document.id,
 ): MediaImportCommitValidation {
   if (
-    document.id !== expectedDocumentId
+    currentProjectId !== expectedProjectId
     || !rateEquals(document.frameRate, expectedRate)
   ) {
     return { kind: 'stale-project-settings' }
@@ -147,6 +154,7 @@ export function resolveMediaImportCommitRate(
   document: TimelineDoc,
   sourceRate: FrameRate | null,
   decision: MediaImportCommitDecision,
+  projectSequences: readonly TimelineDoc[] = [document],
 ): MediaImportRateDecision {
   if (decision === 'keep-project-rate') {
     return { kind: 'accepted', finalRate: document.frameRate }
@@ -159,7 +167,12 @@ export function resolveMediaImportCommitRate(
     }
   }
 
-  const prompt = createMediaImportPrompt(fileName, document, sourceRate)
+  const prompt = createMediaImportPrompt(
+    fileName,
+    document,
+    sourceRate,
+    projectSequences,
+  )
   if (!prompt.canMatchSource) {
     return {
       kind: 'rejected',

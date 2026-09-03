@@ -56,14 +56,17 @@ by explicit frame/resource ownership.
 
 ## Current Myrelith boundary
 
-The current product has one `TimelineDoc` per `.myrelith` project. Track order
+Before Issue #191, the product had one `TimelineDoc` per `.myrelith` project. Track order
 is bottom-to-top; one track contains non-overlapping `Clip` records; every media
 clip maps an exact document frame through `SourceTimeMap`; text is a procedural
 clip; captions remain semantic lanes. `createVideoCompositionPlanner()` emits
 one paint-ordered plan consumed by both preview and export. Audio uses the
 separate pure `createTimelineAudioMixPlan()` and live playback remains driven by
 the `AudioContext` master clock. `documentStore` snapshots the complete
-`TimelineDoc` for one bounded undo/redo history.
+`TimelineDoc` for one bounded undo/redo history. Issue #191 replaces that
+outer ownership with a bounded central same-settings sequence collection, one
+portable root, session-only active navigation, and whole-project history; the
+per-sequence render/audio invariants below remain unchanged.
 
 That architecture gives the follow-ups strong seams, but none of the three
 families is just another current `Clip`:
@@ -401,6 +404,8 @@ focused/full tests, build, lint, audit, source-bound Chromium, zero cleanup.
 prerender caches, new effect types.
 
 ### Part 12b — Add a project-level sequence graph foundation
+
+**Implemented locally by Issue #191; publication pending.**
 
 **Goal:** let one portable project own several independently editable
 same-settings sequences with stable project-wide history and resources.

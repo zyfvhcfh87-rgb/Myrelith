@@ -79,16 +79,16 @@ describe('performance stress fixture', () => {
       height: 2_160,
       frameRate: '30/1',
     })
-    expect(docDurationFrames(fixture.project.document))
+    expect(docDurationFrames(fixture.project.sequences[0]))
       .toBe(PERFORMANCE_FIXTURE_DURATION_FRAMES)
-    expect(fixture.project.document.tracks.map((track) => track.kind))
+    expect(fixture.project.sequences[0].tracks.map((track) => track.kind))
       .toEqual(['video', 'video', 'video', 'video', 'audio', 'audio', 'audio', 'audio'])
   })
 
   test('uses every catalog asset and keeps generated runtime sources bounded', () => {
     const fixture = createPerformanceFixture()
     const referenced = new Set(
-      fixture.project.document.tracks.flatMap((track) => (
+      fixture.project.sequences[0].tracks.flatMap((track) => (
         track.clips
           .map((clip) => clip.assetId)
           .filter((assetId) => !isProceduralTextAssetId(assetId))
@@ -109,7 +109,7 @@ describe('performance stress fixture', () => {
     }
     for (const frame of fixture.scrubFrames) {
       const expectedClipIds = expectedFixtureDrawnClipIds(fixture, frame)
-      const expectedClips = fixture.project.document.tracks.flatMap((track) => (
+      const expectedClips = fixture.project.sequences[0].tracks.flatMap((track) => (
         track.clips.filter((clip) => expectedClipIds.includes(clip.id))
       ))
       expect(expectedClips.filter((clip) => clip.text !== undefined)).toHaveLength(1)
@@ -128,7 +128,7 @@ describe('performance stress fixture', () => {
     await expect(fingerprintPerformanceFixture(second, runtimeMedia()))
       .resolves.toBe(firstFingerprint)
 
-    second.project.document.name = 'Changed fixture identity'
+    second.project.sequences[0].name = 'Changed fixture identity'
     await expect(fingerprintPerformanceFixture(second, runtimeMedia()))
       .resolves.not.toBe(firstFingerprint)
   })

@@ -269,7 +269,7 @@ function normalizeRecoveryGeneration(
   }
   try {
     const project = parseProjectFile(value.serializedProject)
-    if (project.document.id !== documentId) return null
+    if (project.id !== documentId) return null
   } catch {
     return null
   }
@@ -335,7 +335,7 @@ function normalizeRecoveryJournal(
   let latestProjectName: string
   try {
     const latestProject = parseProjectFile(latest.serializedProject)
-    latestProjectName = latestProject.document.name
+    latestProjectName = latestProject.name
   } catch {
     return null
   }
@@ -408,10 +408,10 @@ function validateSnapshotInput(
       cause,
     })
   }
-  if (project.document.id !== input.documentId) {
+  if (project.id !== input.documentId) {
     throw new TypeError('Recovery snapshot document id does not match its metadata')
   }
-  if (project.document.name !== input.projectName) {
+  if (project.name !== input.projectName) {
     throw new TypeError('Recovery snapshot project name does not match its metadata')
   }
   return { ...input, capturedAt, projectBindingId }

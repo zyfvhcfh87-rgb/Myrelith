@@ -55,6 +55,7 @@ import { useTransportStore } from '../state/transportStore'
 import { EditorContextMenuHost } from '../ui/EditorContextMenu'
 import { initSourceMonitorLifecycle } from './sourceMonitorController'
 import { initAudioEffectStatusProjection } from './audioEffectStatus'
+import SequenceControls from '../ui/SequenceControls'
 
 const pluginAppController = getPluginAppController()
 
@@ -248,6 +249,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
       </header>
       <section className="area-workspace" inert={closing}>
         <WorkspaceControls onAnnounce={setWorkspaceAnnouncement} />
+        <SequenceControls />
         <span
           className="workspace-status visually-hidden"
           role="status"

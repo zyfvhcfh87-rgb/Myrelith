@@ -73,7 +73,7 @@ function authoredModel(): ManualLensCorrectionModel {
 
 describe('manual lens-correction history', () => {
   beforeEach(() => {
-    useDocumentStore.setState({ doc: document(), past: [], future: [] })
+    useDocumentStore.getState().setDoc(document())
   })
 
   test('authors, undoes, redoes, and resets as one entry per commit', () => {
@@ -108,7 +108,7 @@ describe('manual lens-correction history', () => {
     })
     expect(useDocumentStore.getState()).toBe(after)
 
-    useDocumentStore.setState({ doc: document(true), past: [], future: [] })
+    useDocumentStore.getState().setDoc(document(true))
     const locked = useDocumentStore.getState()
     locked.setManualLensCorrection('clip', model)
     expect(useDocumentStore.getState()).toBe(locked)

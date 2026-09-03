@@ -806,7 +806,7 @@ describe('linked clip gestures (A/V pairs)', () => {
 
     expect(vidClip().timelineRange.startFrame).toBe(120)
     expect(audClip().timelineRange.startFrame).toBe(1_020)
-    expect(doc().past).toEqual([linked])
+    expect(doc().past.map((project) => project.sequences[0])).toEqual([linked])
     expect(screen.queryByTestId('clip-aud')).not.toBeInTheDocument()
   })
 
@@ -839,7 +839,7 @@ describe('linked clip gestures (A/V pairs)', () => {
     expect(
       vidClip().timelineRange.startFrame - audClip().timelineRange.startFrame,
     ).toBe(65)
-    expect(doc().past).toEqual([before])
+    expect(doc().past.map((project) => project.sequences[0])).toEqual([before])
     expect(warnSpy).not.toHaveBeenCalled()
     warnSpy.mockRestore()
   })

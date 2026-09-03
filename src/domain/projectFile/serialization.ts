@@ -13,6 +13,10 @@ import { fail, type JsonRecord } from './validationPrimitives';
 import { validateProjectFile } from './documentValidation';
 import { migrateProjectFile } from './migrations';
 import { cloneAdjustmentAnimation } from '../adjustmentItems';
+import {
+  sequenceProjectFromTimeline,
+  type SequenceProject,
+} from '../projectSequences';
 
 function cloneEffectParams(params: Effect['params']): Effect['params'] {
   const copy: Effect['params'] = {}
@@ -45,12 +49,8 @@ function cloneLensCorrectionIntent(
     : cloneLensIntentValue(value) as LensCorrectionIntent
 }
 
-function portableProjectSnapshot(project: ProjectFile): ProjectFile {
-  const document = project.document
+function portableTimelineSnapshot(document: TimelineDoc): TimelineDoc {
   return {
-    format: PROJECT_FILE_FORMAT,
-    formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-    document: {
       schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: document.id,
       name: document.name,
@@ -180,7 +180,17 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
           })),
         }
       })(),
-    },
+  }
+}
+
+function portableProjectSnapshot(project: ProjectFile): ProjectFile {
+  return {
+    format: PROJECT_FILE_FORMAT,
+    formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
+    id: project.id,
+    name: project.name,
+    rootSequenceId: project.rootSequenceId,
+    sequences: project.sequences.map(portableTimelineSnapshot),
     assets: project.assets
       .map((asset) => ({
         id: asset.id,
@@ -213,17 +223,25 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
  * conformed frame counts, visuals, and undo history are intentionally absent.
  */
 export function createProjectFileSnapshot(
-  document: TimelineDoc,
+  input: SequenceProject | TimelineDoc,
   descriptors: Iterable<PortableAssetDescriptor>,
   collections: readonly MediaCollection[] = [],
 ): ProjectFile {
+  const sequenceProject = 'sequences' in input
+    ? input
+    : sequenceProjectFromTimeline(input)
   const assets = Array.from(descriptors)
   const project: ProjectFile = {
     format: PROJECT_FILE_FORMAT,
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
-    document: document.captionTracks === undefined
-      ? { ...document, captionTracks: [] }
-      : document,
+    id: sequenceProject.id,
+    name: sequenceProject.name,
+    rootSequenceId: sequenceProject.rootSequenceId,
+    sequences: sequenceProject.sequences.map((document) => (
+      document.captionTracks === undefined
+        ? { ...document, captionTracks: [] }
+        : document
+    )),
     assets,
     collections: cloneMediaCollections(collections),
   }

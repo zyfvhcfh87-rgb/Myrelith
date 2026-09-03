@@ -26,6 +26,11 @@ import { isLocalProjectPickerCancellation, supportsLocalProjectFiles, type Local
 import { clearActiveLocalProjectBindingId, getActiveLocalProjectBindingId, legacyLocalProjectBindingId, setActiveLocalProjectBindingId } from '../localProjectProvenance';
 import type { ProjectActionResult, ProjectControllerDeps } from './contracts';
 import { projectControllerRealDeps as realDeps } from './dependencies';
+import {
+  rootSequence,
+  sequenceProjectFromTimeline,
+  type SequenceProject,
+} from '../../domain/projectSequences';
 
 async function disposePreviewAndPlugins(
   deps: Pick<ProjectControllerDeps, 'disposePreview' | 'disposePlugins'>,
@@ -228,11 +233,12 @@ function invalidatePending(
 }
 
 function resumeSummary(pending: PendingResume): ResumeProjectSummary {
-  const { document, assets } = pending.project
+  const { assets } = pending.project
+  const document = rootSequence(pending.project)
   return {
     origin: pending.origin,
     projectFileName: pending.displayFileName,
-    projectName: document.name,
+    projectName: pending.project.name,
     width: document.width,
     height: document.height,
     frameRate: { ...document.frameRate },
@@ -338,7 +344,7 @@ export async function leaveActiveProject(
 }
 
 async function activateProject(
-  document: TimelineDoc,
+  project: SequenceProject,
   descriptors: readonly PortableAssetDescriptor[],
   assets: readonly MediaAsset[],
   compatibility: readonly MediaCompatibilityItem[],
@@ -379,14 +385,14 @@ async function activateProject(
     }
     // Ownership of candidate URLs moved into mediaStore with replaceAssets.
     pendingResume = null
-    useDocumentStore.getState().setDoc(document)
+    useDocumentStore.getState().setProject(project)
     useTransportStore.getState().resetTransport()
     useSourceMonitorStore.getState().resetSourceMonitor()
     clearSelectedPoolAssetId()
     useProjectSessionStore.setState({
       screen: 'editor',
       phase: 'idle',
-      activeProjectName: document.name,
+      activeProjectName: project.name,
       activeProjectFileName: persistence.fileName,
       activeMediaRelink: INITIAL_ACTIVE_MEDIA_RELINK,
       candidate: null,
@@ -429,7 +435,7 @@ export async function createNewProject(
     return { status: 'failed', message }
   }
   return activateProject(
-    document,
+    sequenceProjectFromTimeline(document),
     [],
     [],
     [],
@@ -521,13 +527,13 @@ async function prepareProjectCandidate(
   deps: ProjectControllerDeps,
 ): Promise<ProjectActionResult> {
   const project = parseProjectFile(serialized)
-  if (source.expectedDocumentId && project.document.id !== source.expectedDocumentId) {
+  if (source.expectedDocumentId && project.id !== source.expectedDocumentId) {
     throw new Error('The local project entry now points to a different project')
   }
   if (generation !== operationGeneration) return { status: 'cancelled' }
 
   const binding = await resolveCandidateBinding(
-    project.document.id,
+    project.id,
     source,
     deps,
   )
@@ -551,8 +557,8 @@ async function prepareProjectCandidate(
 
   if (source.handle && binding.rememberSourceHandle) {
     void deps.rememberRecentProject({
-      documentId: project.document.id,
-      projectName: project.document.name,
+      documentId: project.id,
+      projectName: project.name,
       fileName: source.handle.name,
       lastOpenedAt: deps.now(),
       handle: source.handle,
@@ -762,7 +768,7 @@ function activeRelinkIsCurrent(work: ActiveMediaRelinkWork): boolean {
   return activeMediaRelinkWork === work
     && work.generation === activeMediaRelinkGeneration
     && session.screen === 'editor'
-    && useDocumentStore.getState().doc.id === work.documentId
+    && useDocumentStore.getState().project.id === work.documentId
 }
 
 function publishActiveMediaRelink(
@@ -791,12 +797,13 @@ function createActiveMediaRelinkWork(
   const session = useProjectSessionStore.getState()
   if (session.screen !== 'editor') return null
   invalidateActiveMediaRelink(deps)
-  const document = useDocumentStore.getState().doc
+  const store = useDocumentStore.getState()
+  const document = store.doc
   const projectBindingId = getActiveLocalProjectBindingId()
   if (!projectBindingId) return null
   const work: ActiveMediaRelinkWork = {
     generation: activeMediaRelinkGeneration,
-    documentId: document.id,
+    documentId: store.project.id,
     documentRate: { ...document.frameRate },
     projectBindingId,
     outcome: 'running',
@@ -1152,7 +1159,7 @@ async function restoreRememberedDescriptor(
     const requestId = deps.createCompatibilityRequestId()
     const inspection = await deps.inspectMedia(
       file,
-      pending.project.document.frameRate,
+      rootSequence(pending.project).frameRate,
       descriptor.id,
       pending.abortController.signal,
     )
@@ -1195,7 +1202,7 @@ async function restoreRememberedDescriptor(
     const connected = relinkedAsset(
       descriptor,
       candidate.asset,
-      pending.project.document.frameRate,
+      rootSequence(pending.project).frameRate,
     )
     pending.assets.set(descriptor.id, connected)
     pending.compatibility.set(
@@ -1346,7 +1353,7 @@ async function connectProjectMediaSelections(
     try {
       const inspection = await deps.inspectMedia(
         file,
-        pending.project.document.frameRate,
+        rootSequence(pending.project).frameRate,
         temporaryProbeId(requestId),
         pending.abortController.signal,
       )
@@ -1420,7 +1427,7 @@ async function connectProjectMediaSelections(
       const connected = relinkedAsset(
         descriptor,
         candidate.asset,
-        pending.project.document.frameRate,
+        rootSequence(pending.project).frameRate,
       )
       pending.assets.set(descriptor.id, connected)
       pending.compatibility.set(
@@ -1546,7 +1553,7 @@ function beginActiveMediaPicker(
   deps: Pick<ProjectControllerDeps, 'revokeObjectURL'>,
 ): ActiveMediaPickerContext | null {
   if (useProjectSessionStore.getState().screen !== 'editor') return null
-  const documentId = useDocumentStore.getState().doc.id
+  const documentId = useDocumentStore.getState().project.id
   invalidateActiveMediaRelink(deps)
   return { documentId, generation: activeMediaRelinkGeneration }
 }
@@ -1556,7 +1563,7 @@ function activeMediaPickerIsCurrent(
 ): boolean {
   return context.generation === activeMediaRelinkGeneration
     && useProjectSessionStore.getState().screen === 'editor'
-    && useDocumentStore.getState().doc.id === context.documentId
+    && useDocumentStore.getState().project.id === context.documentId
 }
 
 async function connectActiveAssetSelection(
@@ -1930,7 +1937,7 @@ async function restoreRequestedMediaAndActivate(
   }
 
   const result = await activateProject(
-    pending.project.document,
+    pending.project,
     pending.project.assets,
     [...pending.assets.values()],
     [...pending.compatibility.values()],
@@ -1968,7 +1975,7 @@ export function activateResumedProject(
   })
   if (remembered.length === 0) {
     return activateProject(
-      pending.project.document,
+      pending.project,
       pending.project.assets,
       [...pending.assets.values()],
       [...pending.compatibility.values()],

@@ -18,7 +18,7 @@ function validateAdjustmentKeyframes(
   if (value.length === 0) fail(path, 'must not be empty')
   context.keyframeCount += value.length
   if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
-    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`)
+    fail('$.sequences', `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`)
   }
   let previousFrame: number | null = null
   for (let index = 0; index < value.length; index++) {
@@ -91,7 +91,7 @@ function validateAdjustment(
   boundedArray(item.effects, `${path}.effects`, PROJECT_FILE_LIMITS.maxEffectsPerClip)
   context.effectCount += item.effects.length
   if (context.effectCount > PROJECT_FILE_LIMITS.maxTotalEffects) {
-    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffects} effects in total`)
+    fail('$.sequences', `exceeds ${PROJECT_FILE_LIMITS.maxTotalEffects} effects in total`)
   }
   for (let index = 0; index < item.effects.length; index++) {
     validateEffect(item.effects[index], `${path}.effects[${index}]`, context)
@@ -103,6 +103,10 @@ function validateAdjustment(
   if (error) fail(path, error)
   return typed
 }
+import {
+  SEQUENCE_PROJECT_LIMITS,
+  sequenceSettingsEqual,
+} from '../projectSequences';
 
 function validateTimelineMarker(
   value: unknown,
@@ -287,7 +291,7 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   boundedArray(track.clips, `${path}.clips`, PROJECT_FILE_LIMITS.maxClips)
   context.clipCount += track.clips.length
   if (context.clipCount > PROJECT_FILE_LIMITS.maxClips) {
-    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxClips} clips in total`)
+    fail('$.sequences', `exceeds ${PROJECT_FILE_LIMITS.maxClips} clips in total`)
   }
   let previousEnd = -1
   const clipIndexById = new Map<string, number>()
@@ -304,7 +308,7 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   boundedArray(track.adjustments, `${path}.adjustments`, PROJECT_FILE_LIMITS.maxAdjustments)
   context.adjustmentCount += track.adjustments.length
   if (context.adjustmentCount > PROJECT_FILE_LIMITS.maxAdjustments) {
-    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxAdjustments} adjustments in total`)
+    fail('$.sequences', `exceeds ${PROJECT_FILE_LIMITS.maxAdjustments} adjustments in total`)
   }
   let previousAdjustmentEnd = -1
   const allItemRanges = (track.clips as Clip[]).map((clip) => clip.timelineRange)
@@ -324,7 +328,7 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   boundedArray(track.transitions, `${path}.transitions`, PROJECT_FILE_LIMITS.maxTransitions)
   context.transitionCount += track.transitions.length
   if (context.transitionCount > PROJECT_FILE_LIMITS.maxTransitions) {
-    fail('$.document.tracks', `exceeds ${PROJECT_FILE_LIMITS.maxTransitions} transitions in total`)
+    fail('$.sequences', `exceeds ${PROJECT_FILE_LIMITS.maxTransitions} transitions in total`)
   }
   const windows: ResolvedTransitionWindow[] = []
   for (let index = 0; index < track.transitions.length; index++) {
@@ -352,67 +356,81 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   validateAudioEffectStack(track.audioEffects, `${path}.audioEffects`, context)
 }
 
-function validateDocument(value: unknown, context: ValidationContext): asserts value is TimelineDoc {
-  const document = record(value, '$.document')
+interface ProjectWideTimelineIds {
+  sequenceIds: Set<string>
+  trackIds: Set<string>
+  markerIds: Set<string>
+  captionTrackIds: Set<string>
+  captionItemIds: Set<string>
+  linkGroupIds: Set<string>
+}
+
+function validateDocument(
+  value: unknown,
+  path: string,
+  context: ValidationContext,
+  ids: ProjectWideTimelineIds,
+): asserts value is TimelineDoc {
+  const document = record(value, path)
   exactKeys(
     document,
     ['schemaVersion', 'id', 'name', 'frameRate', 'width', 'height', 'audioSampleRate', 'tracks', 'markers', 'captionTracks', 'masterAudio'],
     [],
-    '$.document',
+    path,
   )
-  safeInteger(document.schemaVersion, '$.document.schemaVersion', 1)
+  safeInteger(document.schemaVersion, `${path}.schemaVersion`, 1)
   if (document.schemaVersion > CURRENT_TIMELINE_SCHEMA_VERSION) {
-    fail('$.document.schemaVersion', `unsupported future timeline schema ${document.schemaVersion}`)
+    fail(`${path}.schemaVersion`, `unsupported future timeline schema ${document.schemaVersion}`)
   }
   if (document.schemaVersion !== CURRENT_TIMELINE_SCHEMA_VERSION) {
-    fail('$.document.schemaVersion', `unsupported timeline schema ${document.schemaVersion}`)
+    fail(`${path}.schemaVersion`, `unsupported timeline schema ${document.schemaVersion}`)
   }
-  stringValue(document.id, '$.document.id', PROJECT_FILE_LIMITS.maxIdCharacters)
-  stringValue(document.name, '$.document.name', PROJECT_FILE_LIMITS.maxNameCharacters)
-  validateFrameRate(document.frameRate, '$.document.frameRate')
+  stringValue(document.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (ids.sequenceIds.has(document.id as string)) {
+    fail(`${path}.id`, 'duplicate sequence id')
+  }
+  ids.sequenceIds.add(document.id as string)
+  stringValue(document.name, `${path}.name`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  validateFrameRate(document.frameRate, `${path}.frameRate`)
   context.documentFrameRate = document.frameRate
-  safeInteger(document.width, '$.document.width', 1, PROJECT_FILE_LIMITS.maxDimension)
-  safeInteger(document.height, '$.document.height', 1, PROJECT_FILE_LIMITS.maxDimension)
+  safeInteger(document.width, `${path}.width`, 1, PROJECT_FILE_LIMITS.maxDimension)
+  safeInteger(document.height, `${path}.height`, 1, PROJECT_FILE_LIMITS.maxDimension)
   const renderBudget = renderSurfaceBudget(document.width, document.height)
   if (!renderBudget.allowed) {
-    fail('$.document', renderBudget.reason ?? 'unsafe render surface')
+    fail(path, renderBudget.reason ?? 'unsafe render surface')
   }
   safeInteger(
     document.audioSampleRate,
-    '$.document.audioSampleRate',
+    `${path}.audioSampleRate`,
     1,
     PROJECT_FILE_LIMITS.maxAudioSampleRate,
   )
-  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
-  const trackIds = new Set<string>()
+  boundedArray(document.tracks, `${path}.tracks`, PROJECT_FILE_LIMITS.maxTracks)
   for (let index = 0; index < document.tracks.length; index++) {
-    validateTrack(document.tracks[index], `$.document.tracks[${index}]`, trackIds, context)
+    validateTrack(document.tracks[index], `${path}.tracks[${index}]`, ids.trackIds, context)
   }
-  boundedArray(document.markers, '$.document.markers', PROJECT_FILE_LIMITS.maxMarkers)
-  const markerIds = new Set<string>()
+  boundedArray(document.markers, `${path}.markers`, PROJECT_FILE_LIMITS.maxMarkers)
   let previousMarker: TimelineMarker | null = null
   for (let index = 0; index < document.markers.length; index++) {
     previousMarker = validateTimelineMarker(
       document.markers[index],
-      `$.document.markers[${index}]`,
-      markerIds,
+      `${path}.markers[${index}]`,
+      ids.markerIds,
       previousMarker,
     )
   }
-  boundedArray(document.captionTracks, '$.document.captionTracks', CAPTION_LIMITS.maxTracks)
-  const captionTrackIds = new Set<string>()
-  const captionItemIds = new Set<string>()
+  boundedArray(document.captionTracks, `${path}.captionTracks`, CAPTION_LIMITS.maxTracks)
   for (let index = 0; index < document.captionTracks.length; index++) {
     validateCaptionTrack(
       document.captionTracks[index],
-      `$.document.captionTracks[${index}]`,
-      captionTrackIds,
-      captionItemIds,
+      `${path}.captionTracks[${index}]`,
+      ids.captionTrackIds,
+      ids.captionItemIds,
     )
   }
   const captionError = captionDocumentValidationError(document as unknown as TimelineDoc)
-  if (captionError) fail('$.document.captionTracks', captionError)
-  validateMasterAudio(document.masterAudio, '$.document.masterAudio', context)
+  if (captionError) fail(`${path}.captionTracks`, captionError)
+  validateMasterAudio(document.masterAudio, `${path}.masterAudio`, context)
 }
 
 /**
@@ -423,7 +441,16 @@ export function validateProjectFile(value: unknown): ProjectFile {
   const project = record(value, '$')
   exactKeys(
     project,
-    ['format', 'formatVersion', 'document', 'assets', 'collections'],
+    [
+      'format',
+      'formatVersion',
+      'id',
+      'name',
+      'rootSequenceId',
+      'sequences',
+      'assets',
+      'collections',
+    ],
     [],
     '$',
   )
@@ -437,6 +464,15 @@ export function validateProjectFile(value: unknown): ProjectFile {
   if (project.formatVersion !== CURRENT_PROJECT_FORMAT_VERSION) {
     fail('$.formatVersion', `unsupported project format ${project.formatVersion}`)
   }
+  stringValue(project.id, '$.id', PROJECT_FILE_LIMITS.maxIdCharacters)
+  stringValue(project.name, '$.name', PROJECT_FILE_LIMITS.maxNameCharacters)
+  stringValue(
+    project.rootSequenceId,
+    '$.rootSequenceId',
+    PROJECT_FILE_LIMITS.maxIdCharacters,
+  )
+  boundedArray(project.sequences, '$.sequences', PROJECT_FILE_LIMITS.maxSequences)
+  if (project.sequences.length === 0) fail('$.sequences', 'requires at least one sequence')
   boundedArray(project.assets, '$.assets', PROJECT_FILE_LIMITS.maxAssets)
 
   const assetIds = new Set<string>()
@@ -474,9 +510,58 @@ export function validateProjectFile(value: unknown): ProjectFile {
     keyframeCount: 0,
     speedPointCount: 0,
   }
-  validateDocument(project.document, context)
-  for (const [linkGroupId, count] of context.linkGroupCounts) {
-    if (count < 2) fail('$.document', `link group ${linkGroupId} has no partner clip`)
+  const ids: ProjectWideTimelineIds = {
+    sequenceIds: new Set(),
+    trackIds: new Set(),
+    markerIds: new Set(),
+    captionTrackIds: new Set(),
+    captionItemIds: new Set(),
+    linkGroupIds: new Set(),
+  }
+  let totalTracks = 0
+  let totalMarkers = 0
+  let totalCaptionTracks = 0
+  let totalCaptionItems = 0
+  let settingsSource: TimelineDoc | null = null
+  for (let index = 0; index < project.sequences.length; index++) {
+    const path = `$.sequences[${index}]`
+    const candidate = project.sequences[index]
+    context.linkGroupCounts = new Map()
+    validateDocument(candidate, path, context, ids)
+    const sequence = candidate as unknown as TimelineDoc
+    if (settingsSource && !sequenceSettingsEqual(settingsSource, sequence)) {
+      fail(path, 'sequence settings must match the project root settings')
+    }
+    settingsSource ??= sequence
+    totalTracks += sequence.tracks.length
+    totalMarkers += sequence.markers?.length ?? 0
+    totalCaptionTracks += sequence.captionTracks?.length ?? 0
+    totalCaptionItems += (sequence.captionTracks ?? []).reduce(
+      (sum, track) => sum + track.items.length,
+      0,
+    )
+    for (const [linkGroupId, count] of context.linkGroupCounts) {
+      if (count < 2) fail(path, `link group ${linkGroupId} has no partner clip`)
+      if (ids.linkGroupIds.has(linkGroupId)) {
+        fail(path, `duplicate link group id ${linkGroupId}`)
+      }
+      ids.linkGroupIds.add(linkGroupId)
+    }
+  }
+  if (!ids.sequenceIds.has(project.rootSequenceId as string)) {
+    fail('$.rootSequenceId', 'missing root sequence')
+  }
+  if (totalTracks > SEQUENCE_PROJECT_LIMITS.maxTotalTracks) {
+    fail('$.sequences', `exceeds ${SEQUENCE_PROJECT_LIMITS.maxTotalTracks} tracks in total`)
+  }
+  if (totalMarkers > SEQUENCE_PROJECT_LIMITS.maxTotalMarkers) {
+    fail('$.sequences', `exceeds ${SEQUENCE_PROJECT_LIMITS.maxTotalMarkers} markers in total`)
+  }
+  if (totalCaptionTracks > SEQUENCE_PROJECT_LIMITS.maxTotalCaptionTracks) {
+    fail('$.sequences', `exceeds ${SEQUENCE_PROJECT_LIMITS.maxTotalCaptionTracks} caption tracks in total`)
+  }
+  if (totalCaptionItems > SEQUENCE_PROJECT_LIMITS.maxTotalCaptionItems) {
+    fail('$.sequences', `exceeds ${SEQUENCE_PROJECT_LIMITS.maxTotalCaptionItems} caption items in total`)
   }
   return project as unknown as ProjectFile
 }

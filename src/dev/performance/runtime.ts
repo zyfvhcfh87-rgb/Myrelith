@@ -45,6 +45,7 @@ import type {
 import { defaultSourceTimeMap } from '../../domain/sourceTimeMap'
 import { proceduralTextAssetId } from '../../domain/textOverlay'
 import { microsecondsDurationToFrames } from '../../domain/time'
+import { rootSequence } from '../../domain/projectSequences'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { useProjectSessionStore } from '../../state/projectSessionStore'
@@ -1180,11 +1181,15 @@ export async function resetAndVerifyCanonicalPerformanceRunState(
 
   const currentDocument = useDocumentStore.getState()
   if (
-    currentDocument.doc !== canonical.document.doc
+    currentDocument.project !== canonical.document.project
+    || currentDocument.activeSequenceId !== canonical.document.activeSequenceId
+    || currentDocument.doc !== canonical.document.doc
     || currentDocument.past !== canonical.document.past
     || currentDocument.future !== canonical.document.future
   ) {
     useDocumentStore.setState({
+      project: canonical.document.project,
+      activeSequenceId: canonical.document.activeSequenceId,
       doc: canonical.document.doc,
       past: canonical.document.past,
       future: canonical.document.future,
@@ -1220,7 +1225,10 @@ export async function resetAndVerifyCanonicalPerformanceRunState(
   const restoredMedia = useMediaStore.getState()
   const restoredTransport = useTransportStore.getState()
   if (
-    restoredDocument.doc !== canonical.document.doc
+    restoredDocument.project !== canonical.document.project
+    || restoredDocument.activeSequenceId
+      !== canonical.document.activeSequenceId
+    || restoredDocument.doc !== canonical.document.doc
     || restoredDocument.past !== canonical.document.past
     || restoredDocument.future !== canonical.document.future
     || !mapsHaveSameEntries(restoredMedia.descriptors, canonical.media.descriptors)
@@ -1236,7 +1244,10 @@ export async function resetAndVerifyCanonicalPerformanceRunState(
     ...fixture,
     project: {
       ...fixture.project,
-      document: restoredDocument.doc,
+      id: restoredDocument.project.id,
+      name: restoredDocument.project.name,
+      rootSequenceId: restoredDocument.project.rootSequenceId,
+      sequences: restoredDocument.project.sequences,
       assets: [...restoredMedia.descriptors.values()],
     },
   }, runtimeMedia)
@@ -1357,7 +1368,7 @@ export function createPerformanceExportDocument(
       `Performance export frames must be an integer from 1 through ${MAX_CONTINUOUS_EXPORT_FRAMES}`,
     )
   }
-  const template = fixture.project.document
+  const template = rootSequence(fixture.project)
   const connectedVideoIds = new Set(fixture.connectedVideoAssetIds)
   const connectedImageIds = new Set(fixture.connectedImageAssetIds)
   const videoSource = fixtureClip(template, 'video', connectedVideoIds)
@@ -1910,6 +1921,8 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       }
     } finally {
       useDocumentStore.setState({
+        project: originalDocument.project,
+        activeSequenceId: originalDocument.activeSequenceId,
         doc: originalDocument.doc,
         past: originalDocument.past,
         future: originalDocument.future,
@@ -1951,7 +1964,7 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
     const metrics = {} as Record<PerformanceMetricId, PerformanceMetric>
     const canonicalDocument = useDocumentStore.getState()
     const documentMemory = estimateDocumentMemory(
-      canonicalDocument.doc,
+      canonicalDocument.project,
       canonicalDocument.past,
       canonicalDocument.future,
     )
@@ -2220,6 +2233,8 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
       this.sources.objectUrls,
     )
     useDocumentStore.setState({
+      project: this.initial.document.project,
+      activeSequenceId: this.initial.document.activeSequenceId,
       doc: this.initial.document.doc,
       past: this.initial.document.past,
       future: this.initial.document.future,
@@ -2233,7 +2248,11 @@ class PerformanceHarnessSession implements PerformanceHarnessApi {
     })
     const currentDocument = useDocumentStore.getState()
     const currentMedia = useMediaStore.getState()
-    const documentStoreRestored = currentDocument.doc === this.initial.document.doc
+    const documentStoreRestored = currentDocument.project
+      === this.initial.document.project
+      && currentDocument.activeSequenceId
+        === this.initial.document.activeSequenceId
+      && currentDocument.doc === this.initial.document.doc
       && currentDocument.past === this.initial.document.past
       && currentDocument.future === this.initial.document.future
     const mediaStoreRestored = currentMedia.assets === this.initial.media.assets
@@ -2291,8 +2310,8 @@ export async function preparePerformanceHarness(
     throw new Error('Performance fixture media could not enter the isolated store')
   }
   useTransportStore.getState().resetTransport()
-  useDocumentStore.getState().setDoc(fixture.project.document)
-  const historyTrack = fixture.project.document.tracks[0]
+  useDocumentStore.getState().setProject(fixture.project)
+  const historyTrack = rootSequence(fixture.project).tracks[0]
   if (!historyTrack) throw new Error('Performance fixture has no history track')
   for (let index = 0; index < PERFORMANCE_HISTORY_EDIT_PAIRS; index++) {
     useDocumentStore.getState().setTrackFlags(historyTrack.id, { hidden: true })
@@ -2302,7 +2321,7 @@ export async function preparePerformanceHarness(
   if (
     documentWithHistory.past.length !== PERFORMANCE_HISTORY_EDIT_PAIRS * 2
     || JSON.stringify(documentWithHistory.doc)
-      !== JSON.stringify(fixture.project.document)
+      !== JSON.stringify(rootSequence(fixture.project))
   ) {
     throw new Error('Performance document history fixture is not deterministic')
   }

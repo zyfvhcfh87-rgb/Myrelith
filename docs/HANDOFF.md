@@ -134,6 +134,7 @@ temporary origin-migration bridge; it is not the canonical public URL.
 | **Post-MVP #188 — pitch-safe retiming** | ✅ final implementation and acceptance complete; delivery via PR #217 | PR #213's constant 0.25×–4× WSOLA now also follows canonical variable-speed ramps in shared live/export code; exact 1× remains direct; held 0× spans fade to silence; combined eight-session and lifecycle gates plus real Chromium speech/music export-reopen evidence are green |
 | **Post-MVP #189 — audio automation, mixer, and effects** | ✅ merged in PR #215 as `138db35` | schema-16 automation, schema-17 mixer, schema-18 clip/track/master effects; shared live/export signal order; loudness and presets; exact-head CI/review green |
 | **Post-MVP #190 — bounded adjustment layers** | ✅ merged in PR #214 as `024ea9b` | schema-15 resource-free video-track items; full history/edit/persistence/recovery; safe post-composite color effects and bounded animation; deterministic shared preview/export order; zero additional compositor surfaces; Chromium interaction/undo/redo/responsive gate clean |
+| **Post-MVP #191 — multiple project sequences** | ✅ implementation and acceptance complete; delivery via PR #218 | project-format-6 same-settings sequence collection; explicit portable root/session active; whole-project history, CRUD UI, validation, persistence/recovery/media reconciliation, and explicit export target; Bugbot's project-identity and adjustment-only Match findings fixed; 3,732 total Vitest and 17 runner tests plus build/lint/audit green; in-app Chromium v5 migration/CRUD/root/undo/redo/export/recovery/720px gate clean; repaired code head CI/Bugbot green |
 | **Public preview foundation** | ✅ complete | PR #39 normally merged as `256887b`; `v0.1.0-alpha.1` prerelease + verified web archive; private multi-arch GHCR package digest `sha256:837cc8e…`; exact Cloudflare production deployment `c85ceeb0`; GitHub About/resources/topics populated |
 | **Current public preview — `v0.2.0-alpha.1` First Light** | ✅ published | annotated tag resolves to `2a845c8`; verified 43-file web archive `sha256:aef2445b…`; public Linux AMD64/ARM64 GHCR index `sha256:ee060a7e…`; exact-head PR + master CI, 3,335 Vitest tests, 17 runner tests, and 10 Chromium tests passed |
 | **Refactor Stage 5 — project media reconnection seams** | ✅ complete | pure descriptor matching + one injected active-relink transaction behind the unchanged facade; 146 focused + 1,704 total tests; checked-in recovery smoke and headed Chromium offline/permission/individual/folder/cancel/replacement matrix, clean console |
@@ -5266,3 +5267,29 @@ surface; it is not a second zoom and never enters document history.
   lint, and diff hygiene.
 - Exact-head CI/review passed before merge; the user authorized skipping the
   final user pass and closing GitHub #190.
+
+## Post-MVP issue #191 - multiple sequences per project
+
+**IMPLEMENTATION COMPLETE LOCALLY (2026-09-03); PUBLICATION AND MERGE AUTHORIZED.**
+
+- Project format 6 replaces the single outer `document` with one bounded,
+  deterministic collection of stable `TimelineDoc` sequence definitions plus
+  one portable root id. Format-5 files migrate by preserving their existing
+  document byte-behaviorally as the sole root. All sequences must share exact
+  rational FPS, dimensions, and audio sample rate; nesting and multicam remain
+  out of scope.
+- `documentStore` owns the complete project, session-only active sequence, and
+  one project-wide bounded undo/redo history. New, duplicate, rename, delete,
+  root selection, and navigation are exposed in the editor. The root is
+  protected; deleting the active non-root returns to the root; navigation is
+  neither persistent nor dirty.
+- Validation examines every active or dormant sequence, globally unique ids,
+  the root, and aggregate bounds before replacing stores or browser resources.
+  Media descriptors, collections, connected sources, recovery, save/live-save,
+  relink, and dirty tracking remain project-wide rather than duplicated per
+  sequence. Selection and transport reconcile on navigation.
+- Export deliberately targets the active sequence and identifies that target
+  in the dialog, including whether it is the project root. Opening or recovering
+  a project begins at the root.
+- The user authorized publication and merge on 2026-09-03, contingent on a
+  rebased exact-head validation pass and completed Bugbot review.

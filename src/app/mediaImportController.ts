@@ -81,10 +81,11 @@ export interface MediaImportDeps {
     signal: AbortSignal,
   ): Promise<MediaProbeResult>
   getDocument(): TimelineDoc
-  replaceDocument(document: TimelineDoc): void
+  getProjectId(): string
+  getSequences(): readonly TimelineDoc[]
+  replaceProjectRate(rate: FrameRate): void
   hasAsset(assetId: string): boolean
   addAsset(asset: MediaAsset, compatibility: MediaCompatibilityItem): boolean
-  reconformAssets(rate: FrameRate): void
   startCompatibility(item: MediaCompatibilityItem): boolean
   hasCompatibility(id: string, requestId: string): boolean
   getCompatibility(id: string): MediaCompatibilityItem | undefined
@@ -108,12 +109,18 @@ const realDeps: MediaImportDeps = {
   createRequestId: () => `compat_${crypto.randomUUID()}`,
   inspect: inspectMediaFileCompatibility,
   getDocument: () => useDocumentStore.getState().doc,
-  replaceDocument: (document) => useDocumentStore.getState().setDoc(document),
+  getProjectId: () => useDocumentStore.getState().project.id,
+  getSequences: () => useDocumentStore.getState().project.sequences,
+  replaceProjectRate: (rate) => {
+    const state = useDocumentStore.getState()
+    if (!state.matchProjectFrameRate(rate)) {
+      throw new Error('project frame rate cannot change after any sequence has content')
+    }
+  },
   hasAsset: (assetId) => useMediaStore.getState().descriptors.has(assetId),
   addAsset: (asset, compatibility) => (
     useMediaStore.getState().addAsset(asset, compatibility)
   ),
-  reconformAssets: (rate) => useMediaStore.getState().reconformAssets(rate),
   startCompatibility: (item) => (
     useMediaStore.getState().startCompatibility(item)
   ),
@@ -292,6 +299,7 @@ async function importSelectedMedia(
   }
   activeImport = operation
   const startingDocument = deps.getDocument()
+  const startingProjectId = deps.getProjectId()
   let analyzed: MediaAsset | null = null
   let probeReturned = false
   let committed = false
@@ -325,7 +333,7 @@ async function importSelectedMedia(
     }
 
     const decisionDocument = deps.getDocument()
-    if (decisionDocument.id !== startingDocument.id) {
+    if (deps.getProjectId() !== startingProjectId) {
       throw new Error('the active project changed while the file was being analyzed')
     }
 
@@ -367,7 +375,7 @@ async function importSelectedMedia(
       retainedImports.set(itemId, {
         file,
         handle,
-        documentId: startingDocument.id,
+        documentId: startingProjectId,
         deps,
       })
       setUi({ ...INITIAL_MEDIA_IMPORT_STATE })
@@ -403,6 +411,7 @@ async function importSelectedMedia(
         file.name,
         decisionDocument,
         readyAsset.frameRate,
+        deps.getSequences(),
       )
       setUi({
         phase: 'awaiting-decision',
@@ -429,8 +438,9 @@ async function importSelectedMedia(
     const expectedRate = prompt?.projectRate ?? decisionDocument.frameRate
     const commitValidation = validateMediaImportCommitDocument(
       commitDocument,
-      decisionDocument.id,
+      startingProjectId,
       expectedRate,
+      deps.getProjectId(),
     )
     if (commitValidation.kind === 'stale-project-settings') {
       throw new Error('the project settings changed while the import decision was open')
@@ -445,6 +455,7 @@ async function importSelectedMedia(
       commitDocument,
       readyAsset.frameRate,
       decision,
+      deps.getSequences(),
     )
     if (rateDecision.kind === 'rejected') {
       throw new Error(rateDecision.message)
@@ -472,11 +483,7 @@ async function importSelectedMedia(
     retainedImports.delete(itemId)
 
     if (decision === 'match-source-rate') {
-      deps.replaceDocument({
-        ...commitDocument,
-        frameRate: { num: finalRate.num, den: finalRate.den },
-      })
-      deps.reconformAssets(finalRate)
+      deps.replaceProjectRate(finalRate)
     }
 
     if (activeImport === operation) {
@@ -487,7 +494,7 @@ async function importSelectedMedia(
     if (handle) {
       void rememberCommittedMediaHandle(
         deps,
-        commitDocument.id,
+        startingProjectId,
         committedAsset.id,
         handle,
       )
@@ -504,7 +511,7 @@ async function importSelectedMedia(
       retainedImports.set(itemId, {
         file,
         handle,
-        documentId: startingDocument.id,
+        documentId: startingProjectId,
         deps,
       })
       setUi({ ...INITIAL_MEDIA_IMPORT_STATE })
@@ -627,7 +634,7 @@ export function retryMediaCompatibility(
     })
   }
   const operationDeps = deps ?? retained.deps
-  if (operationDeps.getDocument().id !== retained.documentId) {
+  if (operationDeps.getProjectId() !== retained.documentId) {
     retainedImports.delete(itemId)
     operationDeps.removeCompatibility(itemId)
     return Promise.resolve({
@@ -671,7 +678,7 @@ export function acceptPartialMediaImport(
       itemId,
     })
   }
-  if (operationDeps.getDocument().id !== retained.documentId) {
+  if (operationDeps.getProjectId() !== retained.documentId) {
     retainedImports.delete(itemId)
     operationDeps.removeCompatibility(itemId)
     return Promise.resolve({
