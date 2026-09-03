@@ -41,6 +41,7 @@ function cloneRate(rate: FrameRate): FrameRate {
 function timelinesHaveTimedContent(documents: readonly TimelineDoc[]): boolean {
   return documents.some((document) => (
     document.tracks.some((track) => track.clips.length > 0)
+    || document.tracks.some((track) => (track.adjustments?.length ?? 0) > 0)
     || (document.markers?.length ?? 0) > 0
     || (document.captionTracks ?? []).some((track) => track.items.length > 0)
   ))
@@ -123,14 +124,15 @@ export type MediaImportCommitValidation =
   | { kind: 'current' }
   | { kind: 'stale-project-settings' }
 
-/** Check the document identity and rate captured before the decision wait. */
+/** Check the project identity and rate captured before the decision wait. */
 export function validateMediaImportCommitDocument(
   document: TimelineDoc,
-  expectedDocumentId: string,
+  expectedProjectId: string,
   expectedRate: FrameRate,
+  currentProjectId: string = document.id,
 ): MediaImportCommitValidation {
   if (
-    document.id !== expectedDocumentId
+    currentProjectId !== expectedProjectId
     || !rateEquals(document.frameRate, expectedRate)
   ) {
     return { kind: 'stale-project-settings' }

@@ -218,6 +218,7 @@ function makeFixture(
     DEFAULT_PROJECT_SETTINGS,
     'doc-import',
   ),
+  projectId?: string,
 ): Fixture {
   let document = startingDocument
   const assets = new Map<string, MediaAsset>()
@@ -247,6 +248,7 @@ function makeFixture(
     createRequestId: () => `request-${++requestCount}`,
     inspect,
     getDocument: () => document,
+    getProjectId: () => projectId ?? document.id,
     getSequences: () => [document],
     replaceProjectRate,
     hasAsset: (id) => assets.has(id),
@@ -1129,6 +1131,34 @@ describe('mediaImportController', () => {
     )
   })
 
+  test('retry still belongs to the project after a sequence switch', async () => {
+    const fixture = makeFixture(
+      makeAsset({ frameRate: F30 }),
+      createTimelineDoc('Alternate cut', DEFAULT_PROJECT_SETTINGS, 'seq-alt'),
+      'project-import',
+    )
+    fixture.inspect
+      .mockResolvedValueOnce({
+        status: 'unsupported',
+        asset: null,
+        compatibility: makeCompatibility('unsupported'),
+      })
+      .mockResolvedValueOnce(readyProbe(makeAsset({ frameRate: F30 })))
+
+    await expect(importMedia(file(), fixture.deps)).resolves.toMatchObject({
+      status: 'unsupported',
+    })
+    fixture.setDocument({
+      ...fixture.currentDocument(),
+      id: 'seq-root',
+    })
+
+    await expect(retryMediaCompatibility('asset-new')).resolves.toEqual({
+      status: 'imported',
+      assetId: 'asset-new',
+    })
+  })
+
   test('removing a checking row aborts and late work cannot resurrect it', async () => {
     const pending = deferred<MediaProbeResult>()
     const fixture = makeFixture()
@@ -1171,6 +1201,51 @@ describe('mediaImportController', () => {
     })
     expect(fixture.assets).toHaveLength(0)
     expect(fixture.revokeObjectURL).toHaveBeenCalledWith('blob:source')
+  })
+
+  test('a handle-aware import on a non-root sequence remembers the project id', async () => {
+    const fixture = makeFixture(
+      makeAsset({ frameRate: F30 }),
+      createTimelineDoc('Alternate cut', DEFAULT_PROJECT_SETTINGS, 'seq-alt'),
+      'project-import',
+    )
+    const selected = file()
+    const handle = {
+      kind: 'file',
+      name: selected.name,
+      getFile: vi.fn(async () => selected),
+    } as unknown as LocalMediaFileHandle
+
+    await expect(
+      importMediaFromHandle(selected, handle, fixture.deps),
+    ).resolves.toMatchObject({ status: 'imported' })
+
+    expect(fixture.rememberMediaHandle).toHaveBeenCalledWith(
+      'project-import',
+      'asset-new',
+      handle,
+    )
+  })
+
+  test('switching sequences while the prompt is open does not treat the project as stale', async () => {
+    const fixture = makeFixture(
+      makeAsset(),
+      createTimelineDoc('Alternate cut', DEFAULT_PROJECT_SETTINGS, 'seq-alt'),
+      'project-import',
+    )
+    const result = importMedia(file(), fixture.deps)
+    await waitForImportPhase('awaiting-decision')
+    fixture.setDocument({
+      ...fixture.currentDocument(),
+      id: 'seq-root',
+    })
+
+    expect(resolveMediaImportDecision('keep-project-rate')).toBe(true)
+    await expect(result).resolves.toEqual({
+      status: 'imported',
+      assetId: 'asset-new',
+    })
+    expect(fixture.assets.has('asset-new')).toBe(true)
   })
 
   test('settings change while the prompt is open rejects the stale choice', async () => {

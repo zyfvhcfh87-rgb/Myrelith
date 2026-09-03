@@ -36,6 +36,27 @@ function makeDocument(): TimelineDoc {
   )
 }
 
+function withAdjustment(document: TimelineDoc): TimelineDoc {
+  return {
+    ...document,
+    tracks: document.tracks.map((track, index) => index === 0
+      ? {
+          ...track,
+          adjustments: [{
+            kind: 'adjustment' as const,
+            id: 'adjustment-1',
+            name: 'Grade',
+            timelineRange: { startFrame: 0, durationFrames: 10 },
+            enabled: true,
+            opacity: 1,
+            animation: { tracks: [], effectTracks: [] },
+            effects: [],
+          }],
+        }
+      : track),
+  }
+}
+
 function withTimelineClip(document: TimelineDoc): TimelineDoc {
   const clip: Clip = {
     id: 'clip-1',
@@ -215,6 +236,12 @@ describe('media import frame-rate decisions', () => {
       sourceRate: F60,
       reason: 'Matching is unavailable after timed content has been added to any sequence.',
     },
+    {
+      name: 'adjustment-only timeline',
+      document: withAdjustment(makeDocument()),
+      sourceRate: F60,
+      reason: 'Matching is unavailable after timed content has been added to any sequence.',
+    },
   ])('keeps Match visible but unavailable for $name', ({
     document,
     sourceRate,
@@ -264,6 +291,14 @@ describe('media import frame-rate decisions', () => {
       expected: 'stale-project-settings',
     },
     {
+      name: 'sequence switch in the same project',
+      document: { ...makeDocument(), id: 'seq-alt' },
+      expectedDocumentId: 'project-import',
+      expectedRate: F30,
+      currentProjectId: 'project-import',
+      expected: 'current',
+    },
+    {
       name: 'changed project rate',
       document: { ...makeDocument(), frameRate: F24 },
       expectedDocumentId: 'doc-import-decisions',
@@ -274,12 +309,14 @@ describe('media import frame-rate decisions', () => {
     document,
     expectedDocumentId,
     expectedRate,
+    currentProjectId,
     expected,
   }) => {
     expect(validateMediaImportCommitDocument(
       document,
       expectedDocumentId,
       expectedRate,
+      currentProjectId,
     ).kind).toBe(expected)
   })
 
@@ -323,6 +360,16 @@ describe('media import frame-rate decisions', () => {
     {
       name: 'edited timeline',
       document: withTimelineClip(makeDocument()),
+      sourceRate: F60,
+      expected: {
+        kind: 'rejected',
+        reason: 'source-rate-unavailable',
+        message: 'Matching is unavailable after timed content has been added to any sequence.',
+      },
+    },
+    {
+      name: 'adjustment-only timeline',
+      document: withAdjustment(makeDocument()),
       sourceRate: F60,
       expected: {
         kind: 'rejected',
