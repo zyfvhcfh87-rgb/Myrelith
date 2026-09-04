@@ -63,6 +63,7 @@ export function addTrack(doc: TimelineDoc, kind: TrackKind): TimelineDoc {
     name: label,
     clips: [],
     sequenceInstances: [],
+    multicamInstances: [],
     adjustments: [],
     transitions: [],
     hidden: false,
@@ -160,19 +161,27 @@ export function removeTrack(doc: TimelineDoc, trackId: TrackId): TimelineDoc {
   }
 
   const touchedGroups = new Set<string>()
-  for (const clip of removedTrack.clips) {
-    if (clip.linkGroupId !== undefined) touchedGroups.add(clip.linkGroupId)
+  for (const item of [
+    ...removedTrack.clips,
+    ...(removedTrack.sequenceInstances ?? []),
+    ...(removedTrack.multicamInstances ?? []),
+  ]) {
+    if (item.linkGroupId !== undefined) touchedGroups.add(item.linkGroupId)
   }
 
   const survivingCounts = new Map<string, number>()
   if (touchedGroups.size > 0) {
     for (let index = 0; index < doc.tracks.length; index++) {
       if (index === trackIndex) continue
-      for (const clip of doc.tracks[index].clips) {
-        if (clip.linkGroupId !== undefined && touchedGroups.has(clip.linkGroupId)) {
+      for (const item of [
+        ...doc.tracks[index].clips,
+        ...(doc.tracks[index].sequenceInstances ?? []),
+        ...(doc.tracks[index].multicamInstances ?? []),
+      ]) {
+        if (item.linkGroupId !== undefined && touchedGroups.has(item.linkGroupId)) {
           survivingCounts.set(
-            clip.linkGroupId,
-            (survivingCounts.get(clip.linkGroupId) ?? 0) + 1,
+            item.linkGroupId,
+            (survivingCounts.get(item.linkGroupId) ?? 0) + 1,
           )
         }
       }
@@ -191,11 +200,13 @@ export function removeTrack(doc: TimelineDoc, trackId: TrackId): TimelineDoc {
     const track = doc.tracks[index]
     if (
       track.locked &&
-      track.clips.some(
-        (clip) =>
-          clip.linkGroupId !== undefined &&
-          orphanedGroups.has(clip.linkGroupId),
-      )
+      [
+        ...track.clips,
+        ...(track.sequenceInstances ?? []),
+        ...(track.multicamInstances ?? []),
+      ].some((item) => (
+        item.linkGroupId !== undefined && orphanedGroups.has(item.linkGroupId)
+      ))
     ) {
       return reject(doc, op, `linked survivor on track ${track.id} is locked`)
     }
@@ -205,13 +216,14 @@ export function removeTrack(doc: TimelineDoc, trackId: TrackId): TimelineDoc {
   for (let index = 0; index < doc.tracks.length; index++) {
     if (index === trackIndex) continue
     const track = doc.tracks[index]
-    if (
-      !track.clips.some(
-        (clip) =>
-          clip.linkGroupId !== undefined &&
-          orphanedGroups.has(clip.linkGroupId),
-      )
-    ) {
+    const hasOrphanedLink = [
+      ...track.clips,
+      ...(track.sequenceInstances ?? []),
+      ...(track.multicamInstances ?? []),
+    ].some((item) => (
+      item.linkGroupId !== undefined && orphanedGroups.has(item.linkGroupId)
+    ))
+    if (!hasOrphanedLink) {
       tracks.push(track)
       continue
     }
@@ -223,6 +235,26 @@ export function removeTrack(doc: TimelineDoc, trackId: TrackId): TimelineDoc {
           ? withoutLinkGroupId(clip)
           : clip,
       ),
+      ...(track.sequenceInstances === undefined ? {} : {
+        sequenceInstances: track.sequenceInstances.map((instance) => {
+          if (
+            instance.linkGroupId === undefined
+            || !orphanedGroups.has(instance.linkGroupId)
+          ) return instance
+          const { linkGroupId: _linkGroupId, ...rest } = instance
+          return rest
+        }),
+      }),
+      ...(track.multicamInstances === undefined ? {} : {
+        multicamInstances: track.multicamInstances.map((instance) => {
+          if (
+            instance.linkGroupId === undefined
+            || !orphanedGroups.has(instance.linkGroupId)
+          ) return instance
+          const { linkGroupId: _linkGroupId, ...rest } = instance
+          return rest
+        }),
+      }),
     })
   }
   return { ...doc, tracks }

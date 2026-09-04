@@ -123,7 +123,7 @@ function fixture(options: {
   }
   return {
     doc: {
-      schemaVersion: 19,
+      schemaVersion: 20,
       id: 'audio-plan-doc',
       name: 'Audio plan',
       frameRate: { num: 30, den: 1 },

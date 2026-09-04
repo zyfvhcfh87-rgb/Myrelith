@@ -53,7 +53,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
 /** V1: clipA [0,300), clipB [400,100). A1: clipD [0,300). V2 empty. */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-1',
     name: 'Store test doc',
     frameRate: { num: 30, den: 1 },
@@ -70,7 +70,7 @@ function makeDoc(): TimelineDoc {
 
 function makeStillDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-still-history',
     name: 'Still history test',
     frameRate: { num: 30, den: 1 },
@@ -111,7 +111,7 @@ function makeTransitionDoc(
   v1Locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-transitions',
     name: 'Transition store test',
     frameRate: { num: 30, den: 1 },
@@ -155,6 +155,48 @@ afterEach(() => {
 })
 
 describe('project-wide sequence history', () => {
+  test('commits multicam creation and cut authoring as exact undoable projects', () => {
+    const created = getState().createMulticam({
+      name: 'Concert',
+      startFrame: 600,
+      videoTrackId: 'V1',
+      audioTrackId: 'A1',
+      angles: [
+        { assetId: 'angle-wide', name: 'Wide', durationFrames: 100, syncFrame: 5 },
+        { assetId: 'angle-close', name: 'Close', durationFrames: 100, syncFrame: 10 },
+      ],
+      audioPolicy: { kind: 'fixed', angleIndex: 0 },
+    })
+    expect(created).not.toBeNull()
+    expect(getState().past).toHaveLength(1)
+    const definition = getState().project.multicams![0]
+    const beforeCut = getState().project
+
+    expect(getState().editMulticamDefinition({
+      kind: 'cut',
+      definitionId: definition.id,
+      frame: 30,
+      angleId: definition.angles[1].id,
+    })).toBe(true)
+    expect(getState().past).toHaveLength(2)
+    const afterCut = getState().project
+    expect(afterCut.multicams![0].switches).toHaveLength(2)
+
+    expect(getState().editMulticamDefinition({
+      kind: 'cut',
+      definitionId: definition.id,
+      frame: 30,
+      angleId: definition.angles[1].id,
+    })).toBe(true)
+    expect(getState().project).toBe(afterCut)
+    expect(getState().past).toHaveLength(2)
+
+    getState().undo()
+    expect(getState().project).toBe(beforeCut)
+    getState().redo()
+    expect(getState().project).toBe(afterCut)
+  })
+
   test('edits separate definitions through one history while navigation stays session-only', () => {
     const rootId = getState().doc.id
     const createdId = getState().createSequence('Scene two')
@@ -1368,7 +1410,7 @@ function makeManualLinkStoreDoc(): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-manual-link-store',
     name: 'Manual link store test',
     frameRate: { num: 30, den: 1 },
@@ -1574,7 +1616,7 @@ const PAIR2 = 'link_pair2'
  */
 function makeLinkedDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-linked',
     name: 'Linked test doc',
     frameRate: { num: 30, den: 1 },
@@ -1694,7 +1736,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * well outside it. */
   function makeTwoPairsDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 19,
+      schemaVersion: 20,
       id: 'doc-split-pairs',
       name: 'Split pairs test doc',
       frameRate: { num: 30, den: 1 },
@@ -1714,7 +1756,7 @@ describe('splitClipAtPlayhead with linked groups', () => {
    * under the playhead. */
   function makeMixedDoc(): TimelineDoc {
     return deepFreeze({
-      schemaVersion: 19,
+      schemaVersion: 20,
       id: 'doc-split-mixed',
       name: 'Split mixed test doc',
       frameRate: { num: 30, den: 1 },

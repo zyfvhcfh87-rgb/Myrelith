@@ -53,7 +53,7 @@ function makeClip(id: string, startFrame: number): Clip {
 
 function makeDocument(): TimelineDoc {
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-editor-shell-selection',
     name: 'Editor shell selection fixture',
     frameRate: { num: 30, den: 1 },
@@ -131,6 +131,15 @@ describe('EditorShell', () => {
       shell?.querySelector('.area-transport > .timeline-zoom-controls'),
     ).not.toBeNull()
     expect(screen.getAllByRole('separator')).toHaveLength(3)
+  })
+
+  test('docks multicam controls in the scrollable inspector instead of covering the monitor', () => {
+    const { container } = render(<EditorShell closing={false} />)
+
+    const controls = screen.getByRole('region', { name: 'Manual-sync multicam' })
+    expect(container.querySelector('#workspace-inspector-panel')).toContainElement(controls)
+    expect(container.querySelector('.area-preview')).not.toContainElement(controls)
+    expect(container.querySelector('.area-workspace')).not.toContainElement(controls)
   })
 
   test('file drags over the editor never navigate, while link drags stay untouched', () => {

@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'vitest'
-import type { Clip, SequenceInstance, TimelineDoc, Track } from './schema'
+import type {
+  Clip,
+  MulticamDefinition,
+  MulticamInstance,
+  SequenceInstance,
+  TimelineDoc,
+  Track,
+} from './schema'
 import type { SequenceProject } from './projectSequences'
 import { defaultSourceTimeMap } from './sourceTimeMap'
 import { createProjectTimelineAudioMixPlan } from './projectAudioMixPlan'
@@ -45,10 +52,53 @@ function nested(
   }
 }
 
+function multicam(id: string, startFrame = 100): MulticamInstance {
+  return {
+    kind: 'multicam',
+    id,
+    name: id,
+    multicamId: 'concert',
+    sourceStartFrame: 0,
+    timelineRange: { startFrame, durationFrames: 50 },
+  }
+}
+
+function multicamDefinition(
+  audioPolicy: MulticamDefinition['audioPolicy'],
+): MulticamDefinition {
+  return {
+    id: 'concert',
+    name: 'Concert',
+    durationFrames: 50,
+    angles: [
+      {
+        id: 'wide',
+        name: 'Wide',
+        assetId: 'asset-wide',
+        coverage: { startFrame: 10, durationFrames: 40 },
+        sourceStartFrame: 0,
+      },
+      {
+        id: 'close',
+        name: 'Close',
+        assetId: 'asset-close',
+        coverage: { startFrame: 0, durationFrames: 50 },
+        sourceStartFrame: 0,
+      },
+    ],
+    switches: [
+      { frame: 0, videoAngleId: 'wide' },
+      { frame: 20, videoAngleId: 'close' },
+    ],
+    audioPolicy,
+  }
+}
+
 function audioTrack(
   id: string,
   clips: Clip[] = [],
   instances: SequenceInstance[] = [],
+  multicams: MulticamInstance[] = [],
 ): Track {
   return {
     id,
@@ -56,6 +106,7 @@ function audioTrack(
     name: id,
     clips,
     sequenceInstances: instances,
+    multicamInstances: multicams,
     transitions: [],
     hidden: false,
     muted: false,
@@ -69,7 +120,7 @@ function audioTrack(
 
 function sequence(id: string, tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },
@@ -134,5 +185,80 @@ describe('project audio mix plan', () => {
     )
 
     expect(plan.clips).toEqual([])
+  })
+
+  test('keeps fixed audio continuous and follow-video audio exact across gaps', () => {
+    const root = sequence('root', [
+      audioTrack('root-A1', [], [], [multicam('concert-audio')]),
+    ])
+    const fixed = createProjectTimelineAudioMixPlan({
+      ...project(root),
+      multicams: [multicamDefinition({ kind: 'fixed', angleId: 'close' })],
+    }, 'root', new Map())
+
+    expect(fixed.clips).toEqual([expect.objectContaining({
+      assetId: 'asset-close',
+      timelineStartFrame: 100,
+      timelineEndFrame: 150,
+      sourceStartFrame: 0,
+      sourceEndFrame: 50,
+    })])
+
+    const follow = createProjectTimelineAudioMixPlan({
+      ...project(root),
+      multicams: [multicamDefinition({ kind: 'follow-video' })],
+    }, 'root', new Map())
+    expect(follow.clips).toEqual([
+      expect.objectContaining({
+        assetId: 'asset-wide',
+        timelineStartFrame: 110,
+        timelineEndFrame: 120,
+        sourceStartFrame: 0,
+        sourceEndFrame: 10,
+      }),
+      expect.objectContaining({
+        assetId: 'asset-close',
+        timelineStartFrame: 120,
+        timelineEndFrame: 150,
+        sourceStartFrame: 20,
+        sourceEndFrame: 50,
+      }),
+    ])
+  })
+
+  test('maps follow-video multicam segments through a nested sequence exactly once', () => {
+    const child = sequence('child', [
+      audioTrack('child-A1', [], [], [multicam('nested-concert', 0)]),
+    ])
+    const root = sequence('root', [audioTrack('root-A1', [], [
+      nested('child-use', 'child', 10, 0, 40),
+    ])])
+    const plan = createProjectTimelineAudioMixPlan({
+      ...project(root, child),
+      multicams: [multicamDefinition({ kind: 'follow-video' })],
+    }, 'root', new Map())
+
+    expect(plan.clips.map((clip) => ({
+      assetId: clip.assetId,
+      timelineStartFrame: clip.timelineStartFrame,
+      timelineEndFrame: clip.timelineEndFrame,
+      sourceStartFrame: clip.sourceStartFrame,
+      sourceEndFrame: clip.sourceEndFrame,
+    }))).toEqual([
+      {
+        assetId: 'asset-wide',
+        timelineStartFrame: 20,
+        timelineEndFrame: 30,
+        sourceStartFrame: 0,
+        sourceEndFrame: 10,
+      },
+      {
+        assetId: 'asset-close',
+        timelineStartFrame: 30,
+        timelineEndFrame: 50,
+        sourceStartFrame: 20,
+        sourceEndFrame: 40,
+      },
+    ])
   })
 })

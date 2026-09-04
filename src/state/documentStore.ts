@@ -203,6 +203,14 @@ import {
   makeSequenceInstanceIndependent as makeProjectSequenceInstanceIndependent,
   type SequenceInstanceEditCommand,
 } from '../domain/sequenceInstanceOperations'
+import {
+  applyMulticamDefinitionEdit as applyProjectMulticamDefinitionEdit,
+  applyMulticamInstanceEdit as applyProjectMulticamInstanceEdit,
+  createMulticamFromAssets,
+  type CreateMulticamCommand,
+  type MulticamDefinitionEditCommand,
+  type MulticamInstanceEditCommand,
+} from '../domain/multicamOperations'
 
 /** Max undo levels; snapshots beyond this fall off the old end. */
 const HISTORY_LIMIT = 100
@@ -240,6 +248,13 @@ export interface DocumentState {
     name: string,
   ) => Readonly<{ sequenceId: string; instanceId: string }> | null
   editSequenceInstance: (command: SequenceInstanceEditCommand) => boolean
+  createMulticam: (command: CreateMulticamCommand) => Readonly<{
+    definitionId: string
+    videoInstanceId: string
+    audioInstanceId: string | null
+  }> | null
+  editMulticamInstance: (command: MulticamInstanceEditCommand) => boolean
+  editMulticamDefinition: (command: MulticamDefinitionEditCommand) => boolean
   makeSequenceInstanceIndependent: (instanceId: string) => string | null
   /** Add an empty same-settings sequence and navigate to it. */
   createSequence: (name: string) => string | null
@@ -843,6 +858,55 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         command,
         randomSequenceId,
       )
+      edited = result.failure === null
+      return result.failure ? state : commitProject(state, result.project)
+    })
+    return edited
+  },
+
+  createMulticam: (command) => {
+    let created: Readonly<{
+      definitionId: string
+      videoInstanceId: string
+      audioInstanceId: string | null
+    }> | null = null
+    set((state) => {
+      const result = createMulticamFromAssets(
+        state.project,
+        state.activeSequenceId,
+        command,
+        randomSequenceId,
+      )
+      if (result.failure || !result.definitionId || !result.videoInstanceId) return state
+      created = Object.freeze({
+        definitionId: result.definitionId,
+        videoInstanceId: result.videoInstanceId,
+        audioInstanceId: result.audioInstanceId,
+      })
+      return commitProject(state, result.project)
+    })
+    return created
+  },
+
+  editMulticamInstance: (command) => {
+    let edited = false
+    set((state) => {
+      const result = applyProjectMulticamInstanceEdit(
+        state.project,
+        state.activeSequenceId,
+        command,
+        randomSequenceId,
+      )
+      edited = result.failure === null
+      return result.failure ? state : commitProject(state, result.project)
+    })
+    return edited
+  },
+
+  editMulticamDefinition: (command) => {
+    let edited = false
+    set((state) => {
+      const result = applyProjectMulticamDefinitionEdit(state.project, command)
       edited = result.failure === null
       return result.failure ? state : commitProject(state, result.project)
     })

@@ -99,7 +99,7 @@ function makeTrack(
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-place-ctrl',
     name: 'placement controller fixture',
     frameRate: { num: 30, den: 1 },

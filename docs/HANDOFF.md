@@ -5334,3 +5334,38 @@ surface; it is not a second zoom and never enters document history.
   oxlint, production dependency audit, diff hygiene, and all 15 repository
   Chromium tests. Vite retains only the established non-fatal large-chunk
   notice.
+
+## Post-MVP issue #193 - bounded manual-sync multicam
+
+**IMPLEMENTATION AND LOCAL ACCEPTANCE COMPLETE (2026-09-04); PUBLICATION NOT AUTHORIZED.**
+
+- Project format 7 and timeline schema 20 add project-owned multicam
+  definitions plus resource-free linked video/audio timeline instances. Strict
+  admission bounds definitions, two-to-eight unique video angles, coverage,
+  ordered switches, fixed/follow-video audio, aggregate counts, references,
+  global ids, and linked geometry. Format 6 / schema 19 migrate with empty
+  collections without changing existing output.
+- Manual clap/event sync stores integer input frames and derives exact local
+  coverage. One binary-search planner selects the active video and audio angle;
+  uncovered video is black and uncovered audio is silence. Nested preview,
+  playback, and export consume the same immutable project video/audio plans.
+- Creation, cut, roll, rename/offset, audio policy, move, trim, split, and
+  duplicate are exposed as atomic project-history operations with track-lock,
+  collision, stale-reference, and replacement guards. The Inspector exposes
+  connected/offline angle cards, paused Source Monitor previews, Alt+1..8 cuts,
+  and accessible linked timeline items without covering the Program Monitor.
+- Headed Chromium on strict port 42193 imported eight 2-second synthetic
+  WebM/Opus angles, aligned frames 0..7, rendered the intentional opening black
+  gap, then matched red/green/purple mouse and keyboard switches in Program.
+  It exercised fixed and follow-video audio, normal playback, paused angle
+  preview, cancellation with no file, crash-style recovery, eight explicit
+  offline sources, one-folder 8/8 relink, portable save validation/reopen, and
+  a real MP4 export. The export contained exactly 67 H.264 frames plus 48 kHz
+  stereo AAC; sampled frames 3/8/12/25 matched black/red/green/purple preview.
+  A final clean reopen also exercised the roll shortcut and linked-lane lock
+  guard with eight offline sources; Chromium reported zero console warnings or
+  errors and all temporary owners were closed.
+- The authoritative gate passes all 274 Vitest files / 3,799 tests plus all 17
+  repository runner checks, production build/typecheck (4,961 modules), clean
+  oxlint, a zero-vulnerability production audit, and diff hygiene. Vite retains
+  only the established non-fatal large-chunk notice.

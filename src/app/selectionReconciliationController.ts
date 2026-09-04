@@ -22,6 +22,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 import { useSequenceInstanceSelectionStore } from '../state/sequenceInstanceSelectionStore'
+import { useMulticamSelectionStore } from '../state/multicamSelectionStore'
 import { rateEquals } from '../domain/time'
 
 function collectClipIds(document: TimelineDoc): ReadonlySet<ClipId> {
@@ -64,6 +65,15 @@ function reconcileSelection(document: TimelineDoc): void {
       ))
     ))
   ) instanceSelection.setSelectedInstanceId(null)
+  const multicamSelection = useMulticamSelectionStore.getState()
+  if (
+    multicamSelection.selectedInstanceId !== null
+    && !document.tracks.some((track) => (
+      (track.multicamInstances ?? []).some((instance) => (
+        instance.id === multicamSelection.selectedInstanceId
+      ))
+    ))
+  ) multicamSelection.setSelectedInstanceId(null)
 }
 
 /**

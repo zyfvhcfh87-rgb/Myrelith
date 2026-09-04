@@ -56,6 +56,7 @@ import { EditorContextMenuHost } from '../ui/EditorContextMenu'
 import { initSourceMonitorLifecycle } from './sourceMonitorController'
 import { initAudioEffectStatusProjection } from './audioEffectStatus'
 import SequenceControls from '../ui/SequenceControls'
+import MulticamControls from '../ui/MulticamControls'
 
 const pluginAppController = getPluginAppController()
 
@@ -311,6 +312,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
         aria-hidden={fitted.inspectorWidth === 0 || undefined}
         inert={closing || fitted.inspectorWidth === 0}
       >
+        <MulticamControls />
         <Inspector />
         <PluginInspectorSurfaces />
       </aside>

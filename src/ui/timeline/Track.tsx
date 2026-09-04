@@ -35,6 +35,7 @@ import {
 } from '../../app/mediaPlacementController'
 import { useDocumentStore } from '../../state/documentStore'
 import { useSequenceInstanceSelectionStore } from '../../state/sequenceInstanceSelectionStore'
+import { useMulticamSelectionStore } from '../../state/multicamSelectionStore'
 import { useTransportStore } from '../../state/transportStore'
 import {
   ASSET_DRAG_TYPE,
@@ -47,6 +48,7 @@ import { isPrimaryEditingPointer } from '../pointerButtons'
 import ClipView from './ClipView'
 import AdjustmentView from './AdjustmentView'
 import SequenceInstanceView from './SequenceInstanceView'
+import MulticamInstanceView from './MulticamInstanceView'
 import TransitionSeam from './TransitionSeam'
 import {
   frameAtTimelineClientX,
@@ -229,6 +231,7 @@ function Track({
         if (e.target === e.currentTarget) {
           useTransportStore.getState().setSelectedClip(null)
           useSequenceInstanceSelectionStore.getState().setSelectedInstanceId(null)
+          useMulticamSelectionStore.getState().setSelectedInstanceId(null)
         }
       }}
       onContextMenu={(event) => {
@@ -330,6 +333,16 @@ function Track({
       ))}
       {(track.sequenceInstances ?? []).map((instance) => (
         <SequenceInstanceView
+          key={instance.id}
+          instance={instance}
+          trackId={track.id}
+          trackKind={track.kind}
+          timelineOriginFrame={timelineOriginFrame}
+          timelineWindowEndFrame={timelineWindowEndFrame}
+        />
+      ))}
+      {(track.multicamInstances ?? []).map((instance) => (
+        <MulticamInstanceView
           key={instance.id}
           instance={instance}
           trackId={track.id}

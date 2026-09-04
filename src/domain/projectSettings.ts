@@ -340,6 +340,7 @@ function emptyTrack(id: string, kind: Track['kind']): Track {
     name: id,
     clips: [],
     sequenceInstances: [],
+    multicamInstances: [],
     adjustments: [],
     transitions: [],
     hidden: false,
@@ -410,6 +411,7 @@ export function createTimelineDoc(
   for (const track of tracks) {
     Object.freeze(track.clips)
     Object.freeze(track.sequenceInstances)
+    Object.freeze(track.multicamInstances)
     Object.freeze(track.adjustments)
     Object.freeze(track.transitions)
     Object.freeze(track.audioEffects)

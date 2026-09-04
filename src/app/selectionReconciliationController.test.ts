@@ -11,6 +11,7 @@ import {
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { useMulticamSelectionStore } from '../state/multicamSelectionStore'
 import {
   INITIAL_TRANSPORT_STATE,
   useTransportStore,
@@ -66,7 +67,7 @@ function makeAudioTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-selection-reconciliation',
     name: 'Selection reconciliation',
     frameRate: { num: 30, den: 1 },
@@ -115,6 +116,7 @@ beforeEach(() => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   useDocumentStore.getState().setDoc(makeDoc())
   useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
+  useMulticamSelectionStore.getState().setSelectedInstanceId(null)
 })
 
 afterEach(() => {
@@ -295,6 +297,29 @@ describe('selection reconciliation lifecycle', () => {
       selectedClipIds: [],
       selectedClipId: null,
     })
+  })
+
+  test('retains a live multicam selection and clears it when the item disappears', () => {
+    const document = makeDoc()
+    document.tracks[0].multicamInstances = [{
+      kind: 'multicam',
+      id: 'multicam-instance-selection',
+      name: 'Two cameras',
+      multicamId: 'multicam-definition-selection',
+      sourceStartFrame: 0,
+      timelineRange: { startFrame: 0, durationFrames: 30 },
+    }]
+    documentState().setDoc(document)
+    useMulticamSelectionStore.getState().setSelectedInstanceId(
+      'multicam-instance-selection',
+    )
+
+    dispose = initSelectionReconciliation()
+    expect(useMulticamSelectionStore.getState().selectedInstanceId)
+      .toBe('multicam-instance-selection')
+
+    documentState().setDoc({ ...document, tracks: [makeTrack('V1', [])] })
+    expect(useMulticamSelectionStore.getState().selectedInstanceId).toBeNull()
   })
 
   test('sequence navigation clears transport and selection instead of carrying stale ids', () => {

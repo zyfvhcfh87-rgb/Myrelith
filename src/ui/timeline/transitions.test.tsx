@@ -133,7 +133,7 @@ function makeTrack(
 function makeDoc(options: { seeded?: boolean; lockedSeeded?: boolean } = {}): TimelineDoc {
   const { seeded = false, lockedSeeded = false } = options
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'transition-ui-doc',
     name: 'Transition UI fixture',
     frameRate: { num: 30, den: 1 },
@@ -172,7 +172,7 @@ function makeDoc(options: { seeded?: boolean; lockedSeeded?: boolean } = {}): Ti
  * D15 [33,48) (overlap), while D4 [38,42) merely touches and is valid. */
 function makeNeighboringTransitionDoc(): TimelineDoc {
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'transition-neighbor-doc',
     name: 'Neighboring transition fixture',
     frameRate: { num: 30, den: 1 },

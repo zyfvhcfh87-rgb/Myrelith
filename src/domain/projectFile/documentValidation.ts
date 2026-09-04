@@ -1,4 +1,4 @@
-import type { AdjustmentAnimationKeyframe, AdjustmentItem, CaptionItem, CaptionTrack, Clip, MasterAudioSettings, SequenceInstance, TimelineDoc, TimelineMarker, Track } from '../schema';
+import type { AdjustmentAnimationKeyframe, AdjustmentItem, CaptionItem, CaptionTrack, Clip, MasterAudioSettings, MulticamDefinition, MulticamInstance, SequenceInstance, TimelineDoc, TimelineMarker, Track } from '../schema';
 import { adjustmentAnimationValidationError, adjustmentItemValidationError } from '../adjustmentItems';
 import { MAX_ANIMATED_FINITE_MAGNITUDE, MAX_KEYFRAME_FRAME, MAX_KEYFRAMES_PER_TRACK } from '../clipAnimation';
 import { CAPTION_LIMITS, CAPTION_STYLE_PRESETS, CAPTION_TRACK_ROLES, captionDocumentValidationError, captionTrackValidationError, compareCaptionItems } from '../captions';
@@ -108,6 +108,9 @@ import {
   sequenceSettingsEqual,
 } from '../projectSequences';
 import { analyzeNestedSequenceGraph } from '../nestedSequences';
+import { multicamLinkedPairValidationError } from '../multicam';
+import { multicamDefinitionValidationError } from '../multicam';
+import { microsecondsDurationToFrames } from '../time';
 
 function validateSequenceInstance(
   value: unknown,
@@ -149,6 +152,119 @@ function validateSequenceInstance(
       (context.linkGroupCounts.get(instance.linkGroupId) ?? 0) + 1,
     )
   }
+  return typed
+}
+
+function validateMulticamInstance(
+  value: unknown,
+  path: string,
+  context: ValidationContext,
+): MulticamInstance {
+  const instance = record(value, path)
+  exactKeys(
+    instance,
+    ['kind', 'id', 'name', 'multicamId', 'sourceStartFrame', 'timelineRange'],
+    ['linkGroupId'],
+    path,
+  )
+  if (instance.kind !== 'multicam') fail(`${path}.kind`, 'expected multicam')
+  stringValue(instance.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (context.timelineItemIds.has(instance.id)) fail(`${path}.id`, 'duplicate timeline item id')
+  context.timelineItemIds.add(instance.id)
+  stringValue(instance.name, `${path}.name`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  stringValue(instance.multicamId, `${path}.multicamId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  safeInteger(instance.sourceStartFrame, `${path}.sourceStartFrame`, 0)
+  validateRange(instance.timelineRange, `${path}.timelineRange`, 1)
+  const typed = instance as unknown as MulticamInstance
+  if (!Number.isSafeInteger(typed.sourceStartFrame + typed.timelineRange.durationFrames)) {
+    fail(path, 'source range must end at a safe integer')
+  }
+  if (instance.linkGroupId !== undefined) {
+    stringValue(instance.linkGroupId, `${path}.linkGroupId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+    context.linkGroupCounts.set(
+      instance.linkGroupId,
+      (context.linkGroupCounts.get(instance.linkGroupId) ?? 0) + 1,
+    )
+  }
+  return typed
+}
+
+function validateMulticamDefinition(
+  value: unknown,
+  path: string,
+  assetIds: ReadonlySet<string>,
+  assetsById: ReadonlyMap<string, PortableAssetDescriptor>,
+  frameRate: TimelineDoc['frameRate'],
+  ids: ProjectWideTimelineIds,
+): MulticamDefinition {
+  const definition = record(value, path)
+  exactKeys(
+    definition,
+    ['id', 'name', 'durationFrames', 'angles', 'switches', 'audioPolicy'],
+    [],
+    path,
+  )
+  stringValue(definition.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  if (ids.multicamDefinitionIds.has(definition.id)) {
+    fail(`${path}.id`, 'duplicate multicam definition id')
+  }
+  ids.multicamDefinitionIds.add(definition.id)
+  stringValue(definition.name, `${path}.name`, PROJECT_FILE_LIMITS.maxNameCharacters)
+  safeInteger(definition.durationFrames, `${path}.durationFrames`, 1)
+  boundedArray(definition.angles, `${path}.angles`, 8)
+  if (definition.angles.length < 2) fail(`${path}.angles`, 'requires at least two angles')
+  for (let index = 0; index < definition.angles.length; index++) {
+    const anglePath = `${path}.angles[${index}]`
+    const angle = record(definition.angles[index], anglePath)
+    exactKeys(
+      angle,
+      ['id', 'name', 'assetId', 'coverage', 'sourceStartFrame'],
+      [],
+      anglePath,
+    )
+    stringValue(angle.id, `${anglePath}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
+    if (ids.multicamAngleIds.has(angle.id)) fail(`${anglePath}.id`, 'duplicate multicam angle id')
+    ids.multicamAngleIds.add(angle.id)
+    stringValue(angle.name, `${anglePath}.name`, PROJECT_FILE_LIMITS.maxNameCharacters)
+    stringValue(angle.assetId, `${anglePath}.assetId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+    if (!assetIds.has(angle.assetId)) fail(`${anglePath}.assetId`, 'references an unknown asset')
+    const asset = assetsById.get(angle.assetId)
+    if (asset?.kind !== 'video') fail(`${anglePath}.assetId`, 'multicam angles require video assets')
+    validateRange(angle.coverage, `${anglePath}.coverage`, 1)
+    safeInteger(angle.sourceStartFrame, `${anglePath}.sourceStartFrame`, 0)
+    const coverage = angle.coverage as { startFrame: number; durationFrames: number }
+    if (coverage.startFrame + coverage.durationFrames > Number(definition.durationFrames)) {
+      fail(`${anglePath}.coverage`, 'exceeds the multicam definition duration')
+    }
+    const sourceEnd = Number(angle.sourceStartFrame) + coverage.durationFrames
+    if (!Number.isSafeInteger(sourceEnd)) fail(anglePath, 'source range must end at a safe integer')
+    if (
+      asset
+      && sourceEnd > microsecondsDurationToFrames(asset.durationMicroseconds, frameRate)
+    ) fail(anglePath, 'source range extends beyond the referenced asset duration')
+  }
+  boundedArray(
+    definition.switches,
+    `${path}.switches`,
+    PROJECT_FILE_LIMITS.maxTotalMulticamSwitches,
+  )
+  for (let index = 0; index < definition.switches.length; index++) {
+    const switchPath = `${path}.switches[${index}]`
+    const item = record(definition.switches[index], switchPath)
+    exactKeys(item, ['frame', 'videoAngleId'], [], switchPath)
+    safeInteger(item.frame, `${switchPath}.frame`, 0)
+    stringValue(item.videoAngleId, `${switchPath}.videoAngleId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  }
+  const audioPolicy = record(definition.audioPolicy, `${path}.audioPolicy`)
+  if (audioPolicy.kind === 'fixed') {
+    exactKeys(audioPolicy, ['kind', 'angleId'], [], `${path}.audioPolicy`)
+    stringValue(audioPolicy.angleId, `${path}.audioPolicy.angleId`, PROJECT_FILE_LIMITS.maxIdCharacters)
+  } else if (audioPolicy.kind === 'follow-video') {
+    exactKeys(audioPolicy, ['kind'], [], `${path}.audioPolicy`)
+  } else fail(`${path}.audioPolicy.kind`, 'expected fixed or follow-video')
+  const typed = definition as unknown as MulticamDefinition
+  const error = multicamDefinitionValidationError(typed)
+  if (error) fail(path, error)
   return typed
 }
 
@@ -321,7 +437,7 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   const track = record(value, path)
   exactKeys(
     track,
-    ['id', 'kind', 'name', 'clips', 'sequenceInstances', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked', 'volume', 'balance', 'audioEffects'],
+    ['id', 'kind', 'name', 'clips', 'sequenceInstances', 'multicamInstances', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked', 'volume', 'balance', 'audioEffects'],
     [],
     path,
   )
@@ -381,6 +497,33 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
       + item.timelineRange.durationFrames
     allItemRanges.push(item.timelineRange)
   }
+  boundedArray(
+    track.multicamInstances,
+    `${path}.multicamInstances`,
+    PROJECT_FILE_LIMITS.maxMulticamInstances,
+  )
+  context.multicamInstanceCount += track.multicamInstances.length
+  if (context.multicamInstanceCount > PROJECT_FILE_LIMITS.maxMulticamInstances) {
+    fail('$.sequences', `exceeds ${PROJECT_FILE_LIMITS.maxMulticamInstances} multicam instances in total`)
+  }
+  let previousMulticamEnd = -1
+  for (let index = 0; index < track.multicamInstances.length; index++) {
+    const itemPath = `${path}.multicamInstances[${index}]`
+    const item = validateMulticamInstance(
+      track.multicamInstances[index],
+      itemPath,
+      context,
+    )
+    if (item.timelineRange.startFrame < previousMulticamEnd) {
+      fail(itemPath, 'multicam instances must be sorted and non-overlapping')
+    }
+    if (allItemRanges.some((range) => (
+      item.timelineRange.startFrame < range.startFrame + range.durationFrames
+      && range.startFrame < item.timelineRange.startFrame + item.timelineRange.durationFrames
+    ))) fail(itemPath, 'multicam instance overlaps another item on the owning track')
+    previousMulticamEnd = item.timelineRange.startFrame + item.timelineRange.durationFrames
+    allItemRanges.push(item.timelineRange)
+  }
   boundedArray(track.adjustments, `${path}.adjustments`, PROJECT_FILE_LIMITS.maxAdjustments)
   context.adjustmentCount += track.adjustments.length
   if (context.adjustmentCount > PROJECT_FILE_LIMITS.maxAdjustments) {
@@ -438,6 +581,8 @@ interface ProjectWideTimelineIds {
   captionTrackIds: Set<string>
   captionItemIds: Set<string>
   linkGroupIds: Set<string>
+  multicamDefinitionIds: Set<string>
+  multicamAngleIds: Set<string>
 }
 
 function validateDocument(
@@ -523,6 +668,7 @@ export function validateProjectFile(value: unknown): ProjectFile {
       'name',
       'rootSequenceId',
       'sequences',
+      'multicams',
       'assets',
       'collections',
     ],
@@ -548,6 +694,11 @@ export function validateProjectFile(value: unknown): ProjectFile {
   )
   boundedArray(project.sequences, '$.sequences', PROJECT_FILE_LIMITS.maxSequences)
   if (project.sequences.length === 0) fail('$.sequences', 'requires at least one sequence')
+  boundedArray(
+    project.multicams,
+    '$.multicams',
+    PROJECT_FILE_LIMITS.maxMulticamDefinitions,
+  )
   boundedArray(project.assets, '$.assets', PROJECT_FILE_LIMITS.maxAssets)
 
   const assetIds = new Set<string>()
@@ -574,6 +725,7 @@ export function validateProjectFile(value: unknown): ProjectFile {
     linkGroupCounts: new Map(),
     clipCount: 0,
     sequenceInstanceCount: 0,
+    multicamInstanceCount: 0,
     adjustmentCount: 0,
     effectCount: 0,
     effectParamCount: 0,
@@ -593,6 +745,8 @@ export function validateProjectFile(value: unknown): ProjectFile {
     captionTrackIds: new Set(),
     captionItemIds: new Set(),
     linkGroupIds: new Set(),
+    multicamDefinitionIds: new Set(),
+    multicamAngleIds: new Set(),
   }
   let totalTracks = 0
   let totalMarkers = 0
@@ -605,6 +759,8 @@ export function validateProjectFile(value: unknown): ProjectFile {
     context.linkGroupCounts = new Map()
     validateDocument(candidate, path, context, ids)
     const sequence = candidate as unknown as TimelineDoc
+    const multicamLinkError = multicamLinkedPairValidationError(sequence)
+    if (multicamLinkError) fail(path, multicamLinkError)
     if (settingsSource && !sequenceSettingsEqual(settingsSource, sequence)) {
       fail(path, 'sequence settings must match the project root settings')
     }
@@ -638,6 +794,44 @@ export function validateProjectFile(value: unknown): ProjectFile {
   }
   if (totalCaptionItems > SEQUENCE_PROJECT_LIMITS.maxTotalCaptionItems) {
     fail('$.sequences', `exceeds ${SEQUENCE_PROJECT_LIMITS.maxTotalCaptionItems} caption items in total`)
+  }
+  let totalMulticamAngles = 0
+  let totalMulticamSwitches = 0
+  for (let index = 0; index < project.multicams.length; index++) {
+    const definition = validateMulticamDefinition(
+      project.multicams[index],
+      `$.multicams[${index}]`,
+      assetIds,
+      assetsById,
+      settingsSource!.frameRate,
+      ids,
+    )
+    totalMulticamAngles += definition.angles.length
+    totalMulticamSwitches += definition.switches.length
+  }
+  if (totalMulticamAngles > PROJECT_FILE_LIMITS.maxTotalMulticamAngles) {
+    fail('$.multicams', `exceeds ${PROJECT_FILE_LIMITS.maxTotalMulticamAngles} angles in total`)
+  }
+  if (totalMulticamSwitches > PROJECT_FILE_LIMITS.maxTotalMulticamSwitches) {
+    fail('$.multicams', `exceeds ${PROJECT_FILE_LIMITS.maxTotalMulticamSwitches} switches in total`)
+  }
+  for (let sequenceIndex = 0; sequenceIndex < project.sequences.length; sequenceIndex++) {
+    const sequence = project.sequences[sequenceIndex] as TimelineDoc
+    for (let trackIndex = 0; trackIndex < sequence.tracks.length; trackIndex++) {
+      const track = sequence.tracks[trackIndex]
+      for (let itemIndex = 0; itemIndex < (track.multicamInstances ?? []).length; itemIndex++) {
+        const instance = track.multicamInstances![itemIndex]
+        const definition = (project.multicams as MulticamDefinition[]).find(
+          (candidate) => candidate.id === instance.multicamId,
+        )
+        const itemPath = `$.sequences[${sequenceIndex}].tracks[${trackIndex}].multicamInstances[${itemIndex}]`
+        if (!definition) fail(`${itemPath}.multicamId`, 'references a missing multicam definition')
+        if (
+          instance.sourceStartFrame + instance.timelineRange.durationFrames
+          > definition.durationFrames
+        ) fail(itemPath, 'source range exceeds the multicam definition duration')
+      }
+    }
   }
   try {
     analyzeNestedSequenceGraph(project as unknown as ProjectFile)

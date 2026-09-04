@@ -26,7 +26,7 @@ function track(id: string, kind: Track['kind'], extra: Partial<Track> = {}): Tra
 
 function doc(tracks: Track[], masterAudio?: TimelineDoc['masterAudio']): TimelineDoc {
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'mixer-doc',
     name: 'Mixer',
     frameRate: { num: 30, den: 1 },

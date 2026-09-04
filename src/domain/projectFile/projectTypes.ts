@@ -1,4 +1,4 @@
-import type { AssetKind, FrameRate, MediaSourceBounds, PartialTrackImportSelection } from '../schema';
+import type { AssetKind, FrameRate, MediaSourceBounds, MulticamDefinition, PartialTrackImportSelection } from '../schema';
 import { MAX_TIMELINE_MARKERS } from '../timelineMarkers';
 import { TEXT_OVERLAY_LIMITS } from '../textOverlay';
 import { MAX_DOCUMENT_ID_CHARACTERS, MAX_PROJECT_NAME_CHARACTERS } from '../projectLimits';
@@ -19,14 +19,17 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   PROJECT_FILE_EXTENSION,
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
-export const CURRENT_PROJECT_FORMAT_VERSION = 6 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 19 as const
+export const CURRENT_PROJECT_FORMAT_VERSION = 7 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 20 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {
   maxSerializedCharacters: 10_000_000,
   maxAssets: 50_000,
   maxSequences: SEQUENCE_PROJECT_LIMITS.maxSequences,
+  maxMulticamDefinitions: SEQUENCE_PROJECT_LIMITS.maxMulticamDefinitions,
+  maxTotalMulticamAngles: SEQUENCE_PROJECT_LIMITS.maxTotalMulticamAngles,
+  maxTotalMulticamSwitches: SEQUENCE_PROJECT_LIMITS.maxTotalMulticamSwitches,
   maxTotalTracks: SEQUENCE_PROJECT_LIMITS.maxTotalTracks,
   maxTotalMarkers: SEQUENCE_PROJECT_LIMITS.maxTotalMarkers,
   maxTotalCaptionTracks: SEQUENCE_PROJECT_LIMITS.maxTotalCaptionTracks,
@@ -38,6 +41,7 @@ export const PROJECT_FILE_LIMITS = {
   maxTracks: 256,
   maxClips: 100_000,
   maxSequenceInstances: SEQUENCE_PROJECT_LIMITS.maxTotalSequenceInstances,
+  maxMulticamInstances: SEQUENCE_PROJECT_LIMITS.maxTotalMulticamInstances,
   maxAdjustments: SEQUENCE_PROJECT_LIMITS.maxTotalAdjustments,
   maxEffectsPerClip: EFFECT_STACK_LIMITS.maxEffectsPerClip,
   maxEffectParams: EFFECT_STACK_LIMITS.maxEffectParams,
@@ -92,14 +96,15 @@ export interface PortableAssetDescriptor {
   audioChannels: number | null
 }
 
-export interface ProjectFileV6 extends SequenceProject {
+export interface ProjectFileV7 extends SequenceProject {
   format: typeof PROJECT_FILE_FORMAT
   formatVersion: typeof CURRENT_PROJECT_FORMAT_VERSION
+  multicams: MulticamDefinition[]
   assets: PortableAssetDescriptor[]
   collections: MediaCollection[]
 }
 
-export type ProjectFile = ProjectFileV6
+export type ProjectFile = ProjectFileV7
 
 export class ProjectFileError extends Error {
   constructor(message: string) {

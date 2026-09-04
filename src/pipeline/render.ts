@@ -311,7 +311,10 @@ export async function compositeFrame(
     ctx.fillRect(0, 0, doc.width, doc.height)
 
     for (const item of plan.items) {
-      if (item.kind === 'sequence-background') {
+      if (
+        item.kind === 'sequence-background'
+        || item.kind === 'multicam-background'
+      ) {
         ctx.save()
         try {
           ctx.globalAlpha = 1

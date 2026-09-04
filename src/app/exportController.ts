@@ -26,6 +26,7 @@ import {
 } from '../domain/projectSequences'
 import { sequenceInstances } from '../domain/nestedSequences'
 import { createProjectTimelineAudioMixPlan } from '../domain/projectAudioMixPlan'
+import { createMulticamPlanner } from '../domain/multicam'
 import type { TimelineAudioMixPlan } from '../domain/audioMixPlan'
 import type { PluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import { selectMediaRepresentation } from '../domain/proxyCache'
@@ -384,6 +385,9 @@ function captureExportInputs(
   )
   const retainedAssetIds = new Set<AssetId>()
   const reachable = reachableSequences(projectTarget)
+  const multicams = new Map((projectTarget.project.multicams ?? []).map(
+    (definition) => [definition.id, createMulticamPlanner(definition)],
+  ))
   for (const sequence of reachable) {
     const hasSilentRamp = includeAudio && audibleTracks(sequence).some((track) => (
       track.clips.some(clipHasWholeWindowSilentRampedAudio)
@@ -396,6 +400,17 @@ function captureExportInputs(
       includeAudio,
       crossfadeWindows,
     )) retainedAssetIds.add(assetId)
+    for (const track of sequence.tracks) {
+      if (track.kind !== 'video' || track.hidden) continue
+      for (const instance of track.multicamInstances ?? []) {
+        const planner = multicams.get(instance.multicamId)
+        if (!planner) continue
+        for (const segment of planner.videoSegments(
+          instance.sourceStartFrame,
+          instance.sourceStartFrame + instance.timelineRange.durationFrames,
+        )) retainedAssetIds.add(segment.assetId)
+      }
+    }
   }
   if (includeAudio) {
     for (const plan of audioMixPlan.clips) {

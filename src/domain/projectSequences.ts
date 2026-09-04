@@ -7,7 +7,12 @@
  * TimelineDoc selected by the state-layer adapter.
  */
 
-import type { EffectId, FrameRate, TimelineDoc } from './schema'
+import type {
+  EffectId,
+  FrameRate,
+  MulticamDefinition,
+  TimelineDoc,
+} from './schema'
 import { effectDescriptorBudget } from './effectBounds'
 import { audioEffectDescriptorBudget } from './audioEffectBounds'
 import {
@@ -21,6 +26,10 @@ import {
 import { proceduralTextAssetId } from './textOverlay'
 import { SEQUENCE_PROJECT_LIMITS } from './sequenceProjectLimits'
 import { analyzeNestedSequenceGraph } from './nestedSequences'
+import {
+  multicamDefinitionValidationError,
+  multicamLinkedPairValidationError,
+} from './multicam'
 
 export { SEQUENCE_PROJECT_LIMITS } from './sequenceProjectLimits'
 
@@ -33,13 +42,18 @@ export interface SequenceProject {
   rootSequenceId: string
   /** Stable, deterministic display order. Definitions are never recursive. */
   sequences: TimelineDoc[]
+  /** Portable manually aligned source groups shared by their timeline items. */
+  multicams?: MulticamDefinition[]
 }
 
 export type SequenceEntityKind =
   | 'sequence'
+  | 'multicam-definition'
+  | 'multicam-angle'
   | 'track'
   | 'clip'
   | 'sequence-instance'
+  | 'multicam-instance'
   | 'adjustment'
   | 'effect'
   | 'audio-effect'
@@ -72,9 +86,13 @@ export interface SequenceProjectEditResult {
 }
 
 interface SequenceProjectCounts {
+  multicamDefinitions: number
+  multicamAngles: number
+  multicamSwitches: number
   tracks: number
   clips: number
   sequenceInstances: number
+  multicamInstances: number
   adjustments: number
   transitions: number
   markers: number
@@ -157,14 +175,25 @@ export function sequenceProjectFromTimeline(
     name: document.name,
     rootSequenceId: document.id,
     sequences: [document],
+    multicams: [],
   }
 }
 
 function collectCounts(project: SequenceProject): SequenceProjectCounts {
   const counts: SequenceProjectCounts = {
+    multicamDefinitions: project.multicams?.length ?? 0,
+    multicamAngles: (project.multicams ?? []).reduce(
+      (sum, definition) => sum + definition.angles.length,
+      0,
+    ),
+    multicamSwitches: (project.multicams ?? []).reduce(
+      (sum, definition) => sum + definition.switches.length,
+      0,
+    ),
     tracks: 0,
     clips: 0,
     sequenceInstances: 0,
+    multicamInstances: 0,
     adjustments: 0,
     transitions: 0,
     markers: 0,
@@ -193,6 +222,7 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
     for (const track of sequence.tracks) {
       counts.clips += track.clips.length
       counts.sequenceInstances += track.sequenceInstances?.length ?? 0
+      counts.multicamInstances += track.multicamInstances?.length ?? 0
       counts.adjustments += track.adjustments?.length ?? 0
       counts.transitions += track.transitions.length
       for (const effect of track.audioEffects ?? []) {
@@ -252,9 +282,12 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
 function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
   const ids = collectUsedIds(project)
   let sequenceCount = 0
+  let multicamDefinitionCount = 0
+  let multicamAngleCount = 0
   let trackCount = 0
   let clipCount = 0
   let sequenceInstanceCount = 0
+  let multicamInstanceCount = 0
   let adjustmentCount = 0
   let effectCount = 0
   let audioEffectCount = 0
@@ -263,6 +296,10 @@ function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
   let captionTrackCount = 0
   let captionItemCount = 0
   const projectLinkGroups = new Set<string>()
+  for (const definition of project.multicams ?? []) {
+    multicamDefinitionCount++
+    multicamAngleCount += definition.angles.length
+  }
   for (const sequence of project.sequences) {
     sequenceCount++
     audioEffectCount += sequence.masterAudio?.audioEffects?.length ?? 0
@@ -292,6 +329,15 @@ function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
           )
         }
       }
+      for (const instance of track.multicamInstances ?? []) {
+        multicamInstanceCount++
+        if (instance.linkGroupId) {
+          sequenceLinkGroups.set(
+            instance.linkGroupId,
+            (sequenceLinkGroups.get(instance.linkGroupId) ?? 0) + 1,
+          )
+        }
+      }
       for (const adjustment of track.adjustments ?? []) {
         effectCount += adjustment.effects.length
       }
@@ -308,8 +354,11 @@ function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
     if ([...sequenceLinkGroups.values()].some((members) => members < 2)) return false
   }
   return ids.sequence.size === sequenceCount
+    && ids.multicamDefinition.size === multicamDefinitionCount
+    && ids.multicamAngle.size === multicamAngleCount
     && ids.track.size === trackCount
-    && ids.timelineItem.size === clipCount + sequenceInstanceCount + adjustmentCount
+    && ids.timelineItem.size
+      === clipCount + sequenceInstanceCount + multicamInstanceCount + adjustmentCount
     && ids.effect.size === effectCount
     && ids.audioEffect.size === audioEffectCount
     && ids.transition.size === transitionCount
@@ -328,6 +377,13 @@ export function sequenceProjectWithinEditBudget(
   const root = sequenceById(project, project.rootSequenceId)
   if (
     !root
+    || (project.multicams?.length ?? 0) > SEQUENCE_PROJECT_LIMITS.maxMulticamDefinitions
+    || (project.multicams ?? []).some((definition) => (
+      multicamDefinitionValidationError(definition) !== null
+    ))
+    || project.sequences.some((sequence) => (
+      multicamLinkedPairValidationError(sequence) !== null
+    ))
     || !project.sequences.every((sequence) => sequenceSettingsEqual(root, sequence))
     || !sequenceProjectIdsAreUnique(project)
   ) return false
@@ -337,10 +393,28 @@ export function sequenceProjectWithinEditBudget(
     return false
   }
   const counts = collectCounts(project)
-  return counts.tracks <= SEQUENCE_PROJECT_LIMITS.maxTotalTracks
+  const multicams = new Map(
+    (project.multicams ?? []).map((definition) => [definition.id, definition]),
+  )
+  if (project.sequences.some((sequence) => sequence.tracks.some((track) => (
+    (track.multicamInstances ?? []).some((instance) => {
+      const definition = multicams.get(instance.multicamId)
+      return !definition
+        || !Number.isSafeInteger(
+          instance.sourceStartFrame + instance.timelineRange.durationFrames,
+        )
+        || instance.sourceStartFrame + instance.timelineRange.durationFrames
+          > definition.durationFrames
+    })
+  )))) return false
+  return counts.multicamDefinitions <= SEQUENCE_PROJECT_LIMITS.maxMulticamDefinitions
+    && counts.multicamAngles <= SEQUENCE_PROJECT_LIMITS.maxTotalMulticamAngles
+    && counts.multicamSwitches <= SEQUENCE_PROJECT_LIMITS.maxTotalMulticamSwitches
+    && counts.tracks <= SEQUENCE_PROJECT_LIMITS.maxTotalTracks
     && counts.clips <= SEQUENCE_PROJECT_LIMITS.maxTotalClips
     && counts.sequenceInstances
       <= SEQUENCE_PROJECT_LIMITS.maxTotalSequenceInstances
+    && counts.multicamInstances <= SEQUENCE_PROJECT_LIMITS.maxTotalMulticamInstances
     && counts.adjustments <= SEQUENCE_PROJECT_LIMITS.maxTotalAdjustments
     && counts.transitions <= SEQUENCE_PROJECT_LIMITS.maxTotalTransitions
     && counts.markers <= SEQUENCE_PROJECT_LIMITS.maxTotalMarkers
@@ -369,10 +443,14 @@ export function matchEmptyProjectFrameRate(
     || !Number.isSafeInteger(frameRate.den)
     || frameRate.num <= 0
     || frameRate.den <= 0
+    || (project.multicams?.length ?? 0) > 0
     || project.sequences.some((sequence) => (
       sequence.tracks.some((track) => track.clips.length > 0)
       || sequence.tracks.some((track) => (
         (track.sequenceInstances?.length ?? 0) > 0
+      ))
+      || sequence.tracks.some((track) => (
+        (track.multicamInstances?.length ?? 0) > 0
       ))
       || sequence.tracks.some((track) => (track.adjustments?.length ?? 0) > 0)
       || (sequence.markers?.length ?? 0) > 0
@@ -395,6 +473,8 @@ function cloneDocument(document: TimelineDoc): TimelineDoc {
 
 interface UsedIds {
   sequence: Set<string>
+  multicamDefinition: Set<string>
+  multicamAngle: Set<string>
   track: Set<string>
   timelineItem: Set<string>
   effect: Set<string>
@@ -409,6 +489,8 @@ interface UsedIds {
 function collectUsedIds(project: SequenceProject): UsedIds {
   const used: UsedIds = {
     sequence: new Set(),
+    multicamDefinition: new Set(),
+    multicamAngle: new Set(),
     track: new Set(),
     timelineItem: new Set(),
     effect: new Set(),
@@ -418,6 +500,10 @@ function collectUsedIds(project: SequenceProject): UsedIds {
     captionTrack: new Set(),
     captionItem: new Set(),
     linkGroup: new Set(),
+  }
+  for (const definition of project.multicams ?? []) {
+    used.multicamDefinition.add(definition.id)
+    for (const angle of definition.angles) used.multicamAngle.add(angle.id)
   }
   for (const sequence of project.sequences) {
     used.sequence.add(sequence.id)
@@ -434,6 +520,10 @@ function collectUsedIds(project: SequenceProject): UsedIds {
         for (const effect of clip.audioEffects ?? []) used.audioEffect.add(effect.id)
       }
       for (const instance of track.sequenceInstances ?? []) {
+        used.timelineItem.add(instance.id)
+        if (instance.linkGroupId) used.linkGroup.add(instance.linkGroupId)
+      }
+      for (const instance of track.multicamInstances ?? []) {
         used.timelineItem.add(instance.id)
         if (instance.linkGroupId) used.linkGroup.add(instance.linkGroupId)
       }
@@ -455,9 +545,12 @@ function collectUsedIds(project: SequenceProject): UsedIds {
 function idSet(used: UsedIds, kind: SequenceEntityKind): Set<string> {
   switch (kind) {
     case 'sequence': return used.sequence
+    case 'multicam-definition': return used.multicamDefinition
+    case 'multicam-angle': return used.multicamAngle
     case 'track': return used.track
     case 'clip': return used.timelineItem
     case 'sequence-instance': return used.timelineItem
+    case 'multicam-instance': return used.timelineItem
     case 'adjustment': return used.timelineItem
     case 'effect': return used.effect
     case 'audio-effect': return used.audioEffect
@@ -553,6 +646,30 @@ function remapDuplicateIds(
         used,
         factory,
         'sequence-instance',
+        instance.id,
+      )
+      if (!instanceId) return null
+      instance.id = instanceId
+      if (instance.linkGroupId) {
+        let linkGroupId = linkGroupIds.get(instance.linkGroupId)
+        if (!linkGroupId) {
+          linkGroupId = allocateId(
+            used,
+            factory,
+            'link-group',
+            instance.linkGroupId,
+          ) ?? undefined
+          if (!linkGroupId) return null
+          linkGroupIds.set(instance.linkGroupId, linkGroupId)
+        }
+        instance.linkGroupId = linkGroupId
+      }
+    }
+    for (const instance of track.multicamInstances ?? []) {
+      const instanceId = allocateId(
+        used,
+        factory,
+        'multicam-instance',
         instance.id,
       )
       if (!instanceId) return null
@@ -768,6 +885,9 @@ export function replaceProjectSequence(
 /** Project-wide durable media usage; procedural text owns no descriptor. */
 export function projectMediaAssetIds(project: SequenceProject): ReadonlySet<string> {
   const assetIds = new Set<string>()
+  for (const definition of project.multicams ?? []) {
+    for (const angle of definition.angles) assetIds.add(angle.assetId)
+  }
   for (const sequence of project.sequences) {
     for (const track of sequence.tracks) {
       for (const clip of track.clips) {

@@ -80,7 +80,7 @@ function sequence(
   tracks: Track[] = [],
 ): TimelineDoc {
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },

@@ -79,8 +79,9 @@ describe('nested sequence project-file seam', () => {
 
     const parsed = parseProjectFile(JSON.stringify(value))
 
-    expect(parsed.sequences[0].schemaVersion).toBe(19)
+    expect(parsed.sequences[0].schemaVersion).toBe(20)
     expect(parsed.sequences[0].tracks[0].sequenceInstances).toEqual([])
+    expect(parsed.sequences[0].tracks[0].multicamInstances).toEqual([])
   })
 
   test('round-trips live references through the allowlisted portable snapshot', () => {

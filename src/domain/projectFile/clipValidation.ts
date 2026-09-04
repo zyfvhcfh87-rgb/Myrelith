@@ -458,6 +458,7 @@ export interface ValidationContext {
   linkGroupCounts: Map<string, number>
   clipCount: number
   sequenceInstanceCount: number
+  multicamInstanceCount: number
   adjustmentCount: number
   effectCount: number
   effectParamCount: number

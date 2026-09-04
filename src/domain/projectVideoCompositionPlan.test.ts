@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'vitest'
-import type { Clip, SequenceInstance, TimelineDoc, Track } from './schema'
+import type {
+  Clip,
+  MulticamDefinition,
+  MulticamInstance,
+  SequenceInstance,
+  TimelineDoc,
+  Track,
+} from './schema'
 import type { SequenceProject } from './projectSequences'
 import { defaultSourceTimeMap } from './sourceTimeMap'
 import { createProjectVideoCompositionPlanner } from './projectVideoCompositionPlan'
@@ -40,10 +47,51 @@ function nested(id: string, sequenceId: string, startFrame = 0): SequenceInstanc
   }
 }
 
+function multicam(id: string, startFrame = 100): MulticamInstance {
+  return {
+    kind: 'multicam',
+    id,
+    name: id,
+    multicamId: 'concert',
+    sourceStartFrame: 0,
+    timelineRange: { startFrame, durationFrames: 50 },
+  }
+}
+
+function multicamDefinition(): MulticamDefinition {
+  return {
+    id: 'concert',
+    name: 'Concert',
+    durationFrames: 50,
+    angles: [
+      {
+        id: 'wide',
+        name: 'Wide',
+        assetId: 'asset-wide',
+        coverage: { startFrame: 10, durationFrames: 40 },
+        sourceStartFrame: 0,
+      },
+      {
+        id: 'close',
+        name: 'Close',
+        assetId: 'asset-close',
+        coverage: { startFrame: 0, durationFrames: 50 },
+        sourceStartFrame: 0,
+      },
+    ],
+    switches: [
+      { frame: 0, videoAngleId: 'wide' },
+      { frame: 20, videoAngleId: 'close' },
+    ],
+    audioPolicy: { kind: 'fixed', angleId: 'close' },
+  }
+}
+
 function track(
   id: string,
   clips: Clip[] = [],
   instances: SequenceInstance[] = [],
+  multicams: MulticamInstance[] = [],
 ): Track {
   return {
     id,
@@ -51,6 +99,7 @@ function track(
     name: id,
     clips,
     sequenceInstances: instances,
+    multicamInstances: multicams,
     adjustments: [],
     transitions: [],
     hidden: false,
@@ -62,7 +111,7 @@ function track(
 
 function sequence(id: string, tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },
@@ -176,5 +225,64 @@ describe('project video composition planner seam', () => {
     expect(new Set(requestKeys).size).toBe(2)
     expect(Object.isFrozen(plan.items.at(-1))).toBe(true)
     expect(Object.isFrozen(requests.at(-1))).toBe(true)
+  })
+
+  test('switches exact multicam sources and keeps uncovered frames explicitly black', () => {
+    const root = sequence('root', [
+      track('root-V1', [], [], [multicam('concert-video')]),
+    ])
+    const source = {
+      ...project(root),
+      multicams: [multicamDefinition()],
+    }
+    const planner = createProjectVideoCompositionPlanner(source, 'root', new Map())
+
+    const uncovered = planner.planFrame(105)
+    expect(uncovered.items).toEqual([expect.objectContaining({
+      kind: 'multicam-background',
+      instanceId: 'concert-video',
+    })])
+    expect(videoCompositionRequests(uncovered)).toEqual([])
+
+    expect(videoCompositionRequests(planner.planFrame(115))).toEqual([
+      expect.objectContaining({
+        clip: expect.objectContaining({ assetId: 'asset-wide' }),
+        sourceFrame: 5,
+      }),
+    ])
+    expect(videoCompositionRequests(planner.planFrame(120))).toEqual([
+      expect.objectContaining({
+        clip: expect.objectContaining({ assetId: 'asset-close' }),
+        sourceFrame: 20,
+      }),
+    ])
+  })
+
+  test('resolves multicam output inside a live sequence instance', () => {
+    const child = sequence('child', [
+      track('child-V1', [], [], [multicam('nested-concert', 0)]),
+    ])
+    const childUse = {
+      ...nested('child-use', 'child', 10),
+      sourceStartFrame: 0,
+      timelineRange: { startFrame: 10, durationFrames: 30 },
+    }
+    const root = sequence('root', [track('root-V1', [], [childUse])])
+    const source = {
+      ...project(root, child),
+      multicams: [multicamDefinition()],
+    }
+    const planner = createProjectVideoCompositionPlanner(source, 'root', new Map())
+
+    expect(planner.planFrame(15).items.map((item) => item.kind)).toEqual([
+      'sequence-background',
+      'multicam-background',
+    ])
+    expect(videoCompositionRequests(planner.planFrame(20))).toEqual([
+      expect.objectContaining({
+        clip: expect.objectContaining({ assetId: 'asset-wide' }),
+        sourceFrame: 0,
+      }),
+    ])
   })
 })

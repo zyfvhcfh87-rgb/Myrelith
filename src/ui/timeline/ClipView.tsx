@@ -33,6 +33,7 @@ import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
 import { useTransportStore } from '../../state/transportStore'
 import { useSequenceInstanceSelectionStore } from '../../state/sequenceInstanceSelectionStore'
+import { useMulticamSelectionStore } from '../../state/multicamSelectionStore'
 import ClipAutomationLane from './ClipAutomationLane'
 import {
   clipAutomationMarkers,
@@ -236,6 +237,7 @@ function ClipView({
       }}
       onPointerDown={(event) => {
         useSequenceInstanceSelectionStore.getState().setSelectedInstanceId(null)
+        useMulticamSelectionStore.getState().setSelectedInstanceId(null)
         onBodyPointerDown(event)
       }}
       onContextMenu={(event) => {

@@ -139,6 +139,8 @@ export function useMediaPoolVirtualizer(
     },
     [measurementVersion, rows, viewport.end, viewport.start],
   )
+  const virtualWindowRef = useRef(virtualWindow)
+  virtualWindowRef.current = virtualWindow
 
   const measureRenderedRows = useCallback((): void => {
     const list = listRef.current
@@ -211,8 +213,9 @@ export function useMediaPoolVirtualizer(
 
   const ensureRowVisible = useCallback((rowIndex: number): void => {
     const list = listRef.current
-    const rowOffset = virtualWindow.rowOffsets[rowIndex]
-    const rowHeight = virtualWindow.rowHeights[rowIndex]
+    const currentWindow = virtualWindowRef.current
+    const rowOffset = currentWindow.rowOffsets[rowIndex]
+    const rowHeight = currentWindow.rowHeights[rowIndex]
     if (!list || rowOffset === undefined || rowHeight === undefined) return
     const root = scrollRootFor(list)
     const rootHeight = root.clientHeight || FALLBACK_VIEWPORT_HEIGHT
@@ -229,7 +232,7 @@ export function useMediaPoolVirtualizer(
       root.scrollTop = Math.max(0, rowEnd - rootHeight)
     }
     measureViewport()
-  }, [measureViewport, virtualWindow.rowHeights, virtualWindow.rowOffsets])
+  }, [measureViewport])
 
   const scrollToStart = useCallback((): void => {
     const list = listRef.current
@@ -266,7 +269,7 @@ export function useMediaPoolVirtualizer(
     return result
   }, [rows])
 
-  return {
+  return useMemo(() => ({
     listRef,
     columnCount,
     rows,
@@ -277,5 +280,15 @@ export function useMediaPoolVirtualizer(
     measureRenderedRows,
     ensureRowVisible,
     scrollToStart,
-  }
+  }), [
+    columnCount,
+    ensureRowVisible,
+    measureRenderedRows,
+    renderedItemIds,
+    rowIndexByItemId,
+    rows,
+    scrollToStart,
+    virtualWindow,
+    visibleItemIds,
+  ])
 }

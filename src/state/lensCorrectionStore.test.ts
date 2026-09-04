@@ -14,7 +14,7 @@ import { useDocumentStore } from './documentStore'
 
 function document(locked = false): TimelineDoc {
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'lens-doc',
     name: 'Lens',
     frameRate: { num: 30, den: 1 },

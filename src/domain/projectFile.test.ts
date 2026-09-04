@@ -115,6 +115,7 @@ function track(
     name: `${id} lane`,
     clips,
     sequenceInstances: [],
+    multicamInstances: [],
     adjustments: [],
     transitions: [],
     hidden: kind === 'video',
@@ -238,6 +239,7 @@ function makeProject(): ProjectFile {
     name: document.name,
     rootSequenceId: document.id,
     sequences: [document],
+    multicams: [],
     assets: makeAssets(),
     collections: [],
   }

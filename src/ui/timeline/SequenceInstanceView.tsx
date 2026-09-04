@@ -3,6 +3,7 @@ import type { SequenceInstance, TrackId, TrackKind } from '../../domain/schema'
 import { rangeEnd } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useSequenceInstanceSelectionStore } from '../../state/sequenceInstanceSelectionStore'
+import { useMulticamSelectionStore } from '../../state/multicamSelectionStore'
 import { useTransportStore } from '../../state/transportStore'
 import { frameToTimelineLocalPx } from './timelineViewport'
 
@@ -51,6 +52,7 @@ function SequenceInstanceView({
       onClick={(event) => {
         event.stopPropagation()
         useTransportStore.getState().setSelectedClip(null)
+        useMulticamSelectionStore.getState().setSelectedInstanceId(null)
         useSequenceInstanceSelectionStore.getState().setSelectedInstanceId(instance.id)
       }}
       onDoubleClick={(event) => {

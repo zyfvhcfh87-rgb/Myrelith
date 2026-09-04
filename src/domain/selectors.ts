@@ -45,6 +45,10 @@ export function docDurationFrames(doc: TimelineDoc): number {
       const end = rangeEnd(instance.timelineRange)
       if (end > last) last = end
     }
+    for (const instance of track.multicamInstances ?? []) {
+      const end = rangeEnd(instance.timelineRange)
+      if (end > last) last = end
+    }
     for (const adjustment of adjustmentItems(track)) {
       const end = rangeEnd(adjustment.timelineRange)
       if (end > last) last = end

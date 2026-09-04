@@ -1,4 +1,4 @@
-import type { AdjustmentItem, Clip, ClipId, SequenceInstance, TimeRange, TimelineDoc, Track, TrackId, Transition, TransitionId } from '../schema';
+import type { AdjustmentItem, Clip, ClipId, MulticamInstance, SequenceInstance, TimeRange, TimelineDoc, Track, TrackId, Transition, TransitionId } from '../schema';
 import { crossfadeWindowsOverlap, resolveCrossfade } from '../selectors';
 import { rangeOverlap } from '../time';
 
@@ -81,7 +81,7 @@ export function withoutLinkGroupId(clip: Clip): Clip {
 
 /** True when `range` overlaps any other clip, instance, or adjustment. */
 export function overlapsAny(
-  track: Pick<Track, 'clips' | 'adjustments' | 'sequenceInstances'>,
+  track: Pick<Track, 'clips' | 'adjustments' | 'sequenceInstances' | 'multicamInstances'>,
   range: TimeRange,
   excludeId?: ClipId,
 ): boolean {
@@ -91,6 +91,8 @@ export function overlapsAny(
     (adjustment) => rangeOverlap(adjustment.timelineRange, range),
   ) || (track.sequenceInstances ?? []).some(
     (instance) => rangeOverlap(instance.timelineRange, range),
+  ) || (track.multicamInstances ?? []).some(
+    (instance) => rangeOverlap(instance.timelineRange, range),
   )
 }
 
@@ -99,10 +101,12 @@ export function clipsOverlapAdjustments(
   clips: readonly Clip[],
   adjustments: readonly AdjustmentItem[] | undefined,
   sequenceInstances: readonly SequenceInstance[] | undefined,
+  multicamInstances: readonly MulticamInstance[] | undefined,
 ): boolean {
   const items = [
     ...(adjustments ?? []),
     ...(sequenceInstances ?? []),
+    ...(multicamInstances ?? []),
   ]
   if (items.length === 0) return false
   return clips.some((clip) =>

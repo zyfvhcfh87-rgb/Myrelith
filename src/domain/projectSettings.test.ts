@@ -28,6 +28,7 @@ function expectedEmptyTrack(id: string, kind: 'video' | 'audio') {
     name: id,
     clips: [],
     sequenceInstances: [],
+    multicamInstances: [],
     adjustments: [],
     transitions: [],
     hidden: false,
@@ -300,7 +301,7 @@ describe('createTimelineDoc', () => {
     const doc = createTimelineDoc('  Demo project  ', settings, 'project-123')
 
     expect(doc).toEqual({
-      schemaVersion: 19,
+      schemaVersion: 20,
       id: 'project-123',
       name: 'Demo project',
       frameRate: { num: 60_000, den: 1_001 },
@@ -322,6 +323,7 @@ describe('createTimelineDoc', () => {
     expect(doc.tracks.every((track) => (
       Object.isFrozen(track.clips)
       && Object.isFrozen(track.sequenceInstances)
+      && Object.isFrozen(track.multicamInstances)
       && Object.isFrozen(track.adjustments)
       && Object.isFrozen(track.transitions)
     ))).toBe(true)
@@ -350,6 +352,8 @@ describe('createTimelineDoc', () => {
       expect(first.tracks[index].clips).not.toBe(second.tracks[index].clips)
       expect(first.tracks[index].sequenceInstances)
         .not.toBe(second.tracks[index].sequenceInstances)
+      expect(first.tracks[index].multicamInstances)
+        .not.toBe(second.tracks[index].multicamInstances)
       expect(first.tracks[index].adjustments)
         .not.toBe(second.tracks[index].adjustments)
       expect(first.tracks[index].transitions)
@@ -359,6 +363,7 @@ describe('createTimelineDoc', () => {
     }
     expect(new Set(first.tracks.map((track) => track.clips)).size).toBe(8)
     expect(new Set(first.tracks.map((track) => track.sequenceInstances)).size).toBe(8)
+    expect(new Set(first.tracks.map((track) => track.multicamInstances)).size).toBe(8)
     expect(new Set(first.tracks.map((track) => track.adjustments)).size).toBe(8)
     expect(new Set(first.tracks.map((track) => track.transitions)).size).toBe(8)
 
@@ -375,7 +380,7 @@ describe('createTimelineDoc', () => {
     )
 
     expect(JSON.stringify(doc)).toBe(JSON.stringify({
-      schemaVersion: 19,
+      schemaVersion: 20,
       id: 'doc_default',
       name: 'Untitled',
       frameRate: { num: 30, den: 1 },

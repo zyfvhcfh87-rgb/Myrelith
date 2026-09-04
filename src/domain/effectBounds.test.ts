@@ -58,7 +58,7 @@ function docWithEffects(effects: EffectDescriptor[], selected: Clip = clip('sele
     locked: false,
   }
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'effect-budget-doc',
     name: 'Effect budget',
     frameRate: { num: 30, den: 1 },
