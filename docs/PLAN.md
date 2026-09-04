@@ -4984,7 +4984,7 @@ Chromium tests. Vite retains only the established non-fatal large-chunk notice.
 
 ## Post-MVP issue #193 - bounded manual-sync multicam
 
-**IMPLEMENTATION AND LOCAL ACCEPTANCE COMPLETE (2026-09-04).**
+**MERGED VIA PR #220 (2026-09-04); ISSUE CLOSED AS COMPLETED.**
 
 - [x] Advance project format 6→7 and timeline schema 19→20 with bounded,
   project-owned multicam definitions and resource-free linked video/audio
@@ -5010,5 +5010,8 @@ Chromium tests. Vite retains only the established non-fatal large-chunk notice.
 - [x] Pass all 274 Vitest files / 3,799 tests plus all 17 runner checks,
   production build/typecheck (4,961 modules), clean lint, zero-vulnerability
   production audit, and diff hygiene.
-- [ ] Push/publish only after explicit authorization; do not merge or close
-  Issue #193 from this local implementation turn.
+- [x] Publish ready PR #220; keep the duplicate collision invariant, accept the
+  valid Bugbot optional-property cleanup, add its regression, resolve both
+  threads, and pass fresh CI/Bugbot on exact head `1a8d766`. Merge normally as
+  `9e7ea59`, verify tree equality and completed Issue #193, then pass master CI
+  run `33917746503`.

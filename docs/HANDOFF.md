@@ -5337,7 +5337,7 @@ surface; it is not a second zoom and never enters document history.
 
 ## Post-MVP issue #193 - bounded manual-sync multicam
 
-**IMPLEMENTATION AND LOCAL ACCEPTANCE COMPLETE (2026-09-04); PUBLICATION NOT AUTHORIZED.**
+**MERGED (2026-09-04) VIA PR #220; ISSUE CLOSED AS COMPLETED.**
 
 - Project format 7 and timeline schema 20 add project-owned multicam
   definitions plus resource-free linked video/audio timeline instances. Strict
@@ -5369,3 +5369,9 @@ surface; it is not a second zoom and never enters document history.
   repository runner checks, production build/typecheck (4,961 modules), clean
   oxlint, a zero-vulnerability production audit, and diff hygiene. Vite retains
   only the established non-fatal large-chunk notice.
+- Cursor Bugbot's first pass on `a3a8911` found one valid optional-property
+  cleanup and one false-positive duplicate-collision suggestion. Autofix
+  `4d7c3b1` landed only the valid change; `1a8d766` added the counterexample
+  regression and both threads were resolved. Fresh CI and Bugbot passed that
+  exact head before normal merge `9e7ea59`; its tree matches the reviewed head,
+  Issue #193 closed as completed, and master CI run `33917746503` passed.
