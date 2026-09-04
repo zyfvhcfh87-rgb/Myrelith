@@ -120,6 +120,17 @@ function portableTimelineSnapshot(document: TimelineDoc): TimelineDoc {
             ? {}
             : { linkGroupId: instance.linkGroupId }),
         })),
+        multicamInstances: (track.multicamInstances ?? []).map((instance) => ({
+          kind: instance.kind,
+          id: instance.id,
+          name: instance.name,
+          multicamId: instance.multicamId,
+          sourceStartFrame: instance.sourceStartFrame,
+          timelineRange: { ...instance.timelineRange },
+          ...(instance.linkGroupId === undefined
+            ? {}
+            : { linkGroupId: instance.linkGroupId }),
+        })),
         adjustments: (track.adjustments ?? []).map((adjustment) => ({
           kind: adjustment.kind,
           id: adjustment.id,
@@ -202,6 +213,20 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
     name: project.name,
     rootSequenceId: project.rootSequenceId,
     sequences: project.sequences.map(portableTimelineSnapshot),
+    multicams: project.multicams.map((definition) => ({
+      id: definition.id,
+      name: definition.name,
+      durationFrames: definition.durationFrames,
+      angles: definition.angles.map((angle) => ({
+        id: angle.id,
+        name: angle.name,
+        assetId: angle.assetId,
+        coverage: { ...angle.coverage },
+        sourceStartFrame: angle.sourceStartFrame,
+      })),
+      switches: definition.switches.map((item) => ({ ...item })),
+      audioPolicy: { ...definition.audioPolicy },
+    })),
     assets: project.assets
       .map((asset) => ({
         id: asset.id,
@@ -253,6 +278,7 @@ export function createProjectFileSnapshot(
         ? { ...document, captionTracks: [] }
         : document
     )),
+    multicams: sequenceProject.multicams ?? [],
     assets,
     collections: cloneMediaCollections(collections),
   }

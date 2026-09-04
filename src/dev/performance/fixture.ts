@@ -286,6 +286,7 @@ function track(
     name: id,
     clips,
     sequenceInstances: [],
+    multicamInstances: [],
     adjustments: [],
     transitions,
     hidden: false,
@@ -463,6 +464,7 @@ export function createPerformanceFixture(): PerformanceFixture {
     name: document.name,
     rootSequenceId: document.id,
     sequences: [document],
+    multicams: [],
     assets: [...videoAssets, ...audioAssets, ...imageAssets],
     collections: [],
   }

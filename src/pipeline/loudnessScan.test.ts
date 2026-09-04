@@ -33,7 +33,7 @@ function makeDoc(durationFrames = 1): TimelineDoc {
     locked: false,
   }
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'loudness',
     name: 'Loudness',
     frameRate: { num: 1, den: 1 },

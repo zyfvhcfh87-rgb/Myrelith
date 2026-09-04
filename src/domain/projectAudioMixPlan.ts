@@ -29,6 +29,7 @@ import {
   sourceTicksAtTimelineOffset,
 } from './sourceTimeMap'
 import { rangeEnd } from './time'
+import { createMulticamPlanner } from './multicam'
 
 interface BusDraft {
   readonly depth: number
@@ -172,6 +173,10 @@ export function createProjectTimelineAudioMixPlan(
   const clips: TimelineAudioClipPlan[] = []
   const mutedClips: TimelineAudioMutedClip[] = []
   const buses: BusDraft[] = []
+  const multicams = new Map((project.multicams ?? []).map((definition) => [
+    definition.id,
+    createMulticamPlanner(definition),
+  ]))
 
   const append = (
     sequence: TimelineDoc,
@@ -240,6 +245,57 @@ export function createProjectTimelineAudioMixPlan(
       if (track.kind !== 'audio' || !audibleTrackIds.has(track.id)) continue
       const scopedTrackId = trackIds.get(track.id)
       if (!scopedTrackId) continue
+      for (const instance of track.multicamInstances ?? []) {
+        const instanceStart = Math.max(
+          localStartFrame,
+          instance.timelineRange.startFrame,
+        )
+        const instanceEnd = Math.min(localEndFrame, rangeEnd(instance.timelineRange))
+        if (instanceStart >= instanceEnd) continue
+        const planner = multicams.get(instance.multicamId)
+        if (!planner) throw new RangeError(`missing multicam "${instance.multicamId}"`)
+        const definitionStart = instance.sourceStartFrame
+          + instanceStart
+          - instance.timelineRange.startFrame
+        const definitionEnd = definitionStart + instanceEnd - instanceStart
+        for (const segment of planner.audioSegments(
+          definitionStart,
+          definitionEnd,
+        )) {
+          if (catalog.get(segment.assetId)?.audio === null) continue
+          const timelineStartFrame = rootOffset
+            + instance.timelineRange.startFrame
+            + segment.startFrame
+            - instance.sourceStartFrame
+          const timelineEndFrame = timelineStartFrame
+            + segment.endFrame
+            - segment.startFrame
+          clips.push({
+            clipId: scopedId(
+              'clip',
+              path,
+              `multicam:${instance.id}:${segment.startFrame}:${segment.angleId}`,
+            ),
+            trackId: scopedTrackId,
+            assetId: segment.assetId,
+            timelineStartFrame,
+            timelineEndFrame,
+            clipTimelineStartFrame: timelineStartFrame,
+            sourceStartFrame: segment.sourceStartFrame,
+            sourceEndFrame: segment.sourceEndFrame,
+            volume: 1,
+            balance: 0,
+            leftGain: 1,
+            rightGain: 1,
+            volumeAnimation: null,
+            balanceAnimation: null,
+            fadeInFrames: 0,
+            fadeOutFrames: 0,
+            envelopes: [],
+            audioEffects: [],
+          })
+        }
+      }
       for (const instance of sequenceInstances(track)) {
         const instanceStart = Math.max(
           localStartFrame,

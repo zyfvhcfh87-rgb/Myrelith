@@ -186,6 +186,7 @@ describe('project-level sequence authority', () => {
       name: document.name,
       rootSequenceId: document.id,
       sequences: [document],
+      multicams: [],
     })
     expect(rootSequence(project)).toBe(document)
   })

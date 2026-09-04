@@ -110,7 +110,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -145,7 +145,7 @@ function makeStillClip(
 
 function makeVideoDoc(clips: Clip[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-stills',
     name: 'Still source tests',
     frameRate: { num: 30, den: 1 },
@@ -702,7 +702,7 @@ describe('clip edits respect adjustment occupancy', () => {
     expect(slideClip(doc, 'clipB', 10)).toBe(doc)
 
     const isolated = deepFreeze({
-      schemaVersion: 19,
+      schemaVersion: 20,
       id: 'doc-retime-adj',
       name: 'retime vs adjustment',
       frameRate: { num: 30, den: 1 },
@@ -1438,7 +1438,7 @@ function makeCrossfadeDoc(
   locked = false,
 ): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'crossfade-doc',
     name: 'Crossfade lifecycle',
     frameRate: { num: 30, den: 1 },
@@ -2160,6 +2160,7 @@ describe('addTrack', () => {
       name: 'V3',
       clips: [],
       sequenceInstances: [],
+      multicamInstances: [],
       adjustments: [],
       transitions: [],
       hidden: false,
@@ -2454,6 +2455,52 @@ describe('removeTrack', () => {
     expect(out.tracks[2]).toBe(doc.tracks[3])
     expect(JSON.parse(JSON.stringify(out))).toEqual(out)
     expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  test('dissolves linked sequence and multicam survivors when their lane is removed', () => {
+    const base = makeDoc()
+    const videoSequence = {
+      kind: 'sequence' as const,
+      id: 'sequence-video',
+      name: 'Compound',
+      sequenceId: 'child',
+      sourceStartFrame: 0,
+      timelineRange: { startFrame: 700, durationFrames: 30 },
+      linkGroupId: 'sequence-pair',
+    }
+    const audioSequence = { ...videoSequence, id: 'sequence-audio' }
+    const videoMulticam = {
+      kind: 'multicam' as const,
+      id: 'multicam-video',
+      name: 'Concert',
+      multicamId: 'concert-definition',
+      sourceStartFrame: 0,
+      timelineRange: { startFrame: 800, durationFrames: 30 },
+      linkGroupId: 'multicam-pair',
+    }
+    const audioMulticam = { ...videoMulticam, id: 'multicam-audio' }
+    const doc = deepFreeze({
+      ...base,
+      tracks: base.tracks.map((track) => {
+        if (track.id === 'V2') return {
+          ...track,
+          sequenceInstances: [videoSequence],
+          multicamInstances: [videoMulticam],
+        }
+        if (track.id === 'A1') return {
+          ...track,
+          sequenceInstances: [audioSequence],
+          multicamInstances: [audioMulticam],
+        }
+        return track
+      }),
+    })
+
+    const out = removeTrack(doc, 'V2')
+    const audio = out.tracks.find((track) => track.id === 'A1')!
+    expect(audio.sequenceInstances?.[0]).not.toHaveProperty('linkGroupId')
+    expect(audio.multicamInstances?.[0]).not.toHaveProperty('linkGroupId')
+    expect(JSON.parse(JSON.stringify(out))).toEqual(out)
   })
 
   test('rejects atomically when dissolving an orphan would edit a locked partner', () => {

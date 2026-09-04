@@ -1,6 +1,13 @@
 /** Shared immutable visual plan for one project sequence, including nesting. */
 
-import type { SequenceInstanceId, TimelineDoc, TrackId } from './schema'
+import type {
+  Clip,
+  MulticamAngle,
+  MulticamInstance,
+  SequenceInstanceId,
+  TimelineDoc,
+  TrackId,
+} from './schema'
 import type { SourceBoundsCatalog } from './crossfadePlan'
 import type { SequenceProject } from './projectSequences'
 import { sequenceById } from './projectSequences'
@@ -18,6 +25,9 @@ import {
   type VideoCompositionPlanner,
 } from './videoCompositionPlan'
 import { rangeEnd } from './time'
+import { createMulticamPlanner } from './multicam'
+import { defaultSourceTimeMap } from './sourceTimeMap'
+import { resolveBlendMode } from './blendModes'
 
 function activeInstanceAt(
   document: TimelineDoc,
@@ -34,6 +44,56 @@ function activeInstanceAt(
     if (instance.timelineRange.startFrame > frame) break
   }
   return null
+}
+
+function activeMulticamAt(
+  document: TimelineDoc,
+  trackId: TrackId,
+  frame: number,
+): MulticamInstance | null {
+  const track = document.tracks.find((candidate) => candidate.id === trackId)
+  if (!track) return null
+  for (const instance of track.multicamInstances ?? []) {
+    if (
+      instance.timelineRange.startFrame <= frame
+      && frame < rangeEnd(instance.timelineRange)
+    ) return instance
+    if (instance.timelineRange.startFrame > frame) break
+  }
+  return null
+}
+
+function multicamClip(
+  instance: MulticamInstance,
+  angle: MulticamAngle,
+): Clip {
+  return {
+    id: `multicam:${instance.id}:${angle.id}`,
+    assetId: angle.assetId,
+    name: `${instance.name} - ${angle.name}`,
+    sourceMode: 'timed',
+    sourceRange: {
+      startFrame: angle.sourceStartFrame,
+      durationFrames: angle.coverage.durationFrames,
+    },
+    sourceTimeMap: defaultSourceTimeMap(
+      angle.sourceStartFrame,
+      angle.coverage.durationFrames,
+    ),
+    timelineRange: { ...instance.timelineRange },
+    transform: {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    },
+    opacity: 1,
+    volume: 1,
+    effects: [],
+  }
 }
 
 function nestedRequestKey(
@@ -93,6 +153,14 @@ export function createProjectVideoCompositionPlanner(
     sequence.id,
     createVideoCompositionPlanner(sequence, catalog, pluginContributions),
   ]))
+  const multicams = new Map((project.multicams ?? []).map((definition) => [
+    definition.id,
+    {
+      definition,
+      planner: createMulticamPlanner(definition),
+      angles: new Map(definition.angles.map((angle) => [angle.id, angle])),
+    },
+  ]))
 
   return Object.freeze({
     planFrame(frame: number): VideoCompositionPlan {
@@ -123,28 +191,62 @@ export function createProjectVideoCompositionPlanner(
         for (const track of sequence.tracks) {
           if (track.kind !== 'video' || track.hidden) continue
           const instance = activeInstanceAt(sequence, track.id, localFrame)
-          if (!instance) {
+          const multicamInstance = activeMulticamAt(sequence, track.id, localFrame)
+          if (!instance && !multicamInstance) {
             items.push(...(byTrack.get(track.id) ?? []))
             continue
           }
-          const path = Object.freeze([...instancePath, instance.id])
+          if (instance) {
+            const path = Object.freeze([...instancePath, instance.id])
+            items.push(Object.freeze({
+              kind: 'sequence-background',
+              trackId: track.id,
+              frame: localFrame,
+              instanceId: instance.id,
+              sequenceId: instance.sequenceId,
+              instancePath: path,
+            }))
+            const child = sequenceById(project, instance.sequenceId)
+            if (!child) throw new RangeError(`missing sequence "${instance.sequenceId}"`)
+            append(
+              child,
+              instance.sourceStartFrame
+                + localFrame
+                - instance.timelineRange.startFrame,
+              path,
+            )
+            continue
+          }
+          const resolved = multicams.get(multicamInstance!.multicamId)
+          if (!resolved) {
+            throw new RangeError(`missing multicam "${multicamInstance!.multicamId}"`)
+          }
           items.push(Object.freeze({
-            kind: 'sequence-background',
+            kind: 'multicam-background',
             trackId: track.id,
             frame: localFrame,
-            instanceId: instance.id,
-            sequenceId: instance.sequenceId,
-            instancePath: path,
+            instanceId: multicamInstance!.id,
+            multicamId: multicamInstance!.multicamId,
           }))
-          const child = sequenceById(project, instance.sequenceId)
-          if (!child) throw new RangeError(`missing sequence "${instance.sequenceId}"`)
-          append(
-            child,
-            instance.sourceStartFrame
-              + localFrame
-              - instance.timelineRange.startFrame,
-            path,
-          )
+          const definitionFrame = multicamInstance!.sourceStartFrame
+            + localFrame
+            - multicamInstance!.timelineRange.startFrame
+          const selected = resolved.planner.select(definitionFrame)
+          if (selected.video.sourceFrame === null) continue
+          const angle = resolved.angles.get(selected.video.angleId)!
+          const clip = Object.freeze(multicamClip(multicamInstance!, angle))
+          items.push(Object.freeze({
+            kind: 'clip',
+            trackId: track.id,
+            frame: localFrame,
+            blendMode: resolveBlendMode(undefined),
+            request: Object.freeze({
+              clip,
+              sourceFrame: selected.video.sourceFrame,
+              opacity: 1,
+              requestKey: nestedRequestKey(instancePath, clip.id),
+            }),
+          }))
         }
         items.push(...captions)
       }

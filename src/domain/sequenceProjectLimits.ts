@@ -6,9 +6,13 @@ import { EFFECT_STACK_LIMITS } from './effectBounds'
 
 export const SEQUENCE_PROJECT_LIMITS = Object.freeze({
   maxSequences: 256,
+  maxMulticamDefinitions: 256,
+  maxTotalMulticamAngles: 2_048,
+  maxTotalMulticamSwitches: 262_144,
   maxTotalTracks: 4_096,
   maxTotalClips: 100_000,
   maxTotalSequenceInstances: 100_000,
+  maxTotalMulticamInstances: 100_000,
   maxTotalAdjustments: 100_000,
   maxTotalTransitions: 100_000,
   maxTotalMarkers: 100_000,

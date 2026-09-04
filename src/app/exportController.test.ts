@@ -77,7 +77,7 @@ function fileDestination(
 }
 
 const DOC: TimelineDoc = {
-  schemaVersion: 19,
+  schemaVersion: 20,
   id: 'doc-export-controller',
   name: 'Export controller fixture',
   frameRate: { num: 30, den: 1 },
@@ -322,6 +322,66 @@ afterEach(async () => {
 })
 
 describe('exportController wiring and completion', () => {
+  test('does not retain an offline multicam angle that cannot contribute output', async () => {
+    const unusedAsset: MediaAsset = {
+      ...ASSET,
+      id: 'asset-unused-angle',
+      fileName: 'unused-angle.mp4',
+      objectUrl: 'blob:unused-angle',
+    }
+    useMediaStore.getState().addAsset(unusedAsset)
+    useMediaStore.getState().disconnectAsset(unusedAsset.id)
+    const multicamDoc: TimelineDoc = {
+      ...DOC,
+      tracks: [{
+        ...DOC.tracks[0],
+        clips: [],
+        multicamInstances: [{
+          kind: 'multicam',
+          id: 'multicam-output',
+          name: 'Concert',
+          multicamId: 'concert-definition',
+          sourceStartFrame: 0,
+          timelineRange: { startFrame: 0, durationFrames: 2 },
+        }],
+      }],
+    }
+    useDocumentStore.getState().setProject({
+      id: 'multicam-export-project',
+      name: 'Multicam export',
+      rootSequenceId: multicamDoc.id,
+      sequences: [multicamDoc],
+      multicams: [{
+        id: 'concert-definition',
+        name: 'Concert',
+        durationFrames: 2,
+        angles: [
+          {
+            id: 'wide',
+            name: 'Wide',
+            assetId: ASSET.id,
+            coverage: { startFrame: 0, durationFrames: 2 },
+            sourceStartFrame: 0,
+          },
+          {
+            id: 'unused',
+            name: 'Unused',
+            assetId: unusedAsset.id,
+            coverage: { startFrame: 0, durationFrames: 2 },
+            sourceStartFrame: 0,
+          },
+        ],
+        switches: [{ frame: 0, videoAngleId: 'wide' }],
+        audioPolicy: { kind: 'fixed', angleId: 'wide' },
+      }],
+    })
+    const h = makeHarness()
+
+    await expect(startExport(SETTINGS, {}, h.deps)).resolves.toBe(RESULT)
+    expect(h.fetchBlob).toHaveBeenCalledOnce()
+    expect(h.fetchBlob).toHaveBeenCalledWith(ASSET.objectUrl)
+  })
+
   test('awaits playback decoder teardown before preflight and media allocation', async () => {
     const playbackDrain = deferred()
     const h = makeHarness()

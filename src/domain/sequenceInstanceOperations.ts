@@ -97,6 +97,10 @@ interface LocatedClip {
 
 function collectAllIds(project: SequenceProject): Set<string> {
   const ids = new Set<string>([project.id])
+  for (const definition of project.multicams ?? []) {
+    ids.add(definition.id)
+    for (const angle of definition.angles) ids.add(angle.id)
+  }
   for (const sequence of project.sequences) {
     ids.add(sequence.id)
     for (const marker of sequence.markers ?? []) ids.add(marker.id)
@@ -113,6 +117,10 @@ function collectAllIds(project: SequenceProject): Set<string> {
         for (const effect of clip.audioEffects ?? []) ids.add(effect.id)
       }
       for (const instance of track.sequenceInstances ?? []) {
+        ids.add(instance.id)
+        if (instance.linkGroupId) ids.add(instance.linkGroupId)
+      }
+      for (const instance of track.multicamInstances ?? []) {
         ids.add(instance.id)
         if (instance.linkGroupId) ids.add(instance.linkGroupId)
       }
@@ -218,6 +226,9 @@ function collides(track: Track, candidate: SequenceInstance): boolean {
       item.id !== candidate.id
       && overlaps(item.timelineRange, candidate.timelineRange)
     ))
+    || (track.multicamInstances ?? []).some((item) => (
+      overlaps(item.timelineRange, candidate.timelineRange)
+    ))
 }
 
 function withTrackInstances(
@@ -272,6 +283,7 @@ function generatedId(
     for (const track of sequence.tracks) {
       for (const clip of track.clips) used.add(clip.id)
       for (const instance of track.sequenceInstances ?? []) used.add(instance.id)
+      for (const instance of track.multicamInstances ?? []) used.add(instance.id)
       for (const adjustment of track.adjustments ?? []) used.add(adjustment.id)
     }
   }
@@ -297,6 +309,9 @@ function generatedLinkGroupId(
         if (clip.linkGroupId) used.add(clip.linkGroupId)
       }
       for (const instance of track.sequenceInstances ?? []) {
+        if (instance.linkGroupId) used.add(instance.linkGroupId)
+      }
+      for (const instance of track.multicamInstances ?? []) {
         if (instance.linkGroupId) used.add(instance.linkGroupId)
       }
     }
@@ -359,6 +374,8 @@ export function createCompoundSequenceFromClips(
       overlaps(item.timelineRange, range)
     )) || (track.sequenceInstances ?? []).some((item) => (
       overlaps(item.timelineRange, range)
+    )) || (track.multicamInstances ?? []).some((item) => (
+      overlaps(item.timelineRange, range)
     ))) return rejectedCompound(project, 'selection-not-bounded')
     if (track.transitions.some((transition) => (
       selected.has(transition.fromClipId) !== selected.has(transition.toClipId)
@@ -401,6 +418,7 @@ export function createCompoundSequenceFromClips(
           },
         })),
       sequenceInstances: [],
+      multicamInstances: [],
       adjustments: [],
       transitions: track.transitions.filter((transition) => (
         selected.has(transition.fromClipId) && selected.has(transition.toClipId)
@@ -637,6 +655,9 @@ export function applySequenceInstanceEdit(
         return rejected(project, 'collision')
       }
       if ((track.adjustments ?? []).some((item) => (
+        overlaps(item.timelineRange, candidate.timelineRange)
+      ))) return rejected(project, 'collision')
+      if ((track.multicamInstances ?? []).some((item) => (
         overlaps(item.timelineRange, candidate.timelineRange)
       ))) return rejected(project, 'collision')
       if (index > 0 && overlaps(instances[index - 1].timelineRange, candidate.timelineRange)) {

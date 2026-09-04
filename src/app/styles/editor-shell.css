@@ -205,6 +205,207 @@
   font: inherit;
 }
 
+.multicam-controls {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  border-bottom: 1px solid #284b4d;
+  color: #9fd7d3;
+  font-size: 11px;
+}
+
+.multicam-controls-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.multicam-controls button,
+.multicam-controls select,
+.multicam-controls input {
+  font: inherit;
+}
+
+.multicam-controls button {
+  padding: 4px 7px;
+  border: 1px solid #32726f;
+  border-radius: 5px;
+  color: #d9fffb;
+  background: #123d3e;
+  cursor: pointer;
+}
+
+.multicam-controls button:hover:not(:disabled) {
+  border-color: #56aaa4;
+  background: #175052;
+}
+
+.multicam-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.multicam-setup,
+.multicam-editor {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid #32726f;
+  border-radius: 9px;
+  color: #dcebea;
+  background: #0e2427;
+}
+
+.multicam-setup {
+  display: grid;
+  gap: 10px;
+}
+
+.multicam-setup > label,
+.multicam-setup-routing label,
+.multicam-angle-card details label,
+.multicam-edit-row label {
+  display: grid;
+  gap: 4px;
+}
+
+.multicam-setup input,
+.multicam-setup select,
+.multicam-angle-card input,
+.multicam-edit-row select {
+  min-height: 28px;
+  box-sizing: border-box;
+  padding: 4px 7px;
+  border: 1px solid #355b5c;
+  border-radius: 5px;
+  color: #ecfffd;
+  background: #091a1d;
+}
+
+.multicam-setup fieldset {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #284b4d;
+  border-radius: 7px;
+}
+
+.multicam-setup-angle {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.multicam-setup-angle > label:first-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.multicam-setup-angle > label:last-child {
+  display: grid;
+  grid-template-columns: 1fr 92px;
+  align-items: center;
+  gap: 6px;
+}
+
+.multicam-setup-routing {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.multicam-setup-actions,
+.multicam-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 7px;
+}
+
+.multicam-editor-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.multicam-editor-heading span {
+  color: #8db8b5;
+}
+
+.multicam-angle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.multicam-angle-card {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid #315557;
+  border-radius: 7px;
+  background: #122e31;
+}
+
+.multicam-angle-card[data-connected='false'] {
+  filter: saturate(0.45);
+}
+
+.multicam-angle-thumbnail {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 4px;
+  color: #9fd7d3;
+  background-color: #091a1d;
+  background-position: left center;
+  background-repeat: no-repeat;
+  background-size: auto 100%;
+}
+
+.multicam-angle-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.multicam-angle-copy strong,
+.multicam-angle-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multicam-angle-copy span {
+  color: #88aaa8;
+}
+
+.multicam-angle-card details {
+  grid-column: 1 / -1;
+  padding-top: 3px;
+}
+
+.multicam-angle-card details[open] {
+  display: grid;
+  gap: 7px;
+}
+
+.multicam-edit-row + .multicam-edit-row {
+  margin-top: 8px;
+}
+
 @media (max-width: 1050px) {
   .app-shell {
     grid-template-rows:

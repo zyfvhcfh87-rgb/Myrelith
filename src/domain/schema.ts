@@ -111,6 +111,12 @@ export type TrackId = string
 export type ClipId = string
 /** Unique id of a live sequence instance placed on one timeline lane. */
 export type SequenceInstanceId = string
+/** Unique id of a project-owned multicam definition. */
+export type MulticamDefinitionId = string
+/** Unique id of one source angle inside a multicam definition. */
+export type MulticamAngleId = string
+/** Unique id of a multicam instance placed on one timeline lane. */
+export type MulticamInstanceId = string
 /** Unique id of a full-frame post-composite adjustment item. */
 export type AdjustmentItemId = string
 /** Unique id of an effect instance on a clip. */
@@ -618,6 +624,51 @@ export interface SequenceInstance {
   linkGroupId?: string
 }
 
+/** One exact, manually aligned media source inside a multicam definition. */
+export interface MulticamAngle {
+  id: MulticamAngleId
+  name: string
+  assetId: AssetId
+  /** Multicam-local interval for which this source has real coverage. */
+  coverage: TimeRange
+  /** Source frame mapped to coverage.startFrame. */
+  sourceStartFrame: number
+}
+
+/** One authored video-angle choice beginning at an exact multicam-local frame. */
+export interface MulticamSwitch {
+  frame: number
+  videoAngleId: MulticamAngleId
+}
+
+export type MulticamAudioPolicy =
+  | { kind: 'fixed'; angleId: MulticamAngleId }
+  | { kind: 'follow-video' }
+
+/** Portable project-owned multicam edit intent. It owns no live resources. */
+export interface MulticamDefinition {
+  id: MulticamDefinitionId
+  name: string
+  durationFrames: number
+  angles: MulticamAngle[]
+  switches: MulticamSwitch[]
+  audioPolicy: MulticamAudioPolicy
+}
+
+/** One lane of a project-owned multicam definition placed on a sequence. */
+export interface MulticamInstance {
+  kind: 'multicam'
+  id: MulticamInstanceId
+  name: string
+  multicamId: MulticamDefinitionId
+  /** First definition-local frame represented at timelineRange.startFrame. */
+  sourceStartFrame: number
+  /** Exact authored parent interval; unavailable angle coverage stays a gap. */
+  timelineRange: TimeRange
+  /** Optional A/V pairing identity, governed by the normal link invariant. */
+  linkGroupId?: string
+}
+
 /** What a track holds; a track only accepts clips compatible with its kind. */
 export type TrackKind = 'video' | 'audio'
 
@@ -643,6 +694,8 @@ export interface Track {
    * include the array.
    */
   sequenceInstances?: SequenceInstance[]
+  /** Project-owned multicam references. Current portable schema writes this array. */
+  multicamInstances?: MulticamInstance[]
   /**
    * Full-frame post-composite items on this lane. Current schema-15 project
    * files always include the array; optional typing keeps historical pure
@@ -762,7 +815,7 @@ export interface CaptionTrack {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 18. */
+  /** Schema version for forward-compatible project files. Currently 20. */
   schemaVersion: number
   /** Unique document id. */
   id: string

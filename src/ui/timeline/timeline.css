@@ -644,6 +644,53 @@
   filter: saturate(0.4);
 }
 
+.multicam-instance-view {
+  position: absolute;
+  z-index: 4;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 1px;
+  padding: 4px 8px;
+  overflow: hidden;
+  border: 1px solid #45d4c7;
+  border-radius: 4px;
+  color: #e5fffc;
+  background: linear-gradient(180deg, #176f75, #12525c);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.track-audio .multicam-instance-view {
+  border-color: #d49b55;
+  color: #fff4e3;
+  background: linear-gradient(180deg, #78512d, #593b24);
+}
+
+.multicam-instance-view.selected,
+.multicam-instance-view:focus-visible {
+  outline: 2px solid #f2dc79;
+  outline-offset: 1px;
+}
+
+.timeline-track.track-hidden .multicam-instance-view,
+.timeline-track.track-muted .multicam-instance-view,
+.timeline-track.track-solo-dimmed .multicam-instance-view {
+  opacity: 0.35;
+}
+
+.timeline-track.track-locked .multicam-instance-view {
+  cursor: not-allowed;
+  filter: saturate(0.4);
+}
+
 .adjustment-view {
   position: absolute;
   top: 5px;

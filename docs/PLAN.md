@@ -4981,3 +4981,34 @@ Chromium tests. Vite retains only the established non-fatal large-chunk notice.
   diff hygiene.
 - [ ] Push/publish only after explicit authorization; do not merge or close
   Issue #192 from this local implementation turn.
+
+## Post-MVP issue #193 - bounded manual-sync multicam
+
+**IMPLEMENTATION AND LOCAL ACCEPTANCE COMPLETE (2026-09-04).**
+
+- [x] Advance project format 6→7 and timeline schema 19→20 with bounded,
+  project-owned multicam definitions and resource-free linked video/audio
+  instances; preserve old projects through empty-collection migrations.
+- [x] Validate two-to-eight unique video angles, integer manual sync/coverage,
+  ordered switches beginning at local zero, fixed/follow-video audio, complete
+  references, linked geometry, global ids, and aggregate hostile-input budgets.
+- [x] Add logarithmic active-angle lookup and exact audio segmentation. Feed
+  multicam leaves and explicit black/silence gaps through the same immutable
+  nested project plans used by preview, playback, and export.
+- [x] Add atomic create, cut, roll, rename/offset, policy, move, trim, split,
+  and duplicate operations with one-entry undo/redo, locks, collisions,
+  stale definitions, project replacement, and offline/relink behavior.
+- [x] Ship accessible Inspector and timeline UI with manual sync entry,
+  connected/offline cards, paused source previews, Program active-angle truth,
+  Alt+1..8 switching, and bounded scrolling that leaves the monitor visible.
+- [x] Browser-verify eight synthetic WebM/Opus angles on strict port 42193:
+  exact offsets, gap black, mouse/keyboard switching, fixed/follow audio,
+  playback, paused preview, cancel/no-output, recovery, 8/8 folder relink,
+  save/reopen, and a 67-frame MP4 whose sampled switch frames match preview;
+  finish with a clean eight-source reopen, guarded roll/lock checks, zero
+  console warnings/errors, and closed temporary owners.
+- [x] Pass all 274 Vitest files / 3,798 tests plus all 17 runner checks,
+  production build/typecheck (4,961 modules), clean lint, zero-vulnerability
+  production audit, and diff hygiene.
+- [ ] Push/publish only after explicit authorization; do not merge or close
+  Issue #193 from this local implementation turn.

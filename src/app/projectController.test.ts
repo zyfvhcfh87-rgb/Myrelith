@@ -361,6 +361,7 @@ function makeProject(
     name,
     rootSequenceId: document.id,
     sequences: [document],
+    multicams: [],
     assets,
     collections: [...collections],
   }

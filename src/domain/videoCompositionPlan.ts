@@ -4,6 +4,8 @@ import type {
   AdjustmentItem,
   CaptionTrackId,
   Clip,
+  MulticamDefinitionId,
+  MulticamInstanceId,
   TimelineDoc,
   TrackId,
   SequenceInstanceId,
@@ -114,12 +116,22 @@ export interface SequenceBackgroundCompositionItem {
   instancePath: readonly SequenceInstanceId[]
 }
 
+/** Opaque black base of one live multicam item, including uncovered angles. */
+export interface MulticamBackgroundCompositionItem {
+  kind: 'multicam-background'
+  trackId: TrackId
+  frame: number
+  instanceId: MulticamInstanceId
+  multicamId: MulticamDefinitionId
+}
+
 export type VideoCompositionItem =
   | OrdinaryVideoPlanItem
   | TextOverlayPlanItem
   | AdjustmentCompositionItem
   | CaptionPlanItem
   | SequenceBackgroundCompositionItem
+  | MulticamBackgroundCompositionItem
   | CrossfadeCompositionItem
 
 /** One transferable, paint-ordered plan for one exact document frame. */
@@ -339,6 +351,7 @@ export function videoCompositionRequests(
       || item.kind === 'caption'
       || item.kind === 'adjustment'
       || item.kind === 'sequence-background'
+      || item.kind === 'multicam-background'
     ) continue
     for (const request of item.requests) {
       if (request.opacity <= 0 || request.weight <= 0) continue

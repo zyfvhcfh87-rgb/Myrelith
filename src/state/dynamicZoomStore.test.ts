@@ -37,7 +37,7 @@ function makeClip(): Clip {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 19,
+    schemaVersion: 20,
     id: 'doc-dynamic-store',
     name: 'Dynamic zoom history',
     frameRate: { num: 30, den: 1 },

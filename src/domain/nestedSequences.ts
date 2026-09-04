@@ -2,6 +2,7 @@
 
 import type {
   Clip,
+  MulticamInstance,
   SequenceInstance,
   SequenceInstanceId,
   TimelineDoc,
@@ -34,17 +35,34 @@ export interface NestedSequenceClipLeaf {
   readonly instancePath: readonly SequenceInstanceId[]
 }
 
+export interface NestedSequenceMulticamLeaf {
+  readonly kind: 'multicam'
+  readonly sequenceId: string
+  readonly trackId: TrackId
+  readonly instanceId: string
+  readonly frame: number
+  readonly instancePath: readonly SequenceInstanceId[]
+}
+
+export type NestedSequenceLeaf =
+  | NestedSequenceClipLeaf
+  | NestedSequenceMulticamLeaf
+
 export interface NestedSequenceFrameExpansion {
   readonly rootSequenceId: string
   readonly rootFrame: number
   readonly mediaKind: TrackKind
-  readonly leaves: readonly NestedSequenceClipLeaf[]
+  readonly leaves: readonly NestedSequenceLeaf[]
   readonly visitedSequenceInstances: number
   readonly maxDepth: number
 }
 
 export function sequenceInstances(track: Track): readonly SequenceInstance[] {
   return track.sequenceInstances ?? []
+}
+
+export function multicamInstances(track: Track): readonly MulticamInstance[] {
+  return track.multicamInstances ?? []
 }
 
 function sequenceById(
@@ -68,7 +86,9 @@ function assertIdentifier(value: string, label: string): void {
   }
 }
 
-function assertInstanceRange(instance: SequenceInstance): void {
+function assertInstanceRange(
+  instance: Pick<SequenceInstance, 'id' | 'sourceStartFrame' | 'timelineRange'>,
+): void {
   const start = instance.timelineRange.startFrame
   const duration = instance.timelineRange.durationFrames
   const end = start + duration
@@ -105,6 +125,7 @@ function validateTrackInstances(
   const occupied = [
     ...track.clips.map((item) => item.timelineRange),
     ...(track.adjustments ?? []).map((item) => item.timelineRange),
+    ...multicamInstances(track).map((item) => item.timelineRange),
   ]
   for (const instance of instances) {
     assertIdentifier(instance.id, 'sequence instance id')
@@ -141,6 +162,46 @@ function validateTrackInstances(
   return instances.length
 }
 
+function validateTrackMulticams(
+  project: SequenceProject,
+  track: Track,
+  ids: Set<string>,
+): void {
+  const definitions = new Map((project.multicams ?? []).map((item) => [item.id, item]))
+  let previousEnd = -1
+  const occupied = [
+    ...track.clips.map((item) => item.timelineRange),
+    ...(track.adjustments ?? []).map((item) => item.timelineRange),
+    ...sequenceInstances(track).map((item) => item.timelineRange),
+  ]
+  for (const instance of multicamInstances(track)) {
+    assertIdentifier(instance.id, 'multicam instance id')
+    if (ids.has(instance.id)) {
+      throw new RangeError(`duplicate timeline item id "${instance.id}"`)
+    }
+    ids.add(instance.id)
+    assertInstanceRange(instance)
+    if (instance.timelineRange.startFrame < previousEnd) {
+      throw new RangeError(`multicam instance "${instance.id}" overlaps another instance`)
+    }
+    if (occupied.some((range) => overlaps(instance.timelineRange, range))) {
+      throw new RangeError(`multicam instance "${instance.id}" overlaps another item`)
+    }
+    const definition = definitions.get(instance.multicamId)
+    if (
+      !definition
+      || instance.sourceStartFrame + instance.timelineRange.durationFrames
+        > definition.durationFrames
+    ) {
+      throw new RangeError(
+        `multicam instance "${instance.id}" references a missing or uncovered definition`,
+      )
+    }
+    previousEnd = rangeEnd(instance.timelineRange)
+    occupied.push(instance.timelineRange)
+  }
+}
+
 /** Validate active and dormant definitions, returning frozen graph facts. */
 export function analyzeNestedSequenceGraph(
   project: SequenceProject,
@@ -153,6 +214,7 @@ export function analyzeNestedSequenceGraph(
   for (const sequence of project.sequences) {
     for (const track of sequence.tracks) {
       referenceCount += validateTrackInstances(project, sequence, track, instanceIds)
+      validateTrackMulticams(project, track, instanceIds)
     }
   }
 
@@ -201,6 +263,7 @@ export function analyzeNestedSequenceGraph(
         let trackMaximum = track.clips.length > 0
           ? mediaKind === 'video' && track.transitions.length > 0 ? 2 : 1
           : 0
+        if (multicamInstances(track).length > 0) trackMaximum = Math.max(trackMaximum, 1)
         for (const instance of sequenceInstances(track)) {
           trackMaximum = Math.max(
             trackMaximum,
@@ -262,6 +325,17 @@ function activeClipAt(track: Track, frame: number): Clip | null {
   return null
 }
 
+function activeMulticamAt(track: Track, frame: number): MulticamInstance | null {
+  for (const instance of multicamInstances(track)) {
+    if (
+      instance.timelineRange.startFrame <= frame
+      && frame < rangeEnd(instance.timelineRange)
+    ) return instance
+    if (instance.timelineRange.startFrame > frame) break
+  }
+  return null
+}
+
 function tracksOfKind(sequence: TimelineDoc, mediaKind: TrackKind): readonly Track[] {
   return sequence.tracks.filter((track) => track.kind === mediaKind)
 }
@@ -289,7 +363,7 @@ export function expandNestedSequenceFrame(
   if (frame >= docDurationFrames(root)) {
     throw new RangeError('frame falls outside the requested sequence')
   }
-  const leaves: NestedSequenceClipLeaf[] = []
+  const leaves: NestedSequenceLeaf[] = []
   let visitedSequenceInstances = 0
   let maxDepth = 1
 
@@ -314,6 +388,25 @@ export function expandNestedSequenceFrame(
           [...instancePath, nested.id],
           depth + 1,
         )
+        continue
+      }
+      const multicam = activeMulticamAt(track, localFrame)
+      if (multicam) {
+        if (leaves.length >= MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME) {
+          throw new RangeError(
+            `nested frame exceeds ${MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME} leaf requests`,
+          )
+        }
+        leaves.push(Object.freeze({
+          kind: 'multicam',
+          sequenceId: sequence.id,
+          trackId: track.id,
+          instanceId: multicam.id,
+          frame: multicam.sourceStartFrame
+            + localFrame
+            - multicam.timelineRange.startFrame,
+          instancePath: Object.freeze([...instancePath]),
+        }))
         continue
       }
       const clip = activeClipAt(track, localFrame)

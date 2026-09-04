@@ -520,6 +520,17 @@ function migrateSequenceInstances(documentValue: unknown): JsonRecord {
   return { ...document, schemaVersion: 19, tracks }
 }
 
+/** Upgrade schema-19 tracks with explicit empty multicam-item collections. */
+function migrateMulticamInstances(documentValue: unknown): JsonRecord {
+  const document = record(documentValue, '$.document')
+  boundedArray(document.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+  const tracks = document.tracks.map((trackValue, trackIndex) => {
+    const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
+    return { ...track, multicamInstances: [] }
+  })
+  return { ...document, schemaVersion: 20, tracks }
+}
+
 /**
  * Upgrade a parsed historical timeline to the current nested schema. The
  * outer project format and nested timeline schema are independent version
@@ -593,6 +604,9 @@ function migrateTimelineDocument(
   if (migrated.schemaVersion === 18) {
     migrated = migrateSequenceInstances(migrated)
   }
+  if (migrated.schemaVersion === 19) {
+    migrated = migrateMulticamInstances(migrated)
+  }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
     const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
@@ -639,7 +653,8 @@ function migrateLegacyAssetBounds(assetsValue: unknown): JsonRecord[] {
 /**
  * Upgrade a parsed historical value into the current format. Outer version 4
  * added durable stream bounds, version 5 added Media Pool collections, and
- * version 6 wraps the unchanged historical document as the sole root sequence.
+ * version 6 wraps the unchanged historical document as the sole root sequence;
+ * version 7 adds project-owned multicam definitions.
  * Nested migrations remain independently versioned on TimelineDoc.
  */
 export function migrateProjectFile(value: unknown): unknown {
@@ -666,6 +681,10 @@ export function migrateProjectFile(value: unknown): unknown {
   ) {
     fail('$.collections', 'unknown field for this project format')
   }
+  if (
+    brandedProject.formatVersion < 7
+    && Object.prototype.hasOwnProperty.call(brandedProject, 'multicams')
+  ) fail('$.multicams', 'unknown field for this project format')
   switch (brandedProject.formatVersion) {
     case 1:
     case 2:
@@ -680,6 +699,7 @@ export function migrateProjectFile(value: unknown): unknown {
         name: document.name,
         rootSequenceId: document.id,
         sequences: [document],
+        multicams: [],
         assets,
         collections: [],
       }
@@ -697,6 +717,7 @@ export function migrateProjectFile(value: unknown): unknown {
         name: document.name,
         rootSequenceId: document.id,
         sequences: [document],
+        multicams: [],
         collections: [],
       }
     }
@@ -713,8 +734,23 @@ export function migrateProjectFile(value: unknown): unknown {
         name: document.name,
         rootSequenceId: document.id,
         sequences: [document],
+        multicams: [],
       }
     }
+    case 6:
+      boundedArray(
+        brandedProject.sequences,
+        '$.sequences',
+        PROJECT_FILE_LIMITS.maxSequences,
+      )
+      return {
+        ...brandedProject,
+        formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
+        multicams: [],
+        sequences: brandedProject.sequences.map((sequence) => (
+          migrateTimelineDocument(sequence, brandedProject.assets)
+        )),
+      }
     case CURRENT_PROJECT_FORMAT_VERSION:
       boundedArray(
         brandedProject.sequences,

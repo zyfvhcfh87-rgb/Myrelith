@@ -188,15 +188,23 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   sole root. Validation covers active and dormant sequences before stores or
   resources change, including the root, global ids, per-sequence invariants,
   and aggregate project budgets. Media descriptors, connected resources, and
-  collections remain project-owned once, outside all sequences. Schema 19 adds
-  live `Track.sequenceInstances` referencing those central definitions with
+  collections remain project-owned once, outside all sequences. Project format
+  7 adds bounded, resource-free `MulticamDefinition` records alongside those
+  sequences. Schema 19 adds live `Track.sequenceInstances` referencing central
+  sequence definitions with
   exact same-settings, integer-frame source/parent ranges. Whole-project graph
   admission includes dormant definitions, rejects cycles and missing references,
   and bounds depth to eight and worst-case expansion to 4,096 leaves per media
   kind, including hidden/muted tracks. Shared project visual/audio planners
   flatten immutable leaves; uncovered ranges remain explicit black/silence.
   Preview effect status uses those same resolved child-frame visual leaves for
-  active instances. Multicam and mixed-settings timelines remain unsupported.
+  active instances. Schema 20 adds `Track.multicamInstances`; linked video/audio
+  instances reference one project-owned definition whose two-to-eight manually
+  aligned angles, exact coverage, ordered switches, and fixed/follow-video audio
+  policy are validated before admission. The same immutable project planners
+  resolve multicam video and audio for preview, playback, nested sequences, and
+  export. Mixed-settings nesting, automatic sync, unlimited angles, and a live
+  simultaneous angle wall remain unsupported.
 - `TimeRange` is **half-open** `[startFrame, startFrame + durationFrames)`;
   ranges that merely touch do not overlap. All ranges are integer frames at
   the document rate.
@@ -988,6 +996,13 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   non-root falls back to the root. Navigation does not enter history or mark
   the project dirty. `setDoc` remains a narrow sole-root compatibility adapter
   for tests and legacy callers. Editing actions include
+  `createMulticam(command)` (manual-sync definition plus linked video/audio
+  placement as one atomic project edit), `editMulticamInstance(command)`
+  (move/trim/split/duplicate/delete across a linked pair atomically), and
+  `editMulticamDefinition(command)` (shared cut/roll/audio/angle intent;
+  rejected while any referencing lane is locked). Successful mutations push
+  one project-history snapshot; rejected and idempotent commands preserve the
+  exact project reference and push none.
   `splitClipAtPlayhead(frame)`, `splitClipAt(clipId, frame)`,
   `insertClip(trackId, clip)`, `insertClips([{trackId, clip}...])` (atomic
   batch, one history entry — the A/V drop path), `trimClip(clipId, edge,

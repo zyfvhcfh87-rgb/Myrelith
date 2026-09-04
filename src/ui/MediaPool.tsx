@@ -1188,7 +1188,12 @@ export default function MediaPool() {
     mediaPoolView.viewMode,
   ])
   const virtualizer = useMediaPoolVirtualizer(sortedItems, rowLayout)
-  const { scrollToStart, visibleItemIds } = virtualizer
+  const {
+    ensureRowVisible,
+    rowIndexByItemId,
+    scrollToStart,
+    visibleItemIds,
+  } = virtualizer
   const filteredIndexById = useMemo(() => new Map(
     sortedItems.map((item, index) => [item.id, index] as const),
   ), [sortedItems])
@@ -1254,15 +1259,16 @@ export default function MediaPool() {
 
   useEffect(() => {
     if (!effectiveSelectedAssetId) return
-    const rowIndex = virtualizer.rowIndexByItemId.get(effectiveSelectedAssetId)
-    if (rowIndex !== undefined) virtualizer.ensureRowVisible(rowIndex)
+    const rowIndex = rowIndexByItemId.get(effectiveSelectedAssetId)
+    if (rowIndex !== undefined) ensureRowVisible(rowIndex)
   }, [
     effectiveSelectedAssetId,
+    ensureRowVisible,
     mediaPoolView.sortDirection,
     mediaPoolView.sortField,
     mediaPoolView.thumbnailSize,
     mediaPoolView.viewMode,
-    virtualizer,
+    rowIndexByItemId,
   ])
 
   const partialReviewItem = partialReview
