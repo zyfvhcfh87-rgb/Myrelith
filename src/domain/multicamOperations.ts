@@ -458,9 +458,7 @@ export function applyMulticamInstanceEdit(
         ...member.instance,
         id: copyId,
         timelineRange: range,
-        ...(copyLinkGroupId
-          ? { linkGroupId: copyLinkGroupId }
-          : { linkGroupId: undefined }),
+        ...(copyLinkGroupId ? { linkGroupId: copyLinkGroupId } : {}),
       })
     }
     const nextSequence = {
@@ -519,9 +517,7 @@ export function applyMulticamInstanceEdit(
           startFrame: command.frame,
           durationFrames: endFrame - command.frame,
         },
-        ...(rightLinkGroupId
-          ? { linkGroupId: rightLinkGroupId }
-          : { linkGroupId: undefined }),
+        ...(rightLinkGroupId ? { linkGroupId: rightLinkGroupId } : {}),
       })
     }
     const memberIds = new Set(members.map(({ instance }) => instance.id))
