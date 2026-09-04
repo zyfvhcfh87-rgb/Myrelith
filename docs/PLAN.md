@@ -5007,7 +5007,7 @@ Chromium tests. Vite retains only the established non-fatal large-chunk notice.
   save/reopen, and a 67-frame MP4 whose sampled switch frames match preview;
   finish with a clean eight-source reopen, guarded roll/lock checks, zero
   console warnings/errors, and closed temporary owners.
-- [x] Pass all 274 Vitest files / 3,798 tests plus all 17 runner checks,
+- [x] Pass all 274 Vitest files / 3,799 tests plus all 17 runner checks,
   production build/typecheck (4,961 modules), clean lint, zero-vulnerability
   production audit, and diff hygiene.
 - [ ] Push/publish only after explicit authorization; do not merge or close

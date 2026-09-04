@@ -5365,7 +5365,7 @@ surface; it is not a second zoom and never enters document history.
   A final clean reopen also exercised the roll shortcut and linked-lane lock
   guard with eight offline sources; Chromium reported zero console warnings or
   errors and all temporary owners were closed.
-- The authoritative gate passes all 274 Vitest files / 3,798 tests plus all 17
+- The authoritative gate passes all 274 Vitest files / 3,799 tests plus all 17
   repository runner checks, production build/typecheck (4,961 modules), clean
   oxlint, a zero-vulnerability production audit, and diff hygiene. Vite retains
   only the established non-fatal large-chunk notice.

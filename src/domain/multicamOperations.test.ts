@@ -245,6 +245,49 @@ describe('multicam project edit seam', () => {
     expect(deleted.project.multicams).toEqual(created.project.multicams)
   })
 
+  test('rejects duplicate overlap and omits link keys from unlinked copies', () => {
+    const created = createMulticamFromAssets(project(), 'root', {
+      name: 'Concert',
+      startFrame: 20,
+      videoTrackId: 'V1',
+      audioTrackId: null,
+      angles: [
+        { assetId: 'wide', name: 'Wide', durationFrames: 120, syncFrame: 0 },
+        { assetId: 'close', name: 'Close', durationFrames: 120, syncFrame: 0 },
+      ],
+      audioPolicy: { kind: 'fixed', angleIndex: 0 },
+    }, idFactory())
+
+    const rejected = applyMulticamInstanceEdit(created.project, 'root', {
+      kind: 'duplicate',
+      instanceId: created.videoInstanceId!,
+      startFrame: 20,
+    }, idFactory())
+    expect(rejected).toEqual({ project: created.project, failure: 'overlap' })
+
+    const duplicated = applyMulticamInstanceEdit(created.project, 'root', {
+      kind: 'duplicate',
+      instanceId: created.videoInstanceId!,
+      startFrame: 200,
+    }, idFactory())
+    expect(duplicated.failure).toBeNull()
+    const duplicate = duplicated.project.sequences[0].tracks[0]
+      .multicamInstances?.find((instance) => instance.timelineRange.startFrame === 200)
+    expect(duplicate).toBeDefined()
+    expect(Object.prototype.hasOwnProperty.call(duplicate, 'linkGroupId')).toBe(false)
+
+    const split = applyMulticamInstanceEdit(duplicated.project, 'root', {
+      kind: 'split',
+      instanceId: created.videoInstanceId!,
+      frame: 70,
+    }, idFactory())
+    expect(split.failure).toBeNull()
+    const right = split.project.sequences[0].tracks[0]
+      .multicamInstances?.find((instance) => instance.timelineRange.startFrame === 70)
+    expect(right).toBeDefined()
+    expect(Object.prototype.hasOwnProperty.call(right, 'linkGroupId')).toBe(false)
+  })
+
   test('authors, changes, and rolls cuts while keeping audio policy independent', () => {
     const created = createMulticamFromAssets(project(), 'root', {
       name: 'Concert',
