@@ -319,6 +319,17 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   No production entry may import it. Follow-up issues must replace the relevant
   prototype with separately reviewed production contracts rather than shipping
   through the research module.
+- Issue #194's `domain/multicamAlignmentResearch.ts`,
+  `domain/multicamTimecodeResearch.ts`,
+  `domain/multicamAlignmentProvenanceResearch.ts`, and their synthetic fixture
+  module are build-unreferenced audio/timecode feasibility work. The architecture guard
+  rejects product imports, including dynamic imports, of these modules. They
+  consume borrowed decoded PCM or normalized fixture evidence only, own no
+  browser resources, and never establish metadata trust or mutate project,
+  cache, history, or UI state. Audio provenance must be separately reviewed;
+  the existing motion-cache identity cannot be repurposed with fake video
+  facts. The staged contract and remaining gates are in
+  `docs/MULTICAM_ALIGNMENT.md`.
 - `domain/pluginManifest.ts` is the pure, non-executing structural validator and
   compatibility negotiator for the proposed plugin manifest. It reuses the
   durable effect-number/key bounds, requires one package-unique render export per

@@ -387,6 +387,19 @@ describe('architecture guard', () => {
     expect(runtimeCycles(edges)).toEqual([])
   })
 
+  test('keeps Issue 194 alignment research outside all product imports', () => {
+    const researchModules = new Set([
+      'domain/multicamAlignmentResearch.ts',
+      'domain/multicamTimecodeResearch.ts',
+      'domain/multicamAlignmentResearchFixtures.ts',
+      'domain/multicamAlignmentProvenanceResearch.ts',
+    ])
+    expect(edges.filter((edge) => (
+      edge.to && researchModules.has(moduleName(edge.to))
+      && !researchModules.has(moduleName(edge.from))
+    )).map(edgeLabel)).toEqual([])
+  })
+
   test('keeps editor and secondary surfaces outside their eager entry graphs', () => {
     const launcherClosure = eagerRuntimeClosure(['main.tsx'], edges)
     expect(launcherClosure).toContain('app/App.tsx')

@@ -5375,3 +5375,39 @@ surface; it is not a second zoom and never enters document history.
   regression and both threads were resolved. Fresh CI and Bugbot passed that
   exact head before normal merge `9e7ea59`; its tree matches the reviewed head,
   Issue #193 closed as completed, and master CI run `33917746503` passed.
+
+## Post-MVP issue #194 - local multicam alignment, first proof
+
+**CONTRACT AND SYNTHETIC PROOF READY FOR REVIEW (2026-09-05).**
+
+- `docs/MULTICAM_ALIGNMENT.md` contains the four-gate implementation plan,
+  measured algorithm/quality envelope, proposed audio provenance, and exact
+  outstanding runtime, cache, timecode-adapter, Apply, and Chromium gates.
+  Product-plan approval and separate audio-provenance review remain pending.
+- The browser-free candidate streams 1–2 channel PCM into at most 6,000
+  200 Hz log-RMS features per selected 5–30-second window. It correlates
+  bounded lags, reports score/alternative/coverage, refuses silent/ambiguous
+  matches, and maps exact source-sample origins into signed integer offsets.
+  Those are research results only; no project or history is mutated.
+- Strict normalized timecode fixtures admit only declared continuous non-drop
+  same-rate/same-clock semantics. This is not a media-container parser or proof
+  of metadata trust. Actual imported timecode remains unsupported until its
+  bounded adapter passes a separate gate.
+- New audio feature/pair key preimages bind all source/project/stream/decode/
+  window/rate/policy/definition facts without repurposing video-motion fields.
+  They register no production schema and write no cache data. The architecture
+  guard blocks product imports, including dynamic imports, of the proof modules.
+- `npm run qa:issue194:research` records source-bound evidence under ignored
+  `.tmp/issue194/`. Nine synthetic quality cases resolve within one frame,
+  three negative cases refuse offsets, and seven 30-second target comparisons
+  use 77,035,000 sample pairs within the 84,042,000 aggregate ceiling.
+  Recorded speech, browser decode, live cancellation/storage, UI, and export
+  acceptance are explicitly still pending.
+- Validation passes 106 focused proof/architecture tests, all 277 Vitest files
+  / 3,900 tests, all 17 runner checks, production build/typecheck, lint, a
+  zero-vulnerability production audit, and diff checks. Build output contains
+  none of the research module/format markers and retains only the established
+  large-chunk advisory. The detailed contract records the
+  corrected initial binding-test assumption, WebSocket runner warning, and
+  build-only literal-parameter type error so those are not mistaken for a
+  first-try clean pass.
