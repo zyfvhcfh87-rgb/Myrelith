@@ -5461,3 +5461,41 @@ surface; it is not a second zoom and never enters document history.
   `scripts/issue194/fetch-speech-fixture.mjs` and `ISSUE194_SPEECH_WAV`; the
   recording is not bundled. GitHub publication, PR, and issue closure have not
   been performed in this local implementation turn.
+
+## Post-MVP issue #195 - multicam monitoring research gate
+
+**RESEARCH COMPLETE LOCALLY; USER APPROVAL PENDING (2026-09-05).**
+
+- Start with [MULTICAM_MONITOR_RESEARCH.md](MULTICAM_MONITOR_RESEARCH.md).
+  The recommendation is a conditional GO to bounded, proxy-first engineering;
+  unrestricted live-wall enablement is a NO-GO. The user explicitly requested
+  research review before implementation. No product runtime/UI was changed.
+- The isolated `scripts/issue195/` lab measures actual Program/audio alongside
+  2/4/8 total angles. Program counts as the active angle; at most seven extra
+  lanes sample at 320×180 / 10 fps. Fresh production 720p AVC proxies passed all
+  sizes on the measured M5 Max/Chromium 151 host. Original 1080 AVC passed 2/4;
+  original 4K AVC passed 2 with very little accounted memory headroom. Larger
+  originals were denied. VP9 originals failed the no-wall Program baseline;
+  5 fps tiles did not fix it. Other devices/codecs remain unproven.
+- The reusable forward cursor retained too many frame references. Finite
+  adapter cursors could acknowledge close before native decoders closed. The
+  accepted research owner uses finite native decoders with explicit disposal;
+  all 32 admitted final timing attempts reached observed zero. It is unshipped
+  and not a production-ready replacement for the general video-source adapter.
+- First implementation gates: one shared Program/audio-first admission owner,
+  bounded demux/native ownership, initial-hidden admission refusal, freshness
+  and cancellation races, then adaptive fallback and accessible UI. The lab
+  exposed the initial-hidden gap; browser memory pressure did not provide a
+  reliable automatic retirement signal. Native/GPU physical-memory bounds,
+  broad codecs, low-memory/long-session behavior, concurrent jobs and full
+  project-controller replacement/recovery remain product acceptance work.
+- Durable measured and rejected evidence is in `docs/evidence/issue195/`.
+  Foreground has 52 timed rows; separate native lifecycle probes distinguish
+  valid hidden/freeze cleanup from Playwright focus emulation and Vite reload
+  interference. Fault counts are observations, not a blanket pass count.
+- Dedicated typecheck / 4 research tests, 17 runner checks, build (4,971
+  modules), lint and zero-vulnerability production audit pass. Full Vitest is
+  3,946/3,947 across 284 files: the remaining plugin-startup `safe-mode` failure
+  reproduces identically (23/24 focused) on isolated unchanged `3653c9a`.
+  The full suite is not claimed green. No GitHub publication or issue closure
+  has been performed; continue only after the user approves the research plan.

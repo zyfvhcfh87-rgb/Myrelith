@@ -401,6 +401,13 @@ describe('architecture guard', () => {
     )).map(edgeLabel)).toEqual([])
   })
 
+  test('keeps the Issue 195 browser laboratory outside production imports', () => {
+    // scripts/ is outside SOURCE_ROOT, so resolved source edges alone cannot
+    // detect this boundary. Check static, dynamic and re-export specifiers.
+    expect(edges.filter((edge) => /(?:^|\/)issue195(?:\/|$)/.test(edge.specifier))
+      .map(edgeLabel)).toEqual([])
+  })
+
   test('keeps editor and secondary surfaces outside their eager entry graphs', () => {
     const launcherClosure = eagerRuntimeClosure(['main.tsx'], edges)
     expect(launcherClosure).toContain('app/App.tsx')

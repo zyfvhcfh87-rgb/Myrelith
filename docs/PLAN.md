@@ -5051,3 +5051,31 @@ Contract and four-gate plan: [MULTICAM_ALIGNMENT.md](MULTICAM_ALIGNMENT.md).
   eight failures (existing button height, AAC duration, missing full FFmpeg,
   and five wheel-event timing assertions). Details and reproduction commands
   are in the contract; the wider suite is not reported as green.
+
+## Post-MVP issue #195 - bounded simultaneous multicam monitoring research
+
+**RESEARCH COMPLETE LOCALLY; IMPLEMENTATION AWAITS USER APPROVAL (2026-09-05).**
+
+Research contract, measured limits and proposed implementation gates:
+[MULTICAM_MONITOR_RESEARCH.md](MULTICAM_MONITOR_RESEARCH.md).
+
+- [x] Trace decoder/surface ownership, Program/audio priority, proxy provenance
+  and the lack of a shared admission authority.
+- [x] Preregister thresholds and compare 2/4/8 total-angle original/proxy cells
+  against paired real-Program baselines on AVC 1080, VP9 1080 and AVC 2160.
+- [x] Reject excessive forward-cursor frame retention and premature finite-
+  cursor close acknowledgements; demonstrate an explicitly owned finite native
+  decoder candidate and record actual terminal ownership.
+- [x] Publish the 52-row final matrix, 64-row rejected candidate and classified
+  fault observations, including exact cuts, cancellation, source/proxy changes,
+  GPU process loss, hidden/freeze correction and negative pressure/admission
+  evidence. Label single-host synthetic scope and all unproven support cells.
+- [x] Document a conditional proxy-first engineering GO, unrestricted-wall NO-GO,
+  shared admission/adaptive fallback design and separate product acceptance.
+- [x] Pass dedicated typecheck / 4 research tests, 17 repository runner checks,
+  production build (4,971 modules), lint, zero-vulnerability production audit
+  and production exclusion. Record 3,946/3,947 full Vitest cases; reproduce the
+  one plugin-startup failure on unchanged `3653c9a` instead of claiming green.
+- [ ] Obtain the user's research-gate approval.
+- [ ] Implement and prove shared admission/suspension and finite source-bound
+  decoding, then adaptive fallback, accessible UI and complete product gates.

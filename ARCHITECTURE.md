@@ -332,6 +332,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   admits only the documented bounded QuickTime profile, with explicit shared
   clock/day confirmation. Runtime buffers, cache keys and metadata evidence stay
   outside portable projects/recovery. See `docs/MULTICAM_ALIGNMENT.md`.
+- Issue #195's unshipped laboratory lives only under `scripts/issue195/`.
+  Its explicit browser runner may compose existing app/state facades and the
+  production worker video-source adapter or an isolated finite WebCodecs owner
+  to measure real Program playback,
+  fresh proxies and disposable thumbnail owners. No production source may
+  import this laboratory, including through dynamic imports or re-exports.
+  It introduces no product decoder admission policy or angle-wall UI. Research
+  decisions and limitations live in `docs/MULTICAM_MONITOR_RESEARCH.md`.
 - `domain/pluginManifest.ts` is the pure, non-executing structural validator and
   compatibility negotiator for the proposed plugin manifest. It reuses the
   durable effect-number/key bounds, requires one package-unique render export per
