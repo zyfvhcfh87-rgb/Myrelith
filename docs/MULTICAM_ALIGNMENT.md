@@ -1,7 +1,9 @@
 # Multicam alignment — Issue #194
 
-Status: first contract and synthetic feasibility proof ready for review.
-Product integration and the new audio-cache provenance still require review.
+Status: implementation plan and audio-cache contract approved by the user on
+2026-09-05. Implementation and Issue #194 acceptance are complete. Eight
+pre-existing/environment failures in the wider Chromium suite are reproduced
+on the original committed baseline and listed below.
 
 ## Intended workflow
 
@@ -33,18 +35,18 @@ filename, file modification time, or container creation date is insufficient.
 - The current import descriptors contain no trusted source timecode. The
   ruler's formatTimecode function formats editor frame numbers; it is not a
   source-metadata parser.
-- The first executable proof is browser-free and excluded from production.
-  No new cache schema, import behavior, store action, or editor control is
-  enabled by this gate.
+- The first gate proved the pure algorithm outside production. After approval,
+  its arithmetic and provenance modules were promoted into the product. The
+  architecture guard still excludes the synthetic fixture generator.
 
 ## Gates and implementation plan
 
-1. **Contract and quality proof (implemented; review pending).** Pin the algorithm, resource
+1. **Contract and quality proof (implemented; approved 2026-09-05).** Pin the algorithm, resource
    limits, offset sign/rounding, negative fixtures, strict normalized timecode
    evidence, and a separately versioned audio provenance. Run deterministic
    fixtures and audit the production import graph. Review this contract before
    product use. Synthetic speech-shaped fixtures do not replace real speech QA.
-2. **Runtime and cache foundation.** Add a discriminated audio provenance to
+2. **Runtime and cache foundation (complete).** Add a discriminated audio provenance to
    the shared derived cache through an explicit schema migration. Preserve
    existing motion entries and rollback semantics. Decode selected windows
    into streaming energy features with one scheduled job/decoder; bind every
@@ -53,13 +55,13 @@ filename, file modification time, or container creation date is insufficient.
    Separately prove a bounded container timecode profile and its metadata
    adapter. If any required semantic fact is unavailable, expose that reason;
    no generic text tag can stand in for the missing evidence.
-3. **Review and Apply.** Add an app facade and serializable proposal store,
+3. **Review and Apply (complete).** Add an app facade and serializable proposal store,
    bounded accessible controls, and one atomic multicam-offset domain action.
    Revalidate all shared-definition locks, coverage, source bounds, ids, and
    project budgets at Apply. Do not extend definition/instance durations or
    discard source tails silently: refuse a proposal that cannot fit existing
    geometry and explain the necessary manual edit. Keep manual controls live.
-4. **Real-source acceptance and delivery.** Chromium must cover decoded
+4. **Real-source acceptance and delivery (issue acceptance complete).** Chromium must cover decoded
    speech/noise/event audio, ambiguity, cancellation, cache hit/stale rejection,
    manual correction, one-entry undo/redo, recovery/export parity, and cleanup.
    Timecode success requires a reviewed container adapter and encoded fixture;
@@ -67,9 +69,8 @@ filename, file modification time, or container creation date is insufficient.
    tests, build/typecheck, lint, production audit, and diff checks at each
    applicable gate; commit with repository authorship conventions.
 
-The plan follows the explicitly selected Issue #194. docs/PLAN.md requires a
-user-approved plan for new post-MVP work; approval of the product gates and
-review of audio provenance are recorded separately from this first proof.
+The plan follows the explicitly selected Issue #194. The user approved both
+the product implementation plan and the audio-cache contract on 2026-09-05.
 
 ## Audio candidate: log-energy correlation v1
 
@@ -103,10 +104,10 @@ different edits, stretches, independent noise, and heavily dissimilar mixes are
 unsupported; short windows cannot establish alignment across a long recording.
 The UI must describe that the result is a constant offset near the chosen event.
 
-The proof consumes already decoded PCM. Its feature averaging is energy
-integration, not an audio resampler. The later decoder must account for real
+The pure algorithm consumes already decoded PCM. Its feature averaging is
+energy integration, not an audio resampler. The runtime decoder accounts for real
 source timestamps, edit-list origins, priming/discard padding, gaps, and codec
-configuration before supplying continuous samples. It must reject gaps or
+configuration before supplying continuous samples. It rejects gaps or
 unknown origin rather than pad silence, shift the first sample, or use native
 average video frame rate as the audio clock. Decoder configuration and
 implementation versions belong in feature provenance.
@@ -126,29 +127,29 @@ a source must not reverse this sign or lose the window origin. Preserve all
 authored positions as integer frames; samples/seconds exist at this analysis
 boundary only.
 
-## Normalized timecode evidence (research only)
+## Normalized timecode evidence
 
-The proof validates a closed evidence record; it does not read a media
+The domain validator accepts a closed evidence record; it does not read a media
 container or establish trust. The record declares a strict HH:MM:SS:FF label,
 an exact reduced frame rate from the same allow-list, non-drop counting,
 continuous timecode, source-presentation-frame-zero origin, zero day offset,
 and an explicit common clock-domain identifier. All facts must be supplied by
-a future independently reviewed metadata adapter; an object passing this
+the bounded metadata adapter described below; an object passing this
 validator alone is not trusted metadata.
 
 Unknown/extra keys, missing flags, semicolon/drop-frame notation, negative
 values, frame labels beyond the nominal rate, discontinuity, unknown offsets,
 day wrapping, different rates/clocks, and unsupported semantics reject. The
-proof aligns only equal source/project rates, including exact rational
+domain operation aligns only equal source/project rates, including exact rational
 non-drop rates, by subtracting label frame counts. It does not infer a shared
 clock, day, or midnight wrap from labels. A product adapter must identify those
 facts or request explicit user confirmation of a common sync basis.
 
-There is no accepted container timecode profile yet. A successful normalized
-fixture proves arithmetic/rejection policy only. Product timecode support is
-still a gate, not a promised button backed by guessed metadata.
+A normalized fixture proves arithmetic/rejection policy only. Product timecode
+uses the narrow QuickTime adapter below and an explicit common-clock/day
+confirmation; other metadata remains unavailable with a reason.
 
-## Audio fingerprint provenance proposal (review required)
+## Audio fingerprint provenance (approved 2026-09-05)
 
 Use a new discriminated record in the shared derived-storage manifest, not a
 new independent storage owner. Version and migrate the manifest explicitly;
@@ -176,14 +177,14 @@ feature records and pair results cannot alias. Changing any provenance fact
 is a cache miss. Validate bytes/counts/finiteness and their exact relation to
 requested sample coverage before treating a hit as usable.
 
-The executable preimages in multicamAlignmentProvenanceResearch.ts use fixed
-JSON tuples with separate research format identifiers for features and pairs.
+The promoted preimages in multicamAlignmentProvenance.ts use fixed JSON tuples
+with separate production v1 identifiers for features and pairs.
 They validate the existing bounded opaque local-binding syntax, not a magic
-prefix. The future app must obtain that binding from its current local-project
-owner; string validation cannot establish project ownership. These preimages
-are review evidence and do not register a manifest format or make any OPFS write.
+prefix. The app obtains that binding from its current local-project owner and
+checks it again before publication and Apply; string validation cannot establish
+project ownership. Only the shared AnalysisStorage owner writes OPFS entries.
 
-Proposed audio cache ceiling: 1 MiB per entry, 16 MiB per project, 64 MiB total
+Approved audio cache ceiling: 1 MiB per entry, 16 MiB per project, 64 MiB total
 within the existing shared 512 MiB target; at most 1,024 aggregate entries.
 Apply the tighter per-kind ceilings before LRU mutation. No PCM, source bytes,
 object URLs, Files, decoders, worker handles, trust claims, or cache keys enter
@@ -192,7 +193,7 @@ Clear/remove uses the existing derived-storage registry after cancelling and
 draining matching jobs. Storage failure leaves manual editing and the project
 intact; a late committed entry rolls back before the scheduler slot is reused.
 
-## Evidence and remaining gates (2026-09-05)
+## First proof evidence (historical, before product integration)
 
 Run npm run qa:issue194:research to regenerate the source-bound JSON at
 .tmp/issue194/alignment-research.json. The committed runner hashes its exact
@@ -222,16 +223,17 @@ nonzero source-window origins, weak/unrelated audio, search-edge refusal,
 source-sample discontinuity, oversized/pinned feature buffers, and one-shot
 ownership.
 
-Real recorded speech, compressed decode, OPFS lifecycle, proposal UI, and
-Chromium product acceptance remain required gates. This proof adds no
-observable editor behavior, so a product browser gate is not claimed here.
+That first proof did not cover real recorded speech, compressed decode, OPFS
+lifecycle, proposal UI, or Chromium product acceptance. The runtime acceptance
+below supplies separate evidence; the pure runner continues to report only its
+own synthetic scope.
 
 ### Honest notes
 
 - The first provenance test incorrectly assumed the existing opaque binding
   validator requires a local-project prefix. It deliberately accepts bounded
   legacy opaque ids too; the test now checks invalid syntax, and the contract
-  explicitly assigns ownership verification to the future app controller.
+  explicitly assigns ownership verification to the app controller.
 - The first evidence runner produced Vite's WebSocket-listen warning despite
   disabled HMR. The runner now explicitly disables WebSockets as well, and the
   corrected run opens no listener and emits no warning.
@@ -253,3 +255,157 @@ observable editor behavior, so a product browser gate is not claimed here.
   and [AVFoundation timecode support](https://developer.apple.com/library/archive/technotes/tn2310/_index.html):
   labels require format/rate/flag interpretation; a generic text tag does not
   establish the media mapping or a shared recording clock.
+
+
+## Approved runtime profile (2026-09-05)
+
+The pure algorithm is promoted without changing its quality thresholds. A single
+MediaJobScheduler reservation spans the sequential reference/target windows and
+all storage settlement. Each source gets one worker: metadata is read before
+cache lookup, decoding starts only on a miss, and worker termination precedes
+releasing the native decoder count. Open/decode each have a 30-second deadline;
+read-only source/cache operations have a 10-second deadline. Cancellation during
+an owned storage write retains admission until staging is discarded or the late
+manifest transaction rolls back. Clearing disposable storage drains registered
+analysis owners first.
+
+Rollback preserves newer concurrent cache commits. It restores prior entries
+in recency order only while entry-count, shared-byte, and audio-kind ceilings
+still fit, removing retired files that cannot be restored. A regression covers
+an audio transaction evicting six short windows while motion analysis commits
+into the space it freed; rollback still succeeds inside the 1,024-entry limit.
+
+The locked Mediabunny 1.50.9 supplies source presentation timestamps, including
+container edits and codec priming. Decoded timestamps must lie within a quarter
+sample of the selected source grid and blocks must be consecutive. No padding,
+resampling, or shifting the first sample is allowed. Native samples longer than
+one second at the maximum admitted rate reject before copying; copied planar
+blocks remain at most 4,096 frames. Decoder policy binds codec configuration,
+Mediabunny version, decoder path, browser version, and these continuity rules.
+Only validated little-endian features are cached; pair results are recomputed.
+Schema 1 motion entries migrate to explicit schema 2 motion records in the same
+physical directory. Audio entries have an independent discriminator and identity.
+
+The first container timecode profile reads at most 4 MiB of movie metadata,
+4,096 bounded atom headers, 16 tracks, and one four-byte local media sample.
+It accepts a QuickTime/ISO-BMFF single video track with an explicit tmcd track
+reference, constant exact source rate, one non-drop 32-bit sample covering the
+complete video, self-contained data reference, and absent or identity edits.
+Composition offsets, fragmented media, changing formats, external data, negative
+counts, midnight crossing, drop-frame/counter/unknown flags, rate mismatch, and
+ambiguous associations reject. Optional reel names and extended nested atoms
+are outside this initial profile. The user explicitly confirms the common
+recording clock and calendar day; the parser cannot infer those from a label.
+Tests with minimal metadata containers establish this profile's validation.
+Chromium additionally imports actual encoded AVC/AAC files carrying this tmcd
+profile and resolves their known 23-frame difference. This is a generated
+container fixture, not a claim about every camera vendor's metadata.
+
+## Product acceptance (2026-09-05)
+
+The implementation uses project format 7 / timeline schema 20 unchanged.
+`set-offsets` edits only existing angle coverage starts. Proposal data belongs
+to the app controller and presentation store; Apply rechecks the immutable
+project, active sequence, local binding, source and descriptor identities,
+source bounds, all shared-definition locks, geometry, and project budget.
+Cancellation, project edits, source disconnection/replacement, and disposable
+storage clearing invalidate review. No await separates Apply validation from
+the single history mutation.
+
+| Gate | Measured result |
+|---|---|
+| Unit and repository runner tests | 284 files / 3,946 Vitest tests; all 17 runner checks |
+| Production build/typecheck | Pass, 4,971 modules; only the established large-chunk advisory |
+| Lint / production dependency audit / diff | Pass; zero production vulnerabilities |
+| Promoted pure quality runner | 9 signed-offset cases, 3 negative cases, 7 maximum-window comparisons within the work ceiling |
+| Issue #194 Chromium | 5/5 pass on Chromium 151.0.7922.34, macOS arm64, strict localhost port 41732 |
+| Wider Chromium suite | 12/20 pass; the same eight failures reproduce on the unmodified baseline, where 7/15 pass |
+
+The current pure runner fingerprint is
+sha256:1fab92972e92db83993715842536c35fd97e130262a8d73caba2f5ccee052048;
+its Node 24.19.0 run took 1,223.6 ms. This remains synthetic algorithm evidence,
+separate from the browser checks. The final local commit identifies the product
+tree; ignored `.tmp/issue194/` contains logs and the regenerable JSON.
+
+The five checked-in browser tests exercise:
+
+- Actual local AVC/AAC encoding and import, a known 0.75-second recording
+  offset proposed as 23 frames at 30 fps, preview with unchanged project/history,
+  correction to 24, one-entry Apply, exact Undo/Redo, two cache hits, and a 5 ms
+  window change that reuses only the other source.
+- Actual encoded AVC/AAC with explicitly associated tmcd tracks: common-clock/
+  day confirmation is required, the known difference is exactly 23 frames, and
+  the 720 px Inspector has no horizontal overflow. New controls and their labels
+  meet the 24 px click-target check; desktop and narrow review screenshots were
+  inspected. This profile deliberately rejects unsupported
+  timecode semantics instead of inferring them.
+- Repeated AAC audio yields an ambiguous row without an applicable offset.
+  Cancel, clear, and the existing manual angle editor remain usable; a manual
+  12-frame edit succeeds afterward.
+- Recorded LibriSpeech, encoded to AAC at 48 kHz with half-gain offset target
+  audio, resolves within one project frame. The original recording is identified
+  below; synthetic speech-shaped data is not substituted for this check.
+- Ordinary saved offsets round-trip through deterministic portable serialization.
+  The shared plan resolves target source frame 22 at project frame 45 before and
+  after serialization. A real 60-frame export is reopened and decoded: the
+  camera switch changes red to blue and audio is non-silent. The MP4 is 54,792
+  bytes and measures 2.048 seconds including the browser's existing AAC tail
+  (see the baseline note below). Actual IndexedDB
+  recovery through reload restores the same definition with two offline sources
+  and no retained proposal. Reconnection invalidates an existing review, then
+  permits fresh analysis/cache reuse. Clearing during analysis leaves zero
+  manifest entries, active analysis jobs, and active analysis decoders.
+
+These issue checks report zero browser console warnings/errors. The fixture
+owners close their audio/video samples, inputs, and export owners; analysis
+diagnostics peak at one decoder and settle at zero jobs/decoders. Recordings
+and fixture generation stay local to QA and outside the production bundle.
+
+### Reproducing recorded-speech acceptance
+
+The public [LibriSpeech corpus](https://www.openslr.org/12) is CC BY 4.0.
+The selected source is recording `1272-128104-0004`, validation row 4 of
+[the small LibriSpeech fixture dataset](https://huggingface.co/datasets/hf-internal-testing/librispeech_asr_dummy),
+revision `5be91486e11a2d616f4ec5db8d3fd248585ac07a`. Its WAV is 940,844 bytes,
+16 kHz mono, 29.4 seconds, with SHA-256
+`4798e34d9a323ed835ae6055172236f8965dd5ccf146c25758711023ecc8b2e6`.
+The downloader verifies the source path, recording id, read limit, and hash
+before writing, and refuses to replace a different existing file.
+
+```sh
+node scripts/issue194/fetch-speech-fixture.mjs /tmp/issue194-speech.wav
+ISSUE194_SPEECH_WAV=/tmp/issue194-speech.wav npm run test:browser -- tests/browser/issue-194-alignment.spec.ts
+```
+
+The downloaded recording is not checked in or shipped. Without the environment
+variable, only the recorded-speech test is explicitly skipped; the local
+acceptance above supplied it and ran all five tests. The browser fixture makes
+both AVC/AAC sources from this same recording and known source origins, using
+the real importer, worker decoder, shared storage, controller, and Apply path.
+
+### Wider-suite baseline and honest notes
+
+The complete Chromium suite was run, not assumed green from the focused tests.
+An isolated archive of original commit
+`b97c8fe0431e4f3dfdeec053b59ecbf1a896987f` reproduced all eight unrelated
+failures with the same locked dependencies and browser:
+
+- The existing New multicam button measures 23 px tall against the 24 px
+  accessibility assertion.
+- Issue #188's AAC export test measures 1.045333 seconds instead of its expected
+  1.001 seconds in this Chromium environment. Issue #194's export check proves
+  the saved offset, camera selection, and non-silent audio; it does not claim
+  to repair that pre-existing AAC-duration discrepancy.
+- The OS file-drop test cannot create fixtures because a full `ffmpeg` binary
+  is absent. Playwright's bundled recording-only ffmpeg cannot generate them.
+- Five project-setup tests read scrollTop immediately after an asynchronous
+  wheel event and observe zero. Their failures reproduce on the baseline.
+
+The local implementation fixes two issues exposed during its own verification:
+decimal 5 ms input rounding and concurrent cache rollback exceeding the shared
+entry ceiling. Test development also corrected exact-label/tab selectors, a
+recovery poll that visited an older generation, and a readback-canvas hint;
+typecheck required the NodeNext `.js` import specifier for the browser fixture.
+Corrected focused checks, full Vitest, build, and lint pass. Runner startup may
+print Node's NO_COLOR/FORCE_COLOR environment warning; page-console assertions
+remain clean. Baseline failures are retained as explicit follow-up evidence.

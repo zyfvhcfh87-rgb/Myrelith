@@ -5376,9 +5376,9 @@ surface; it is not a second zoom and never enters document history.
   exact head before normal merge `9e7ea59`; its tree matches the reviewed head,
   Issue #193 closed as completed, and master CI run `33917746503` passed.
 
-## Post-MVP issue #194 - local multicam alignment, first proof
+## Post-MVP issue #194 - local multicam alignment, first proof (historical)
 
-**CONTRACT AND SYNTHETIC PROOF READY FOR REVIEW (2026-09-05).**
+**FIRST PROOF AT b97c8fe (2026-09-05); SUPERSEDED BY APPROVED IMPLEMENTATION BELOW.**
 
 - `docs/MULTICAM_ALIGNMENT.md` contains the four-gate implementation plan,
   measured algorithm/quality envelope, proposed audio provenance, and exact
@@ -5411,3 +5411,53 @@ surface; it is not a second zoom and never enters document history.
   corrected initial binding-test assumption, WebSocket runner warning, and
   build-only literal-parameter type error so those are not mistaken for a
   first-try clean pass.
+
+## Post-MVP issue #194 - approved local audio/timecode alignment
+
+**IMPLEMENTATION AND ISSUE-SPECIFIC LOCAL ACCEPTANCE COMPLETE (2026-09-05).**
+
+- The user explicitly approved the implementation plan and audio-cache
+  contract. `docs/MULTICAM_ALIGNMENT.md` now records the shipped bounds,
+  metadata profile, source fixture, implementation decisions, and evidence.
+- `domain/multicamAlignment.ts`, `multicamTimecode.ts`, and
+  `multicamAlignmentProvenance.ts` promote the pure proof. Synthetic fixture
+  generation stays outside product imports. Shared analysis manifest schema 2
+  explicitly distinguishes motion/audio features and migrates schema 1 without
+  moving files or inventing video/clip facts. Audio has its own byte ceilings;
+  rollback preserves concurrent cache commits without exceeding shared limits.
+- `pipeline/audioAlignmentDecode.ts` and `workers/audio-alignment.worker.ts`
+  stream continuous source-timestamped mono/stereo windows into bounded energy
+  features. `app/audioAlignmentWorkerBridge.ts` closes or terminates before
+  releasing decoder admission. `app/audioAlignmentService.ts` owns one scheduled
+  job/decoder, exact source/window/decode provenance, cache reuse, deadlines,
+  cooperative correlation, and cancellation through late-write settlement.
+  `app/derivedDataOwners.ts` drains owners before disposable-storage deletion.
+- `pipeline/multicamTimecodeMetadata.ts` reads a bounded, explicitly associated
+  QuickTime tmcd profile. Only continuous non-drop source/project-matched
+  timing, zero/identity edits, and self-contained samples are admitted. The user
+  confirms a shared clock/day; unsupported semantics produce a reason.
+- `app/multicamAlignmentController.ts`, the presentation-only alignment store,
+  and `ui/MulticamAlignmentControls.tsx` expose reference/target selection,
+  windows, measured proposals, manual correction, and Apply. Proposal freshness
+  includes immutable project, sequence, local binding, media and descriptor
+  identities. One `set-offsets` history action rechecks source/geometry/locks
+  and changes ordinary integer coverage starts. Manual edits remain available;
+  project format 7 and schema 20 are unchanged.
+- Five Chromium 151 tests pass using real encoded AVC/AAC, recorded LibriSpeech,
+  and an encoded tmcd fixture. They prove a 23-frame offset, manual correction,
+  ambiguity/refusal, atomic Undo/Redo, exact cache hits/window misses, stale
+  reconnect, active clear, portable round-trip, target source-frame parity,
+  decoded export camera/audio output, and actual offline recovery after reload.
+  Reviewed screenshots fit the Inspector at desktop and 720 px; the issue tests
+  have clean page consoles and settle with no analysis jobs/decoders retained.
+- All 284 Vitest files / 3,946 tests plus 17 runner checks, production
+  build/typecheck (4,971 modules), lint, zero-vulnerability production audit,
+  and diff hygiene pass. The whole Chromium suite is 12/20, not green: all eight
+  failures reproduce on isolated original commit `b97c8fe` (7/15). They concern
+  the existing 23 px New multicam button, AAC export duration in this browser,
+  missing full FFmpeg, and five immediate wheel-scroll assertions. The contract
+  records the baseline evidence; these failures are separate follow-up work.
+- Reproduce recorded-speech QA with the pinned, bounded downloader at
+  `scripts/issue194/fetch-speech-fixture.mjs` and `ISSUE194_SPEECH_WAV`; the
+  recording is not bundled. GitHub publication, PR, and issue closure have not
+  been performed in this local implementation turn.

@@ -3,8 +3,10 @@
 import { isLocalProjectBindingId } from './localProjectBinding'
 import { MAX_DOCUMENT_ID_CHARACTERS } from './projectLimits'
 import type { FrameRate } from './schema'
+import { audioFeatureKeyPreimage, type AudioFeatureIdentity } from './multicamAlignmentProvenance'
 
-export const ANALYSIS_CACHE_SCHEMA_VERSION = 1 as const
+export const ANALYSIS_CACHE_SCHEMA_VERSION = 2 as const
+// Keep the physical root: schema 1 motion files migrate without moving bytes.
 export const ANALYSIS_CACHE_ROOT = 'myrelith-derived/analysis-cache-v1'
 export const MAX_ANALYSIS_CACHE_ENTRIES = 1_024
 export const MAX_ANALYSIS_RESULT_BYTES = 256 * 1024 * 1024
@@ -12,6 +14,9 @@ export const MAX_ANALYSIS_SAMPLES = 1_000_000
 export const ANALYSIS_CACHE_TARGET_BYTES = 512 * 1024 * 1024
 export const ANALYSIS_CACHE_MINIMUM_HEADROOM_BYTES = 128 * 1024 * 1024
 export const ANALYSIS_CACHE_TARGET_ORIGIN_USAGE_RATIO = 0.7
+export const MAX_AUDIO_FEATURE_BYTES = 1024 * 1024
+export const AUDIO_CACHE_PROJECT_BYTES = 16 * 1024 * 1024
+export const AUDIO_CACHE_TOTAL_BYTES = 64 * 1024 * 1024
 
 export type AnalysisKind = 'stabilization' | 'point-tracking' | 'box-tracking'
 
@@ -58,6 +63,7 @@ export interface AnalysisCacheIdentity {
 }
 
 export interface AnalysisCacheEntry extends AnalysisCacheIdentity {
+  readonly cacheKind: 'motion'
   readonly cacheKey: string
   readonly resultFileName: string
   readonly resultBytes: number
@@ -66,9 +72,21 @@ export interface AnalysisCacheEntry extends AnalysisCacheIdentity {
   readonly lastUsedAt: number
 }
 
+/** Audio provenance has no invented video dimensions or clip attachment. */
+export interface AudioFeatureCacheEntry extends AudioFeatureIdentity {
+  readonly cacheKind: 'audio-feature'
+  readonly cacheKey: string
+  readonly resultFileName: string
+  readonly resultBytes: number
+  readonly createdAt: number
+  readonly lastUsedAt: number
+}
+
+export type DerivedAnalysisCacheEntry = AnalysisCacheEntry | AudioFeatureCacheEntry
+
 export interface AnalysisCacheManifest {
   readonly schemaVersion: typeof ANALYSIS_CACHE_SCHEMA_VERSION
-  readonly entries: readonly AnalysisCacheEntry[]
+  readonly entries: readonly DerivedAnalysisCacheEntry[]
 }
 
 export type AnalysisCacheStaleReason =
@@ -214,6 +232,7 @@ function validAlgorithm(value: unknown): value is AnalysisAlgorithmProvenance {
 
 function validEntry(value: unknown): value is AnalysisCacheEntry {
   if (!record(value) || !exactKeys(value, [
+    'cacheKind',
     'cacheKey',
     'projectBindingId',
     'assetId',
@@ -226,7 +245,7 @@ function validEntry(value: unknown): value is AnalysisCacheEntry {
     'createdAt',
     'lastUsedAt',
   ])) return false
-  return digest(value.cacheKey)
+  return value.cacheKind === 'motion' && digest(value.cacheKey)
     && isLocalProjectBindingId(value.projectBindingId)
     && boundedString(value.assetId, MAX_DOCUMENT_ID_CHARACTERS)
     && validSource(value.source)
@@ -246,12 +265,33 @@ function validEntry(value: unknown): value is AnalysisCacheEntry {
     && value.lastUsedAt >= value.createdAt
 }
 
+export function audioFeatureIdentity(entry: AudioFeatureCacheEntry): AudioFeatureIdentity {
+  const { cacheKind: _kind, cacheKey: _key, resultFileName: _file, resultBytes: _bytes,
+    createdAt: _created, lastUsedAt: _used, ...identity } = entry
+  return identity
+}
+
+function validAudioEntry(value: unknown): value is AudioFeatureCacheEntry {
+  if (!record(value) || value.cacheKind !== 'audio-feature') return false
+  const { cacheKind: _kind, cacheKey, resultFileName, resultBytes, createdAt, lastUsedAt,
+    ...identity } = value
+  try { audioFeatureKeyPreimage(identity) } catch { return false }
+  return digest(cacheKey)
+    && typeof resultFileName === 'string' && RESULT_FILE_PATTERN.test(resultFileName)
+    && resultFileName.startsWith(`${cacheKey}.`)
+    && positiveSafeInteger(resultBytes) && resultBytes <= MAX_AUDIO_FEATURE_BYTES
+    && resultBytes === (identity.binCount as number) * 4
+    && nonNegativeSafeInteger(createdAt) && createdAt <= MAX_TIMESTAMP
+    && nonNegativeSafeInteger(lastUsedAt) && lastUsedAt <= MAX_TIMESTAMP
+    && lastUsedAt >= createdAt
+}
+
 /** Invalid/future disposable manifests fail closed instead of being repaired. */
 export function parseAnalysisCacheManifest(value: unknown): AnalysisCacheManifest {
   if (!record(value) || !exactKeys(value, ['schemaVersion', 'entries'])) {
     throw new TypeError('Analysis cache manifest must be an exact object')
   }
-  if (value.schemaVersion !== ANALYSIS_CACHE_SCHEMA_VERSION) {
+  if (value.schemaVersion !== 1 && value.schemaVersion !== ANALYSIS_CACHE_SCHEMA_VERSION) {
     throw new TypeError('Unsupported analysis cache manifest version')
   }
   if (!Array.isArray(value.entries) || value.entries.length > MAX_ANALYSIS_CACHE_ENTRIES) {
@@ -259,10 +299,18 @@ export function parseAnalysisCacheManifest(value: unknown): AnalysisCacheManifes
   }
   const cacheKeys = new Set<string>()
   const fileNames = new Set<string>()
-  const entries: AnalysisCacheEntry[] = []
+  const entries: DerivedAnalysisCacheEntry[] = []
   let aggregateBytes = 0
-  for (const rawEntry of value.entries) {
-    if (!validEntry(rawEntry)) throw new TypeError('Analysis cache manifest has an invalid entry')
+  for (const input of value.entries) {
+    // Only schema 1 may omit the discriminator; never reinterpret an audio record.
+    const rawEntry = value.schemaVersion === 1 && record(input) && !('cacheKind' in input)
+      ? { ...input, cacheKind: 'motion' } : input
+    if (value.schemaVersion === 1 && record(input) && 'cacheKind' in input) {
+      throw new TypeError('Schema 1 only contains legacy motion entries')
+    }
+    if (!validEntry(rawEntry) && !validAudioEntry(rawEntry)) {
+      throw new TypeError('Analysis cache manifest has an invalid entry')
+    }
     if (cacheKeys.has(rawEntry.cacheKey) || fileNames.has(rawEntry.resultFileName)) {
       throw new TypeError('Analysis cache manifest contains duplicate identities')
     }
@@ -272,6 +320,10 @@ export function parseAnalysisCacheManifest(value: unknown): AnalysisCacheManifes
     }
     cacheKeys.add(rawEntry.cacheKey)
     fileNames.add(rawEntry.resultFileName)
+    if (rawEntry.cacheKind === 'audio-feature') {
+      entries.push({ ...rawEntry, sourceFingerprint: { ...rawEntry.sourceFingerprint } })
+      continue
+    }
     entries.push({
       ...rawEntry,
       source: {
@@ -333,7 +385,7 @@ export function analysisCacheFreshness(
   return reasons.length === 0 ? { state: 'fresh' } : { state: 'stale', reasons }
 }
 
-export function analysisCacheByteSize(entries: readonly AnalysisCacheEntry[]): number {
+export function analysisCacheByteSize(entries: readonly DerivedAnalysisCacheEntry[]): number {
   let total = 0
   for (const entry of entries) {
     total += entry.resultBytes

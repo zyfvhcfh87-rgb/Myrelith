@@ -9,6 +9,7 @@ import { MOTION_ANALYSIS_ALGORITHM_VERSION } from './motionAnalysis'
 
 function entry(): AnalysisCacheEntry {
   return {
+    cacheKind: 'motion',
     cacheKey: 'a'.repeat(64),
     projectBindingId: 'local-project:issue-44',
     assetId: 'asset-1',
@@ -47,7 +48,16 @@ function entry(): AnalysisCacheEntry {
   }
 }
 
+const LEGACY_ANALYSIS_CACHE_SCHEMA_VERSION = 1
+
 describe('analysis cache provenance', () => {
+  test('migrates legacy motion entries explicitly without changing their bytes or identity', () => {
+    const { cacheKind: _kind, ...legacy } = entry()
+    const migrated = parseAnalysisCacheManifest({ schemaVersion: LEGACY_ANALYSIS_CACHE_SCHEMA_VERSION, entries: [legacy] })
+    expect(migrated).toEqual({ schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION, entries: [entry()] })
+    expect(() => parseAnalysisCacheManifest({ schemaVersion: LEGACY_ANALYSIS_CACHE_SCHEMA_VERSION, entries: [entry()] })).toThrow(/legacy/)
+    expect(() => parseAnalysisCacheManifest({ schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION, entries: [legacy] })).toThrow(/invalid entry/)
+  })
   test('strictly parses and clones a current manifest', () => {
     const original = entry()
     const parsed = parseAnalysisCacheManifest({
@@ -56,7 +66,8 @@ describe('analysis cache provenance', () => {
     })
     expect(parsed.entries).toEqual([original])
     expect(parsed.entries[0]).not.toBe(original)
-    expect(parsed.entries[0]?.source).not.toBe(original.source)
+    expect(parsed.entries[0]?.cacheKind).toBe('motion')
+    if (parsed.entries[0]?.cacheKind === 'motion') expect(parsed.entries[0].source).not.toBe(original.source)
   })
 
   test('rejects future/hostile manifest fields and duplicate result identities', () => {

@@ -1,16 +1,16 @@
-/** Strict normalized-evidence proof only. This is not a container parser or a trust boundary. */
+/** Pure normalized timecode validation and arithmetic; metadata trust belongs to the app adapter. */
 import type { FrameRate } from './schema'
-import { alignmentResearchRateIsSupported } from './multicamAlignmentResearch'
+import { alignmentRateIsSupported } from './multicamAlignment'
 
-export interface ResearchTimecodeEvidence {
-  readonly format: 'normalized-timecode-research-v1'
+export interface TimecodeEvidence {
+  readonly format: 'normalized-timecode-v1'
   readonly label: string
   readonly rate: FrameRate
   readonly counting: 'non-drop'
   readonly origin: 'presentation-frame-zero'
   readonly continuity: 'continuous'
   readonly dayOffset: 0
-  /** Supplied by the fixture; a future metadata adapter must establish a shared basis. */
+  /** The app adapter supplies this after explicit shared-clock/day confirmation. */
   readonly clockDomain: string
 }
 
@@ -18,8 +18,8 @@ type TimecodeFailure =
   | 'invalid-record' | 'unknown-rate' | 'unsupported-semantics' | 'invalid-label'
   | 'different-clocks' | 'different-rates'
 
-export type ResearchTimecodeParseResult =
-  | { readonly state: 'valid'; readonly evidence: ResearchTimecodeEvidence; readonly frameCount: number }
+export type TimecodeParseResult =
+  | { readonly state: 'valid'; readonly evidence: TimecodeEvidence; readonly frameCount: number }
   | { readonly state: 'unavailable'; readonly reason: TimecodeFailure }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -32,16 +32,16 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
 }
 
 /** Validating this normalized record cannot establish that its semantic claims are true. */
-export function parseResearchTimecode(value: unknown): ResearchTimecodeParseResult {
+export function parseTimecode(value: unknown): TimecodeParseResult {
   if (!record(value) || !exactKeys(value, [
     'format', 'label', 'rate', 'counting', 'origin', 'continuity', 'dayOffset', 'clockDomain',
-  ]) || value.format !== 'normalized-timecode-research-v1') {
+  ]) || value.format !== 'normalized-timecode-v1') {
     return { state: 'unavailable', reason: 'invalid-record' }
   }
   if (
     !record(value.rate) || !exactKeys(value.rate, ['num', 'den'])
     || typeof value.rate.num !== 'number' || typeof value.rate.den !== 'number'
-    || !alignmentResearchRateIsSupported({ num: value.rate.num, den: value.rate.den })
+    || !alignmentRateIsSupported({ num: value.rate.num, den: value.rate.den })
   ) return { state: 'unavailable', reason: 'unknown-rate' }
   if (
     value.counting !== 'non-drop' || value.origin !== 'presentation-frame-zero'
@@ -57,8 +57,8 @@ export function parseResearchTimecode(value: unknown): ResearchTimecodeParseResu
   if (hours > 23 || minutes > 59 || seconds > 59 || frames >= nominalRate) {
     return { state: 'unavailable', reason: 'invalid-label' }
   }
-  const evidence: ResearchTimecodeEvidence = {
-    format: 'normalized-timecode-research-v1', label: value.label,
+  const evidence: TimecodeEvidence = {
+    format: 'normalized-timecode-v1', label: value.label,
     rate: { num: value.rate.num, den: value.rate.den }, counting: 'non-drop',
     origin: 'presentation-frame-zero', continuity: 'continuous', dayOffset: 0,
     clockDomain: value.clockDomain,
@@ -69,21 +69,21 @@ export function parseResearchTimecode(value: unknown): ResearchTimecodeParseResu
   }
 }
 
-export function alignResearchTimecodes(
+export function alignTimecodes(
   reference: unknown,
   target: unknown,
   projectRate: FrameRate,
 ): { readonly state: 'aligned'; readonly offsetFrames: number }
   | { readonly state: 'unavailable'; readonly reason: TimecodeFailure } {
-  const ref = parseResearchTimecode(reference)
+  const ref = parseTimecode(reference)
   if (ref.state === 'unavailable') return ref
-  const other = parseResearchTimecode(target)
+  const other = parseTimecode(target)
   if (other.state === 'unavailable') return other
   if (ref.evidence.clockDomain !== other.evidence.clockDomain) {
     return { state: 'unavailable', reason: 'different-clocks' }
   }
   if (
-    !alignmentResearchRateIsSupported(projectRate)
+    !alignmentRateIsSupported(projectRate)
     || [ref.evidence.rate, other.evidence.rate].some((rate) => (
       rate.num !== projectRate.num || rate.den !== projectRate.den
     ))

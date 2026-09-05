@@ -603,6 +603,7 @@ export class MotionAnalysisController {
         this.throwIfStale(request, signal)
         const now = this.deps.now()
         const entry: AnalysisCacheEntry = {
+          cacheKind: 'motion',
           ...identity,
           cacheKey,
           resultFileName: staged.fileName,

@@ -5018,7 +5018,7 @@ Chromium tests. Vite retains only the established non-fatal large-chunk notice.
 
 ## Post-MVP issue #194 - local audio and timecode multicam alignment
 
-**FIRST PROOF READY FOR REVIEW; PRODUCT PLAN/PROVENANCE APPROVAL PENDING.**
+**IMPLEMENTATION AND ISSUE-SPECIFIC ACCEPTANCE COMPLETE (2026-09-05).**
 
 Contract and four-gate plan: [MULTICAM_ALIGNMENT.md](MULTICAM_ALIGNMENT.md).
 
@@ -5035,11 +5035,19 @@ Contract and four-gate plan: [MULTICAM_ALIGNMENT.md](MULTICAM_ALIGNMENT.md).
 - [x] Guard production imports and pass 106 focused cases, 3,900 full Vitest
   cases, the 17 repository runner checks, build/typecheck, lint, zero-
   vulnerability production audit, production exclusion, and diff checks.
-- [ ] Review/approve the product implementation plan and audio provenance.
-- [ ] Implement shared cache migration, bounded decode/scheduler lifecycle,
+- [x] User explicitly approved the product implementation plan and audio provenance on 2026-09-05.
+- [x] Implement shared cache migration, bounded decode/scheduler lifecycle,
   source/project-currentness, and a separately proven timecode metadata adapter.
-- [ ] Add serializable proposals, accessible review/manual correction, and
+- [x] Add serializable proposals, accessible review/manual correction, and
   one atomic freshly validated Apply into existing multicam integer geometry.
-- [ ] Verify real recorded audio and encoded timecode where supported in
+- [x] Verify real recorded audio and encoded timecode where supported in
   Chromium, ambiguity, cancellation, cache hit/stale rejection, correction,
   undo/redo, recovery/export, and complete cleanup; run all final checks.
+- [x] Pass 284 Vitest files / 3,946 tests, all 17 repository runner checks,
+  production build/typecheck, lint, zero-vulnerability production audit, and
+  all five Issue #194 Chromium tests with recorded speech supplied.
+- [x] Run the entire Chromium suite and compare failures against isolated
+  original commit `b97c8fe`: 12/20 current versus 7/15 baseline, with the same
+  eight failures (existing button height, AAC duration, missing full FFmpeg,
+  and five wheel-event timing assertions). Details and reproduction commands
+  are in the contract; the wider suite is not reported as green.

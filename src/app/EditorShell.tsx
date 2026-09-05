@@ -40,6 +40,7 @@ import { initMediaCapabilityLifecycle } from './mediaCapabilityController'
 import { initSelectionReconciliation } from './selectionReconciliationController'
 import { initProxyController } from './proxyController'
 import { initMotionAnalysisRuntime } from './motionAnalysisRuntime'
+import { initMulticamAlignment } from './multicamAlignmentController'
 import { getPluginAppController } from './pluginAppController'
 import { setPreviewPluginBinding } from './previewController'
 import {
@@ -139,6 +140,15 @@ export default function EditorShell({ closing }: EditorShellProps) {
   }, [])
   useEffect(() => {
     initMediaVisuals()
+  }, [])
+  useEffect(() => {
+    let unmounted = false
+    let release: (() => Promise<void>) | null = null
+    void initMulticamAlignment().then((acquired) => {
+      if (unmounted) void acquired()
+      else release = acquired
+    })
+    return () => { unmounted = true; if (release) void release() }
   }, [])
   useEffect(() => {
     const onDragOver = (event: DragEvent): void => {

@@ -296,6 +296,10 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
           && renderWorkerPipelineTypeImports.get(fromName)?.has(toName)
         )
         || (
+          fromName === 'workers/audio-alignment.worker.ts'
+          && new Set(['pipeline/audioAlignmentDecode.ts', 'pipeline/audioAlignmentProtocol.ts']).has(toName)
+        )
+        || (
           fromName === 'workers/motion-analysis.worker.ts'
           && new Set([
             'pipeline/motionAnalysisDecode.ts',
@@ -387,12 +391,9 @@ describe('architecture guard', () => {
     expect(runtimeCycles(edges)).toEqual([])
   })
 
-  test('keeps Issue 194 alignment research outside all product imports', () => {
+  test('keeps synthetic multicam audio fixtures outside all product imports', () => {
     const researchModules = new Set([
-      'domain/multicamAlignmentResearch.ts',
-      'domain/multicamTimecodeResearch.ts',
       'domain/multicamAlignmentResearchFixtures.ts',
-      'domain/multicamAlignmentProvenanceResearch.ts',
     ])
     expect(edges.filter((edge) => (
       edge.to && researchModules.has(moduleName(edge.to))

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ANALYSIS_CACHE_SCHEMA_VERSION,
   type AnalysisCacheEntry,
+  type AudioFeatureCacheEntry,
 } from '../domain/analysisCache'
 import {
   AnalysisStorage,
@@ -136,6 +137,7 @@ function entry(
 ): AnalysisCacheEntry {
   const cacheKey = cacheDigit.repeat(64)
   return {
+    cacheKind: 'motion',
     cacheKey,
     projectBindingId: 'local-project:test',
     assetId: 'asset-1',
@@ -328,4 +330,76 @@ describe('AnalysisStorage', () => {
     await storage.removeAsset('local-project:test', 'asset-2')
     expect((await storage.readManifest()).entries).toEqual([])
   })
+})
+
+function audioEntry(index = 1, binding = 'local-project:audio'): AudioFeatureCacheEntry {
+  const key = index.toString(16).padStart(64, '0')
+  return { cacheKind: 'audio-feature', cacheKey: key, projectBindingId: binding, assetId: 'audio-asset',
+    sourceFingerprint: { algorithm: 'sha256-sampled-v1', digest: 'a'.repeat(64), fileName: 'angle.mov', size: 1, lastModified: 0 },
+    audioStreamIndex: 0, audioTrackId: '2', decodePolicyDigest: 'b'.repeat(64), timestampOrigin: 'source-presentation-zero-continuous-v1',
+    inputSampleRate: 48000, channels: 2, startSample: 0, sourceSampleCount: 1440000, binCount: 6000,
+    resultFileName: `${key}.${'a'.repeat(32)}.bin`, resultBytes: 24000, createdAt: index, lastUsedAt: index }
+}
+it('keeps audio separate from motion attachment deletion and rolls back a replacement', async () => {
+  const { storage } = fixture()
+  const audio = audioEntry()
+  const staged = await storage.stageResult(audio.cacheKey, new Uint8Array(24000))
+  const first = { ...audio, resultFileName: staged.fileName }
+  await (await storage.commitEntry(first)).finalize()
+  expect(await storage.findAudioFeature(audio.cacheKey)).toEqual(first)
+  await storage.removeAttachment(audio.projectBindingId, 'anything')
+  expect((await storage.readManifest()).entries).toEqual([first])
+  const replacement = await storage.stageResult(audio.cacheKey, new Uint8Array(24000))
+  const transaction = await storage.commitEntry({ ...audio, resultFileName: replacement.fileName })
+  await transaction.rollback()
+  expect((await storage.readManifest()).entries).toEqual([first])
+  await storage.removeAsset(audio.projectBindingId, audio.assetId)
+  expect((await storage.readManifest()).entries).toEqual([])
+})
+it('enforces the audio project LRU ceiling without evicting motion entries', async () => {
+  const { storage, root } = fixture()
+  const derived = await root.getDirectoryHandle('myrelith-derived', { create: true })
+  const directory = await derived.getDirectoryHandle('analysis-cache-v1', { create: true })
+  const file = await directory.getFileHandle('manifest.json', { create: true })
+  const write = await file.createWritable()
+  const motion = entry('f', `${'f'.repeat(64)}.${'a'.repeat(32)}.bin`)
+  const audio = Array.from({ length: 699 }, (_, i) => audioEntry(i + 1))
+  await write.write(JSON.stringify({ schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION, entries: [motion, ...audio] }))
+  await write.close()
+  const transaction = await storage.commitEntry(audioEntry(700))
+  const committed = (await storage.readManifest()).entries
+  expect(committed).toHaveLength(700)
+  expect(committed).toContainEqual(motion)
+  expect(committed.some((item) => item.cacheKey === audio[0].cacheKey)).toBe(false)
+  expect(committed.filter((item) => item.cacheKind === 'audio-feature').reduce((n, item) => n + item.resultBytes, 0)).toBeLessThanOrEqual(16 * 1024 * 1024)
+  await transaction.rollback()
+  expect((await storage.readManifest()).entries).toHaveLength(700)
+})
+it('rejects audio byte inflation before any shared eviction or write', async () => {
+  const { storage, events } = fixture()
+  await expect(storage.commitEntry({ ...audioEntry(), resultBytes: 2 * 1024 * 1024 })).rejects.toThrow()
+  expect(events).toEqual([])
+})
+it('rolls back audio eviction within shared limits when motion commits during the transaction', async () => {
+  const { storage, root } = fixture()
+  const derived = await root.getDirectoryHandle('myrelith-derived', { create: true })
+  const directory = await derived.getDirectoryHandle('analysis-cache-v1', { create: true })
+  const manifest = await directory.getFileHandle('manifest.json', { create: true })
+  const write = await manifest.createWritable()
+  // 1,024 entries and 16,776,000 audio bytes: the new 30-second window evicts six 5-second windows.
+  const audio = Array.from({ length: 1024 }, (_, i) => i < 390
+    ? { ...audioEntry(i + 1), binCount: 1000, sourceSampleCount: 240000, resultBytes: 4000 }
+    : audioEntry(i + 1))
+  await write.write(JSON.stringify({ schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION, entries: audio }))
+  await write.close()
+  const incoming = audioEntry(1025)
+  const transaction = await storage.commitEntry(incoming)
+  const motion = entry('f', `${'f'.repeat(64)}.${'a'.repeat(32)}.bin`)
+  await (await storage.commitEntry(motion)).finalize()
+  await transaction.rollback()
+  const entries = (await storage.readManifest()).entries
+  expect(entries).toHaveLength(1024)
+  expect(entries).toContainEqual(motion)
+  expect(entries.some((item) => item.cacheKey === incoming.cacheKey)).toBe(false)
+  expect(entries.filter((item) => item.cacheKind === 'audio-feature').reduce((sum, item) => sum + item.resultBytes, 0)).toBeLessThanOrEqual(16 * 1024 * 1024)
 })

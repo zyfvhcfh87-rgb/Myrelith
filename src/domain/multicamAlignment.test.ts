@@ -1,15 +1,28 @@
 import { describe, expect, test } from 'vitest'
 import {
-  ALIGNMENT_RESEARCH_LIMITS as LIMITS,
-  correlateResearchFingerprints,
-  createResearchFingerprintBuilder,
-  researchLagToOffsetFrames,
-  type ResearchAudioFingerprint,
-} from './multicamAlignmentResearch'
+  MULTICAM_ALIGNMENT_LIMITS as LIMITS,
+  correlateAudioFingerprints,
+  createAudioFingerprintBuilder,
+  audioLagToOffsetFrames,
+  encodeAudioFingerprint,
+  decodeAudioFingerprint,
+  type AudioFingerprint,
+} from './multicamAlignment'
 import {
   createResearchAudioFixture as fixture,
-  runResearchCorrelation as correlate,
+  runAudioCorrelation as correlate,
 } from './multicamAlignmentResearchFixtures'
+
+test('cache byte decoding validates exact coverage, count, finiteness and tight ownership', () => {
+  const fingerprint = fixture({ durationSeconds: 10 })
+  const identity = { ...fingerprint, binCount: fingerprint.values.length }
+  const bytes = encodeAudioFingerprint(fingerprint)
+  expect(decodeAudioFingerprint(identity, bytes)).toEqual(fingerprint)
+  expect(() => decodeAudioFingerprint({ ...identity, sourceSampleCount: 1 }, bytes)).toThrow()
+  expect(() => decodeAudioFingerprint(identity, bytes.subarray(4))).toThrow()
+  new DataView(bytes.buffer).setFloat32(0, NaN, true)
+  expect(() => decodeAudioFingerprint(identity, bytes)).toThrow()
+})
 
 const F30 = { num: 30, den: 1 }
 const mono = { inputSampleRate: 8_000, channels: 1, startSample: 0, binCount: 1_000 }
@@ -22,7 +35,7 @@ describe('Issue 194 streaming energy proof', () => {
     expect(uneven.values.byteOffset).toBe(0)
     expect(uneven.values.buffer.byteLength).toBe(4_000)
 
-    const builder = createResearchFingerprintBuilder(mono)
+    const builder = createAudioFingerprintBuilder(mono)
     const plane = new Float32Array(40).fill(0.125)
     for (let index = 0; index < 1_000; index++) builder.push([plane], index * 40)
     plane.fill(0)
@@ -44,12 +57,12 @@ describe('Issue 194 streaming energy proof', () => {
     { binCount: 1_000.5 }, { startSample: -1 }, { startSample: 86_400 * 8_000 },
     { startSample: Number.MAX_SAFE_INTEGER },
   ])('rejects the window before allocating outside its envelope: %j', (patch) => {
-    expect(() => createResearchFingerprintBuilder({ ...mono, ...patch })).toThrow(RangeError)
+    expect(() => createAudioFingerprintBuilder({ ...mono, ...patch })).toThrow(RangeError)
   })
 
   test('copies admitted request facts before a caller can alter them', () => {
     const request = { ...mono }
-    const builder = createResearchFingerprintBuilder(request)
+    const builder = createAudioFingerprintBuilder(request)
     request.startSample = 123
     request.channels = 3
     for (let index = 0; index < 40_000; index += 4_000) {
@@ -65,14 +78,14 @@ describe('Issue 194 streaming energy proof', () => {
       [[new Float32Array(100), new Float32Array(99)], 0],
       [[], 0],
     ] as const) {
-      const builder = createResearchFingerprintBuilder(mono)
+      const builder = createAudioFingerprintBuilder(mono)
       expect(() => builder.push(planes, start)).toThrow(/continuous/)
       expect(() => builder.finish()).toThrow(/terminal/)
     }
   })
 
   test.each([NaN, Infinity, -Infinity, 17])('rejects invalid PCM %s and drops partial features', (value) => {
-    const builder = createResearchFingerprintBuilder(mono)
+    const builder = createAudioFingerprintBuilder(mono)
     const plane = new Float32Array(100).fill(0.1)
     plane[99] = value
     expect(() => builder.push([plane], 0)).toThrow(/PCM contains/)
@@ -80,7 +93,7 @@ describe('Issue 194 streaming energy proof', () => {
   })
 
   test('requires full continuous coverage instead of padding a truncated decode', () => {
-    const builder = createResearchFingerprintBuilder(mono)
+    const builder = createAudioFingerprintBuilder(mono)
     builder.push([new Float32Array(100)], 0)
     expect(() => builder.finish()).toThrow(/complete selected window/)
     expect(() => builder.push([new Float32Array(100)], 100)).toThrow(/terminal/)
@@ -172,7 +185,7 @@ describe('Issue 194 bounded correlation quality', () => {
 
   test('can close at the first checkpoint without evaluating the remaining search', () => {
     const reference = fixture({ inputSampleRate: 8_000 })
-    const iterator = correlateResearchFingerprints(reference, reference, F30)
+    const iterator = correlateAudioFingerprints(reference, reference, F30)
     for (const progress of iterator) {
       expect(progress.comparisons).toBe(LIMITS.yieldComparisons)
       break
@@ -190,7 +203,7 @@ describe('Issue 194 bounded correlation quality', () => {
       { channels: 3 }, { values: nonFinite }, { values: new Float32Array(6_001) },
       { values: new Float32Array(10_000).subarray(0, 1_000) },
     ]) {
-      const invalid = { ...reference, ...patch } as ResearchAudioFingerprint
+      const invalid = { ...reference, ...patch } as AudioFingerprint
       expect(correlate(reference, invalid).result).toMatchObject({ state: 'unavailable', reason: 'invalid-input' })
     }
     for (const maxLag of [0, 199, 1_001, NaN, 200.5]) {
@@ -204,19 +217,19 @@ describe('Issue 194 exact signed offset projection', () => {
   const zero = { startSample: 0, inputSampleRate: 48_000 }
 
   test('rounds ties away from zero and keeps reference exchange symmetric', () => {
-    expect(researchLagToOffsetFrames(zero, zero, -10, F30)).toBe(2)
-    expect(researchLagToOffsetFrames(zero, zero, 10, F30)).toBe(-2)
+    expect(audioLagToOffsetFrames(zero, zero, -10, F30)).toBe(2)
+    expect(audioLagToOffsetFrames(zero, zero, 10, F30)).toBe(-2)
     const start = { startSample: 79_999 * 44_100 + 1, inputSampleRate: 44_100 }
     const other = { startSample: 79_998 * 48_000 + 19, inputSampleRate: 48_000 }
     const rate = { num: 30_000, den: 1_001 }
-    const forward = researchLagToOffsetFrames(start, other, 87, rate)
+    const forward = audioLagToOffsetFrames(start, other, 87, rate)
     expect(forward).toBe(17)
-    expect(researchLagToOffsetFrames(other, start, -87, rate)).toBe(-forward)
+    expect(audioLagToOffsetFrames(other, start, -87, rate)).toBe(-forward)
   })
 
   test('rejects invalid conversion inputs before BigInt conversion', () => {
-    expect(() => researchLagToOffsetFrames(zero, zero, 1.1, F30)).toThrow(RangeError)
-    expect(() => researchLagToOffsetFrames({ ...zero, startSample: Infinity }, zero, 0, F30)).toThrow(RangeError)
-    expect(() => researchLagToOffsetFrames(zero, zero, 0, { num: 30, den: 0 })).toThrow(RangeError)
+    expect(() => audioLagToOffsetFrames(zero, zero, 1.1, F30)).toThrow(RangeError)
+    expect(() => audioLagToOffsetFrames({ ...zero, startSample: Infinity }, zero, 0, F30)).toThrow(RangeError)
+    expect(() => audioLagToOffsetFrames(zero, zero, 0, { num: 30, den: 0 })).toThrow(RangeError)
   })
 })

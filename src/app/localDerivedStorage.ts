@@ -1,5 +1,6 @@
 import { proxyStorage } from './proxyStorage'
 import { analysisStorage } from './analysisStorage'
+import { withDerivedDataOwnersDrained } from './derivedDataOwners'
 
 /**
  * Strict registry for disposable origin-local artifacts.
@@ -66,7 +67,9 @@ export function createDisposableStorageController(
       )
     },
     async clear() {
-      for (const provider of providers) await provider.clear()
+      await withDerivedDataOwnersDrained(async () => {
+        for (const provider of providers) await provider.clear()
+      })
     },
   }
 }

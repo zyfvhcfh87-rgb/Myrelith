@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest'
 import {
-  researchAudioFeatureKeyPreimage as featureKey,
-  researchAudioPairKeyPreimage as pairKey,
-  type ResearchAudioFeatureIdentity,
-  type ResearchAudioPairIdentity,
-} from './multicamAlignmentProvenanceResearch'
+  audioFeatureKeyPreimage as featureKey,
+  audioPairKeyPreimage as pairKey,
+  type AudioFeatureIdentity,
+  type AudioPairIdentity,
+} from './multicamAlignmentProvenance'
 
-const identity = (): ResearchAudioFeatureIdentity => ({
+const identity = (): AudioFeatureIdentity => ({
   projectBindingId: 'local-project:issue-194', assetId: 'camera-1',
   sourceFingerprint: {
     algorithm: 'sha256-sampled-v1', digest: 'a'.repeat(64),
@@ -16,7 +16,7 @@ const identity = (): ResearchAudioFeatureIdentity => ({
   timestampOrigin: 'source-presentation-zero-continuous-v1',
   inputSampleRate: 48_000, channels: 2, startSample: 48_000, sourceSampleCount: 480_000, binCount: 2_000,
 })
-const pair = (): ResearchAudioPairIdentity => ({
+const pair = (): AudioPairIdentity => ({
   referenceFeatureKey: 'a'.repeat(64), targetFeatureKey: 'b'.repeat(64),
   projectRate: { num: 30, den: 1 }, maxLagBins: 1_000, definitionDigest: 'c'.repeat(64),
 })
@@ -26,13 +26,13 @@ describe('Issue 194 audio provenance proposal', () => {
     const source = identity()
     const reordered = Object.fromEntries(Object.entries(source).reverse())
     expect(featureKey(reordered)).toBe(featureKey(source))
-    expect(JSON.parse(featureKey(source))[0]).toBe('myrelith-audio-feature-research-v1')
-    expect(JSON.parse(pairKey(pair()))[0]).toBe('myrelith-audio-pair-research-v1')
+    expect(JSON.parse(featureKey(source))[0]).toBe('myrelith-audio-feature-v1')
+    expect(JSON.parse(pairKey(pair()))[0]).toBe('myrelith-audio-pair-v1')
   })
 
   test('invalidates features across every source, decode, project and window dimension', () => {
     const original = identity()
-    const mutations: Partial<ResearchAudioFeatureIdentity>[] = [
+    const mutations: Partial<AudioFeatureIdentity>[] = [
       { projectBindingId: 'local-project:copied-project' }, { assetId: 'camera-2' },
       { audioStreamIndex: 1 }, { audioTrackId: '3' }, { decodePolicyDigest: 'e'.repeat(64) },
       { inputSampleRate: 44_100, sourceSampleCount: 441_000 }, { channels: 1 },
@@ -49,7 +49,7 @@ describe('Issue 194 audio provenance proposal', () => {
 
   test('invalidates pair results on order, input, rate, search or definition changes', () => {
     const original = pair()
-    const mutations: Partial<ResearchAudioPairIdentity>[] = [
+    const mutations: Partial<AudioPairIdentity>[] = [
       { referenceFeatureKey: 'd'.repeat(64) }, { targetFeatureKey: 'd'.repeat(64) },
       { referenceFeatureKey: original.targetFeatureKey, targetFeatureKey: original.referenceFeatureKey },
       { projectRate: { num: 30_000, den: 1_001 } }, { maxLagBins: 999 },

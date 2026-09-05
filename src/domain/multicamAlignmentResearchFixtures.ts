@@ -1,11 +1,11 @@
 /** Deterministic synthetic quality fixtures; deliberately excluded from product entry graphs. */
 import {
-  ALIGNMENT_RESEARCH_LIMITS,
-  createResearchFingerprintBuilder,
-  correlateResearchFingerprints,
-  type ResearchAlignmentResult,
-  type ResearchAudioFingerprint,
-} from './multicamAlignmentResearch'
+  MULTICAM_ALIGNMENT_LIMITS,
+  createAudioFingerprintBuilder,
+  correlateAudioFingerprints,
+  type AudioAlignmentResult,
+  type AudioFingerprint,
+} from './multicamAlignment'
 import type { FrameRate } from './schema'
 
 export type ResearchAudioFixtureKind =
@@ -56,16 +56,16 @@ export interface ResearchAudioFixtureOptions {
 
 export function createResearchAudioFixture(
   options: ResearchAudioFixtureOptions = {},
-): ResearchAudioFingerprint {
+): AudioFingerprint {
   const {
     kind = 'coded-tone', inputSampleRate = 48_000, channels = 1,
     startSeconds = 0, durationSeconds = 10, recordingStartSeconds = 0,
     gain = 1, invertRightChannel = false, seed = 37, blockFrames = 4_096,
   } = options
   const startSample = Math.round(startSeconds * inputSampleRate)
-  const binCount = Math.round(durationSeconds * ALIGNMENT_RESEARCH_LIMITS.featureRate)
-  const sampleCount = Math.ceil(binCount * inputSampleRate / ALIGNMENT_RESEARCH_LIMITS.featureRate)
-  const builder = createResearchFingerprintBuilder({ inputSampleRate, channels, startSample, binCount })
+  const binCount = Math.round(durationSeconds * MULTICAM_ALIGNMENT_LIMITS.featureRate)
+  const sampleCount = Math.ceil(binCount * inputSampleRate / MULTICAM_ALIGNMENT_LIMITS.featureRate)
+  const builder = createAudioFingerprintBuilder({ inputSampleRate, channels, startSample, binCount })
   if (!Number.isSafeInteger(blockFrames) || blockFrames < 1 || blockFrames > 4_096) {
     throw new RangeError('Invalid fixture block size')
   }
@@ -83,13 +83,13 @@ export function createResearchAudioFixture(
   return builder.finish()
 }
 
-export function runResearchCorrelation(
-  reference: ResearchAudioFingerprint,
-  target: ResearchAudioFingerprint,
+export function runAudioCorrelation(
+  reference: AudioFingerprint,
+  target: AudioFingerprint,
   rate: FrameRate = { num: 30, den: 1 },
-  maxLagBins: number = ALIGNMENT_RESEARCH_LIMITS.maxLagBins,
-): { readonly result: ResearchAlignmentResult; readonly yields: number; readonly maxWorkBetweenYields: number } {
-  const iterator = correlateResearchFingerprints(reference, target, rate, maxLagBins)
+  maxLagBins: number = MULTICAM_ALIGNMENT_LIMITS.maxLagBins,
+): { readonly result: AudioAlignmentResult; readonly yields: number; readonly maxWorkBetweenYields: number } {
+  const iterator = correlateAudioFingerprints(reference, target, rate, maxLagBins)
   let yields = 0
   let lastComparisons = 0
   let maxWorkBetweenYields = 0

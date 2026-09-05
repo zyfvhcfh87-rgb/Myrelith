@@ -1,10 +1,10 @@
-/** Proposed cache-key framing for Issue #194. This registers/writes no cache schema. */
+/** Exact domain-separated cache identities for bounded multicam audio features. */
 import type { AnalysisSourceFingerprint } from './analysisCache'
 import { isLocalProjectBindingId } from './localProjectBinding'
 import type { FrameRate } from './schema'
-import { ALIGNMENT_RESEARCH_LIMITS as LIMITS, alignmentResearchRateIsSupported } from './multicamAlignmentResearch'
+import { MULTICAM_ALIGNMENT_LIMITS as LIMITS, alignmentRateIsSupported } from './multicamAlignment'
 
-export interface ResearchAudioFeatureIdentity {
+export interface AudioFeatureIdentity {
   readonly projectBindingId: string
   readonly assetId: string
   readonly sourceFingerprint: AnalysisSourceFingerprint
@@ -20,7 +20,7 @@ export interface ResearchAudioFeatureIdentity {
   readonly binCount: number
 }
 
-export interface ResearchAudioPairIdentity {
+export interface AudioPairIdentity {
   readonly referenceFeatureKey: string
   readonly targetFeatureKey: string
   readonly projectRate: FrameRate
@@ -50,13 +50,13 @@ function integer(value: unknown, minimum: number, maximum: number): value is num
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum && value <= maximum
 }
 
-/** Exact ordered JSON tuple. A future app owner hashes its UTF-8 bytes with SHA-256. */
-export function researchAudioFeatureKeyPreimage(value: unknown): string {
+/** Exact ordered JSON tuple. The app owner hashes its UTF-8 bytes with SHA-256. */
+export function audioFeatureKeyPreimage(value: unknown): string {
   if (!record(value) || !exactKeys(value, [
     'projectBindingId', 'assetId', 'sourceFingerprint', 'audioStreamIndex', 'audioTrackId',
     'decodePolicyDigest', 'timestampOrigin', 'inputSampleRate', 'channels',
     'startSample', 'sourceSampleCount', 'binCount',
-  ])) throw new TypeError('Invalid research audio feature identity')
+  ])) throw new TypeError('Invalid audio feature identity')
   const source = value.sourceFingerprint
   if (
     !isLocalProjectBindingId(value.projectBindingId)
@@ -74,9 +74,9 @@ export function researchAudioFeatureKeyPreimage(value: unknown): string {
     || !integer(value.sourceSampleCount, 1, LIMITS.maxInputRate * 30)
     || value.sourceSampleCount !== Math.ceil(value.binCount * value.inputSampleRate / LIMITS.featureRate)
     || value.startSample + value.sourceSampleCount > LIMITS.maxSourceSeconds * value.inputSampleRate
-  ) throw new TypeError('Unproven or out-of-envelope research audio provenance')
+  ) throw new TypeError('Unproven or out-of-envelope audio provenance')
   return JSON.stringify([
-    'myrelith-audio-feature-research-v1',
+    'myrelith-audio-feature-v1',
     value.projectBindingId, value.assetId,
     [source.algorithm, source.digest, source.fileName, source.size, source.lastModified],
     value.audioStreamIndex, value.audioTrackId, value.decodePolicyDigest, value.timestampOrigin,
@@ -86,20 +86,20 @@ export function researchAudioFeatureKeyPreimage(value: unknown): string {
 }
 
 /** Results bind order/sign, project mapping, every quality policy, and the proposal snapshot. */
-export function researchAudioPairKeyPreimage(value: unknown): string {
+export function audioPairKeyPreimage(value: unknown): string {
   if (!record(value) || !exactKeys(value, [
     'referenceFeatureKey', 'targetFeatureKey', 'projectRate', 'maxLagBins', 'definitionDigest',
-  ])) throw new TypeError('Invalid research audio pair identity')
+  ])) throw new TypeError('Invalid audio pair identity')
   const rate = value.projectRate
   if (
     !digest(value.referenceFeatureKey) || !digest(value.targetFeatureKey)
     || !digest(value.definitionDigest) || !record(rate) || !exactKeys(rate, ['num', 'den'])
     || typeof rate.num !== 'number' || typeof rate.den !== 'number'
-    || !alignmentResearchRateIsSupported({ num: rate.num, den: rate.den })
+    || !alignmentRateIsSupported({ num: rate.num, den: rate.den })
     || !integer(value.maxLagBins, LIMITS.minLagBins, LIMITS.maxLagBins)
-  ) throw new TypeError('Unproven or out-of-envelope research audio pair provenance')
+  ) throw new TypeError('Unproven or out-of-envelope audio pair provenance')
   return JSON.stringify([
-    'myrelith-audio-pair-research-v1', value.referenceFeatureKey, value.targetFeatureKey,
+    'myrelith-audio-pair-v1', value.referenceFeatureKey, value.targetFeatureKey,
     [rate.num, rate.den], value.maxLagBins, value.definitionDigest,
     ['pearson-overlap-v1', LIMITS.minOverlapBins, LIMITS.minOverlapRatio,
       LIMITS.minScore, LIMITS.minMargin, LIMITS.minMeanFeature, LIMITS.minFeatureDeviation,

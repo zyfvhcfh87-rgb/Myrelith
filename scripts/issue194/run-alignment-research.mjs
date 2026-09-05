@@ -9,13 +9,13 @@ import { createServer } from 'vite'
 const root = fileURLToPath(new URL('../..', import.meta.url))
 const sourceFiles = [
   'src/domain/localProjectBinding.ts',
-  'src/domain/multicamAlignmentResearch.ts',
+  'src/domain/multicamAlignment.ts',
   'src/domain/multicamAlignmentResearchFixtures.ts',
-  'src/domain/multicamAlignmentProvenanceResearch.ts',
-  'src/domain/multicamTimecodeResearch.ts',
-  'src/domain/multicamAlignmentResearch.test.ts',
-  'src/domain/multicamAlignmentProvenanceResearch.test.ts',
-  'src/domain/multicamTimecodeResearch.test.ts',
+  'src/domain/multicamAlignmentProvenance.ts',
+  'src/domain/multicamTimecode.ts',
+  'src/domain/multicamAlignment.test.ts',
+  'src/domain/multicamAlignmentProvenance.test.ts',
+  'src/domain/multicamTimecode.test.ts',
   'src/test/architecture.test.ts',
   'scripts/issue194/run-alignment-research.mjs',
 ].sort()
@@ -39,11 +39,11 @@ const server = await createServer({
 })
 
 try {
-  const { createResearchAudioFixture: fixture, runResearchCorrelation: correlate } = await server.ssrLoadModule(
+  const { createResearchAudioFixture: fixture, runAudioCorrelation: correlate } = await server.ssrLoadModule(
     '/src/domain/multicamAlignmentResearchFixtures.ts',
   )
-  const { ALIGNMENT_RESEARCH_LIMITS: limits } = await server.ssrLoadModule('/src/domain/multicamAlignmentResearch.ts')
-  const { alignResearchTimecodes } = await server.ssrLoadModule('/src/domain/multicamTimecodeResearch.ts')
+  const { MULTICAM_ALIGNMENT_LIMITS: limits } = await server.ssrLoadModule('/src/domain/multicamAlignment.ts')
+  const { alignTimecodes } = await server.ssrLoadModule('/src/domain/multicamTimecode.ts')
   const startedAt = performance.now()
   const quality = []
   for (const kind of ['coded-tone', 'speech-shaped', 'noise']) {
@@ -85,12 +85,12 @@ try {
   }
   assert.ok(totalComparisons <= 7 * limits.maxPairComparisons)
   const timecode = (label, patch = {}) => ({
-    format: 'normalized-timecode-research-v1', label, rate: { num: 30_000, den: 1_001 },
+    format: 'normalized-timecode-v1', label, rate: { num: 30_000, den: 1_001 },
     counting: 'non-drop', origin: 'presentation-frame-zero', continuity: 'continuous',
     dayOffset: 0, clockDomain: 'fixture:common-clock-same-day', ...patch,
   })
-  const validTimecode = alignResearchTimecodes(timecode('01:00:00:00'), timecode('01:00:02:05'), { num: 30_000, den: 1_001 })
-  const dropFrame = alignResearchTimecodes(timecode('01:00:00:00'), timecode('01:00:02:05', { counting: 'drop-frame' }), { num: 30_000, den: 1_001 })
+  const validTimecode = alignTimecodes(timecode('01:00:00:00'), timecode('01:00:02:05'), { num: 30_000, den: 1_001 })
+  const dropFrame = alignTimecodes(timecode('01:00:00:00'), timecode('01:00:02:05', { counting: 'drop-frame' }), { num: 30_000, den: 1_001 })
   assert.deepEqual(validTimecode, { state: 'aligned', offsetFrames: 65 })
   assert.equal(dropFrame.state, 'unavailable')
   assert.equal(sourceFingerprint(), fingerprint, 'research sources changed during the run')

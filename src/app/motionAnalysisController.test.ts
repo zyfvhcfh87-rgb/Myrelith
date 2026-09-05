@@ -201,6 +201,7 @@ function deps(
 
 function cachedEntry(): AnalysisCacheEntry {
   return {
+    cacheKind: 'motion',
     cacheKey: 'a'.repeat(64),
     projectBindingId: 'local-project:test',
     assetId: 'asset-1',

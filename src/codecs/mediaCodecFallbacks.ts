@@ -21,6 +21,7 @@ export type MediaDecoderCapabilityBoundary =
   | 'filmstrip'
   | 'waveform'
   | 'audio-playback'
+  | 'audio-alignment'
   | 'proxy-generation'
   | 'export-video'
   | 'export-audio'

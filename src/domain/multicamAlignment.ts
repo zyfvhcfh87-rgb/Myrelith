@@ -1,11 +1,10 @@
 /**
- * Issue #194's build-unreferenced audio alignment candidate.
+ * Bounded local audio alignment, approved in docs/MULTICAM_ALIGNMENT.md.
  * This consumes decoded PCM, owns no browser resource, and never edits a project.
- * Product use requires the contract/quality/provenance gates in MULTICAM_ALIGNMENT.md.
  */
 import type { FrameRate } from './schema'
 
-export const ALIGNMENT_RESEARCH_LIMITS = Object.freeze({
+export const MULTICAM_ALIGNMENT_LIMITS = Object.freeze({
   featureRate: 200,
   minBins: 1_000,
   maxBins: 6_000,
@@ -32,13 +31,13 @@ const RATES = new Set([
   '24000/1001', '30000/1001', '60000/1001',
 ])
 
-export function alignmentResearchRateIsSupported(rate: FrameRate): boolean {
+export function alignmentRateIsSupported(rate: FrameRate): boolean {
   return rate !== null && typeof rate === 'object'
     && typeof rate.num === 'number' && typeof rate.den === 'number'
     && RATES.has(`${rate.num}/${rate.den}`)
 }
 
-export interface ResearchFingerprintRequest {
+export interface AudioFingerprintRequest {
   readonly inputSampleRate: number
   readonly channels: number
   /** Index in the proven source-presentation sample grid, not a decoder-local cursor. */
@@ -46,7 +45,7 @@ export interface ResearchFingerprintRequest {
   readonly binCount: number
 }
 
-export interface ResearchAudioFingerprint {
+export interface AudioFingerprint {
   readonly kind: 'log-rms-200-v1'
   readonly inputSampleRate: number
   readonly channels: number
@@ -55,15 +54,15 @@ export interface ResearchAudioFingerprint {
   readonly values: Float32Array<ArrayBuffer>
 }
 
-export interface ResearchFingerprintBuilder {
+export interface AudioFingerprintBuilder {
   /** Consecutive, aligned planar PCM. The caller retains and closes its own block. */
   push(channels: readonly Float32Array[], firstSample: number): void
   /** Transfers the derived feature buffer exactly once; no PCM is retained. */
-  finish(): ResearchAudioFingerprint
+  finish(): AudioFingerprint
 }
 
-function validRequest(request: ResearchFingerprintRequest): boolean {
-  const limits = ALIGNMENT_RESEARCH_LIMITS
+function validRequest(request: AudioFingerprintRequest): boolean {
+  const limits = MULTICAM_ALIGNMENT_LIMITS
   return Number.isSafeInteger(request.inputSampleRate)
     && request.inputSampleRate >= limits.minInputRate
     && request.inputSampleRate <= limits.maxInputRate
@@ -76,13 +75,13 @@ function validRequest(request: ResearchFingerprintRequest): boolean {
       <= limits.maxSourceSeconds * request.inputSampleRate
 }
 
-export function createResearchFingerprintBuilder(
-  request: ResearchFingerprintRequest,
-): ResearchFingerprintBuilder {
+export function createAudioFingerprintBuilder(
+  request: AudioFingerprintRequest,
+): AudioFingerprintBuilder {
   if (!validRequest(request)) throw new RangeError('Invalid bounded audio window')
   // Copy primitive request facts: a caller mutation cannot change an admitted job.
   const { inputSampleRate, channels, startSample, binCount } = request
-  const { featureRate, maxBlockFrames } = ALIGNMENT_RESEARCH_LIMITS
+  const { featureRate, maxBlockFrames } = MULTICAM_ALIGNMENT_LIMITS
   const expectedSamples = Math.ceil(binCount * inputSampleRate / featureRate)
   let values: Float32Array<ArrayBuffer> | null = new Float32Array(binCount)
   let processed = 0
@@ -139,7 +138,7 @@ export function createResearchFingerprintBuilder(
         throw new RangeError('PCM does not cover the complete selected window')
       }
       finishBin()
-      const result: ResearchAudioFingerprint = {
+      const result: AudioFingerprint = {
         kind: 'log-rms-200-v1', inputSampleRate, channels, startSample,
         sourceSampleCount: expectedSamples, values,
       }
@@ -149,7 +148,7 @@ export function createResearchFingerprintBuilder(
   }
 }
 
-function fingerprintIsValid(fingerprint: ResearchAudioFingerprint): boolean {
+export function audioFingerprintIsValid(fingerprint: AudioFingerprint): boolean {
   if (!fingerprint || typeof fingerprint !== 'object') return false
   const values = fingerprint.values
   return fingerprint.kind === 'log-rms-200-v1'
@@ -158,14 +157,42 @@ function fingerprintIsValid(fingerprint: ResearchAudioFingerprint): boolean {
     && values.byteOffset === 0 && values.byteLength === values.buffer.byteLength
     && validRequest({ ...fingerprint, binCount: values.length })
     && fingerprint.sourceSampleCount === Math.ceil(
-      values.length * fingerprint.inputSampleRate / ALIGNMENT_RESEARCH_LIMITS.featureRate,
+      values.length * fingerprint.inputSampleRate / MULTICAM_ALIGNMENT_LIMITS.featureRate,
     )
     && values.every((value) => (
-      Number.isFinite(value) && value >= 0 && value <= ALIGNMENT_RESEARCH_LIMITS.maxFeature + 1e-6
+      Number.isFinite(value) && value >= 0 && value <= MULTICAM_ALIGNMENT_LIMITS.maxFeature + 1e-6
     ))
 }
 
-export interface ResearchCorrelationFacts {
+/** Stable little-endian bytes, used only by the disposable cache. */
+export function encodeAudioFingerprint(fingerprint: AudioFingerprint): Uint8Array<ArrayBuffer> {
+  if (!audioFingerprintIsValid(fingerprint)) throw new TypeError('Invalid audio fingerprint')
+  const bytes = new Uint8Array(fingerprint.values.length * 4)
+  const view = new DataView(bytes.buffer)
+  fingerprint.values.forEach((value, index) => view.setFloat32(index * 4, value, true))
+  return bytes
+}
+
+export function decodeAudioFingerprint(
+  identity: AudioFingerprintRequest & { readonly sourceSampleCount: number },
+  bytes: Uint8Array<ArrayBuffer>,
+): AudioFingerprint {
+  if (!validRequest(identity) || bytes.byteLength !== identity.binCount * 4
+    || bytes.byteOffset !== 0 || bytes.byteLength !== bytes.buffer.byteLength) {
+    throw new TypeError('Invalid cached audio feature length or coverage')
+  }
+  const view = new DataView(bytes.buffer)
+  const values = Float32Array.from({ length: identity.binCount }, (_, i) => view.getFloat32(i * 4, true))
+  const fingerprint: AudioFingerprint = {
+    kind: 'log-rms-200-v1', values, inputSampleRate: identity.inputSampleRate,
+    channels: identity.channels, startSample: identity.startSample,
+    sourceSampleCount: identity.sourceSampleCount,
+  }
+  if (!audioFingerprintIsValid(fingerprint)) throw new TypeError('Invalid cached audio features')
+  return fingerprint
+}
+
+export interface AudioCorrelationFacts {
   readonly score: number | null
   readonly alternativeScore: number | null
   readonly margin: number | null
@@ -174,21 +201,21 @@ export interface ResearchCorrelationFacts {
   readonly comparisons: number
 }
 
-export type ResearchAlignmentResult =
+export type AudioAlignmentResult =
   | {
       readonly state: 'aligned'
       readonly offsetFrames: number
       readonly lagBins: number
-      readonly facts: ResearchCorrelationFacts
+      readonly facts: AudioCorrelationFacts
     }
   | {
       readonly state: 'ambiguous' | 'unavailable'
       readonly reason: 'invalid-input' | 'silent-or-flat' | 'insufficient-overlap'
         | 'weak-match' | 'repeated-match' | 'search-boundary'
-      readonly facts: ResearchCorrelationFacts
+      readonly facts: AudioCorrelationFacts
     }
 
-export interface ResearchCorrelationProgress {
+export interface AudioCorrelationProgress {
   readonly comparisons: number
   readonly evaluatedLags: number
 }
@@ -201,9 +228,9 @@ function informative(values: Float32Array): boolean {
     squared += value * value
   }
   const mean = sum / values.length
-  return mean >= ALIGNMENT_RESEARCH_LIMITS.minMeanFeature
+  return mean >= MULTICAM_ALIGNMENT_LIMITS.minMeanFeature
     && squared / values.length - mean * mean
-      >= ALIGNMENT_RESEARCH_LIMITS.minFeatureDeviation ** 2
+      >= MULTICAM_ALIGNMENT_LIMITS.minFeatureDeviation ** 2
 }
 
 function signedRoundedRatio(numerator: bigint, denominator: bigint): number {
@@ -213,28 +240,28 @@ function signedRoundedRatio(numerator: bigint, denominator: bigint): number {
 }
 
 /** Exact window-origin arithmetic; only the final project frame is rounded. */
-export function researchLagToOffsetFrames(
-  reference: Pick<ResearchAudioFingerprint, 'startSample' | 'inputSampleRate'>,
-  target: Pick<ResearchAudioFingerprint, 'startSample' | 'inputSampleRate'>,
+export function audioLagToOffsetFrames(
+  reference: Pick<AudioFingerprint, 'startSample' | 'inputSampleRate'>,
+  target: Pick<AudioFingerprint, 'startSample' | 'inputSampleRate'>,
   lagBins: number,
   rate: FrameRate,
 ): number {
   for (const source of [reference, target]) {
     if (
       !Number.isSafeInteger(source.inputSampleRate)
-      || source.inputSampleRate < ALIGNMENT_RESEARCH_LIMITS.minInputRate
-      || source.inputSampleRate > ALIGNMENT_RESEARCH_LIMITS.maxInputRate
+      || source.inputSampleRate < MULTICAM_ALIGNMENT_LIMITS.minInputRate
+      || source.inputSampleRate > MULTICAM_ALIGNMENT_LIMITS.maxInputRate
       || !Number.isSafeInteger(source.startSample) || source.startSample < 0
-      || source.startSample > ALIGNMENT_RESEARCH_LIMITS.maxSourceSeconds * source.inputSampleRate
+      || source.startSample > MULTICAM_ALIGNMENT_LIMITS.maxSourceSeconds * source.inputSampleRate
     ) throw new RangeError('Invalid source sample origin')
   }
   if (
-    !alignmentResearchRateIsSupported(rate) || !Number.isSafeInteger(lagBins)
-    || Math.abs(lagBins) > ALIGNMENT_RESEARCH_LIMITS.maxLagBins
+    !alignmentRateIsSupported(rate) || !Number.isSafeInteger(lagBins)
+    || Math.abs(lagBins) > MULTICAM_ALIGNMENT_LIMITS.maxLagBins
   ) throw new RangeError('Invalid audio alignment frame conversion')
   const refRate = BigInt(reference.inputSampleRate)
   const targetRate = BigInt(target.inputSampleRate)
-  const featureRate = BigInt(ALIGNMENT_RESEARCH_LIMITS.featureRate)
+  const featureRate = BigInt(MULTICAM_ALIGNMENT_LIMITS.featureRate)
   const numerator = (
     BigInt(reference.startSample) * targetRate * featureRate
     - BigInt(target.startSample) * refRate * featureRate
@@ -248,20 +275,20 @@ export function researchLagToOffsetFrames(
  * cancellation between yields and closes the iterator before releasing them.
  * Yielding is data-only; scheduling and AbortSignal ownership belong to app/worker.
  */
-export function* correlateResearchFingerprints(
-  reference: ResearchAudioFingerprint,
-  target: ResearchAudioFingerprint,
+export function* correlateAudioFingerprints(
+  reference: AudioFingerprint,
+  target: AudioFingerprint,
   rate: FrameRate,
-  maxLagBins: number = ALIGNMENT_RESEARCH_LIMITS.maxLagBins,
-): Generator<ResearchCorrelationProgress, ResearchAlignmentResult> {
-  const limits = ALIGNMENT_RESEARCH_LIMITS
-  const emptyFacts: ResearchCorrelationFacts = {
+  maxLagBins: number = MULTICAM_ALIGNMENT_LIMITS.maxLagBins,
+): Generator<AudioCorrelationProgress, AudioAlignmentResult> {
+  const limits = MULTICAM_ALIGNMENT_LIMITS
+  const emptyFacts: AudioCorrelationFacts = {
     score: null, alternativeScore: null, margin: null, overlapBins: 0,
     evaluatedLags: 0, comparisons: 0,
   }
   if (
-    !fingerprintIsValid(reference) || !fingerprintIsValid(target)
-    || !alignmentResearchRateIsSupported(rate) || !Number.isSafeInteger(maxLagBins)
+    !audioFingerprintIsValid(reference) || !audioFingerprintIsValid(target)
+    || !alignmentRateIsSupported(rate) || !Number.isSafeInteger(maxLagBins)
     || maxLagBins < limits.minLagBins || maxLagBins > limits.maxLagBins
   ) return { state: 'unavailable', reason: 'invalid-input', facts: emptyFacts }
   if (!informative(reference.values) || !informative(target.values)) {
@@ -332,7 +359,7 @@ export function* correlateResearchFingerprints(
       alternativeScore = Math.max(alternativeScore, scores[lag + maxLagBins])
     }
   }
-  const facts: ResearchCorrelationFacts = {
+  const facts: AudioCorrelationFacts = {
     score: bestScore, alternativeScore, margin: bestScore - alternativeScore,
     overlapBins: bestOverlap, evaluatedLags, comparisons,
   }
@@ -341,6 +368,6 @@ export function* correlateResearchFingerprints(
   if (Math.abs(bestLag) === maxLagBins) return { state: 'unavailable', reason: 'search-boundary', facts }
   return {
     state: 'aligned', lagBins: bestLag,
-    offsetFrames: researchLagToOffsetFrames(reference, target, bestLag, rate), facts,
+    offsetFrames: audioLagToOffsetFrames(reference, target, bestLag, rate), facts,
   }
 }
