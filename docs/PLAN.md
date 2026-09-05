@@ -5015,3 +5015,39 @@ Chromium tests. Vite retains only the established non-fatal large-chunk notice.
   threads, and pass fresh CI/Bugbot on exact head `1a8d766`. Merge normally as
   `9e7ea59`, verify tree equality and completed Issue #193, then pass master CI
   run `33917746503`.
+
+## Post-MVP issue #194 - local audio and timecode multicam alignment
+
+**IMPLEMENTATION AND ISSUE-SPECIFIC ACCEPTANCE COMPLETE (2026-09-05).**
+
+Contract and four-gate plan: [MULTICAM_ALIGNMENT.md](MULTICAM_ALIGNMENT.md).
+
+- [x] Trace manual multicam, exact source origins, one-job scheduling, shared
+  derived storage, and the current absence of trusted imported timecode.
+- [x] Document the bounded audio candidate, sample/window/channel/work/cache
+  limits, strict normalized timecode semantics, and separately versioned audio
+  feature/pair provenance before any product use.
+- [x] Implement an isolated pure proof and reproducible source-bound runner:
+  nine signed-offset tone/speech-shaped/noise cases within one frame, honest
+  silence/repetition rejection, all admitted project rates, exact window-origin
+  conversion, one-shot PCM consumption, work/cancellation bounds, provenance
+  invalidation, and strict non-drop evidence/rejection fixtures.
+- [x] Guard production imports and pass 106 focused cases, 3,900 full Vitest
+  cases, the 17 repository runner checks, build/typecheck, lint, zero-
+  vulnerability production audit, production exclusion, and diff checks.
+- [x] User explicitly approved the product implementation plan and audio provenance on 2026-09-05.
+- [x] Implement shared cache migration, bounded decode/scheduler lifecycle,
+  source/project-currentness, and a separately proven timecode metadata adapter.
+- [x] Add serializable proposals, accessible review/manual correction, and
+  one atomic freshly validated Apply into existing multicam integer geometry.
+- [x] Verify real recorded audio and encoded timecode where supported in
+  Chromium, ambiguity, cancellation, cache hit/stale rejection, correction,
+  undo/redo, recovery/export, and complete cleanup; run all final checks.
+- [x] Pass 284 Vitest files / 3,946 tests, all 17 repository runner checks,
+  production build/typecheck, lint, zero-vulnerability production audit, and
+  all five Issue #194 Chromium tests with recorded speech supplied.
+- [x] Run the entire Chromium suite and compare failures against isolated
+  original commit `b97c8fe`: 12/20 current versus 7/15 baseline, with the same
+  eight failures (existing button height, AAC duration, missing full FFmpeg,
+  and five wheel-event timing assertions). Details and reproduction commands
+  are in the contract; the wider suite is not reported as green.

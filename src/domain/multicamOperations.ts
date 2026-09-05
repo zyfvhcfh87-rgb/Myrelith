@@ -111,6 +111,13 @@ export interface MulticamInstanceEditResult {
 
 export type MulticamDefinitionEditCommand =
   | {
+      readonly kind: 'set-offsets'
+      readonly definitionId: string
+      /** Fresh immutable definition captured by the app review owner. */
+      readonly expectedDefinition: MulticamDefinition
+      readonly offsets: readonly { readonly angleId: string; readonly coverageStartFrame: number }[]
+    }
+  | {
       readonly kind: 'cut'
       readonly definitionId: string
       readonly frame: number
@@ -325,7 +332,22 @@ export function applyMulticamDefinitionEdit(
   const definition = project.multicams![definitionIndex]
   let edited: MulticamDefinition
   try {
-    if (command.kind === 'cut') {
+    if (command.kind === 'set-offsets') {
+      if (command.expectedDefinition !== definition || command.offsets.length < 1
+        || command.offsets.length > MULTICAM_LIMITS.maxAngles
+        || new Set(command.offsets.map((offset) => offset.angleId)).size !== command.offsets.length
+        || command.offsets.some((offset) => !Number.isSafeInteger(offset.coverageStartFrame)
+          || offset.coverageStartFrame < 0 || !definition.angles.some((angle) => angle.id === offset.angleId))) {
+        return { project, failure: 'invalid-definition' }
+      }
+      const angles = definition.angles.map((angle) => {
+        const offset = command.offsets.find((item) => item.angleId === angle.id)
+        return !offset || offset.coverageStartFrame === angle.coverage.startFrame ? angle
+          : { ...angle, coverage: { ...angle.coverage, startFrame: offset.coverageStartFrame } }
+      })
+      // Preserve source ranges, switches, definition duration and every instance.
+      edited = angles.every((angle, index) => angle === definition.angles[index]) ? definition : { ...definition, angles }
+    } else if (command.kind === 'cut') {
       edited = setMulticamCut(definition, command.frame, command.angleId)
     } else if (command.kind === 'roll-cut') {
       edited = rollMulticamCut(definition, command.frame, command.toFrame)

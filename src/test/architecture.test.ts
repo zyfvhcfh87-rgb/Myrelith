@@ -296,6 +296,10 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
           && renderWorkerPipelineTypeImports.get(fromName)?.has(toName)
         )
         || (
+          fromName === 'workers/audio-alignment.worker.ts'
+          && new Set(['pipeline/audioAlignmentDecode.ts', 'pipeline/audioAlignmentProtocol.ts']).has(toName)
+        )
+        || (
           fromName === 'workers/motion-analysis.worker.ts'
           && new Set([
             'pipeline/motionAnalysisDecode.ts',
@@ -385,6 +389,16 @@ describe('architecture guard', () => {
 
   test('keeps the production runtime import graph acyclic', () => {
     expect(runtimeCycles(edges)).toEqual([])
+  })
+
+  test('keeps synthetic multicam audio fixtures outside all product imports', () => {
+    const researchModules = new Set([
+      'domain/multicamAlignmentResearchFixtures.ts',
+    ])
+    expect(edges.filter((edge) => (
+      edge.to && researchModules.has(moduleName(edge.to))
+      && !researchModules.has(moduleName(edge.from))
+    )).map(edgeLabel)).toEqual([])
   })
 
   test('keeps editor and secondary surfaces outside their eager entry graphs', () => {

@@ -11,6 +11,7 @@ import {
 import { useMulticamSelectionStore } from '../state/multicamSelectionStore'
 import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 import { useTransportStore } from '../state/transportStore'
+import MulticamAlignmentControls from './MulticamAlignmentControls'
 
 interface SetupState {
   readonly projectId: string
@@ -488,6 +489,9 @@ export default function MulticamControls() {
                 })}
               />
             ))}
+          </div>
+          <div className="multicam-edit-row">
+            <MulticamAlignmentControls key={definition.id} definition={definition} />
           </div>
           <div className="multicam-edit-row">
             <label>

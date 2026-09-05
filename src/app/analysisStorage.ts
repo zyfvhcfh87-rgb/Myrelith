@@ -6,13 +6,19 @@ import {
   ANALYSIS_CACHE_TARGET_ORIGIN_USAGE_RATIO,
   MAX_ANALYSIS_CACHE_ENTRIES,
   MAX_ANALYSIS_RESULT_BYTES,
+  AUDIO_CACHE_PROJECT_BYTES,
+  AUDIO_CACHE_TOTAL_BYTES,
+  MAX_AUDIO_FEATURE_BYTES,
   analysisCacheByteSize,
   analysisCacheFreshness,
   parseAnalysisCacheManifest,
   type AnalysisCacheEntry,
   type AnalysisCacheIdentity,
   type AnalysisCacheManifest,
+  type AudioFeatureCacheEntry,
+  type DerivedAnalysisCacheEntry,
 } from '../domain/analysisCache'
+import { audioFeatureKeyPreimage, type AudioFeatureIdentity } from '../domain/multicamAlignmentProvenance'
 
 const DERIVED_DIRECTORY = 'myrelith-derived'
 const ANALYSIS_DIRECTORY = 'analysis-cache-v1'
@@ -197,6 +203,7 @@ export class AnalysisStorage {
   async stageResult(
     cacheKey: string,
     bytes: Uint8Array<ArrayBuffer>,
+    audioIdentity?: AudioFeatureIdentity,
   ): Promise<StagedAnalysisResult> {
     if (!/^[a-f0-9]{64}$/.test(cacheKey)) throw new TypeError('Invalid analysis cache key')
     if (
@@ -206,6 +213,13 @@ export class AnalysisStorage {
       || bytes.byteLength > MAX_ANALYSIS_RESULT_BYTES
     ) {
       throw new RangeError('Analysis result must be a tight non-empty buffer within the reviewed limit')
+    }
+    // Validate the tighter audio envelope before shared LRU can delete anything.
+    if (audioIdentity) {
+      audioFeatureKeyPreimage(audioIdentity)
+      if (bytes.byteLength > MAX_AUDIO_FEATURE_BYTES || bytes.byteLength !== audioIdentity.binCount * 4) {
+        throw new RangeError('Audio feature bytes do not match their bounded provenance')
+      }
     }
     await this.ensureCapacity(bytes.byteLength)
     const token = this.deps.createToken()
@@ -237,13 +251,15 @@ export class AnalysisStorage {
     }
   }
 
-  async commitEntry(entry: AnalysisCacheEntry): Promise<AnalysisStorageEntryCommit> {
-    parseAnalysisCacheManifest({
+  async commitEntry(candidateEntry: DerivedAnalysisCacheEntry): Promise<AnalysisStorageEntryCommit> {
+    // Own a validated copy across asynchronous staging/manifest operations.
+    const entry = parseAnalysisCacheManifest({
       schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION,
-      entries: [entry],
-    })
+      entries: [candidateEntry],
+    }).entries[0]
     const obsoleteFiles = new Set<string>()
-    const replacedEntries: AnalysisCacheEntry[] = []
+    const rollbackDiscardedFiles = new Set<string>([entry.resultFileName])
+    const replacedEntries: DerivedAnalysisCacheEntry[] = []
     await this.mutate(async (manifest) => {
       const entries = manifest.entries.filter((candidate) => candidate.cacheKey !== entry.cacheKey)
       for (const candidate of manifest.entries) {
@@ -253,6 +269,28 @@ export class AnalysisStorage {
         }
       }
       entries.push(entry)
+      if (entry.cacheKind === 'audio-feature') {
+        let audioBytes = analysisCacheByteSize(entries.filter((item) => item.cacheKind === 'audio-feature'))
+        let projectBytes = analysisCacheByteSize(entries.filter((item) => (
+          item.cacheKind === 'audio-feature' && item.projectBindingId === entry.projectBindingId
+        )))
+        const candidates = entries.filter((item) => item !== entry && item.cacheKind === 'audio-feature')
+          .sort((a, b) => a.lastUsedAt - b.lastUsedAt || a.cacheKey.localeCompare(b.cacheKey))
+        // First satisfy the project ceiling, then the shared audio ceiling.
+        for (const sameProjectOnly of [true, false]) {
+          for (const item of candidates) {
+            if (!entries.includes(item)) continue
+            const sameProject = item.projectBindingId === entry.projectBindingId
+            if (sameProjectOnly ? !sameProject || projectBytes <= AUDIO_CACHE_PROJECT_BYTES
+              : audioBytes <= AUDIO_CACHE_TOTAL_BYTES) continue
+            entries.splice(entries.indexOf(item), 1)
+            audioBytes -= item.resultBytes
+            if (sameProject) projectBytes -= item.resultBytes
+            replacedEntries.push(item)
+            obsoleteFiles.add(item.resultFileName)
+          }
+        }
+      }
       if (entries.length > MAX_ANALYSIS_CACHE_ENTRIES) {
         const candidates = entries.filter((candidate) => candidate !== entry).sort((left, right) => (
           left.lastUsedAt - right.lastUsedAt || left.cacheKey.localeCompare(right.cacheKey)
@@ -290,15 +328,46 @@ export class AnalysisStorage {
             candidate.cacheKey === entry.cacheKey
             && candidate.resultFileName === entry.resultFileName
           ))
-          for (const previous of replacedEntries) {
+          let totalBytes = analysisCacheByteSize(entries)
+          let audioBytes = 0
+          const projectAudioBytes = new Map<string, number>()
+          for (const retained of entries) {
+            if (retained.cacheKind !== 'audio-feature') continue
+            audioBytes += retained.resultBytes
+            projectAudioBytes.set(retained.projectBindingId,
+              (projectAudioBytes.get(retained.projectBindingId) ?? 0) + retained.resultBytes)
+          }
+          // Other analysis owners may have committed since this transaction.
+          // Preserve their entries, then restore the newest prior data that still fits.
+          const prior = [...replacedEntries].sort((a, b) => b.lastUsedAt - a.lastUsedAt || a.cacheKey.localeCompare(b.cacheKey))
+          for (const previous of prior) {
             if (entries.some((candidate) => (
               candidate.cacheKey === previous.cacheKey
               || candidate.resultFileName === previous.resultFileName
             ))) continue
+            const projectBytes = projectAudioBytes.get(previous.projectBindingId) ?? 0
+            if (entries.length >= MAX_ANALYSIS_CACHE_ENTRIES
+              || totalBytes + previous.resultBytes > ANALYSIS_CACHE_TARGET_BYTES
+              || (previous.cacheKind === 'audio-feature'
+                && (audioBytes + previous.resultBytes > AUDIO_CACHE_TOTAL_BYTES
+                  || projectBytes + previous.resultBytes > AUDIO_CACHE_PROJECT_BYTES))) {
+              rollbackDiscardedFiles.add(previous.resultFileName)
+              continue
+            }
             entries.push(previous)
+            totalBytes += previous.resultBytes
+            if (previous.cacheKind === 'audio-feature') {
+              audioBytes += previous.resultBytes
+              projectAudioBytes.set(previous.projectBindingId, projectBytes + previous.resultBytes)
+            }
           }
           return { schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION, entries }
-        }, async () => this.removeFile(entry.resultFileName))
+        }, async (_previous, committed) => {
+          const retainedFiles = new Set(committed.entries.map((item) => item.resultFileName))
+          for (const fileName of rollbackDiscardedFiles) {
+            if (!retainedFiles.has(fileName)) await this.removeFile(fileName)
+          }
+        })
         return settlement
       },
     }
@@ -306,13 +375,21 @@ export class AnalysisStorage {
 
   async findFreshEntry(identity: AnalysisCacheIdentity): Promise<AnalysisCacheEntry | null> {
     const manifest = await this.readManifest()
-    return manifest.entries.find((entry) => (
-      analysisCacheFreshness(entry, identity).state === 'fresh'
+    return manifest.entries.find((entry): entry is AnalysisCacheEntry => (
+      entry.cacheKind === 'motion' && analysisCacheFreshness(entry, identity).state === 'fresh'
     )) ?? null
   }
 
-  async readResult(entry: AnalysisCacheEntry): Promise<Uint8Array<ArrayBuffer>> {
+  async findAudioFeature(cacheKey: string): Promise<AudioFeatureCacheEntry | null> {
+    const manifest = await this.readManifest()
+    return manifest.entries.find((entry): entry is AudioFeatureCacheEntry => (
+      entry.cacheKind === 'audio-feature' && entry.cacheKey === cacheKey
+    )) ?? null
+  }
+
+  async readResult(entry: DerivedAnalysisCacheEntry): Promise<Uint8Array<ArrayBuffer>> {
     try {
+      parseAnalysisCacheManifest({ schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION, entries: [entry] })
       const directory = await this.directory(false)
       const handle = await directory.getFileHandle(entry.resultFileName)
       const file = await handle.getFile()
@@ -344,13 +421,13 @@ export class AnalysisStorage {
     await this.mutate(async (manifest) => {
       obsoleteFiles.push(...manifest.entries
         .filter((entry) => (
-          entry.projectBindingId === projectBindingId && entry.attachment.clipId === clipId
+          entry.cacheKind === 'motion' && entry.projectBindingId === projectBindingId && entry.attachment.clipId === clipId
         ))
         .map((entry) => entry.resultFileName))
       return {
         schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION,
         entries: manifest.entries.filter((entry) => !(
-          entry.projectBindingId === projectBindingId && entry.attachment.clipId === clipId
+          entry.cacheKind === 'motion' && entry.projectBindingId === projectBindingId && entry.attachment.clipId === clipId
         )),
       }
     }, async () => {

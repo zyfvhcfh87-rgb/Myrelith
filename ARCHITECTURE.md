@@ -103,6 +103,10 @@ non-negotiable rules. Re-read it at the start of every coding session.
     `pipeline/motionAnalysisDecode.ts` (the bounded sequential decode and
     grayscale core) and `pipeline/motionAnalysisProtocol.ts` (its serializable
     worker contract); the worker is their sole production runtime host,
+  - `workers/audio-alignment.worker.ts` may import only
+    `pipeline/audioAlignmentDecode.ts` and `pipeline/audioAlignmentProtocol.ts`;
+    it owns one sequential audio iterator, closes samples in finally, and is
+    terminated by the app bridge before releasing decoder admission,
   - `engine/worker-bridge.ts` references the worker FILE via
     `new Worker(new URL(...))` — a URL, not a module import; the pipeline
     chunk source reaches the bridge by injection, never by import.
@@ -319,6 +323,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   No production entry may import it. Follow-up issues must replace the relevant
   prototype with separately reviewed production contracts rather than shipping
   through the research module.
+- Issue #194's approved `domain/multicamAlignment.ts`, `multicamTimecode.ts`
+  and `multicamAlignmentProvenance.ts` own pure bounded correlation, exact
+  normalized timecode arithmetic and separate audio cache identities. Synthetic
+  fixtures remain outside product imports. The shared derived manifest migrates
+  schema 1 motion entries to schema 2 with explicit motion/audio-feature kinds;
+  audio never invents video or clip facts. `pipeline/multicamTimecodeMetadata.ts`
+  admits only the documented bounded QuickTime profile, with explicit shared
+  clock/day confirmation. Runtime buffers, cache keys and metadata evidence stay
+  outside portable projects/recovery. See `docs/MULTICAM_ALIGNMENT.md`.
 - `domain/pluginManifest.ts` is the pure, non-executing structural validator and
   compatibility negotiator for the proposed plugin manifest. It reuses the
   durable effect-number/key bounds, requires one package-unique render export per
