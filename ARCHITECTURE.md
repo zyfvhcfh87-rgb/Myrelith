@@ -107,6 +107,11 @@ non-negotiable rules. Re-read it at the start of every coding session.
     `pipeline/audioAlignmentDecode.ts` and `pipeline/audioAlignmentProtocol.ts`;
     it owns one sequential audio iterator, closes samples in finally, and is
     terminated by the app bridge before releasing decoder admission,
+  - `workers/multicam-monitor.worker.ts` may import only
+    `pipeline/multicamMonitorDecode.ts` and `pipeline/multicamMonitorProtocol.ts`;
+    it owns bounded finite native decoders, demux inputs and one scratch surface.
+    The app bridge drains or terminates it before releasing shared optional-media
+    admission. Monitoring never supplies authored switch timing or export frames,
   - `engine/worker-bridge.ts` references the worker FILE via
     `new Worker(new URL(...))` — a URL, not a module import; the pipeline
     chunk source reaches the bridge by injection, never by import.
@@ -130,6 +135,44 @@ non-negotiable rules. Re-read it at the start of every coding session.
 Changes may span multiple modules or layers when that is the smallest complete
 solution. The dependency direction above and all ownership/timing rules remain
 binding across the whole change.
+
+## Optional multicam monitoring
+
+`app/mediaResourceAdmission.ts` is the shared admission authority for the
+optional angle wall. Program and audio reserve before opening resources and
+retain their leases through disposal. Source Monitor, scheduler-owned media
+jobs and export suspend the wall before their own allocations. Essential work
+keeps its subsystem limits; it is never rejected to preserve a thumbnail wall.
+Program reserves conservative high-water decoder and RGBA-equivalent surface
+allowances for its current bridge lifetime. Audio reserves its complete planned
+clip count because delayed lookahead work can overlap multiple clip cursors.
+These conservative reservations can deny monitoring on complex compositions.
+
+`app/multicamMonitorSession.ts` owns the optional lease, worker bridge and
+registered canvases. Normal off keeps the lease until an observed zero ledger
+or its 100 ms deadline. Priority work, stale sources, project teardown and
+suspension synchronously terminate the old worker before releasing admission;
+late transferred bitmaps are still closed. Termination is recorded separately
+from cooperative native-zero acknowledgement. Never infer a zero native ledger
+from an unacknowledged worker termination.
+
+The wall admits one worker and at most seven inactive-angle lanes, with one
+pending request per lane. The shared allowance is 12 declared decoder slots
+and 256 MiB of known RGBA-equivalent surfaces; the wall itself is limited to
+64 MiB. Encoded payload, bounded demux caches, source Blobs and opaque native/GPU
+allocations are additional. These limits must never be described as total
+browser memory. Five to eight angles require provenance-fresh 720p proxies;
+bounded 8-bit AVC originals up to 1080p may serve smaller groups. Unsupported
+media/configurations preserve existing manual and on-demand previews.
+
+The selected instance, integer playhead and existing authored multicam planner
+determine every requested source time. The monitor never advances transport,
+writes a cut, supplies export media or stores resources in Zustand. A complete
+healthy Program baseline is required before starting; subsequent Program/audio
+budget failures pause the wall, while tile-only failure reduces cadence once.
+Initial hidden state and freshness after asynchronous preparation are admission
+conditions, not just event handlers. Browser pressure notifications are not a
+reliable admission mechanism.
 
 ## Scrubbing-vs-committed pattern
 

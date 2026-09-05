@@ -109,6 +109,7 @@ import {
   previewRepresentationDecision,
   reportProxyPreviewFailure,
 } from './proxyController'
+import { mediaResourceAdmission, type MediaResourceLease } from './mediaResourceAdmission'
 
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
@@ -293,6 +294,10 @@ const realDeps: PreviewDeps = {
 }
 
 interface ControllerState {
+  resourceLease: MediaResourceLease | null
+  maxSourcePixels: number
+  maxVideoRequests: number
+  maxOutputPixels: number
   canvas: HTMLCanvasElement | null
   bridge: BridgeLike | null
   deps: PreviewDeps | null
@@ -319,6 +324,10 @@ interface ControllerState {
 }
 
 const state: ControllerState = {
+  resourceLease: null,
+  maxSourcePixels: 0,
+  maxVideoRequests: 0,
+  maxOutputPixels: 0,
   canvas: null,
   bridge: null,
   deps: null,
@@ -451,6 +460,7 @@ function syncPresentationProfile(
   const surfacesMatch = presentationSurfacesMatch(state.presentationProfile, profile)
   state.presentationProfile = profile
   if (surfacesMatch) return
+  mediaResourceAdmission.interrupt('program-resized')
   bridge.setPresentationProfile(profile)
 }
 
@@ -608,6 +618,7 @@ function rebuildPreviewEffectStatusIndex(doc: TimelineDoc): void {
 }
 
 function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {
+  mediaResourceAdmission.interrupt('program-changed')
   const doc = currentPreviewDocument()
   const renderDoc = currentPreviewRenderDocument(doc)
   state.visualPlanner = createCurrentVisualPlanner(deps, doc)
@@ -648,6 +659,23 @@ function scheduleRender(deps: PreviewDeps): void {
     const seen = new Set<AssetId>()
     const visualPlan = state.visualPlanner?.planFrame(transport.playheadFrame)
     if (!visualPlan) return
+    const requests = videoCompositionRequests(visualPlan)
+    // Separate clips can open distinct lanes even when they share one asset.
+    state.maxVideoRequests = Math.max(state.maxVideoRequests, requests.length)
+    for (const request of requests) {
+      const asset = media.assets.get(request.clip.assetId)
+      if (asset?.width && asset.height) state.maxSourcePixels = Math.max(state.maxSourcePixels,
+        Math.ceil(asset.width / 16) * 16 * Math.ceil(asset.height / 16) * 16)
+    }
+    const profile = state.presentationProfile
+    if (profile) state.maxOutputPixels = Math.max(state.maxOutputPixels, profile.outputWidth * profile.outputHeight)
+    state.resourceLease?.update({
+      kind: 'program', decoderSlots: state.maxVideoRequests * 2 + 2,
+      // Two retained samples, conversion/transfer headroom and the two reusable
+      // lens surfaces per source lane, plus the four compositor surfaces.
+      surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4,
+      monitorCompatible: true,
+    })
     effectStatuses = projectPlannedPreviewEffectStatuses(
       visualPlan,
       previewStatus.rendererCapabilities,
@@ -779,6 +807,7 @@ async function loadOneVideoAsset(
     status: 'loading' as const,
   }
   state.assetStates.set(assetId, pipelineState)
+  mediaResourceAdmission.interrupt('program-source-changed')
   let failureReason: MediaRuntimeFailure['reason'] = 'resource-unavailable'
   let failureTrackKind: 'video' | null = null
   let proxySelected = false
@@ -992,11 +1021,20 @@ export function initPreview(
   if (state.canvas === canvas) return
   void disposePreviewState(false)
 
-  let bridge: BridgeLike
+  let bridge: BridgeLike | undefined
+  const resourceLease = mediaResourceAdmission.reserve({ kind: 'program', decoderSlots: 0, surfaceBytes: 0, monitorCompatible: false })
   try {
     bridge = deps.createBridge(pluginEffectHandler)
     deps.init(bridge, deps.transferCanvas(canvas))
   } catch (e) {
+    // Creating the bridge can allocate workers before canvas transfer fails.
+    // Keep its admission until those partially initialized resources close.
+    const failedBridge = bridge
+    void (async () => {
+      try { await failedBridge?.dispose() }
+      catch (cause) { console.warn('[previewController] failed initialization cleanup:', cause) }
+      finally { resourceLease.release() }
+    })()
     console.warn(
       '[previewController] preview disabled:',
       e instanceof Error ? e.message : e,
@@ -1006,6 +1044,7 @@ export function initPreview(
   // Become the current owner before wiring callbacks so a synchronous
   // first message is not dropped by the identity guard.
   state.canvas = canvas
+  state.resourceLease = resourceLease
   state.bridge = bridge
   state.deps = deps
   // Replacement starts disposing the previous owner without awaiting it.
@@ -1014,6 +1053,7 @@ export function initPreview(
   const ownerGeneration = state.renderGeneration
   bridge.onWorkerError = (message) => {
     if (!isCurrentPreviewOwner(bridge, ownerGeneration)) return
+    mediaResourceAdmission.interrupt('program-error')
     console.warn('[previewController] worker error:', message)
   }
   bridge.onAssetError = (assetId, runtimeToken, trackKind, message) => {
@@ -1118,6 +1158,10 @@ export function initPreview(
 }
 
 async function disposePreviewState(clearPluginBinding: boolean): Promise<void> {
+  mediaResourceAdmission.interrupt('program-closed')
+  const resourceLease = state.resourceLease
+  state.resourceLease = null
+  state.maxOutputPixels = state.maxSourcePixels = state.maxVideoRequests = 0
   cancelScheduledRender()
   state.renderGeneration++
   state.presentationGeneration++
@@ -1126,7 +1170,8 @@ async function disposePreviewState(clearPluginBinding: boolean): Promise<void> {
   state.unsubscribes = []
   state.pluginUnsubscribe?.()
   state.pluginUnsubscribe = null
-  const close = state.bridge?.dispose()
+  let close: void | Promise<void>
+  try { close = state.bridge?.dispose() } catch (cause) { close = Promise.reject(cause) }
   state.bridge = null
   state.deps = null
   state.viewport = null
@@ -1140,7 +1185,7 @@ async function disposePreviewState(clearPluginBinding: boolean): Promise<void> {
   if (clearPluginBinding) pluginBinding = null
   usePreviewStatusStore.getState().resetPreviewStatus()
   useVideoScopesStore.getState().reset()
-  await close
+  try { await close } finally { resourceLease?.release() }
 }
 
 /** Tear everything down (tests / real app teardown, not StrictMode churn). */

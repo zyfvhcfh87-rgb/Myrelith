@@ -2928,6 +2928,14 @@ surface; it is not a second zoom and never enters document history.
 
 ## Working agreements (the user's explicit preferences)
 
+- Browser QA must run with `--mute-audio`, including independently spawned
+  research/lifecycle browsers. Do not add synthetic audible tones to test
+  fixtures; use silent tracks for scheduling checks and inspect audio data
+  without speaker output. The user explicitly requested quiet tests (2026-09-05).
+- Use the in-app browser for visual checks and headless browsers for automated
+  runs. Do not repeatedly open Chrome windows. A native visible lifecycle test
+  must be an explicit exception, not part of ordinary QA (user request, 2026-09-05).
+
 - Changes may span every module needed for one complete fix. Keep dependency
   boundaries clear and verify logical steps separately; never skip a phase
   gate; commit with the message file + `-F` pattern, authored by Aryel and add
@@ -5464,12 +5472,13 @@ surface; it is not a second zoom and never enters document history.
 
 ## Post-MVP issue #195 - multicam monitoring research gate
 
-**RESEARCH COMPLETE LOCALLY; USER APPROVAL PENDING (2026-09-05).**
+**HISTORICAL RESEARCH GATE; USER APPROVED IMPLEMENTATION (2026-09-05).**
 
 - Start with [MULTICAM_MONITOR_RESEARCH.md](MULTICAM_MONITOR_RESEARCH.md).
   The recommendation is a conditional GO to bounded, proxy-first engineering;
   unrestricted live-wall enablement is a NO-GO. The user explicitly requested
-  research review before implementation. No product runtime/UI was changed.
+  research review before implementation. That approval was given explicitly;
+  the research commit itself changed no product runtime/UI.
 - The isolated `scripts/issue195/` lab measures actual Program/audio alongside
   2/4/8 total angles. Program counts as the active angle; at most seven extra
   lanes sample at 320×180 / 10 fps. Fresh production 720p AVC proxies passed all
@@ -5498,4 +5507,54 @@ surface; it is not a second zoom and never enters document history.
   3,946/3,947 across 284 files: the remaining plugin-startup `safe-mode` failure
   reproduces identically (23/24 focused) on isolated unchanged `3653c9a`.
   The full suite is not claimed green. No GitHub publication or issue closure
-  has been performed; continue only after the user approves the research plan.
+  has been performed. The user subsequently approved the research plan; see the
+  implementation acceptance record below.
+
+## Post-MVP issue #195 - bounded simultaneous multicam implementation
+
+**IMPLEMENTATION COMPLETE LOCALLY; CONDITIONAL CHROMIUM QUALIFICATION (2026-09-05).**
+
+- Research was explicitly approved before implementation. Shared admission,
+  finite decoding and adaptive controller phases were each tested and built /
+  linted before connecting the UI. See
+  [implementation validation](evidence/issue195/implementation-validation.md)
+  and its source-bound [artifact](evidence/issue195/implementation.json).
+- Select a multicam item, enable **Live angle previews**, and press Play. The
+  active angle remains in Program; inactive tiles target 320×180 / 10 fps and
+  can reduce once to 160×90 / 5 fps. Program/audio pressure pauses the wall with
+  an explicit retry reason. Existing integer-frame cut commands, keyboard
+  shortcuts, audio policy, original export and on-demand previews stay canonical.
+- `app/mediaResourceAdmission.ts` reserves before Program/audio allocations;
+  Source Monitor, scheduler-owned jobs and export preempt the wall. Complex
+  Program/audio plans can conservatively deny it. Five to eight angles require
+  fresh 720p proxies; smaller groups may use bounded 8-bit AVC originals up to
+  1080p. The 64 MiB wall and 256 MiB aggregate allowances are known reference /
+  surface accounting, never claims about total native/GPU/process memory.
+- `app/multicamMonitorController.ts` composes freshness, audio-clock observations,
+  source preparation and lifecycle subscriptions. `multicamMonitorSession.ts`
+  owns admission, canvases and the finite worker bridge. Domain planning stays
+  pure; Zustand contains presentation facts only. `multicam-monitor.worker.ts`
+  hosts bounded Mediabunny demux plus directly owned native decoders. Every
+  request closes frames and its decoder; normal off drains or terminates within
+  100 ms. Urgent retirement terminates before releasing its lease and closes
+  late transferred bitmaps. Forced cleanup never fabricates an observed zero
+  native ledger. Partial Program/Source initialization now closes its bridge
+  before releasing admission too.
+- Final headless Chromium acceptance: **9 passed, 1 intentionally skipped**
+  (the visible native-window test is explicit opt-in). Covers 2/4/8 angles,
+  recorded footage with production proxies, eight playback/seek cycles,
+  keyboard cuts and narrow layout, source/proxy/derived-data changes, original
+  export and recovery/relink. Build (4,979 modules), lint, 5 research decisions,
+  17 runner checks and 97 focused ownership tests pass. Full Vitest is
+  **3,996/3,997** across 289 files: the same plugin `safe-mode` baseline failure
+  reproduced on unchanged `3653c9a`. Do not report a green full suite.
+- Native minimize/freeze/GPU retirement has successful exploratory probes,
+  but the repeated matrix was not wholly green: an unknown browser exit and
+  a guarded pause after thaw were retained as failures. The final optional
+  native harness adjustment was not rerun after the user requested no more
+  Chrome windows. Automatic post-freeze/GPU recovery, physical pressure,
+  multi-hour native memory and other hardware/browser engines remain unqualified.
+- Quiet QA is now a working agreement: silent generated tracks, muted browsers,
+  headless automation and in-app visual review. The in-app editor is available,
+  but its native file chooser was not controllable; do not call that a media
+  acceptance pass. No GitHub publication or issue closure was performed.

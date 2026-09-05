@@ -37,7 +37,7 @@ export async function generate(profileId: string, angle: number) {
     })(), (async () => {
       for (let start = 0; start < seconds * 48_000; start += 4096) {
         const count = Math.min(4096, seconds * 48_000 - start), data = new Float32Array(count)
-        for (let i = 0; i < count; i++) data[i] = 0.025 * Math.sin(2 * Math.PI * (220 + angle * 30) * (start + i) / 48_000)
+        // Silent audio keeps the decoder/scheduler workload without test tones.
         const sample = new AudioSample({ data, format: 'f32-planar', sampleRate: 48_000, numberOfChannels: 1, timestamp: start / 48_000 })
         try { await audio.add(sample) } finally { sample.close() }
       }

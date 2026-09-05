@@ -5054,7 +5054,7 @@ Contract and four-gate plan: [MULTICAM_ALIGNMENT.md](MULTICAM_ALIGNMENT.md).
 
 ## Post-MVP issue #195 - bounded simultaneous multicam monitoring research
 
-**RESEARCH COMPLETE LOCALLY; IMPLEMENTATION AWAITS USER APPROVAL (2026-09-05).**
+**RESEARCH APPROVED; BOUNDED IMPLEMENTATION COMPLETE LOCALLY (2026-09-05).**
 
 Research contract, measured limits and proposed implementation gates:
 [MULTICAM_MONITOR_RESEARCH.md](MULTICAM_MONITOR_RESEARCH.md).
@@ -5076,6 +5076,12 @@ Research contract, measured limits and proposed implementation gates:
   production build (4,971 modules), lint, zero-vulnerability production audit
   and production exclusion. Record 3,946/3,947 full Vitest cases; reproduce the
   one plugin-startup failure on unchanged `3653c9a` instead of claiming green.
-- [ ] Obtain the user's research-gate approval.
-- [ ] Implement and prove shared admission/suspension and finite source-bound
-  decoding, then adaptive fallback, accessible UI and complete product gates.
+- [x] User explicitly approved the research gate and implementation on 2026-09-05.
+- [x] Implement and separately test/build/lint shared admission/suspension,
+  finite source-bound decoding, then the adaptive app controller.
+- [x] Connect accessible Inspector controls to existing authored commands and
+  verify the opt-in product through the real Chromium acceptance matrix.
+  Evidence and qualification limits: [implementation acceptance](evidence/issue195/implementation-validation.md).
+- [ ] Broaden hardware/codec/browser qualification beyond the measured Chromium
+  host; physical memory pressure and multi-hour native-memory behavior remain
+  unproven. These configurations are not advertised as supported.

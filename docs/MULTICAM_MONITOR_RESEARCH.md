@@ -1,16 +1,19 @@
 # Issue #195: simultaneous multicam monitoring research
 
-Research completed locally on 2026-09-05; user gate approval is pending.
-Product implementation and ordinary UI enablement have not started.
+Research completed locally on 2026-09-05. The user explicitly approved the
+bounded proxy-first plan and authorized implementation on 2026-09-05.
+The bounded implementation and its separate product acceptance record are in
+[implementation validation](evidence/issue195/implementation-validation.md).
+The measurements below describe the research commit, not new product runs.
 
 ## Decision submitted for review
 
 **Recommend a conditional GO to a bounded, proxy-first implementation plan;
-NO-GO to enabling an unrestricted live angle wall. User approval is pending.**
+NO-GO to enabling an unrestricted live angle wall. User approved this direction on 2026-09-05.**
 The research demonstrates a viable finite native-decoder owner on one machine.
 It does not approve shipping this laboratory or bypassing the implementation
-acceptance gates below. Existing manual multicam and paused previews remain the
-product behavior until those gates pass.
+acceptance gates below. The resulting implementation is opt-in and preserves
+manual multicam and on-demand previews whenever admission or runtime health fails.
 
 The proposed first implementation supports a 320×180, 10 fps view of inactive
 angles, preferentially from provenance-fresh 720p AVC proxies. Program represents
@@ -296,7 +299,7 @@ previews; export continues to require originals. Live wall enablement also
 requires a single admission authority across Program, Source Monitor, proxy
 generation and analysis, rather than independently summing subsystem limits.
 
-## Current architecture findings
+## Architecture findings at the research baseline
 
 - `src/app/mediaJobScheduler.ts` limits each scheduler instance. Media visuals
   use two slots; proxy generation, motion analysis and audio alignment own

@@ -123,7 +123,7 @@ describe('MulticamControls', () => {
     ], []))
     fireEvent.click(screen.getByRole('button', { name: 'Create multicam' }))
 
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(screen.getByRole('status', { name: 'Multicam edit status' })).toHaveTextContent(
       'A selected angle is no longer available. Choose available video sources again.',
     )
     expect(useDocumentStore.getState().project.multicams).toEqual([])
@@ -140,7 +140,7 @@ describe('MulticamControls', () => {
     )))
 
     expect(screen.queryByLabelText('Multicam name')).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(screen.getByRole('status', { name: 'Multicam edit status' })).toHaveTextContent(
       'Multicam setup closed because the active project changed.',
     )
   })
@@ -157,7 +157,7 @@ describe('MulticamControls', () => {
     act(() => useTransportStore.getState().setPlayheadFrame(500))
     fireEvent.keyDown(window, { key: 'ArrowLeft', altKey: true, shiftKey: true })
     expect(useDocumentStore.getState().project.multicams![0]).toBe(definitionBefore)
-    expect(screen.getByRole('status')).toHaveTextContent(
+    expect(screen.getByRole('status', { name: 'Multicam edit status' })).toHaveTextContent(
       'Place the playhead inside the multicam item before rolling a cut.',
     )
 

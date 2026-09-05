@@ -22,7 +22,14 @@ test('requires an independently healthy paired baseline and complete evidence', 
   const cell = valid(); cell.program.latencyMs.p95 = null
   assert.equal(evaluateCell(cell, valid()).passed, false)
 })
-test('fast average cannot conceal one stalled angle or missing sound', () => {
+test('silent audio is valid, but missing or non-finite audio evidence is not', () => {
+  const cell = valid(), baseline = valid()
+  cell.audio.rms = 0; baseline.audio.rms = 0
+  assert.equal(evaluateCell(cell, baseline).passed, true)
+  cell.audio.rms = NaN
+  assert.equal(evaluateCell(cell, baseline).passed, false)
+})
+test('fast average cannot conceal one stalled angle or missing audio scheduling', () => {
   const cell = valid(); cell.count = 4; cell.tiles.tiles = [{ fps: 12 }, { fps: 12 }, { fps: 0 }]
   assert.ok(evaluateCell(cell, valid()).failures.includes('tile-cadence'))
   cell.audio = null

@@ -296,6 +296,10 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
           && renderWorkerPipelineTypeImports.get(fromName)?.has(toName)
         )
         || (
+          fromName === 'workers/multicam-monitor.worker.ts'
+          && new Set(['pipeline/multicamMonitorDecode.ts', 'pipeline/multicamMonitorProtocol.ts']).has(toName)
+        )
+        || (
           fromName === 'workers/audio-alignment.worker.ts'
           && new Set(['pipeline/audioAlignmentDecode.ts', 'pipeline/audioAlignmentProtocol.ts']).has(toName)
         )

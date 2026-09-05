@@ -10,6 +10,7 @@
  */
 
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
+import { mediaResourceAdmission } from './mediaResourceAdmission'
 import { validateExportProfile } from '../domain/exportProfile'
 import {
   createCrossfadeAudioWindowIndex,
@@ -546,10 +547,14 @@ function trackActiveExport(
   runtimeGuards: ReadonlyMap<AssetId, MediaRuntimeGuard>,
 ): Promise<ExportResult | undefined> {
   const token = {}
+  // Export owns a separate decoder/surface budget. Retire optional monitoring
+  // before profile probes, Blob retention, plugin consumption or allocation.
+  const resourceLease = mediaResourceAdmission.reserve({ kind: 'export', decoderSlots: 0, surfaceBytes: 0, monitorCompatible: false })
   const completion = Promise.resolve().then(start).catch((cause) => {
     reportExportRuntimeFailure(cause, runtimeGuards)
     throw cause
   }).finally(() => {
+    resourceLease.release()
     if (state.active?.token === token) state.active = null
   })
   state.active = { token, lifecycle, completion }

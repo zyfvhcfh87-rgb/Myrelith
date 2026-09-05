@@ -29,6 +29,7 @@ import {
   type MonitorPlaybackHandoff,
 } from '../domain/sourceMonitor'
 import { PlaybackEngine } from '../engine/playback-engine'
+import { mediaResourceAdmission, type MediaResourceLease } from './mediaResourceAdmission'
 import {
   hasAudioPlaybackContent,
   startTimelineAudioPlayback,
@@ -102,6 +103,7 @@ interface ControllerState {
   deps: SourcePlaybackDeps
   engine: PlaybackEngine | null
   audioSession: TimelineAudioPlaybackSession | null
+  audioLease: MediaResourceLease | null
   startupAbort: AbortController | null
   playGeneration: number
   activeGeneration: number
@@ -115,6 +117,7 @@ const state: ControllerState = {
   deps: realDeps,
   engine: null,
   audioSession: null,
+  audioLease: null,
   startupAbort: null,
   playGeneration: 0,
   activeGeneration: -1,
@@ -153,6 +156,8 @@ function stopSourceAudioSession(): void {
   state.startupAbort?.abort()
   state.startupAbort = null
   const session = state.audioSession
+  const lease = state.audioLease
+  state.audioLease = null
   state.audioSession = null
   if (!session) return
   let pending: Promise<unknown>
@@ -161,7 +166,7 @@ function stopSourceAudioSession(): void {
   } catch (cause) {
     pending = Promise.reject(cause)
   }
-  void trackCleanup(pending, 'source audio cleanup failed')
+  void trackCleanup(pending.finally(() => lease?.release()), 'source audio cleanup failed')
 }
 
 function haltSourceEngine(): void {
@@ -390,6 +395,8 @@ function startSourceAudio(
     },
   }
 
+  const lease = mediaResourceAdmission.reserve({ kind: 'source', decoderSlots: 1, surfaceBytes: 0, monitorCompatible: false })
+  let adoptedLease = false
   const playbackTask = (async () => {
     const audioSession = await state.deps.startAudio(
       context,
@@ -426,6 +433,8 @@ function startSourceAudio(
 
     state.startupAbort = null
     state.audioSession = audioSession
+    state.audioLease = lease
+    adoptedLease = true
     startSourceEngine(engine, live.session, audioSession.anchorTime)
   })().catch((cause) => {
     if (
@@ -438,7 +447,7 @@ function startSourceAudio(
     const live = useSourceMonitorStore.getState().session
     if (!live || live.shuttleStep === 0) return
     startSourceEngine(engine, live, context.currentTime)
-  })
+  }).finally(() => { if (!adoptedLease) lease.release() })
   state.playbackTasks.add(playbackTask)
   void playbackTask.then(() => state.playbackTasks.delete(playbackTask))
 }

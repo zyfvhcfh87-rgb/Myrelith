@@ -67,7 +67,7 @@ function nameError(value: unknown, field: string): string | null {
     : null
 }
 
-function angleSourceFrame(angle: MulticamAngle, frame: number): number | null {
+export function multicamAngleSourceFrame(angle: MulticamAngle, frame: number): number | null {
   const endFrame = angle.coverage.startFrame + angle.coverage.durationFrames
   return frame < angle.coverage.startFrame || frame >= endFrame
     ? null
@@ -250,12 +250,12 @@ export function createMulticamPlanner(
         video: Object.freeze({
           angleId: videoAngle.id,
           assetId: videoAngle.assetId,
-          sourceFrame: angleSourceFrame(videoAngle, frame),
+          sourceFrame: multicamAngleSourceFrame(videoAngle, frame),
         }),
         audio: Object.freeze({
           angleId: audioAngle.id,
           assetId: audioAngle.assetId,
-          sourceFrame: angleSourceFrame(audioAngle, frame),
+          sourceFrame: multicamAngleSourceFrame(audioAngle, frame),
         }),
         switchComparisons,
       })

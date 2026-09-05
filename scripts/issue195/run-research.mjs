@@ -25,7 +25,7 @@ const files = [...new Set([...git('ls-files').split('\n'), ...readdirSync('scrip
 const sourceHash = createHash('sha256')
 for (const path of files) { sourceHash.update(path); sourceHash.update('\0'); sourceHash.update(readFileSync(path)); sourceHash.update('\0') }
 const fileDigests = Object.fromEntries(files.map((path) => [path, createHash('sha256').update(readFileSync(path)).digest('hex')]))
-const flags = ['--autoplay-policy=no-user-gesture-required', '--enable-automation']
+const flags = ['--mute-audio', '--autoplay-policy=no-user-gesture-required', '--enable-automation']
 const ignoredDefaultFlags = ['--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows']
 const result = { schema: 'myrelith-issue195-v1', candidate, lifecycleOnly, startedAt: new Date().toISOString(),
   source: { commit: git('rev-parse', 'HEAD'), status: git('status', '--porcelain'), sha256: sourceHash.digest('hex'), files, fileDigests,
