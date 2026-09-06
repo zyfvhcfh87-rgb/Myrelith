@@ -5558,3 +5558,17 @@ surface; it is not a second zoom and never enters document history.
   headless automation and in-app visual review. The in-app editor is available,
   but its native file chooser was not controllable; do not call that a media
   acceptance pass. No GitHub publication or issue closure was performed.
+
+### PR #223 audio-admission review (2026-09-06)
+
+The ready PR now includes master and preserves its reviewed alignment fix.
+The audio-restart reservation overlap is intentional: old resources remain
+counted through cleanup, while essential replacement audio may preempt optional
+previews. The early-release autofix was rejected. Three regressions and a
+negative-control mutation establish this distinction; see the
+[review evidence](evidence/issue195/audio-admission-review.md).
+Full local validation now passes 4,001 tests / 289 files plus 17 runner checks
+with `NODE_OPTIONS=--no-experimental-webstorage` to avoid Node 26 host storage
+interfering with jsdom. Build/typecheck and lint pass. No browser runtime changed
+in this follow-up. Fresh PR checks and the final merged state remain the
+publication authority.

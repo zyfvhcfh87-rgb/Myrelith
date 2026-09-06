@@ -147,6 +147,11 @@ Program reserves conservative high-water decoder and RGBA-equivalent surface
 allowances for its current bridge lifetime. Audio reserves its complete planned
 clip count because delayed lookahead work can overlap multiple clip cursors.
 These conservative reservations can deny monitoring on complex compositions.
+During an audio restart, the old and replacement reservations overlap until
+old-session cleanup settles. If that temporary overlap exceeds the allowance,
+the wall yields before replacement audio starts; it can be retried after
+cleanup. Releasing the old lease early or delaying essential playback merely
+to keep thumbnails active would violate this ownership/priority contract.
 
 `app/multicamMonitorSession.ts` owns the optional lease, worker bridge and
 registered canvases. Normal off keeps the lease until an observed zero ledger

@@ -443,6 +443,9 @@ function stopAudioSession(): void {
     } catch (cause) {
       pending = Promise.reject(cause)
     }
+    // A replacement may start while this session is still closing. Count both
+    // reservations until cleanup settles; optional previews must yield if that
+    // overlap exceeds their allowance, rather than undercounting audio owners.
     void trackCleanup(pending.finally(() => lease?.release()), 'audio cleanup failed')
   }
 }
