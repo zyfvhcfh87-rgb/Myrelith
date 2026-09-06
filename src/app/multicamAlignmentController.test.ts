@@ -60,6 +60,16 @@ test('preview leaves document/history untouched; corrected offsets apply once an
   expect(useDocumentStore.getState().project).toEqual(after.project)
   expect(JSON.stringify(after.project)).not.toMatch(/cacheKey|fingerprint|pairKey|decodePolicy/)
 })
+test('apply ignores an unselected leftover offline angle', async () => {
+  const f = fixture()
+  await f.controller.analyze(f.settings)
+  useMediaStore.getState().removeAsset('third')
+  const before = useDocumentStore.getState()
+  expect(f.controller.apply([{ angleId: f.definition.angles[1].id, coverageStartFrame: 24 }])).toBe(true)
+  expect(useDocumentStore.getState().past.length).toBe(before.past.length + 1)
+  expect(useDocumentStore.getState().project.multicams![0].angles[1].coverage.startFrame).toBe(24)
+  expect(useMulticamAlignmentStore.getState()).toMatchObject({ phase: 'applied' })
+})
 test('rejects oversized, negative, fractional and unreviewed offsets without creating history', async () => {
   const f = fixture()
   await f.controller.analyze(f.settings)

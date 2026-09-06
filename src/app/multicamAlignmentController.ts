@@ -202,10 +202,11 @@ export class MulticamAlignmentController {
       return reject('Accept at least one valid proposal. Ambiguous and unavailable rows cannot be applied.')
     }
     const rate = useDocumentStore.getState().doc.frameRate
-    // Recheck live source coverage independently of the proposal and of persisted cache data.
-    for (const angle of session.definition.angles) {
-      const descriptor = useMediaStore.getState().descriptors.get(angle.assetId)
-      if (!descriptor || angle.sourceStartFrame + angle.coverage.durationFrames > microsecondsDurationToFrames(descriptor.durationMicroseconds, rate)) {
+    // Recheck live selected-source coverage independently of the proposal and of persisted cache data.
+    for (const source of session.sources) {
+      const angle = session.definition.angles.find((item) => item.id === source.angleId)
+      const descriptor = useMediaStore.getState().descriptors.get(source.asset.id)
+      if (!angle || !descriptor || angle.sourceStartFrame + angle.coverage.durationFrames > microsecondsDurationToFrames(descriptor.durationMicroseconds, rate)) {
         return reject('An angle exceeds its current source coverage. Correct its manual range first.')
       }
     }
