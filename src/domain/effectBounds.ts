@@ -130,6 +130,13 @@ export function documentEffectBudgetUsage(doc: TimelineDoc): EffectBudgetUsage {
   let effects = 0
   let params = 0
   let stringCharacters = 0
+  for (const stack of [doc.masterVideoEffects ?? [], ...doc.tracks.map((track) => track.videoEffects ?? [])]) {
+    effects += stack.length
+    for (const effect of stack) {
+      const descriptor = effectDescriptorBudget(effect)
+      params += descriptor.params; stringCharacters += descriptor.stringCharacters
+    }
+  }
   for (const track of doc.tracks) {
     for (const clip of track.clips) {
       effects += clip.effects.length

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import type { Clip, SequenceInstance, TimelineDoc, Track } from './schema'
 import { defaultSourceTimeMap } from './sourceTimeMap'
+import { createColorAdjustEffect } from './effectStack'
 import type { SequenceProject, SequenceEntityKind } from './projectSequences'
 import {
   applySequenceInstanceEdit,
@@ -74,7 +75,7 @@ function clip(id: string, startFrame: number, linkGroupId?: string): Clip {
 
 function sequence(id: string, tracks: Track[] = []): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },
@@ -104,6 +105,27 @@ function factory() {
 }
 
 describe('sequence-instance edit seam', () => {
+  test('compound creation retains enclosing video buses exactly once, including preserved intent', () => {
+    const video = { ...track('V1', 'video'), clips: [clip('video-clip', 12)], videoEffects: [createColorAdjustEffect('track-bus'), { id: 'future-bus', type: 'future.bus', version: 4, enabled: false, params: {} }] }
+    const parent = { ...sequence('root', [video]), masterVideoEffects: [createColorAdjustEffect('master-bus')] }
+    const initial = project(parent)
+    const result = createCompoundSequenceFromClips(initial, 'root', ['video-clip'], 'Scene', factory())
+    expect(result.failure).toBeNull()
+    expect(result.project.sequences[0].tracks[0].videoEffects).toEqual(video.videoEffects)
+    expect(result.project.sequences[0].masterVideoEffects).toEqual(parent.masterVideoEffects)
+    expect(result.project.sequences[1].tracks[0].videoEffects).toEqual([])
+    expect(result.project.sequences[1].masterVideoEffects).toEqual([])
+  })
+
+  test('multiple selected video tracks with separate bus intent reject without changing the project', () => {
+    const a = { ...track('V1', 'video'), clips: [clip('a', 12)], videoEffects: [createColorAdjustEffect('track-bus')] }
+    const b = { ...track('V2', 'video'), clips: [clip('b', 12)] }
+    const initial = project(sequence('root', [a, b]))
+    const result = createCompoundSequenceFromClips(initial, 'root', ['a', 'b'], 'Scene', factory())
+    expect(result.failure).toBe('video-bus-scope')
+    expect(result.project).toBe(initial)
+  })
+
   test('creates one live compound definition and linked parent instances atomically', () => {
     const video = { ...track('V1', 'video'), clips: [clip('video-clip', 12, 'av')] }
     const audio = { ...track('A1', 'audio'), clips: [clip('audio-clip', 12, 'av')] }

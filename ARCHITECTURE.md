@@ -257,6 +257,19 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   resolve multicam video and audio for preview, playback, nested sequences, and
   export. Mixed-settings nesting, automatic sync, unlimited angles, and a live
   simultaneous angle wall remain unsupported.
+- Schema 21 adds static `Track.videoEffects` and `TimelineDoc.masterVideoEffects`
+  using ordinary versioned descriptors; old documents migrate to empty arrays.
+  All stacks count toward global effect ids and budgets, including dormant
+  sequences. Track processing follows source effects, opacity and transition
+  mixing, before the track's outer blend. Adjustment items keep their existing
+  accumulated-picture stage. Captions precede each sequence master. Nested
+  plans carry sequence id, local frame and instance path; child master precedes
+  enclosing track processing. Current equal-size opaque sequence instances and
+  explicit `preservesOpaqueInput` registration permit sequential destination/
+  leg/group reuse. Future alpha-reducing stages cannot use this optimization.
+  Bus pixels borrow existing scratch after source/plugin completion, with one
+  readback plus bounded spatial scratch admitted in Program and exact lens
+  source/output budgets before allocation. No browser resources enter stacks.
 - `TimeRange` is **half-open** `[startFrame, startFrame + durationFrames)`;
   ranges that merely touch do not overlap. All ranges are integer frames at
   the document rate.
@@ -1334,7 +1347,26 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   a `frameReady`; superseded seeks are resolved by the bridge, and a
   worker `error` carrying a requestId also settles that request.
 
+Local effect presets use the exact versioned, bounded data contract in
+`domain/effectPresets.ts`. `app/localEffectPresetStorage.ts` owns one IndexedDB
+read/write transaction per mutation and closes each connection on completion
+or failure. Only transaction completion confirms a write. Valid siblings and
+unrecognized raw records survive mutations; a future envelope is read-only.
+`effectPresetStore` contains serializable presentation facts only. Presets
+capture resolved static effect values, carry no media or trust authority, and
+apply through the same atomic clip-attribute operation with fresh identities.
+They are independent of project save/recovery and timeline history.
+
 ## Folder layout
+
+Clip attribute workflows use `domain/clipAttributes.ts` for atomic candidate
+construction and validation. Fresh effect ids reserve all project sequences
+and orphan animation targets; copied keys keep local frame offsets while
+recomputing source-time intent through each destination map. The app clipboard
+is a defensive data snapshot scoped to `documentStore.projectGeneration`.
+That generation is session-only, advances on document replacement, and never
+enters history or portable files. Dialogs pin project, generation, sequence and
+explicit selection; the store commits the complete validated batch once.
 
 ```
 src/

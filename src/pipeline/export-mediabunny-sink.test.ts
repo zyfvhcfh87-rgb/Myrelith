@@ -102,11 +102,11 @@ describe('createMediabunnyExportSink video behavior', () => {
     expect(transitionSurfaces.group.canvas).toBe(fakeCanvases[2])
     expect(fakeCanvases[1].getContext).toHaveBeenCalledWith(
       '2d',
-      { colorSpace: 'srgb' },
+      { colorSpace: 'srgb', willReadFrequently: true },
     )
     expect(fakeCanvases[2].getContext).toHaveBeenCalledWith(
       '2d',
-      { colorSpace: 'srgb' },
+      { colorSpace: 'srgb', willReadFrequently: true },
     )
     expect(sink.transitionSurfaceProvider.get()).toBe(transitionSurfaces)
     expect(fakeCanvases).toHaveLength(3)

@@ -125,6 +125,7 @@ function track(
     volume: 1,
     balance: 0,
     audioEffects: [],
+    videoEffects: [],
   }
 }
 
@@ -217,6 +218,7 @@ function makeDocument(): TimelineDoc {
 
   return {
     schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
+    masterVideoEffects: [],
     id: 'project-123',
     name: 'Portable edit',
     frameRate: { num: 30_000, den: 1_001 },

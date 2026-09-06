@@ -411,10 +411,10 @@ function frozenPixelEffect(effect: CanvasPixelEffect | null): CanvasPixelEffect 
       params: Object.freeze({ ...effect.params }),
     })
   }
-  return Object.freeze({
-    kind: effect.kind,
-    params: Object.freeze({ ...effect.params }),
-  })
+  if (effect.kind === 'chroma-key') {
+    return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
+  }
+  return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
 }
 
 function builtInStage(effect: EffectDescriptor): BuiltInVideoEffectStage {

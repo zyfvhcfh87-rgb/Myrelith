@@ -20,7 +20,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
 export const CURRENT_PROJECT_FORMAT_VERSION = 7 as const
-export const CURRENT_TIMELINE_SCHEMA_VERSION = 20 as const
+export const CURRENT_TIMELINE_SCHEMA_VERSION = 21 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
 export const PROJECT_FILE_LIMITS = {

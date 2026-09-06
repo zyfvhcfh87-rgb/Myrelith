@@ -1,0 +1,73 @@
+{
+  "lensUnavailable": null,
+  "maxDifference": 0,
+  "failure": "VideoEffectStageExecutionError: Video-bus pixel processing failed.",
+  "cleared": true,
+  "scopes": [
+    {
+      "kind": "video-bus",
+      "target": "master",
+      "trackId": "",
+      "sequenceId": "child",
+      "frame": 2,
+      "instancePath": [
+        "child-use"
+      ],
+      "effects": [
+        {
+          "id": "child-master",
+          "type": "builtin.vignette",
+          "version": 1,
+          "enabled": true,
+          "params": {
+            "strength": 0.6,
+            "radius": 0.2,
+            "softness": 0.8
+          }
+        }
+      ]
+    },
+    {
+      "kind": "video-bus",
+      "target": "track",
+      "trackId": "parent-child",
+      "sequenceId": "root",
+      "frame": 2,
+      "instancePath": [],
+      "effects": [
+        {
+          "id": "parent-track-blur",
+          "type": "builtin.box-blur",
+          "version": 1,
+          "enabled": true,
+          "params": {
+            "radius": 2
+          }
+        }
+      ]
+    },
+    {
+      "kind": "video-bus",
+      "target": "master",
+      "trackId": "",
+      "sequenceId": "root",
+      "frame": 2,
+      "instancePath": [],
+      "effects": [
+        {
+          "id": "root-master",
+          "type": "builtin.color-adjust",
+          "version": 1,
+          "enabled": true,
+          "params": {
+            "exposure": -0.4,
+            "contrast": 0,
+            "saturation": 0,
+            "temperature": 0,
+            "tint": 0
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,11 +1,15 @@
 import type { Clip } from './schema'
 
-/** The deliberately small serialized blend-mode vocabulary shipped by issue #46. */
+/** The deliberately small serialized blend-mode vocabulary extended by issue #197. */
 export const BLEND_MODE_NAMES = Object.freeze([
   'normal',
   'multiply',
   'screen',
   'overlay',
+  'darken',
+  'lighten',
+  'difference',
+  'exclusion',
 ] as const)
 
 export type BlendModeName = (typeof BLEND_MODE_NAMES)[number]
@@ -87,6 +91,10 @@ export interface Rgba8 {
 }
 
 function channelBlend(backdrop: number, source: number, mode: BlendModeName): number {
+  if (mode === 'darken') return Math.min(backdrop, source)
+  if (mode === 'lighten') return Math.max(backdrop, source)
+  if (mode === 'difference') return Math.abs(backdrop - source)
+  if (mode === 'exclusion') return backdrop + source - 2 * backdrop * source
   if (mode === 'multiply') return backdrop * source
   if (mode === 'screen') return backdrop + source - backdrop * source
   if (mode === 'overlay') {

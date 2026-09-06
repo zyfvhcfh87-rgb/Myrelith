@@ -1,0 +1,121 @@
+{
+  "browser": "151.0.7922.34",
+  "platform": "darwin",
+  "arch": "arm64",
+  "rows": [
+    {
+      "width": 1280,
+      "height": 720,
+      "elapsedMs": 920,
+      "error": null,
+      "peakSurfaces": 3,
+      "peakArrays": 7372800,
+      "scratchPeak": 15360,
+      "liveSurfaces": 0,
+      "liveArrays": 0,
+      "rgbaSurfaceBytes": 11059200
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "elapsedMs": 1942.8000000044703,
+      "error": null,
+      "peakSurfaces": 3,
+      "peakArrays": 16588800,
+      "scratchPeak": 23040,
+      "liveSurfaces": 0,
+      "liveArrays": 0,
+      "rgbaSurfaceBytes": 24883200
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "elapsedMs": 7723,
+      "error": null,
+      "peakSurfaces": 3,
+      "peakArrays": 66355200,
+      "scratchPeak": 46080,
+      "liveSurfaces": 0,
+      "liveArrays": 0,
+      "rgbaSurfaceBytes": 99532800
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "run": 0,
+      "fail": false,
+      "error": null,
+      "peakSurfaces": 3,
+      "peakArrays": 7372800,
+      "scratchPeak": 15360,
+      "liveSurfaces": 0,
+      "liveArrays": 0,
+      "rgbaSurfaceBytes": 11059200
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "run": 0,
+      "fail": true,
+      "error": "Error: injected plugin failure/cancellation",
+      "peakSurfaces": 3,
+      "peakArrays": 3686400,
+      "scratchPeak": 15360,
+      "liveSurfaces": 0,
+      "liveArrays": 0,
+      "rgbaSurfaceBytes": 11059200
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "run": 1,
+      "fail": false,
+      "error": null,
+      "peakSurfaces": 3,
+      "peakArrays": 7372800,
+      "scratchPeak": 15360,
+      "liveSurfaces": 0,
+      "liveArrays": 0,
+      "rgbaSurfaceBytes": 11059200
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "run": 1,
+      "fail": true,
+      "error": "Error: injected plugin failure/cancellation",
+      "peakSurfaces": 3,
+      "peakArrays": 3686400,
+      "scratchPeak": 15360,
+      "liveSurfaces": 0,
+      "liveArrays": 0,
+      "rgbaSurfaceBytes": 11059200
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "run": 2,
+      "fail": false,
+      "error": null,
+      "peakSurfaces": 3,
+      "peakArrays": 7372800,
+      "scratchPeak": 15360,
+      "liveSurfaces": 0,
+      "liveArrays": 0,
+      "rgbaSurfaceBytes": 11059200
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "run": 2,
+      "fail": true,
+      "error": "Error: injected plugin failure/cancellation",
+      "peakSurfaces": 3,
+      "peakArrays": 3686400,
+      "scratchPeak": 15360,
+      "liveSurfaces": 0,
+      "liveArrays": 0,
+      "rgbaSurfaceBytes": 11059200
+    }
+  ]
+}

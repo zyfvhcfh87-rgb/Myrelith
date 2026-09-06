@@ -7,7 +7,7 @@ import './loudnessController'
 
 function doc(id: string): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },

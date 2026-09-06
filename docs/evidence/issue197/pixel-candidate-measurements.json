@@ -1,0 +1,971 @@
+{
+  "recordedAt": "2026-09-06T13:55:52.403Z",
+  "chromium": "151.0.7922.34",
+  "nodePlatform": "darwin",
+  "nodeArch": "arm64",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+  "hardwareConcurrency": 18,
+  "rows": [
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "box-blur",
+      "setting": "representative",
+      "parameters": {
+        "radius": 8
+      },
+      "samplesMs": [
+        27.700000002980232,
+        13.600000001490116,
+        13.5,
+        13.600000001490116,
+        13.5,
+        13.5,
+        13.699999995529652,
+        13.399999998509884,
+        13.5,
+        13.599999994039536
+      ],
+      "p95Ms": 27.700000002980232,
+      "ceilingMs": 40,
+      "scratchBytesPeak": 5120,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "box-blur",
+      "setting": "maximum",
+      "parameters": {
+        "radius": 32
+      },
+      "samplesMs": [
+        13.400000005960464,
+        13.5,
+        13.5,
+        14,
+        13.5,
+        13.399999998509884,
+        13.600000001490116,
+        13.600000001490116,
+        13.5,
+        13.600000001490116
+      ],
+      "p95Ms": 14,
+      "ceilingMs": 40,
+      "scratchBytesPeak": 5120,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "sharpen",
+      "setting": "representative",
+      "parameters": {
+        "amount": 0.5
+      },
+      "samplesMs": [
+        8.800000004470348,
+        7.899999998509884,
+        7.899999998509884,
+        7.899999998509884,
+        7.9000000059604645,
+        7.899999998509884,
+        7.899999998509884,
+        7.899999998509884,
+        8.100000001490116,
+        7.899999998509884
+      ],
+      "p95Ms": 8.800000004470348,
+      "ceilingMs": 40,
+      "scratchBytesPeak": 15360,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "sharpen",
+      "setting": "maximum",
+      "parameters": {
+        "amount": 2
+      },
+      "samplesMs": [
+        7.800000004470348,
+        7.799999997019768,
+        8,
+        7.899999998509884,
+        7.9000000059604645,
+        7.799999997019768,
+        7.899999998509884,
+        8,
+        8.099999994039536,
+        7.799999997019768
+      ],
+      "p95Ms": 8.099999994039536,
+      "ceilingMs": 40,
+      "scratchBytesPeak": 15360,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "vignette",
+      "setting": "representative",
+      "parameters": {
+        "strength": 0.5,
+        "radius": 0.5,
+        "softness": 0.5
+      },
+      "samplesMs": [
+        4.200000002980232,
+        4.100000001490116,
+        4.199999995529652,
+        4.200000002980232,
+        4.0999999940395355,
+        4.100000001490116,
+        4.100000001490116,
+        4.100000001490116,
+        4.0999999940395355,
+        4.200000002980232
+      ],
+      "p95Ms": 4.200000002980232,
+      "ceilingMs": 40,
+      "scratchBytesPeak": 0,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "vignette",
+      "setting": "maximum",
+      "parameters": {
+        "strength": 1,
+        "radius": 0,
+        "softness": 0.01
+      },
+      "samplesMs": [
+        4.100000001490116,
+        4.100000001490116,
+        4.0999999940395355,
+        4.100000001490116,
+        4.100000001490116,
+        4,
+        4.200000002980232,
+        4.200000002980232,
+        4.0999999940395355,
+        4.199999995529652
+      ],
+      "p95Ms": 4.200000002980232,
+      "ceilingMs": 40,
+      "scratchBytesPeak": 0,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "drop-shadow",
+      "setting": "representative",
+      "parameters": {
+        "radius": 8,
+        "offsetX": 8,
+        "offsetY": 8,
+        "opacity": 0.5,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        9.600000001490116,
+        8.799999997019768,
+        8.699999995529652,
+        8.799999997019768,
+        8.899999998509884,
+        8.900000005960464,
+        8.700000002980232,
+        8.800000004470348,
+        8.899999998509884,
+        8.699999995529652
+      ],
+      "p95Ms": 9.600000001490116,
+      "ceilingMs": 40,
+      "scratchBytesPeak": 43520,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "drop-shadow",
+      "setting": "maximum",
+      "parameters": {
+        "radius": 32,
+        "offsetX": 64,
+        "offsetY": 64,
+        "opacity": 1,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        8.600000001490116,
+        8.5,
+        8.600000001490116,
+        8.799999997019768,
+        8.5,
+        8.700000002980232,
+        8.599999994039536,
+        8.600000001490116,
+        8.5,
+        8.5
+      ],
+      "p95Ms": 8.799999997019768,
+      "ceilingMs": 40,
+      "scratchBytesPeak": 176640,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "outline",
+      "setting": "representative",
+      "parameters": {
+        "width": 4,
+        "opacity": 0.5,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        14.5,
+        13.099999994039536,
+        13.299999997019768,
+        13.299999997019768,
+        13.299999997019768,
+        13.399999998509884,
+        13.299999997019768,
+        13.399999998509884,
+        13.399999998509884,
+        13.199999995529652
+      ],
+      "p95Ms": 14.5,
+      "ceilingMs": 40,
+      "scratchBytesPeak": 55060,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "outline",
+      "setting": "maximum",
+      "parameters": {
+        "width": 32,
+        "opacity": 1,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        13.399999998509884,
+        13.5,
+        13.5,
+        13.399999998509884,
+        13.5,
+        13.399999998509884,
+        13.5,
+        13.5,
+        13.5,
+        13.5
+      ],
+      "p95Ms": 13.5,
+      "ceilingMs": 40,
+      "scratchBytesPeak": 270212,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "eight-blurs",
+      "samplesMs": [
+        108.20000000298023,
+        108.20000000298023,
+        108.29999999701977,
+        108.10000000149012,
+        108.80000000447035,
+        108.5,
+        108.39999999850988,
+        108.10000000149012,
+        108.20000000298023,
+        108.5
+      ],
+      "p95Ms": 108.80000000447035,
+      "ceilingMs": 320,
+      "passed": true,
+      "note": "Eight sequential maximum-radius blur stages; scratch is reused in lifetime, not multiplied by stack length."
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "candidate": "mixed-echo-stages",
+      "samplesMs": [
+        54.899999998509884,
+        54.29999999701977,
+        54.399999998509884,
+        54.600000001490116,
+        55,
+        54.70000000298023,
+        54.70000000298023,
+        56.30000000447035,
+        54.5,
+        56.5
+      ],
+      "p95Ms": 56.5,
+      "ceilingMs": 320,
+      "passed": true,
+      "note": "Three byte-echo stand-ins exercise shared stage copies, not installed plugin acceptance. Caller plus transactional working/input/output = four RGBA buffers; canvases and plugin runtime excluded."
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "box-blur",
+      "setting": "representative",
+      "parameters": {
+        "radius": 8
+      },
+      "samplesMs": [
+        30,
+        30,
+        29.899999998509884,
+        29.899999998509884,
+        30.200000002980232,
+        29.899999998509884,
+        29.899999998509884,
+        30.100000001490116,
+        30,
+        30.100000001490116
+      ],
+      "p95Ms": 30.200000002980232,
+      "ceilingMs": 90,
+      "scratchBytesPeak": 7680,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "box-blur",
+      "setting": "maximum",
+      "parameters": {
+        "radius": 32
+      },
+      "samplesMs": [
+        30.19999999552965,
+        30.100000001490116,
+        30.399999998509884,
+        30.200000002980232,
+        30.100000001490116,
+        30.099999994039536,
+        30.200000002980232,
+        30.100000001490116,
+        30.200000002980232,
+        30.399999998509884
+      ],
+      "p95Ms": 30.399999998509884,
+      "ceilingMs": 90,
+      "scratchBytesPeak": 7680,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "sharpen",
+      "setting": "representative",
+      "parameters": {
+        "amount": 0.5
+      },
+      "samplesMs": [
+        17.69999999552965,
+        17.80000000447035,
+        17.899999998509884,
+        18,
+        18.100000001490116,
+        18.69999999552965,
+        18.100000001490116,
+        17.69999999552965,
+        17.899999998509884,
+        17.69999999552965
+      ],
+      "p95Ms": 18.69999999552965,
+      "ceilingMs": 90,
+      "scratchBytesPeak": 23040,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "sharpen",
+      "setting": "maximum",
+      "parameters": {
+        "amount": 2
+      },
+      "samplesMs": [
+        17.799999997019768,
+        17.600000001490116,
+        17.799999997019768,
+        17.600000001490116,
+        17.700000002980232,
+        17.799999997019768,
+        17.700000002980232,
+        17.799999997019768,
+        17.899999998509884,
+        17.899999998509884
+      ],
+      "p95Ms": 17.899999998509884,
+      "ceilingMs": 90,
+      "scratchBytesPeak": 23040,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "vignette",
+      "setting": "representative",
+      "parameters": {
+        "strength": 0.5,
+        "radius": 0.5,
+        "softness": 0.5
+      },
+      "samplesMs": [
+        10.5,
+        10.299999997019768,
+        9.100000001490116,
+        9.299999997019768,
+        9.200000002980232,
+        9.199999995529652,
+        9.300000004470348,
+        9.199999995529652,
+        9.300000004470348,
+        9.100000001490116
+      ],
+      "p95Ms": 10.5,
+      "ceilingMs": 90,
+      "scratchBytesPeak": 0,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "vignette",
+      "setting": "maximum",
+      "parameters": {
+        "strength": 1,
+        "radius": 0,
+        "softness": 0.01
+      },
+      "samplesMs": [
+        9.199999995529652,
+        9.200000002980232,
+        9.299999997019768,
+        9.199999995529652,
+        9.300000004470348,
+        9.100000001490116,
+        9.300000004470348,
+        9.299999997019768,
+        9.399999998509884,
+        9.300000004470348
+      ],
+      "p95Ms": 9.399999998509884,
+      "ceilingMs": 90,
+      "scratchBytesPeak": 0,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "drop-shadow",
+      "setting": "representative",
+      "parameters": {
+        "radius": 8,
+        "offsetX": 8,
+        "offsetY": 8,
+        "opacity": 0.5,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        19.799999997019768,
+        19.799999997019768,
+        19.700000002980232,
+        19.5,
+        19.600000001490116,
+        19.600000001490116,
+        20,
+        19.899999998509884,
+        20,
+        19.600000001490116
+      ],
+      "p95Ms": 20,
+      "ceilingMs": 90,
+      "scratchBytesPeak": 65280,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "drop-shadow",
+      "setting": "maximum",
+      "parameters": {
+        "radius": 32,
+        "offsetX": 64,
+        "offsetY": 64,
+        "opacity": 1,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        19.200000002980232,
+        19.100000001490116,
+        19.100000001490116,
+        19.5,
+        19.19999999552965,
+        19.100000001490116,
+        19,
+        19.19999999552965,
+        19.100000001490116,
+        19.600000001490116
+      ],
+      "p95Ms": 19.600000001490116,
+      "ceilingMs": 90,
+      "scratchBytesPeak": 264960,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "outline",
+      "setting": "representative",
+      "parameters": {
+        "width": 4,
+        "opacity": 0.5,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        29.599999994039536,
+        29.80000000447035,
+        29.69999999552965,
+        29.799999997019768,
+        29.600000001490116,
+        29.900000005960464,
+        29.700000002980232,
+        29.5,
+        29.599999994039536,
+        29.5
+      ],
+      "p95Ms": 29.900000005960464,
+      "ceilingMs": 90,
+      "scratchBytesPeak": 82580,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "outline",
+      "setting": "maximum",
+      "parameters": {
+        "width": 32,
+        "opacity": 1,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        29.69999999552965,
+        30.100000001490116,
+        29.899999998509884,
+        30.100000001490116,
+        30.100000001490116,
+        30.099999994039536,
+        30,
+        30.100000001490116,
+        30.200000002980232,
+        29.799999997019768
+      ],
+      "p95Ms": 30.200000002980232,
+      "ceilingMs": 90,
+      "scratchBytesPeak": 405252,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "eight-blurs",
+      "samplesMs": [
+        241.19999999552965,
+        241.60000000149012,
+        241.29999999701977,
+        240.89999999850988,
+        241.39999999850988,
+        240.80000000447035,
+        240.39999999850988,
+        240.69999999552965,
+        240.80000000447035,
+        241.09999999403954
+      ],
+      "p95Ms": 241.60000000149012,
+      "ceilingMs": 720,
+      "passed": true,
+      "note": "Eight sequential maximum-radius blur stages; scratch is reused in lifetime, not multiplied by stack length."
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "candidate": "mixed-echo-stages",
+      "samplesMs": [
+        121.20000000298023,
+        122.19999999552965,
+        123.20000000298023,
+        121.39999999850988,
+        123,
+        123.80000000447035,
+        122.39999999850988,
+        122,
+        121.79999999701977,
+        121.39999999850988
+      ],
+      "p95Ms": 123.80000000447035,
+      "ceilingMs": 720,
+      "passed": true,
+      "note": "Three byte-echo stand-ins exercise shared stage copies, not installed plugin acceptance. Caller plus transactional working/input/output = four RGBA buffers; canvases and plugin runtime excluded."
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "box-blur",
+      "setting": "representative",
+      "parameters": {
+        "radius": 8
+      },
+      "samplesMs": [
+        122.10000000149012,
+        122.29999999701977,
+        123,
+        122.29999999701977,
+        122.80000000447035,
+        122.19999999552965,
+        122.69999999552965,
+        122.60000000149012,
+        122.70000000298023,
+        122
+      ],
+      "p95Ms": 123,
+      "ceilingMs": 360,
+      "scratchBytesPeak": 15360,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "box-blur",
+      "setting": "maximum",
+      "parameters": {
+        "radius": 32
+      },
+      "samplesMs": [
+        122.60000000149012,
+        122.89999999850988,
+        122.70000000298023,
+        122.79999999701977,
+        122.89999999850988,
+        122.60000000149012,
+        122.39999999850988,
+        121.70000000298023,
+        123,
+        122.60000000149012
+      ],
+      "p95Ms": 123,
+      "ceilingMs": 360,
+      "scratchBytesPeak": 15360,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "sharpen",
+      "setting": "representative",
+      "parameters": {
+        "amount": 0.5
+      },
+      "samplesMs": [
+        71.40000000596046,
+        84.40000000596046,
+        71.59999999403954,
+        71.10000000149012,
+        71.60000000149012,
+        71.60000000149012,
+        71.5,
+        71.39999999850988,
+        71.70000000298023,
+        72.10000000149012
+      ],
+      "p95Ms": 84.40000000596046,
+      "ceilingMs": 360,
+      "scratchBytesPeak": 46080,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "sharpen",
+      "setting": "maximum",
+      "parameters": {
+        "amount": 2
+      },
+      "samplesMs": [
+        72,
+        72.60000000149012,
+        71.20000000298023,
+        71.19999999552965,
+        72.89999999850988,
+        71.39999999850988,
+        71.40000000596046,
+        71.69999999552965,
+        71.20000000298023,
+        71
+      ],
+      "p95Ms": 72.89999999850988,
+      "ceilingMs": 360,
+      "scratchBytesPeak": 46080,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "vignette",
+      "setting": "representative",
+      "parameters": {
+        "strength": 0.5,
+        "radius": 0.5,
+        "softness": 0.5
+      },
+      "samplesMs": [
+        36.899999998509884,
+        36.899999998509884,
+        37,
+        37.100000001490116,
+        36.899999998509884,
+        37.400000005960464,
+        38.19999999552965,
+        38.100000001490116,
+        36.79999999701977,
+        37
+      ],
+      "p95Ms": 38.19999999552965,
+      "ceilingMs": 360,
+      "scratchBytesPeak": 0,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "vignette",
+      "setting": "maximum",
+      "parameters": {
+        "strength": 1,
+        "radius": 0,
+        "softness": 0.01
+      },
+      "samplesMs": [
+        36.80000000447035,
+        37.19999999552965,
+        36.69999999552965,
+        36.69999999552965,
+        36.900000005960464,
+        37.099999994039536,
+        38,
+        38,
+        38.20000000298023,
+        37.79999999701977
+      ],
+      "p95Ms": 38.20000000298023,
+      "ceilingMs": 360,
+      "scratchBytesPeak": 0,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "drop-shadow",
+      "setting": "representative",
+      "parameters": {
+        "radius": 8,
+        "offsetX": 8,
+        "offsetY": 8,
+        "opacity": 0.5,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        78.5,
+        78.89999999850988,
+        78.30000000447035,
+        80,
+        78.60000000149012,
+        77.89999999850988,
+        78.30000000447035,
+        78.5,
+        78.29999999701977,
+        78.39999999850988
+      ],
+      "p95Ms": 80,
+      "ceilingMs": 360,
+      "scratchBytesPeak": 130560,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "drop-shadow",
+      "setting": "maximum",
+      "parameters": {
+        "radius": 32,
+        "offsetX": 64,
+        "offsetY": 64,
+        "opacity": 1,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        78.30000000447035,
+        78.79999999701977,
+        78.39999999850988,
+        78.69999999552965,
+        78.70000000298023,
+        78.60000000149012,
+        81.10000000149012,
+        80.89999999850988,
+        80.40000000596046,
+        78.19999999552965
+      ],
+      "p95Ms": 81.10000000149012,
+      "ceilingMs": 360,
+      "scratchBytesPeak": 529920,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "outline",
+      "setting": "representative",
+      "parameters": {
+        "width": 4,
+        "opacity": 0.5,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        118.5,
+        118.80000000447035,
+        118.60000000149012,
+        118.5,
+        118.39999999850988,
+        118.60000000149012,
+        119.10000000149012,
+        118.70000000298023,
+        118.5,
+        118.70000000298023
+      ],
+      "p95Ms": 119.10000000149012,
+      "ceilingMs": 360,
+      "scratchBytesPeak": 165140,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "outline",
+      "setting": "maximum",
+      "parameters": {
+        "width": 32,
+        "opacity": 1,
+        "color": "#000000"
+      },
+      "samplesMs": [
+        120,
+        119.5,
+        122.30000000447035,
+        119.59999999403954,
+        125.80000000447035,
+        120,
+        120.30000000447035,
+        119.60000000149012,
+        119.5,
+        122
+      ],
+      "p95Ms": 125.80000000447035,
+      "ceilingMs": 360,
+      "scratchBytesPeak": 810372,
+      "scratchCeilingBytes": 1048576,
+      "passed": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "eight-blurs",
+      "samplesMs": [
+        978,
+        975.5999999940395,
+        979,
+        978.7000000029802,
+        983.5,
+        979.2999999970198,
+        979.1000000014901,
+        977.7999999970198,
+        976.5,
+        976.0999999940395
+      ],
+      "p95Ms": 983.5,
+      "ceilingMs": 2880,
+      "passed": true,
+      "note": "Eight sequential maximum-radius blur stages; scratch is reused in lifetime, not multiplied by stack length."
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "candidate": "mixed-echo-stages",
+      "samplesMs": [
+        490.5,
+        491.79999999701977,
+        486.8999999985099,
+        488.19999999552965,
+        487.8999999985099,
+        490.90000000596046,
+        488,
+        487.5,
+        491.1000000014901,
+        490.6000000014901
+      ],
+      "p95Ms": 491.79999999701977,
+      "ceilingMs": 2880,
+      "passed": true,
+      "note": "Three byte-echo stand-ins exercise shared stage copies, not installed plugin acceptance. Caller plus transactional working/input/output = four RGBA buffers; canvases and plugin runtime excluded."
+    }
+  ],
+  "sourceSha256": {
+    "src/domain/spatialEffectPixels.ts": "a54829db5ea06b4ddd6fdd14c66ea0b1cc11efc16084cb1f8377a76d61cfb216",
+    "src/domain/spatialEffectDefinitions.ts": "cce149adad51323458366451f7a0950d907235fc0df73367253d277f69ddae26",
+    "src/domain/effectPixels.ts": "9c9b7bc0e91220486ef546a83c8d8efbcf9e39efc919862be1ff617047b2c154",
+    "src/pipeline/videoEffectStageExecution.ts": "3ce91a5d8c7056478b89bebb5ad9e3cf9f7708743b52f3f8d6a330d6a6467f59",
+    "tests/browser/issue-197-pixel-candidates.spec.ts": "7d06e0e607c2a439050305a7c55f4bc99bfb4e26f84d11e522d674796d79cf36"
+  }
+}

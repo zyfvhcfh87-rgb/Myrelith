@@ -1,3 +1,4 @@
+import VideoBusInspector from './VideoBusInspector'
 /**
  * Contextual Inspector composition root. Focused panels live under ui/inspector.
  * Layering remains ui/ -> state/ + domain selectors only.
@@ -25,6 +26,7 @@ import TextOverlayFields from './inspector/TextOverlayFields'
 import TimingInspectorSection from './inspector/TimingInspectorSection'
 import VideoInspectorSections from './inspector/VideoInspectorSections'
 import AdjustmentInspector from './AdjustmentInspector'
+import ClipAttributeControls from './ClipAttributeControls'
 
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
 const DynamicZoomEditor = lazy(() => import('./DynamicZoomEditor'))
@@ -32,6 +34,10 @@ const StabilizationEditor = lazy(() => import('./StabilizationEditor'))
 const MotionTrackingEditor = lazy(() => import('./MotionTrackingEditor'))
 
 export default function Inspector() {
+  return <><VideoBusInspector /><ClipInspector /></>
+}
+
+function ClipInspector() {
   const selectedClipId = useTransportStore((s) => s.selectedClipId)
   const selectedAdjustmentId = useTransportStore((s) => s.selectedAdjustmentId)
   const visualPreview = useTransportStore((s) => s.clipVisualPreview)
@@ -163,6 +169,7 @@ export default function Inspector() {
       )}
       <LinkSelectionControls key="linking-controls" />
       <TimingInspectorSection clip={clip} doc={timelineDoc} />
+      <ClipAttributeControls clipId={clip.id} />
       {videoClip?.text && (
         <TextOverlayFields
           key={`text:${videoClip.id}`}

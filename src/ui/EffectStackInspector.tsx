@@ -1,3 +1,5 @@
+import EffectBrowser from './EffectBrowser'
+import { SPATIAL_EFFECT_PARAMETERS, spatialEffectKind, spatialEffectParams } from '../state/editorUi'
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import type {
   Clip,
@@ -28,6 +30,7 @@ import {
 import { effectAppendBudgetError } from '../domain/effectBounds'
 import { useDocumentStore } from '../state/documentStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
+import { copyClipAttributes, copyClipEffectStack } from '../app/clipAttributeController'
 
 const PENDING_PREVIEW_EFFECT_DETAIL =
   'Preview renderer status has not been projected yet; the effect is preserved and bypassed.'
@@ -44,7 +47,7 @@ interface NumericFieldProps {
   onCommit: (value: number) => void
 }
 
-function NumericField({
+export function NumericField({
   label,
   value,
   min,
@@ -508,6 +511,25 @@ function ColorFields({
   )
 }
 
+
+function SpatialFields({ clip, effect, playheadFrame, locked }: { clip: Clip; effect: EffectDescriptor; playheadFrame: number; locked: boolean }) {
+  const kind = spatialEffectKind(effect.type)
+  if (!kind || effect.version !== 1) return null
+  const params = spatialEffectParams(kind, effect.params)
+  return <div className="inspector-effect-params">
+    {Object.entries(SPATIAL_EFFECT_PARAMETERS[kind]).map(([parameter, spec]) => <div key={parameter} className="inspector-effect-parameter">
+      <NumericField label={spec.label} value={Number(params[parameter])} min={spec.min} max={spec.max} step={spec.step}
+        disabled={locked} testId={`inspector-effect-${kind}-${parameter}-${effect.id}`}
+        onCommit={(value) => updateAtFrame(clip, effect, playheadFrame, { [parameter]: value })} />
+      {clip.text === undefined && <EffectParameterAnimation clip={clip} effect={effect} parameter={parameter} spec={spec}
+        value={Number(params[parameter])} playheadFrame={playheadFrame} locked={locked} />}
+    </div>)}
+    {(kind === 'drop-shadow' || kind === 'outline') && <label className="inspector-field"><span className="inspector-field-label">Effect color</span>
+      <input type="color" value={String(params.color)} disabled={locked} onChange={(event) => updateAtFrame(clip, effect, playheadFrame, { color: event.target.value })} />
+    </label>}
+  </div>
+}
+
 export default function EffectStackInspector({
   doc,
   clip,
@@ -520,6 +542,10 @@ export default function EffectStackInspector({
   playheadFrame: number
 }) {
   const effectStatuses = usePreviewStatusStore((state) => state.effectStatuses)
+  const [effectSelection, setEffectSelection] = useState<{ clipId: string; ids: string[] }>({ clipId: clip.id, ids: [] })
+  const selectedIds = effectSelection.clipId === clip.id
+    ? effectSelection.ids.filter((id) => clip.effects.some((effect) => effect.id === id))
+    : []
   const probes = {
     color: createColorAdjustEffect('__effect-budget-color__'),
     chroma: createChromaKeyEffect('__effect-budget-chroma__'),
@@ -548,6 +574,11 @@ export default function EffectStackInspector({
     <section className="inspector-section inspector-effects" aria-labelledby="inspector-effects-heading">
       <div className="inspector-section-bar">
         <h3 id="inspector-effects-heading">Effect stack</h3>
+        <div className="inspector-effect-actions">
+          <EffectBrowser clipId={clip.id} hasEffects={clip.effects.length > 0} />
+          <button type="button" disabled={!clip.effects.length} onClick={() => copyClipEffectStack(clip.id)}>Copy stack</button>
+          <button type="button" disabled={!selectedIds.length} onClick={() => copyClipAttributes(clip.id, selectedIds)}>Copy selected effects</button>
+        </div>
         <div className="inspector-effect-actions" aria-label="Add effect">
           <button type="button" className="inspector-effect-add" disabled={locked || limits.color !== null} aria-describedby={addBudgetReasonId(limits.color)} onClick={() => add(createColorAdjustEffect(newId()))}>Add color</button>
           <button type="button" className="inspector-effect-add" disabled={locked || limits.chroma !== null} aria-describedby={addBudgetReasonId(limits.chroma)} onClick={() => add(createChromaKeyEffect(newId()))}>Add chroma key</button>
@@ -594,6 +625,12 @@ export default function EffectStackInspector({
                 const resettable = effectRegistration(effect.type)?.version === effect.version
                 return (
                   <li className="inspector-effect-card" key={effect.id}>
+                    <label className="attribute-option"><input type="checkbox"
+                      aria-label={`Select effect ${index + 1}: ${resolution.label}`}
+                      checked={selectedIds.includes(effect.id)}
+                      onChange={(event) => setEffectSelection({ clipId: clip.id,
+                        ids: event.target.checked ? [...selectedIds, effect.id] : selectedIds.filter((id) => id !== effect.id),
+                      })} /> Select for copy</label>
                     <div className="inspector-effect-card-heading">
                       <span><strong>{resolution.label}</strong><small>{index + 1} of {clip.effects.length}</small></span>
                       <span className={`inspector-effect-status is-${resolution.status}`} aria-label={`Effect status: ${resolution.status}`}>{resolution.status}</span>
@@ -605,6 +642,7 @@ export default function EffectStackInspector({
                       `inspector-effect-enabled-${effect.id}`,
                       (enabled) => store().setEffectEnabled(clip.id, effect.id, enabled),
                     )}
+                    <SpatialFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />
                     {editableColor && <ColorFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />}
                     {editableMask && <MaskFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />}
                     {editableChroma && <ChromaKeyFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />}

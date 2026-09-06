@@ -32,6 +32,7 @@ import type {
   Track,
 } from '../domain/schema'
 import { defaultTextProps } from '../domain/textOverlay'
+import { videoBusAdditionalBytes } from '../domain/videoBusStage'
 import { analyzeVideoScopes } from '../domain/videoScopes'
 import { defaultClipVisualSettings } from '../domain/clipInspector'
 import {
@@ -476,6 +477,23 @@ afterEach(async () => {
 })
 
 describe('previewController', () => {
+  test('reserves bus memory before dispatch without admitting monitors during initialization', async () => {
+    const original = mediaResourceAdmission.snapshot()
+    const effect = createColorAdjustEffect('master-bus'); effect.params.exposure = -1
+    useDocumentStore.getState().setDoc({ ...initialDoc, masterVideoEffects: [effect] })
+    const { deps, bridge } = makeDeps()
+    const reservations: ReturnType<typeof mediaResourceAdmission.snapshot>[] = []
+    const setDoc = bridge.setDoc.bind(bridge)
+    bridge.setDoc = (doc) => { reservations.push(mediaResourceAdmission.snapshot()); setDoc(doc) }
+    initPreview(canvasEl(), deps)
+    expect(reservations[0].surfaceBytes).toBeGreaterThanOrEqual(videoBusAdditionalBytes(initialDoc.width, initialDoc.height))
+    expect(reservations[0].programReady).toBe(false)
+    await nextFrame(); await flush()
+    expect(mediaResourceAdmission.snapshot().programReady).toBe(true)
+    await disposePreview()
+    expect(mediaResourceAdmission.snapshot()).toEqual(original)
+  })
+
   test('drains playback lanes before a queued paused repaint can run', async () => {
     const { deps, bridge } = makeDeps()
     initPreview(canvasEl(), deps)

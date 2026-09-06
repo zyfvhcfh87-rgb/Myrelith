@@ -1,7 +1,9 @@
+import { snapshotVideoBusStack } from './videoBusStage'
 /** Pure, explicit visual composition planning for preview and export. */
 
 import type {
   AdjustmentItem,
+  EffectDescriptor,
   CaptionTrackId,
   Clip,
   MulticamDefinitionId,
@@ -41,7 +43,21 @@ import {
 import { sourceFrameAtTimelineFrame } from './sourceTimeMap'
 import { adjustmentItems, resolveAdjustmentAtFrame } from './adjustmentItems'
 
-export interface OrdinaryVideoPlanItem {
+export interface VideoBusTrackScope {
+  readonly trackEffects?: readonly EffectDescriptor[]
+  readonly busScope?: { readonly sequenceId: string; readonly frame: number; readonly instancePath: readonly string[] }
+}
+export interface VideoBusCompositionItem {
+  kind: 'video-bus'
+  trackId: string
+  frame: number
+  sequenceId: string
+  instancePath: readonly string[]
+  target: 'track' | 'master'
+  effects: readonly EffectDescriptor[]
+}
+
+export interface OrdinaryVideoPlanItem extends VideoBusTrackScope {
   kind: 'clip'
   trackId: TrackId
   frame: number
@@ -73,7 +89,7 @@ export function videoCompositionRequestKey(
   return request.requestKey ?? request.clip.id
 }
 
-export interface TextOverlayPlanItem {
+export interface TextOverlayPlanItem extends VideoBusTrackScope {
   kind: 'text'
   trackId: TrackId
   frame: number
@@ -92,7 +108,7 @@ export interface AdjustmentCompositionItem {
   adjustment: AdjustmentItem
 }
 
-export interface CrossfadeCompositionItem extends Omit<CrossfadeFrameGroup, 'requests'> {
+export interface CrossfadeCompositionItem extends Omit<CrossfadeFrameGroup, 'requests'>, VideoBusTrackScope {
   requests: readonly [PlannedCrossfadeFrameRequest, PlannedCrossfadeFrameRequest]
   blendMode: BlendModeResolution
 }
@@ -126,6 +142,7 @@ export interface MulticamBackgroundCompositionItem {
 }
 
 export type VideoCompositionItem =
+  | VideoBusCompositionItem
   | OrdinaryVideoPlanItem
   | TextOverlayPlanItem
   | AdjustmentCompositionItem
@@ -227,6 +244,7 @@ export function createVideoCompositionPlanner(
   const effectStagePlanner = createVideoEffectStagePlanner(pluginContributions)
   const tracks: Array<{
     readonly id: TrackId
+    readonly effects: readonly EffectDescriptor[]
     readonly clips: FrameIndex<Clip>
     readonly adjustments: FrameIndex<AdjustmentItem>
     readonly transitions: FrameIndex<CrossfadePlan>
@@ -252,6 +270,7 @@ export function createVideoCompositionPlanner(
     )
     tracks.push({
       id: track.id,
+      effects: snapshotVideoBusStack(track.videoEffects),
       clips: createFrameIndex(track.clips, (clip) => ({
         startFrame: clip.timelineRange.startFrame,
         endFrame:
@@ -269,10 +288,12 @@ export function createVideoCompositionPlanner(
     })
   }
 
+  const master = snapshotVideoBusStack(doc.masterVideoEffects)
   return {
     planFrame(frame: number): VideoCompositionPlan {
       const items: VideoCompositionItem[] = []
       for (const track of tracks) {
+        const scoped = <T extends VideoBusTrackScope>(item: T): T => track.effects.length ? { ...item, trackEffects: track.effects, busScope: { sequenceId: doc.id, frame, instancePath: [] } } : item
         const adjustment = track.adjustments.activeAt(frame)
         if (adjustment) {
           const resolved = resolveAdjustmentAtFrame(adjustment, frame)
@@ -293,7 +314,7 @@ export function createVideoCompositionPlanner(
             ? resolveCrossfadeGroupAnimation(rawGroup, effectStagePlanner)
             : null
           if (group) {
-            items.push(group)
+            items.push(scoped(group))
             continue
           }
         }
@@ -303,7 +324,7 @@ export function createVideoCompositionPlanner(
           frame,
           effectStagePlanner,
         )
-        if (ordinary) items.push(ordinary)
+        if (ordinary) items.push(scoped(ordinary))
       }
       const captions = activeCaptionItemsAtFrame(doc, frame)
       for (let index = 0; index < captions.length; index++) {
@@ -315,6 +336,7 @@ export function createVideoCompositionPlanner(
           paint: captionPaintFor(doc, caption.track, caption.item, index, captions.length),
         })
       }
+      if (master.length) items.push({ kind: 'video-bus', target: 'master', trackId: '', sequenceId: doc.id, frame, instancePath: [], effects: master })
       return { frame, items }
     },
   }
@@ -348,6 +370,7 @@ export function videoCompositionRequests(
     }
     if (
       item.kind === 'text'
+      || item.kind === 'video-bus'
       || item.kind === 'caption'
       || item.kind === 'adjustment'
       || item.kind === 'sequence-background'

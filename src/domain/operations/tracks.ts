@@ -72,6 +72,7 @@ export function addTrack(doc: TimelineDoc, kind: TrackKind): TimelineDoc {
     locked: false,
     volume: 1,
     balance: 0,
+    videoEffects: [],
     audioEffects: [],
   }
 

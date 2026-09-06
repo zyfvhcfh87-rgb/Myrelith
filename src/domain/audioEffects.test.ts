@@ -68,7 +68,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
 
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 20,
+    schemaVersion: 21,
     id: 'doc-audio-fx',
     name: 'Audio effects',
     frameRate: { num: 30, den: 1 },

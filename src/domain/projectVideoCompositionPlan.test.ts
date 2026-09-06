@@ -111,7 +111,7 @@ function track(
 
 function sequence(id: string, tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },
@@ -285,4 +285,36 @@ describe('project video composition planner seam', () => {
       }),
     ])
   })
+})
+
+test('video bus scope keeps child frame/path and child master before parent track and master', () => {
+  const effect = (id: string) => ({ id, type: 'builtin.color-adjust', version: 1, enabled: true, params: { exposure: 1 } })
+  const child = sequence('child', [track('child-track', [clip('leaf')])])
+  child.tracks[0].videoEffects = [effect('child-track-effect')]
+  child.masterVideoEffects = [effect('child-master')]
+  const root = sequence('root', [track('parent-one', [], [nested('first', 'child')]), track('parent-two', [], [{ ...nested('second', 'child'), sourceStartFrame: 7 }])])
+  root.tracks[0].videoEffects = [effect('parent-track')]
+  root.masterVideoEffects = [effect('root-master')]
+  const plan = createProjectVideoCompositionPlanner(project(root, child), 'root', new Map()).planFrame(2)
+  expect(plan.items.filter((item) => item.kind === 'video-bus').map((item) => [item.effects[0].id, item.sequenceId, item.frame, item.instancePath])).toEqual([
+    ['child-master', 'child', 5, ['first']], ['parent-track', 'root', 2, []],
+    ['child-master', 'child', 9, ['second']], ['root-master', 'root', 2, []],
+  ])
+  expect(plan.items.filter((item) => item.kind === 'clip').map((item) => item.busScope)).toEqual([
+    { sequenceId: 'child', frame: 5, instancePath: ['first'] }, { sequenceId: 'child', frame: 9, instancePath: ['second'] },
+  ])
+  expect(videoCompositionRequests(plan)).toHaveLength(2)
+})
+
+test('multicam gaps stay opaque and receive the enclosing track bus before master', () => {
+  const effect = (id: string) => ({ id, type: 'builtin.color-adjust', version: 1, enabled: true, params: { brightness: 0.1 } })
+  const root = sequence('root', [track('video', [], [], [multicam('concert-video')])])
+  root.tracks[0].videoEffects = [effect('track-bus')]
+  root.masterVideoEffects = [effect('master-bus')]
+  const planner = createProjectVideoCompositionPlanner({ ...project(root), multicams: [multicamDefinition()] }, 'root', new Map())
+  const gap = planner.planFrame(105)
+  expect(gap.items.map((item) => item.kind)).toEqual(['multicam-background', 'video-bus', 'video-bus'])
+  expect(gap.items.filter((item) => item.kind === 'video-bus').map((item) => item.effects[0].id)).toEqual(['track-bus', 'master-bus'])
+  expect(videoCompositionRequests(gap)).toEqual([])
+  expect(planner.planFrame(115).items.map((item) => item.kind)).toEqual(['multicam-background', 'clip', 'video-bus', 'video-bus'])
 })

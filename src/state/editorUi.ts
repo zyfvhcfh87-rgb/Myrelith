@@ -2,6 +2,7 @@
  * State-layer facade for pure editor facts consumed by React surfaces.
  * Keeping these exports here preserves the ui -> state -> domain direction.
  */
+export { CLIP_ATTRIBUTE_LABELS } from '../domain/clipAttributes'
 
 export {
   adjustmentEditDeltaBounds,
@@ -98,3 +99,5 @@ export {
   sourceTimeSpeedRatePercent,
 } from '../domain/sourceTimeMap'
 export { rangeEnd, secondsToFrames } from '../domain/time'
+
+export { SPATIAL_EFFECT_PARAMETERS, spatialEffectKind, spatialEffectParams } from '../domain/spatialEffectDefinitions'

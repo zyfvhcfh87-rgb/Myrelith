@@ -30,7 +30,7 @@ function track(id: string, kind: TrackKind): Track {
 
 function sequence(): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id: 'root',
     name: 'Root',
     frameRate: { num: 30, den: 1 },

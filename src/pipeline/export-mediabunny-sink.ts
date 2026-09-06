@@ -1,4 +1,5 @@
 /** Transactional buffered/direct-file Mediabunny export sink. */
+import { hasVideoBusEffects, videoBusRenderBudgetError } from '../domain/videoBusStage'
 
 import {
   AudioSample,
@@ -211,6 +212,7 @@ export async function createMediabunnyExportSink(
   const lensDocument = projectTarget
     ? {
         ...doc,
+        masterVideoEffects: projectReachableSequences(projectTarget.project, projectTarget.sequenceId).flatMap((sequence) => sequence.masterVideoEffects ?? []),
         tracks: projectReachableSequences(
           projectTarget.project,
           projectTarget.sequenceId,
@@ -218,6 +220,10 @@ export async function createMediabunnyExportSink(
       }
     : doc
 
+  if (hasVideoBusEffects(lensDocument)) {
+    const error = videoBusRenderBudgetError(doc.width, doc.height)
+    if (error) throw new RangeError(error)
+  }
   if (documentHasUnsupportedLensCorrection(lensDocument)) {
     throw new LensRemapUnavailableError(
       'Export is blocked because this project contains a preserved future lens-correction version.',
@@ -531,9 +537,9 @@ export async function createMediabunnyExportSink(
       get: () => {
         if (transitionSurfaces) return transitionSurfaces
         const legCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const legContext = legCanvas.getContext('2d', SRGB_2D_CONTEXT)
+        const legContext = legCanvas.getContext('2d', { ...SRGB_2D_CONTEXT, willReadFrequently: true })
         const groupCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const groupContext = groupCanvas.getContext('2d', SRGB_2D_CONTEXT)
+        const groupContext = groupCanvas.getContext('2d', { ...SRGB_2D_CONTEXT, willReadFrequently: true })
         if (!legContext || !groupContext) {
           legCanvas.width = 1
           legCanvas.height = 1

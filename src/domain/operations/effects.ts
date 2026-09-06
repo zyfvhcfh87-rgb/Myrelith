@@ -36,8 +36,8 @@ export function addEffect(
 }
 
 function effectIdExists(doc: TimelineDoc, effectId: EffectId): boolean {
-  return doc.tracks.some((track) =>
-    track.clips.some((clip) => clip.effects.some((effect) => effect.id === effectId)),
+  return (doc.masterVideoEffects ?? []).some((effect) => effect.id === effectId) || doc.tracks.some((track) =>
+    (track.videoEffects ?? []).some((effect) => effect.id === effectId) || track.clips.some((clip) => clip.effects.some((effect) => effect.id === effectId)),
   )
 }
 

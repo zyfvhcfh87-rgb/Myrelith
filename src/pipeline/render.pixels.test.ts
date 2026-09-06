@@ -565,7 +565,7 @@ function makeAdjustment(
 
 function makeDoc(tracks: Track[], width = 5, height = 5): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id: 'pixel-doc',
     name: 'pixel-doc',
     frameRate: { num: 30, den: 1 },
@@ -1159,4 +1159,34 @@ describe('compositeFrame pixel goldens', () => {
     expect(rendered.output.rgbaAt(2, 2)).toEqual([128, 128, 0, 255])
     expect(rendered.surfaces.gets()).toBe(0)
   })
+})
+
+test('track color effect runs after crossfade weighting and master runs after the completed picture', async () => {
+  const from = makeClip('from-bus', 'A', 0, 2), to = makeClip('to-bus', 'B', 2, 2)
+  const track = transitionTrack(from, to, 1)
+  const brighten = createColorAdjustEffect('track-brighten'); brighten.params.exposure = 1
+  track.videoEffects = [brighten]
+  const doc = makeDoc([track], 1, 1)
+  const result = await render(doc, 2, { A: solid(1, 1, [255, 0, 0, 255]), B: solid(1, 1, [0, 0, 255, 255]) })
+  expect(result.output.rgbaAt(0, 0)).toEqual([255, 0, 255, 255])
+  const dim = createColorAdjustEffect('master-dim'); dim.params.exposure = -1; doc.masterVideoEffects = [dim]
+  const mastered = await render(doc, 2, { A: solid(1, 1, [255, 0, 0, 255]), B: solid(1, 1, [0, 0, 255, 255]) })
+  expect(mastered.output.rgbaAt(0, 0)).toEqual([128, 0, 128, 255])
+})
+
+test('an awaited source plugin completes before track and master effects and leaves empty tracks transparent', async () => {
+  const source = makeClip('bus-plugin', 'source', 0, 1, { opacity: 0.5, effects: [pluginEffect()] })
+  const track = makeTrack('video', [source]), empty = makeTrack('empty', [])
+  const dim = createColorAdjustEffect('track-dim'); dim.params.exposure = -1
+  track.videoEffects = [dim]; empty.videoEffects = [createColorAdjustEffect('unused')]
+  const doc = makeDoc([track, empty], 1, 1)
+  const bright = createColorAdjustEffect('master-bright'); bright.params.exposure = 1; doc.masterVideoEffects = [bright]
+  const result = await render(doc, 0, { source: solid(1, 1, [255, 255, 255, 255]) }, pluginSnapshot(), {
+    applyPluginEffect: async (request) => {
+      await Promise.resolve()
+      expect([...request.rgba]).toEqual([255, 255, 255, 255])
+      return { status: 'applied', rgba: new Uint8Array([80, 120, 160, 255]) }
+    },
+  })
+  expect(result.output.rgbaAt(0, 0)).toEqual([40, 60, 80, 255])
 })

@@ -607,6 +607,12 @@ function migrateTimelineDocument(
   if (migrated.schemaVersion === 19) {
     migrated = migrateMulticamInstances(migrated)
   }
+  if (migrated.schemaVersion === 20) {
+    boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
+    migrated = { ...migrated, schemaVersion: 21, masterVideoEffects: [], tracks: migrated.tracks.map((value, index) => ({
+      ...record(value, `$.document.tracks[${index}]`), videoEffects: [],
+    })) }
+  }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
     const track = record(trackValue, `$.document.tracks[${trackIndex}]`)

@@ -1,0 +1,36 @@
+{
+  "previewPixel": [
+    241,
+    188,
+    137,
+    255
+  ],
+  "exported": {
+    "bytes": 365954,
+    "pixel": [
+      240,
+      188,
+      136,
+      255
+    ],
+    "duration": 6,
+    "cancelled": true,
+    "unchanged": true,
+    "admissionBefore": {
+      "essentialOwners": 1,
+      "decoderSlots": 4,
+      "surfaceBytes": 40820612,
+      "monitorOwners": 0,
+      "blockers": [],
+      "programReady": true
+    },
+    "admissionAfter": {
+      "essentialOwners": 1,
+      "decoderSlots": 4,
+      "surfaceBytes": 40820612,
+      "monitorOwners": 0,
+      "blockers": [],
+      "programReady": true
+    }
+  }
+}

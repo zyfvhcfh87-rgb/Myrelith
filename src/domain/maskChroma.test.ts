@@ -80,7 +80,7 @@ function documentWithClip(clip = mediaClip()): TimelineDoc {
     locked: false,
   }
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id: 'doc-1',
     name: 'Masks and chroma',
     frameRate: { num: 30, den: 1 },

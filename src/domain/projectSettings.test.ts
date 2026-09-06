@@ -37,6 +37,7 @@ function expectedEmptyTrack(id: string, kind: 'video' | 'audio') {
     locked: false,
     volume: 1,
     balance: 0,
+    videoEffects: [],
     audioEffects: [],
   }
 }
@@ -301,7 +302,7 @@ describe('createTimelineDoc', () => {
     const doc = createTimelineDoc('  Demo project  ', settings, 'project-123')
 
     expect(doc).toEqual({
-      schemaVersion: 20,
+      schemaVersion: 21,
       id: 'project-123',
       name: 'Demo project',
       frameRate: { num: 60_000, den: 1_001 },
@@ -312,6 +313,7 @@ describe('createTimelineDoc', () => {
       markers: [],
       captionTracks: [],
       masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
+      masterVideoEffects: [],
     })
     expect(Object.isFrozen(doc)).toBe(true)
     expect(Object.isFrozen(doc.frameRate)).toBe(true)
@@ -380,7 +382,7 @@ describe('createTimelineDoc', () => {
     )
 
     expect(JSON.stringify(doc)).toBe(JSON.stringify({
-      schemaVersion: 20,
+      schemaVersion: 21,
       id: 'doc_default',
       name: 'Untitled',
       frameRate: { num: 30, den: 1 },
@@ -391,6 +393,7 @@ describe('createTimelineDoc', () => {
       markers: [],
       captionTracks: [],
       masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
+      masterVideoEffects: [],
     }))
   })
 

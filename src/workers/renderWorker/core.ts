@@ -652,11 +652,11 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       if (!profile) throw new Error('transition surfaces requested before setDoc')
       if (!transitionLeg) {
         transitionLeg = env.createCanvas(profile.outputWidth, profile.outputHeight)
-        transitionLegCtx = transitionLeg.getContext('2d', SRGB_2D_CONTEXT)
+        transitionLegCtx = transitionLeg.getContext('2d', { ...SRGB_2D_CONTEXT, willReadFrequently: true })
       }
       if (!transitionGroup) {
         transitionGroup = env.createCanvas(profile.outputWidth, profile.outputHeight)
-        transitionGroupCtx = transitionGroup.getContext('2d', SRGB_2D_CONTEXT)
+        transitionGroupCtx = transitionGroup.getContext('2d', { ...SRGB_2D_CONTEXT, willReadFrequently: true })
       }
       if (!transitionLegCtx || !transitionGroupCtx) {
         throw new Error('transition canvas 2d context unavailable')

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { resolveBlendMode } from '../domain/blendModes'
+import { BLEND_MODE_NAMES, resolveBlendMode } from '../domain/blendModes'
 import {
   probeCanvasBlendMode,
   selectBlendModeBackend,
@@ -72,4 +72,14 @@ describe('blend-mode capability adapter', () => {
       supportsWebGL: () => true,
     })).toEqual({ backend: 'compatibility', effective: 'normal' })
   })
+})
+
+test.each(BLEND_MODE_NAMES)('%s probes success, rejection and thrown setter without changing authored intent', (mode) => {
+  const operation = mode === 'normal' ? 'source-over' : mode
+  expect(probeCanvasBlendMode(new CanvasProbeFake(), mode)).toEqual({ supported: true, operation })
+  const rejected = new CanvasProbeFake([operation])
+  expect(probeCanvasBlendMode(rejected, mode)).toEqual({ supported: false, operation: 'source-over' })
+  expect(rejected.globalCompositeOperation).toBe('destination-over')
+  const hostile = new CanvasProbeFake(); hostile.throwOnSet = true
+  expect(probeCanvasBlendMode(hostile, mode).supported).toBe(false)
 })
