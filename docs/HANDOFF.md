@@ -5572,3 +5572,18 @@ with `NODE_OPTIONS=--no-experimental-webstorage` to avoid Node 26 host storage
 interfering with jsdom. Build/typecheck and lint pass. No browser runtime changed
 in this follow-up. Fresh PR checks and the final merged state remain the
 publication authority.
+
+## Post-MVP issue #197 - effect workflows planning checkpoint
+
+**PLAN PROPOSED; PRODUCT IMPLEMENTATION AWAITS USER APPROVAL (2026-09-06).**
+
+Start with [EFFECT_WORKFLOWS.md](EFFECT_WORKFLOWS.md). The plan begins with atomic
+clip-attribute and effect-stack copy/paste/reset, then local static presets and
+search, measured built-ins/blends, a separate track/master stage/resource proof,
+and product integration plus full acceptance. Ordinary successful gates do not
+need repeated approval after the plan is accepted. Track/master scope must
+preserve nested sequence ownership and fit measured render allocations.
+
+`codex/issue197` was fast-forwarded to merged master `573cb45`; the prior checkout
+`b3ee3d9` had the identical source tree. This checkpoint adds documentation only.
+No Issue #197 product tests or rendering acceptance have run yet.

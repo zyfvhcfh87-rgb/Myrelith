@@ -5085,3 +5085,21 @@ Research contract, measured limits and proposed implementation gates:
 - [ ] Broaden hardware/codec/browser qualification beyond the measured Chromium
   host; physical memory pressure and multi-hour native-memory behavior remain
   unproven. These configurations are not advertised as supported.
+
+## Post-MVP issue #197 - reusable effects and video buses
+
+**PROPOSED PLAN; AWAITING USER APPROVAL (2026-09-06).**
+
+The contract and acceptance sequence are in
+[EFFECT_WORKFLOWS.md](EFFECT_WORKFLOWS.md).
+
+- [x] Inspect #197, current descriptor/animation/history contracts, adjustment
+  and nested rendering, plugin execution, and resource accounting.
+- [x] Prepare a concrete plan on merged master `573cb45` without product changes.
+- [ ] Obtain approval for the plan.
+- [ ] Gate 1: atomic selected-attribute and complete/selected-stack copy/paste/reset.
+- [ ] Gate 2: strict local presets and searchable capability-aware effect browser.
+- [ ] Gate 3: measured built-ins and parity-proven blend expansion.
+- [ ] Gate 4: prove track/master order, nesting and bounded resource ownership.
+- [ ] Gate 5: integrate approved track/master descriptors, migration and UI.
+- [ ] Gate 6: full tests/build/lint/audit, Chromium acceptance and delivery evidence.
