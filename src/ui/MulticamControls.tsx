@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState, type FormEvent } from 'react'
+import { mountMulticamMonitor } from '../app/multicamMonitorController'
 import { openSourceAsset } from '../app/sourceMonitorController'
 import type { MulticamAngle } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
@@ -12,6 +13,7 @@ import { useMulticamSelectionStore } from '../state/multicamSelectionStore'
 import { useSourceMonitorStore } from '../state/sourceMonitorStore'
 import { useTransportStore } from '../state/transportStore'
 import MulticamAlignmentControls from './MulticamAlignmentControls'
+import MulticamMonitorControls, { MulticamAngleStatus } from './MulticamMonitorControls'
 
 interface SetupState {
   readonly projectId: string
@@ -33,6 +35,7 @@ function editableTarget(target: EventTarget | null): boolean {
 }
 
 interface AngleEditorProps {
+  readonly active: boolean
   readonly angle: MulticamAngle
   readonly index: number
   readonly definitionFrame: number
@@ -45,6 +48,7 @@ interface AngleEditorProps {
 }
 
 function AngleEditor({
+  active,
   angle,
   index,
   definitionFrame,
@@ -86,6 +90,7 @@ function AngleEditor({
       </div>
       <div className="multicam-angle-copy">
         <strong>{angle.name}</strong>
+        <MulticamAngleStatus angleId={angle.id} active={active} />
         <span>{connected ? 'Connected' : 'Offline'} · offset {angle.coverage.startFrame}f</span>
       </div>
       <button
@@ -174,6 +179,12 @@ export default function MulticamControls() {
   const definitionLocked = useMemo(() => (
     definition ? multicamDefinitionIsLocked(project, definition.id) : false
   ), [definition, project])
+
+  const setupOpen = setup !== null
+  // Layout owns the session before child passive effects register their canvases.
+  useLayoutEffect(() => {
+    if (selectedInstanceId && !setupOpen) return mountMulticamMonitor(selectedInstanceId)
+  }, [selectedInstanceId, setupOpen])
 
   const cutToAngle = (angleId: string): boolean => {
     if (!definition || !playheadInside) {
@@ -468,10 +479,14 @@ export default function MulticamControls() {
               Unlock every lane that uses this multicam to edit cuts, offsets, or audio policy.
             </p>
           )}
+          <MulticamMonitorControls definition={definition} instanceId={selectedInstance.id}
+            activeAngleId={selectedAngleId} disabled={definitionLocked || !playheadInside}
+            onCut={(id) => { cutToAngle(id) }} />
           <div className="multicam-angle-grid">
             {definition.angles.map((angle, index) => (
               <AngleEditor
-                key={angle.id}
+                key={`${selectedInstance.id}:${angle.id}`}
+                active={angle.id === selectedAngleId}
                 angle={angle}
                 index={index}
                 definitionFrame={definitionFrame}
@@ -615,7 +630,7 @@ export default function MulticamControls() {
           </div>
         </div>
       )}
-      <span className="visually-hidden" role="status" aria-live="polite">
+      <span className="visually-hidden" role="status" aria-label="Multicam edit status" aria-live="polite">
         {status}
       </span>
     </section>

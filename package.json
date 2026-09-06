@@ -32,6 +32,8 @@
     "qa:issue110:tracking": "node scripts/issue110/run-motion-tracking.mjs",
     "qa:issue111:lens-remap": "node scripts/issue111/run-lens-remap.mjs",
     "qa:issue194:research": "node scripts/issue194/run-alignment-research.mjs",
+    "qa:issue195:research": "node scripts/issue195/run-research.mjs",
+    "qa:issue195:check": "tsc -p scripts/issue195/tsconfig.json && node --test scripts/issue195/decision.test.mjs",
     "qa:issue78:research": "npx --no-install vite-node scripts/issue78/run-structure-research.mjs",
     "postinstall": "patch-package",
     "test": "node scripts/run-vitest.mjs",

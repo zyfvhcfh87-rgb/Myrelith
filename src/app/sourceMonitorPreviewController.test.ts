@@ -34,6 +34,7 @@ import {
 } from './sourceMonitorPreviewController'
 import type { RenderMode } from '../workers/render-protocol'
 import type { MediaCompatibilityItem } from '../domain/mediaCompatibility'
+import { mediaResourceAdmission } from './mediaResourceAdmission'
 
 const F30: FrameRate = { num: 30, den: 1 }
 
@@ -226,6 +227,19 @@ afterEach(async () => {
 })
 
 describe('sourceMonitorPreviewController', () => {
+  test('failed initialization retains admission until its partial bridge closes', async () => {
+    const { deps, bridge } = makeDeps(), closed = deferred<void>()
+    bridge.dispose = vi.fn(() => closed.promise)
+    deps.transferCanvas = () => { throw new Error('Canvas transfer failed') }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      expect(() => initSourcePreview(canvasEl(), deps)).not.toThrow()
+      expect(bridge.dispose).toHaveBeenCalledOnce()
+      expect(mediaResourceAdmission.snapshot().blockers).toContain('source')
+      closed.resolve(); await flush()
+      expect(mediaResourceAdmission.snapshot().blockers).not.toContain('source')
+    } finally { closed.resolve(); warn.mockRestore() }
+  })
   test('decodes the open source onto its own canvas without touching Program', async () => {
     const { deps, bridge, blob } = makeDeps()
     const asset = makeAsset()

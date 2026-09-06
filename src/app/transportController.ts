@@ -38,6 +38,7 @@ import {
   type AudioMeterBallisticsState,
 } from '../domain/audioMeter'
 import { PlaybackEngine } from '../engine/playback-engine'
+import { mediaResourceAdmission, type MediaResourceLease } from './mediaResourceAdmission'
 import type { PlaybackClock } from '../engine/playback-engine'
 import {
   audioPlaybackAssetIds,
@@ -130,6 +131,7 @@ interface ControllerState {
   engine: PlaybackEngine | null
   clockCtx: ClockContext | null
   audioSession: TimelineAudioPlaybackSession | null
+  audioLease: MediaResourceLease | null
   startupAbort: AbortController | null
   playGeneration: number
   audioPlanKey: string
@@ -150,6 +152,7 @@ const state: ControllerState = {
   engine: null,
   clockCtx: null,
   audioSession: null,
+  audioLease: null,
   startupAbort: null,
   playGeneration: 0,
   audioPlanKey: '',
@@ -430,6 +433,8 @@ function stopAudioSession(): void {
   state.startupAbort?.abort()
   state.startupAbort = null
   const session = state.audioSession
+  const lease = state.audioLease
+  state.audioLease = null
   state.audioSession = null
   if (session) {
     let pending: Promise<unknown>
@@ -438,7 +443,10 @@ function stopAudioSession(): void {
     } catch (cause) {
       pending = Promise.reject(cause)
     }
-    void trackCleanup(pending, 'audio cleanup failed')
+    // A replacement may start while this session is still closing. Count both
+    // reservations until cleanup settles; optional previews must yield if that
+    // overlap exceeds their allowance, rather than undercounting audio owners.
+    void trackCleanup(pending.finally(() => lease?.release()), 'audio cleanup failed')
   }
 }
 
@@ -615,6 +623,8 @@ function startPlayback(
   }
 
   const resolveAsset = createAssetResolver(assets, state.deps.fetchBlob)
+  const lease = mediaResourceAdmission.reserve({ kind: 'audio', decoderSlots: mixPlan.clips.length, surfaceBytes: 0, monitorCompatible: true })
+  let adoptedLease = false
   const playbackTask = (async () => {
     const session = await state.deps.startAudio(
       context,
@@ -657,6 +667,8 @@ function startPlayback(
 
     state.startupAbort = null
     state.audioSession = session
+    state.audioLease = lease
+    adoptedLease = true
     startAudioMeter(generation, session)
     engine.start(from, durationFrames, doc.frameRate, session.anchorTime)
   })().catch((cause) => {
@@ -669,7 +681,7 @@ function startPlayback(
     warnAudio('audio playback disabled; continuing with video', cause)
     stopAudioMeter('unavailable', 'Playback levels unavailable')
     engine.start(from, durationFrames, doc.frameRate, context.currentTime)
-  })
+  }).finally(() => { if (!adoptedLease) lease.release() })
   state.playbackTasks.add(playbackTask)
   void playbackTask.then(() => state.playbackTasks.delete(playbackTask))
 }

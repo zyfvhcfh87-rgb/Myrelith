@@ -7,6 +7,8 @@
  * no Blob, decoder, URL, or project truth enters a snapshot.
  */
 
+import { mediaResourceAdmission } from './mediaResourceAdmission'
+
 export type MediaJobPriority = 'background' | 'visible' | 'selected'
 
 export type MediaJobFailureCode =
@@ -478,6 +480,10 @@ export class MediaJobScheduler {
       },
     }
 
+    const resourceLease = mediaResourceAdmission.reserve({
+      kind: 'analysis', decoderSlots: queued.request.resources.decoderSlots,
+      surfaceBytes: 0, monitorCompatible: false,
+    })
     void Promise.resolve()
       .then(() => queued.request.run(context))
       .then(
@@ -506,6 +512,7 @@ export class MediaJobScheduler {
         },
       )
       .finally(() => {
+        resourceLease.release()
         active.activeDecoderCount = 0
         if (this.active.get(queued.request.id) === active) {
           this.active.delete(queued.request.id)

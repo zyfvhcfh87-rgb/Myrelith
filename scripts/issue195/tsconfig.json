@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.app.json",
+  "compilerOptions": { "tsBuildInfoFile": "../../node_modules/.tmp/issue195.tsbuildinfo", "types": ["vite/client", "node"], "noEmit": true },
+  "include": ["./*.ts"]
+}

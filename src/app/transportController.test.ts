@@ -24,6 +24,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 import { useAudioMeterStore } from '../state/audioMeterStore'
+import { mediaResourceAdmission } from './mediaResourceAdmission'
 import {
   configureTransport,
   disposeTransport,
@@ -713,6 +714,106 @@ describe('live audio integration', () => {
 
     expect(fake.startAudio).toHaveBeenCalledTimes(2)
     expect(second.stop).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    { programSlots: 3, preempts: false },
+    { programSlots: 4, preempts: true },
+  ])('audio restart with $programSlots Program slots retains closing ownership (preempts: $preempts)', async ({ programSlots, preempts }) => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const program = mediaResourceAdmission.reserve({
+      kind: 'program', decoderSlots: programSlots, surfaceBytes: 50_000_000, monitorCompatible: true,
+    })
+    const request = { decoderSlots: 7, surfaceBytes: 55_065_600 }
+    const events: string[] = []
+    const wall = mediaResourceAdmission.tryMonitor(request, (reason) => {
+      events.push(reason)
+      if (wall.admitted) wall.release()
+    })
+    const stopGate = deferred<void>()
+    const first = makeAudioSession(0)
+    const second = makeAudioSession(10)
+    first.stop.mockImplementationOnce(() => stopGate.promise)
+    fake.startAudio.mockResolvedValueOnce(first).mockImplementationOnce(async () => {
+      events.push('replacement starts')
+      return second
+    })
+
+    try {
+      expect(wall.admitted).toBe(true)
+      play()
+      await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+      expect(mediaResourceAdmission.snapshot().decoderSlots).toBe(programSlots + 1 + 7)
+
+      const original = useDocumentStore.getState().doc
+      useDocumentStore.getState().setDoc({
+        ...original,
+        tracks: original.tracks.map((track) => track.id === 'A1'
+          ? { ...track, clips: track.clips.map((clip) => ({ ...clip, volume: 0.5 })) }
+          : track),
+      })
+      await vi.waitFor(() => expect(fake.pendingCount()).toBe(1))
+      expect(first.stop).toHaveBeenCalledOnce()
+      expect(fake.startAudio).toHaveBeenCalledTimes(2)
+      expect(events).toEqual(preempts ? ['audio-priority', 'replacement starts'] : ['replacement starts'])
+      expect(mediaResourceAdmission.snapshot()).toMatchObject({
+        essentialOwners: 3,
+        decoderSlots: programSlots + 2 + (preempts ? 0 : 7),
+        monitorOwners: preempts ? 0 : 1,
+      })
+      if (preempts) expect(mediaResourceAdmission.tryMonitor(request, () => {}).admitted).toBe(false)
+
+      // Essential playback starts without waiting for the old cleanup gate,
+      // and Program still advances from the replacement audio anchor.
+      fake.clock.currentTime = 10.5
+      fake.pump()
+      expect(transport().playheadFrame).toBe(15)
+      expect(transport().isPlaying).toBe(true)
+      stopGate.resolve()
+      await vi.waitFor(() => expect(mediaResourceAdmission.snapshot().essentialOwners).toBe(2))
+      expect(mediaResourceAdmission.snapshot().decoderSlots).toBe(programSlots + 1 + (preempts ? 0 : 7))
+      if (preempts) {
+        const retried = mediaResourceAdmission.tryMonitor(request, () => {})
+        try {
+          expect(retried.admitted).toBe(true)
+        } finally {
+          if (retried.admitted) retried.release()
+        }
+      }
+    } finally {
+      stopGate.resolve()
+      await pauseAndDrainPlayback()
+      if (wall.admitted) wall.release()
+      program.release()
+    }
+    expect(mediaResourceAdmission.snapshot()).toMatchObject({ essentialOwners: 0, monitorOwners: 0, decoderSlots: 0 })
+  })
+
+  test('cancelled audio prime retains admission through late-session cleanup', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const prime = deferred<TimelineAudioPlaybackSession>()
+    const stopGate = deferred<void>()
+    const lateSession = makeAudioSession(80)
+    lateSession.stop.mockImplementationOnce(() => stopGate.promise)
+    fake.startAudio.mockImplementationOnce(() => prime.promise)
+    try {
+      play()
+      await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+      pause()
+      expect(fake.startAudio.mock.calls[0][4].signal?.aborted).toBe(true)
+      expect(mediaResourceAdmission.snapshot()).toMatchObject({ essentialOwners: 1, decoderSlots: 1 })
+      prime.resolve(lateSession)
+      await vi.waitFor(() => expect(lateSession.stop).toHaveBeenCalledOnce())
+      expect(mediaResourceAdmission.snapshot()).toMatchObject({ essentialOwners: 1, decoderSlots: 1 })
+      expect(fake.pendingCount()).toBe(0)
+      stopGate.resolve()
+      await vi.waitFor(() => expect(mediaResourceAdmission.snapshot().essentialOwners).toBe(0))
+    } finally {
+      prime.resolve(lateSession)
+      stopGate.resolve()
+      await pauseAndDrainPlayback()
+    }
+    expect(mediaResourceAdmission.snapshot()).toMatchObject({ essentialOwners: 0, monitorOwners: 0, decoderSlots: 0 })
   })
 
   test('sequence navigation stops the active audio owner before changing context', async () => {

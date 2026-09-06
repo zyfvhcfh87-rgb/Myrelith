@@ -4,6 +4,7 @@ import { resetMediaImportController } from '../mediaImportController';
 import { disposeMediaVisuals } from '../mediaVisualsController';
 import { discardProjectRecoverySession, pauseProjectPersistenceSession, resumeProjectPersistenceSession, startProjectPersistenceSession, suspendProjectPersistenceSession } from '../projectPersistenceController';
 import { disposePreview } from '../previewController';
+import { disposeMulticamMonitor } from '../multicamMonitorController';
 import { disposeSourcePreview } from '../sourceMonitorPreviewController';
 import { disposeSourcePlayback } from '../sourceMonitorPlaybackController';
 import { disposeTransport } from '../transportController';
@@ -28,6 +29,7 @@ export const projectControllerRealDeps: ProjectControllerDeps = {
     await disposeTransport()
   },
   disposePreview: async () => {
+    disposeMulticamMonitor()
     await disposeSourcePreview()
     await disposePreview()
   },

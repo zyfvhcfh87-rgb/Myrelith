@@ -13,6 +13,8 @@ export default defineConfig({
   use: {
     baseURL: browserTestUrl,
     headless: true,
+    // Browser tests inspect decoded audio and meters without using speakers.
+    launchOptions: { args: ['--mute-audio'] },
     viewport: { width: 1440, height: 900 },
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',

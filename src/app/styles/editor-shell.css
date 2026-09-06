@@ -399,6 +399,7 @@
 }
 
 .multicam-angle-thumbnail {
+  position: relative;
   grid-row: span 2;
   display: grid;
   place-items: center;
@@ -412,6 +413,46 @@
   background-repeat: no-repeat;
   background-size: auto 100%;
 }
+
+.multicam-angle-canvas {
+  display: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.multicam-angle-canvas[data-live='true'] { display: block; }
+
+.multicam-angle-status { font-size: 11px; }
+
+.multicam-monitor-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.multicam-monitor-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  cursor: pointer;
+}
+
+.multicam-monitor-controls button { min-height: 28px; }
+.multicam-monitor-controls p { flex-basis: 100%; margin: 0; color: #b3cecc; }
+
+.multicam-monitor-wall { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 5px; width: 100%; }
+.multicam-monitor-tile { display: grid; min-width: 0; padding: 3px; gap: 2px; border: 1px solid #315557; border-radius: 4px; background: #122e31; color: #b3cecc; }
+.multicam-monitor-tile[aria-pressed='true'] { border-color: #70d6ca; color: #ddfff8; }
+.multicam-monitor-tile:focus-visible { outline: 2px solid #a2d9ff; outline-offset: 2px; }
+.multicam-monitor-image { display: grid; place-items: center; position: relative; aspect-ratio: 16 / 9; background: #091a1d; overflow: hidden; }
+.multicam-monitor-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.multicam-monitor-tile .multicam-angle-status { font-size: 10px; white-space: nowrap; }
 
 .multicam-angle-copy {
   display: grid;

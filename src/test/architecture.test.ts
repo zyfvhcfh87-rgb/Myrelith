@@ -296,6 +296,10 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
           && renderWorkerPipelineTypeImports.get(fromName)?.has(toName)
         )
         || (
+          fromName === 'workers/multicam-monitor.worker.ts'
+          && new Set(['pipeline/multicamMonitorDecode.ts', 'pipeline/multicamMonitorProtocol.ts']).has(toName)
+        )
+        || (
           fromName === 'workers/audio-alignment.worker.ts'
           && new Set(['pipeline/audioAlignmentDecode.ts', 'pipeline/audioAlignmentProtocol.ts']).has(toName)
         )
@@ -399,6 +403,13 @@ describe('architecture guard', () => {
       edge.to && researchModules.has(moduleName(edge.to))
       && !researchModules.has(moduleName(edge.from))
     )).map(edgeLabel)).toEqual([])
+  })
+
+  test('keeps the Issue 195 browser laboratory outside production imports', () => {
+    // scripts/ is outside SOURCE_ROOT, so resolved source edges alone cannot
+    // detect this boundary. Check static, dynamic and re-export specifiers.
+    expect(edges.filter((edge) => /(?:^|\/)issue195(?:\/|$)/.test(edge.specifier))
+      .map(edgeLabel)).toEqual([])
   })
 
   test('keeps editor and secondary surfaces outside their eager entry graphs', () => {

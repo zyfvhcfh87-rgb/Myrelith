@@ -2928,6 +2928,14 @@ surface; it is not a second zoom and never enters document history.
 
 ## Working agreements (the user's explicit preferences)
 
+- Browser QA must run with `--mute-audio`, including independently spawned
+  research/lifecycle browsers. Do not add synthetic audible tones to test
+  fixtures; use silent tracks for scheduling checks and inspect audio data
+  without speaker output. The user explicitly requested quiet tests (2026-09-05).
+- Use the in-app browser for visual checks and headless browsers for automated
+  runs. Do not repeatedly open Chrome windows. A native visible lifecycle test
+  must be an explicit exception, not part of ordinary QA (user request, 2026-09-05).
+
 - Changes may span every module needed for one complete fix. Keep dependency
   boundaries clear and verify logical steps separately; never skip a phase
   gate; commit with the message file + `-F` pattern, authored by Aryel and add
@@ -5461,3 +5469,106 @@ surface; it is not a second zoom and never enters document history.
   `scripts/issue194/fetch-speech-fixture.mjs` and `ISSUE194_SPEECH_WAV`; the
   recording is not bundled. GitHub publication, PR, and issue closure have not
   been performed in this local implementation turn.
+
+## Post-MVP issue #195 - multicam monitoring research gate
+
+**HISTORICAL RESEARCH GATE; USER APPROVED IMPLEMENTATION (2026-09-05).**
+
+- Start with [MULTICAM_MONITOR_RESEARCH.md](MULTICAM_MONITOR_RESEARCH.md).
+  The recommendation is a conditional GO to bounded, proxy-first engineering;
+  unrestricted live-wall enablement is a NO-GO. The user explicitly requested
+  research review before implementation. That approval was given explicitly;
+  the research commit itself changed no product runtime/UI.
+- The isolated `scripts/issue195/` lab measures actual Program/audio alongside
+  2/4/8 total angles. Program counts as the active angle; at most seven extra
+  lanes sample at 320×180 / 10 fps. Fresh production 720p AVC proxies passed all
+  sizes on the measured M5 Max/Chromium 151 host. Original 1080 AVC passed 2/4;
+  original 4K AVC passed 2 with very little accounted memory headroom. Larger
+  originals were denied. VP9 originals failed the no-wall Program baseline;
+  5 fps tiles did not fix it. Other devices/codecs remain unproven.
+- The reusable forward cursor retained too many frame references. Finite
+  adapter cursors could acknowledge close before native decoders closed. The
+  accepted research owner uses finite native decoders with explicit disposal;
+  all 32 admitted final timing attempts reached observed zero. It is unshipped
+  and not a production-ready replacement for the general video-source adapter.
+- First implementation gates: one shared Program/audio-first admission owner,
+  bounded demux/native ownership, initial-hidden admission refusal, freshness
+  and cancellation races, then adaptive fallback and accessible UI. The lab
+  exposed the initial-hidden gap; browser memory pressure did not provide a
+  reliable automatic retirement signal. Native/GPU physical-memory bounds,
+  broad codecs, low-memory/long-session behavior, concurrent jobs and full
+  project-controller replacement/recovery remain product acceptance work.
+- Durable measured and rejected evidence is in `docs/evidence/issue195/`.
+  Foreground has 52 timed rows; separate native lifecycle probes distinguish
+  valid hidden/freeze cleanup from Playwright focus emulation and Vite reload
+  interference. Fault counts are observations, not a blanket pass count.
+- Dedicated typecheck / 4 research tests, 17 runner checks, build (4,971
+  modules), lint and zero-vulnerability production audit pass. Full Vitest is
+  3,946/3,947 across 284 files: the remaining plugin-startup `safe-mode` failure
+  reproduces identically (23/24 focused) on isolated unchanged `3653c9a`.
+  The full suite is not claimed green. No GitHub publication or issue closure
+  has been performed. The user subsequently approved the research plan; see the
+  implementation acceptance record below.
+
+## Post-MVP issue #195 - bounded simultaneous multicam implementation
+
+**IMPLEMENTATION COMPLETE LOCALLY; CONDITIONAL CHROMIUM QUALIFICATION (2026-09-05).**
+
+- Research was explicitly approved before implementation. Shared admission,
+  finite decoding and adaptive controller phases were each tested and built /
+  linted before connecting the UI. See
+  [implementation validation](evidence/issue195/implementation-validation.md)
+  and its source-bound [artifact](evidence/issue195/implementation.json).
+- Select a multicam item, enable **Live angle previews**, and press Play. The
+  active angle remains in Program; inactive tiles target 320×180 / 10 fps and
+  can reduce once to 160×90 / 5 fps. Program/audio pressure pauses the wall with
+  an explicit retry reason. Existing integer-frame cut commands, keyboard
+  shortcuts, audio policy, original export and on-demand previews stay canonical.
+- `app/mediaResourceAdmission.ts` reserves before Program/audio allocations;
+  Source Monitor, scheduler-owned jobs and export preempt the wall. Complex
+  Program/audio plans can conservatively deny it. Five to eight angles require
+  fresh 720p proxies; smaller groups may use bounded 8-bit AVC originals up to
+  1080p. The 64 MiB wall and 256 MiB aggregate allowances are known reference /
+  surface accounting, never claims about total native/GPU/process memory.
+- `app/multicamMonitorController.ts` composes freshness, audio-clock observations,
+  source preparation and lifecycle subscriptions. `multicamMonitorSession.ts`
+  owns admission, canvases and the finite worker bridge. Domain planning stays
+  pure; Zustand contains presentation facts only. `multicam-monitor.worker.ts`
+  hosts bounded Mediabunny demux plus directly owned native decoders. Every
+  request closes frames and its decoder; normal off drains or terminates within
+  100 ms. Urgent retirement terminates before releasing its lease and closes
+  late transferred bitmaps. Forced cleanup never fabricates an observed zero
+  native ledger. Partial Program/Source initialization now closes its bridge
+  before releasing admission too.
+- Final headless Chromium acceptance: **9 passed, 1 intentionally skipped**
+  (the visible native-window test is explicit opt-in). Covers 2/4/8 angles,
+  recorded footage with production proxies, eight playback/seek cycles,
+  keyboard cuts and narrow layout, source/proxy/derived-data changes, original
+  export and recovery/relink. Build (4,979 modules), lint, 5 research decisions,
+  17 runner checks and 97 focused ownership tests pass. Full Vitest is
+  **3,996/3,997** across 289 files: the same plugin `safe-mode` baseline failure
+  reproduced on unchanged `3653c9a`. Do not report a green full suite.
+- Native minimize/freeze/GPU retirement has successful exploratory probes,
+  but the repeated matrix was not wholly green: an unknown browser exit and
+  a guarded pause after thaw were retained as failures. The final optional
+  native harness adjustment was not rerun after the user requested no more
+  Chrome windows. Automatic post-freeze/GPU recovery, physical pressure,
+  multi-hour native memory and other hardware/browser engines remain unqualified.
+- Quiet QA is now a working agreement: silent generated tracks, muted browsers,
+  headless automation and in-app visual review. The in-app editor is available,
+  but its native file chooser was not controllable; do not call that a media
+  acceptance pass. No GitHub publication or issue closure was performed.
+
+### PR #223 audio-admission review (2026-09-06)
+
+The ready PR now includes master and preserves its reviewed alignment fix.
+The audio-restart reservation overlap is intentional: old resources remain
+counted through cleanup, while essential replacement audio may preempt optional
+previews. The early-release autofix was rejected. Three regressions and a
+negative-control mutation establish this distinction; see the
+[review evidence](evidence/issue195/audio-admission-review.md).
+Full local validation now passes 4,001 tests / 289 files plus 17 runner checks
+with `NODE_OPTIONS=--no-experimental-webstorage` to avoid Node 26 host storage
+interfering with jsdom. Build/typecheck and lint pass. No browser runtime changed
+in this follow-up. Fresh PR checks and the final merged state remain the
+publication authority.

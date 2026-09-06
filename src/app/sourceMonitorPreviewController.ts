@@ -46,6 +46,7 @@ import {
   reportMediaRuntimeFailure,
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
+import { mediaResourceAdmission, type MediaResourceLease } from './mediaResourceAdmission'
 
 export interface SourcePreviewBridge {
   setDoc(doc: TimelineDoc): void
@@ -111,6 +112,7 @@ const realDeps: SourcePreviewDeps = {
 }
 
 interface ControllerState {
+  resourceLease: MediaResourceLease | null
   canvas: HTMLCanvasElement | null
   bridge: SourcePreviewBridge | null
   deps: SourcePreviewDeps | null
@@ -128,6 +130,7 @@ interface ControllerState {
 }
 
 const state: ControllerState = {
+  resourceLease: null,
   canvas: null,
   bridge: null,
   deps: null,
@@ -439,11 +442,18 @@ export function initSourcePreview(
   if (state.canvas === canvas) return
   void disposeSourcePreviewState()
 
-  let bridge: SourcePreviewBridge
+  let bridge: SourcePreviewBridge | undefined
+  const resourceLease = mediaResourceAdmission.reserve({ kind: 'source', decoderSlots: 2, surfaceBytes: 0, monitorCompatible: false })
   try {
     bridge = deps.createBridge()
     deps.init(bridge, deps.transferCanvas(canvas))
   } catch (cause) {
+    const failedBridge = bridge
+    void (async () => {
+      try { await failedBridge?.dispose() }
+      catch (error) { console.warn('[sourceMonitorPreviewController] failed initialization cleanup:', error) }
+      finally { resourceLease.release() }
+    })()
     console.warn(
       '[sourceMonitorPreviewController] preview disabled:',
       cause instanceof Error ? cause.message : cause,
@@ -452,6 +462,7 @@ export function initSourcePreview(
   }
 
   state.canvas = canvas
+  state.resourceLease = resourceLease
   state.bridge = bridge
   state.deps = deps
   state.suspended = false
@@ -503,12 +514,15 @@ export function initSourcePreview(
 }
 
 async function disposeSourcePreviewState(): Promise<void> {
+  const resourceLease = state.resourceLease
+  state.resourceLease = null
   cancelScheduledRender()
   state.renderGeneration++
   for (const unsubscribe of state.unsubscribes) unsubscribe()
   state.unsubscribes = []
   if (state.bridge) releaseOpenedSource(state.bridge)
-  const close = state.bridge?.dispose()
+  let close: void | Promise<void>
+  try { close = state.bridge?.dispose() } catch (cause) { close = Promise.reject(cause) }
   state.bridge = null
   state.deps = null
   state.viewport = null
@@ -520,7 +534,7 @@ async function disposeSourcePreviewState(): Promise<void> {
   state.suspended = false
   state.canvas = null
   state.rafHandle = null
-  await close
+  try { await close } finally { resourceLease?.release() }
 }
 
 export function disposeSourcePreview(): Promise<void> {

@@ -58,6 +58,7 @@ import type {
   RenderWorkerCapabilities,
 } from '../workers/render-protocol'
 import { resetMediaCompatibilityController } from './mediaCompatibilityController'
+import { mediaResourceAdmission } from './mediaResourceAdmission'
 import {
   createPreviewEffectStatusIndex,
   projectIndexedPreviewEffectStatuses,
@@ -1525,14 +1526,20 @@ describe('previewController', () => {
     expect(vi.mocked(deps.init)).toHaveBeenCalledTimes(1)
   })
 
-  test('a failing transfer disables preview without crashing', () => {
-    const { deps } = makeDeps()
+  test('a failing transfer closes the partial bridge before releasing admission', async () => {
+    const { deps, bridge } = makeDeps()
+    const closed = deferred<void>()
+    bridge.dispose = vi.fn(() => closed.promise)
     deps.transferCanvas = () => {
       throw new Error('OffscreenCanvas unsupported')
     }
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(() => initPreview(canvasEl(), deps)).not.toThrow()
     expect(warn).toHaveBeenCalled()
+    expect(bridge.dispose).toHaveBeenCalledOnce()
+    expect(mediaResourceAdmission.snapshot().blockers).toContain('program')
+    closed.resolve(); await flush()
+    expect(mediaResourceAdmission.snapshot().blockers).not.toContain('program')
     warn.mockRestore()
   })
 

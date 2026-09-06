@@ -1,0 +1,1425 @@
+{
+  "issue": 195,
+  "recordedAt": "2026-09-05T21:18:38.913Z",
+  "baseCommit": "4abd719ab6fad3eacb790d7b154d41053aa67ece",
+  "qualification": "Conditional opt-in monitor on the measured Chromium host; not unrestricted playback or physical memory proof",
+  "source": {
+    "sha256": "1311f852585b847e024fc961cb703113c71514ff776fe4eeba878851a0043937",
+    "startedAt": "2026-09-05T21:14:23.948Z",
+    "finishedAt": "2026-09-05T21:18:38.913Z",
+    "stable": true,
+    "pathCount": 756,
+    "changedFiles": {
+      "playwright.config.ts": "d2467e4af7fe265cc55f48260de8f6d0d86c6f9a0a0c02a250fae8efc9d0f02f",
+      "scripts/issue195/decision.mjs": "1f255f1cfcc578cdaedf04a552ec946225fff4bfa2eff5683bceeecd883deba5",
+      "scripts/issue195/decision.test.mjs": "9295b7bc1b142356c6499c2cee1eff2b737970be95db7e572ddbaba273fa7ccc",
+      "scripts/issue195/fixtures.ts": "8551bccb3302ba10f3c9fbbd060b2270b7d602004decebd29660d6369fa340b0",
+      "scripts/issue195/run-research.mjs": "f233aaff636b3a9b5af9249b8f4c82ba4c8c5d062343dfac40397fb6140892b4",
+      "src/app/exportController.ts": "bf71c42b8bd12392b08837fca7b84e0996a258b54c5b2a4649e7999465f1e446",
+      "src/app/mediaJobScheduler.ts": "6cd4571faf5dd0cc41cdb157b8cff42215a3ac0c708fbcfcd802612bb4f4e09b",
+      "src/app/previewController.test.ts": "5b6a09605ea2b238d6a219543623f9035bfabe8febebb85cf1f08071ad416757",
+      "src/app/previewController.ts": "06384fcaa68606cb327b25c3446d2b9f0761e6c166cfe383cd088794e21610c3",
+      "src/app/projectController/dependencies.ts": "0d3036efe1916db1c4507a9094b5cf03dcd1c4fb4ef65ca7163effca305dcecb",
+      "src/app/sourceMonitorPlaybackController.ts": "3891988965196e9cf79204d1b2bcb824f1453c63542676b4891aeda8dc1c85b8",
+      "src/app/sourceMonitorPreviewController.test.ts": "4eb6059c1bab4ac7c6fd8af80fa75ff9a51722eb8bb71b7a5263b107a1e162ea",
+      "src/app/sourceMonitorPreviewController.ts": "8e2b3ed63db5c8d7a99660d29ad7e27d94f03dc79aa8303d4f1462c31ba3ec73",
+      "src/app/styles/editor-shell.css": "e1d761dbf35ae9d9e729fbedb4e626ea7991d1f2931ca1575a9baa8c1c91ea6c",
+      "src/app/transportController.ts": "3aa1fb1321d19a918432a06ffd8caa8eb45623a874b9b4357f8be714885fb561",
+      "src/domain/multicam.ts": "f1b6d88580b78fda43655b19297a2a864fb7bb3f3616eb573420a7176cf2e53f",
+      "src/test/architecture.test.ts": "650ae384b58740abb9bb7a3cd116b10762817f8ca2ec6d62926ae5bf4c4709d1",
+      "src/ui/MulticamControls.test.tsx": "8952a21c7fe9bc5a0836500a86974d3063c83853b0da07398603d79cea5ad1d6",
+      "src/ui/MulticamControls.tsx": "c4bf72967de46717213f0cd0677aa8d580b5cfda35e0f86c439cd075798fce7a",
+      "src/app/mediaResourceAdmission.test.ts": "8fd0fa3ae07706f0a78a77f092fc25169eb52bb6445283986f72c2d99d17ea6c",
+      "src/app/mediaResourceAdmission.ts": "7f04835002871c230266fac91ef73afb7b7848052f1495dc4abdbb53f1f0d5ad",
+      "src/app/multicamMonitorController.ts": "ee508ec840289c9faa8d4e6da5462e6bd39257c19889dca03d3556469b637a65",
+      "src/app/multicamMonitorSession.test.ts": "aaf3d4ac78e63d166f98e02fb9d5d3229fa3166ce9a8f74526ffc169424e44b6",
+      "src/app/multicamMonitorSession.ts": "51026a10cf846500840cec69e8ebcb4f13dace171130d8037ab9c3768d9b4f41",
+      "src/app/multicamMonitorWorkerBridge.test.ts": "efea1bbb2fee04cf1df0ebfae9ae41a56c07099571cc11d5ac461d562982a702",
+      "src/app/multicamMonitorWorkerBridge.ts": "d541985757146502caf3edb6189a47be3564eb66be580188d3e64998b471a1c9",
+      "src/domain/multicamMonitor.test.ts": "4a17ec117645e000a03c3caaf10d36a11046b7d104a773bdf0e0807cdb419d84",
+      "src/domain/multicamMonitor.ts": "4f92425d860815515ef84be4d7fbf4b1bd279c03b951dfbd7475863deb947545",
+      "src/pipeline/multicamMonitorDecode.test.ts": "6d964138a989296fa0b5a49f2a29d5817a7a31b726d662c28bd331ffc37f4b4b",
+      "src/pipeline/multicamMonitorDecode.ts": "0381cda6fa8efa9a887cdca552ddca5a3997a04ade3e66bcb7e60ac0c584947e",
+      "src/pipeline/multicamMonitorProtocol.ts": "a80439e031cd10a2594547f42dac17a949b33e91bb7d5d85ab45c414ab03de62",
+      "src/state/multicamMonitorStore.ts": "3c9be29d9826c68c865afa79acdc1729b6af83ab67858f3811ea74dddb8d123e",
+      "src/ui/MulticamMonitorControls.tsx": "2856f05c0bc6c7295744132a9c2ba5ebadfcc737203fcd626c61ac212293309c",
+      "src/workers/multicam-monitor.worker.ts": "9b12055343502f0c1ff17f64d1bbafe8b5071c4385828b1879b6040dad2f1a43",
+      "tests/browser/fixtures/monitor-media.ts": "1018a42c5ceceb6dbca814f8e392d7fa28217df2f800fce216b15a20f754a087",
+      "tests/browser/issue-195-monitor.spec.ts": "028c8620a37c078084e8f35044d4cc59c7fd5ad738e6ee33a4483f9290f6df4c"
+    }
+  },
+  "host": {
+    "os": "Darwin 25.5.0 arm64",
+    "cpu": "Apple M5 Max",
+    "logicalCpus": 18,
+    "ramGiB": 64,
+    "browser": "Chromium 151.0.7922.34",
+    "renderer": "ANGLE Metal Apple M5 Max",
+    "driver": "26.5.1",
+    "mediabunny": "1.50.9",
+    "playwright": "1.62.1",
+    "vite": "8.1.1",
+    "headless": true,
+    "muted": true
+  },
+  "fixture": {
+    "synthetic": "20s 1280x720 AVC 30fps 1Mbps keyframe each second; silent AAC. Independent imports of repeated encoded content.",
+    "recordedSha256": "0cd83d944a6ca7822b4a8306cecc60a36e859b041f6702c6a1ad9ead78924451",
+    "recordedSource": "https://developer.mozilla.org/shared-assets/videos/flower.mp4",
+    "recordedCase": "Two repeated imports; production-generated fresh proxies; not distinct physical cameras"
+  },
+  "results": [
+    {
+      "name": "keyboard cuts use the integer playhead; focus and authored audio survive monitoring and a narrow layout",
+      "project": "chromium",
+      "status": "passed",
+      "durationMs": 9476,
+      "retry": 0,
+      "evidence": {}
+    },
+    {
+      "name": "Source Monitor, proxy removal, clear and project replacement retire the product worker",
+      "project": "chromium",
+      "status": "passed",
+      "durationMs": 18750,
+      "retry": 0,
+      "evidence": {}
+    },
+    {
+      "name": "unsupported VP9 originals retain paused previews and editing controls",
+      "project": "chromium",
+      "status": "passed",
+      "durationMs": 8413,
+      "retry": 0,
+      "evidence": {}
+    },
+    {
+      "name": "recorded camera content decodes through fresh local proxies",
+      "project": "chromium",
+      "status": "passed",
+      "durationMs": 8500,
+      "retry": 0,
+      "evidence": {
+        "recorded-ownership": {
+          "presentation": {
+            "enabled": true,
+            "phase": "waiting",
+            "detail": "Press Play to check Program playback and start live previews.",
+            "quality": "normal",
+            "angles": {}
+          },
+          "pendingSetup": false,
+          "worker": null,
+          "canvases": 2,
+          "surfacePixels": 0,
+          "lastCleanup": {
+            "forced": true,
+            "reason": "program-resized",
+            "ledger": {
+              "inputs": 1,
+              "nativeDecoders": 1,
+              "nativeFrames": 1,
+              "createdDecoders": 12,
+              "closedDecoders": 11,
+              "frameBytes": 2073600,
+              "peakDecoders": 1,
+              "peakFrames": 2,
+              "peakFrameBytes": 4147200,
+              "scratchSurfaces": 1,
+              "scratchBytes": 230400
+            },
+            "workers": 0,
+            "pending": 0,
+            "unclosedReceivedBitmaps": 0
+          },
+          "lastHealth": {
+            "stage": "baseline",
+            "fps": 30.000491811385142,
+            "latencyP95": 0.5,
+            "errors": 0,
+            "audioHealthy": true,
+            "decision": "admit"
+          },
+          "admission": {
+            "essentialOwners": 1,
+            "decoderSlots": 4,
+            "surfaceBytes": 27279360,
+            "monitorOwners": 0,
+            "blockers": [],
+            "programReady": true
+          }
+        }
+      }
+    },
+    {
+      "name": "sustained sessions keep bounded ownership across repeated playback and seeking",
+      "project": "chromium",
+      "status": "passed",
+      "durationMs": 80972,
+      "retry": 0,
+      "evidence": {
+        "sustained-ownership": [
+          {
+            "live": {
+              "presentation": {
+                "enabled": true,
+                "phase": "live",
+                "detail": "10 fps angle previews · active angle in Program Monitor.",
+                "quality": "normal",
+                "angles": {
+                  "multicam_angle_f9f1fe95-ec86-488b-9b2d-dfbb2cc41408": "program",
+                  "multicam_angle_1ee06473-16d2-43a1-a104-8a1a8157b17b": "live",
+                  "multicam_angle_5d271d5c-e416-4a99-87f1-342ae45aa018": "live",
+                  "multicam_angle_7c6d5531-9526-48fb-ba9d-a28bedf3082f": "live"
+                }
+              },
+              "pendingSetup": false,
+              "worker": {
+                "state": "ready",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 1,
+                "pending": 3,
+                "received": 204,
+                "closedBitmaps": 204
+              },
+              "canvases": 4,
+              "surfacePixels": 172800,
+              "lastCleanup": null,
+              "lastHealth": {
+                "stage": "live",
+                "fps": 29.87452698667821,
+                "latencyP95": 0.5,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "continue"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 8,
+                "surfaceBytes": 60595200,
+                "monitorOwners": 1,
+                "blockers": [],
+                "programReady": true
+              }
+            }
+          },
+          {
+            "live": {
+              "presentation": {
+                "enabled": true,
+                "phase": "live",
+                "detail": "10 fps angle previews · active angle in Program Monitor.",
+                "quality": "normal",
+                "angles": {
+                  "multicam_angle_f9f1fe95-ec86-488b-9b2d-dfbb2cc41408": "program",
+                  "multicam_angle_1ee06473-16d2-43a1-a104-8a1a8157b17b": "live",
+                  "multicam_angle_5d271d5c-e416-4a99-87f1-342ae45aa018": "live",
+                  "multicam_angle_7c6d5531-9526-48fb-ba9d-a28bedf3082f": "live"
+                }
+              },
+              "pendingSetup": false,
+              "worker": {
+                "state": "ready",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 201,
+                  "closedDecoders": 200,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 1,
+                "pending": 3,
+                "received": 201,
+                "closedBitmaps": 201
+              },
+              "canvases": 4,
+              "surfacePixels": 172800,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "program-resized",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "live",
+                "fps": 30.001967342076817,
+                "latencyP95": 0.5,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "continue"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 8,
+                "surfaceBytes": 60595200,
+                "monitorOwners": 1,
+                "blockers": [],
+                "programReady": true
+              }
+            }
+          },
+          {
+            "live": {
+              "presentation": {
+                "enabled": true,
+                "phase": "live",
+                "detail": "10 fps angle previews · active angle in Program Monitor.",
+                "quality": "normal",
+                "angles": {
+                  "multicam_angle_f9f1fe95-ec86-488b-9b2d-dfbb2cc41408": "program",
+                  "multicam_angle_1ee06473-16d2-43a1-a104-8a1a8157b17b": "live",
+                  "multicam_angle_5d271d5c-e416-4a99-87f1-342ae45aa018": "live",
+                  "multicam_angle_7c6d5531-9526-48fb-ba9d-a28bedf3082f": "live"
+                }
+              },
+              "pendingSetup": false,
+              "worker": {
+                "state": "ready",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 1,
+                "pending": 3,
+                "received": 204,
+                "closedBitmaps": 204
+              },
+              "canvases": 4,
+              "surfacePixels": 172800,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "program-resized",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 201,
+                  "closedDecoders": 200,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "live",
+                "fps": 30.139829042959096,
+                "latencyP95": 0.5,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "continue"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 8,
+                "surfaceBytes": 60595200,
+                "monitorOwners": 1,
+                "blockers": [],
+                "programReady": true
+              }
+            }
+          },
+          {
+            "live": {
+              "presentation": {
+                "enabled": true,
+                "phase": "live",
+                "detail": "10 fps angle previews · active angle in Program Monitor.",
+                "quality": "normal",
+                "angles": {
+                  "multicam_angle_f9f1fe95-ec86-488b-9b2d-dfbb2cc41408": "program",
+                  "multicam_angle_1ee06473-16d2-43a1-a104-8a1a8157b17b": "live",
+                  "multicam_angle_5d271d5c-e416-4a99-87f1-342ae45aa018": "live",
+                  "multicam_angle_7c6d5531-9526-48fb-ba9d-a28bedf3082f": "live"
+                }
+              },
+              "pendingSetup": false,
+              "worker": {
+                "state": "ready",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 201,
+                  "closedDecoders": 200,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 1,
+                "pending": 0,
+                "received": 201,
+                "closedBitmaps": 201
+              },
+              "canvases": 4,
+              "surfacePixels": 172800,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "program-resized",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "live",
+                "fps": 29.994001199670677,
+                "latencyP95": 0.6000000014901161,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "continue"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 8,
+                "surfaceBytes": 60595200,
+                "monitorOwners": 1,
+                "blockers": [],
+                "programReady": true
+              }
+            }
+          },
+          {
+            "live": {
+              "presentation": {
+                "enabled": true,
+                "phase": "live",
+                "detail": "10 fps angle previews · active angle in Program Monitor.",
+                "quality": "normal",
+                "angles": {
+                  "multicam_angle_f9f1fe95-ec86-488b-9b2d-dfbb2cc41408": "program",
+                  "multicam_angle_1ee06473-16d2-43a1-a104-8a1a8157b17b": "live",
+                  "multicam_angle_5d271d5c-e416-4a99-87f1-342ae45aa018": "live",
+                  "multicam_angle_7c6d5531-9526-48fb-ba9d-a28bedf3082f": "live"
+                }
+              },
+              "pendingSetup": false,
+              "worker": {
+                "state": "ready",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 1,
+                "pending": 3,
+                "received": 204,
+                "closedBitmaps": 204
+              },
+              "canvases": 4,
+              "surfacePixels": 172800,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "program-resized",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 201,
+                  "closedDecoders": 200,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "live",
+                "fps": 30.00344301813921,
+                "latencyP95": 0.5,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "continue"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 8,
+                "surfaceBytes": 60595200,
+                "monitorOwners": 1,
+                "blockers": [],
+                "programReady": true
+              }
+            }
+          },
+          {
+            "live": {
+              "presentation": {
+                "enabled": true,
+                "phase": "live",
+                "detail": "10 fps angle previews · active angle in Program Monitor.",
+                "quality": "normal",
+                "angles": {
+                  "multicam_angle_f9f1fe95-ec86-488b-9b2d-dfbb2cc41408": "program",
+                  "multicam_angle_1ee06473-16d2-43a1-a104-8a1a8157b17b": "live",
+                  "multicam_angle_5d271d5c-e416-4a99-87f1-342ae45aa018": "live",
+                  "multicam_angle_7c6d5531-9526-48fb-ba9d-a28bedf3082f": "live"
+                }
+              },
+              "pendingSetup": false,
+              "worker": {
+                "state": "ready",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 1,
+                "pending": 3,
+                "received": 204,
+                "closedBitmaps": 204
+              },
+              "canvases": 4,
+              "surfacePixels": 172800,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "program-resized",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "live",
+                "fps": 30,
+                "latencyP95": 0.6000000014901161,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "continue"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 8,
+                "surfaceBytes": 60595200,
+                "monitorOwners": 1,
+                "blockers": [],
+                "programReady": true
+              }
+            }
+          },
+          {
+            "live": {
+              "presentation": {
+                "enabled": true,
+                "phase": "live",
+                "detail": "10 fps angle previews · active angle in Program Monitor.",
+                "quality": "normal",
+                "angles": {
+                  "multicam_angle_f9f1fe95-ec86-488b-9b2d-dfbb2cc41408": "program",
+                  "multicam_angle_1ee06473-16d2-43a1-a104-8a1a8157b17b": "live",
+                  "multicam_angle_5d271d5c-e416-4a99-87f1-342ae45aa018": "live",
+                  "multicam_angle_7c6d5531-9526-48fb-ba9d-a28bedf3082f": "live"
+                }
+              },
+              "pendingSetup": false,
+              "worker": {
+                "state": "ready",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 1,
+                "pending": 3,
+                "received": 204,
+                "closedBitmaps": 204
+              },
+              "canvases": 4,
+              "surfacePixels": 172800,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "program-resized",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "live",
+                "fps": 29.9985000749739,
+                "latencyP95": 0.5999999940395355,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "continue"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 8,
+                "surfaceBytes": 60595200,
+                "monitorOwners": 1,
+                "blockers": [],
+                "programReady": true
+              }
+            }
+          },
+          {
+            "live": {
+              "presentation": {
+                "enabled": true,
+                "phase": "live",
+                "detail": "10 fps angle previews · active angle in Program Monitor.",
+                "quality": "normal",
+                "angles": {
+                  "multicam_angle_f9f1fe95-ec86-488b-9b2d-dfbb2cc41408": "program",
+                  "multicam_angle_1ee06473-16d2-43a1-a104-8a1a8157b17b": "live",
+                  "multicam_angle_5d271d5c-e416-4a99-87f1-342ae45aa018": "live",
+                  "multicam_angle_7c6d5531-9526-48fb-ba9d-a28bedf3082f": "live"
+                }
+              },
+              "pendingSetup": false,
+              "worker": {
+                "state": "ready",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 1,
+                "pending": 3,
+                "received": 204,
+                "closedBitmaps": 204
+              },
+              "canvases": 4,
+              "surfacePixels": 172800,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "program-resized",
+                "ledger": {
+                  "inputs": 3,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 204,
+                  "closedDecoders": 203,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 3,
+                  "peakFrames": 4,
+                  "peakFrameBytes": 14745600,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "live",
+                "fps": 30.01230012300123,
+                "latencyP95": 0.7000000029802322,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "continue"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 8,
+                "surfaceBytes": 60595200,
+                "monitorOwners": 1,
+                "blockers": [],
+                "programReady": true
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "export preempts monitoring, uses originals, and recovery/relink preserve authored cuts",
+      "project": "chromium",
+      "status": "passed",
+      "durationMs": 15033,
+      "retry": 0,
+      "evidence": {
+        "original-export": {
+          "ownersAtStart": 0,
+          "bytes": 1019655,
+          "duration": 20.117333333333335,
+          "rms": 0,
+          "unchanged": true
+        }
+      }
+    },
+    {
+      "name": "native visibility, initial hidden admission, freeze and GPU loss retire the worker",
+      "project": "chromium",
+      "status": "skipped",
+      "durationMs": 0,
+      "retry": 0,
+      "evidence": {}
+    },
+    {
+      "name": "2 angles with original AVC render through the product owner and retire on pause",
+      "project": "chromium",
+      "status": "passed",
+      "durationMs": 11281,
+      "retry": 0,
+      "evidence": {
+        "live-ownership": {
+          "presentation": {
+            "enabled": true,
+            "phase": "live",
+            "detail": "10 fps angle previews · active angle in Program Monitor.",
+            "quality": "normal",
+            "angles": {
+              "multicam_angle_3b09dd0b-22a7-4a9c-a0cf-4be1f9f064d4": "program",
+              "multicam_angle_c1b70d94-0c54-442c-9f6f-36482686a7ab": "live"
+            }
+          },
+          "pendingSetup": false,
+          "worker": {
+            "state": "ready",
+            "ledger": {
+              "inputs": 1,
+              "nativeDecoders": 1,
+              "nativeFrames": 1,
+              "createdDecoders": 51,
+              "closedDecoders": 50,
+              "frameBytes": 3686400,
+              "peakDecoders": 1,
+              "peakFrames": 2,
+              "peakFrameBytes": 7372800,
+              "scratchSurfaces": 1,
+              "scratchBytes": 230400
+            },
+            "workers": 1,
+            "pending": 0,
+            "received": 51,
+            "closedBitmaps": 51
+          },
+          "canvases": 2,
+          "surfacePixels": 57600,
+          "lastCleanup": null,
+          "lastHealth": {
+            "stage": "live",
+            "fps": 30.003443018029262,
+            "latencyP95": 0.7000000029802322,
+            "errors": 0,
+            "audioHealthy": true,
+            "decision": "continue"
+          },
+          "admission": {
+            "essentialOwners": 2,
+            "decoderSlots": 6,
+            "surfaceBytes": 44928000,
+            "monitorOwners": 1,
+            "blockers": [],
+            "programReady": true
+          }
+        },
+        "cooperative-close": {
+          "presentation": {
+            "enabled": false,
+            "phase": "off",
+            "detail": "Paused angle previews are available.",
+            "quality": "normal",
+            "angles": {}
+          },
+          "pendingSetup": false,
+          "worker": null,
+          "canvases": 2,
+          "surfacePixels": 0,
+          "lastCleanup": {
+            "forced": false,
+            "reason": "drained",
+            "ledger": {
+              "inputs": 0,
+              "nativeDecoders": 0,
+              "nativeFrames": 0,
+              "createdDecoders": 51,
+              "closedDecoders": 51,
+              "frameBytes": 0,
+              "peakDecoders": 1,
+              "peakFrames": 2,
+              "peakFrameBytes": 7372800,
+              "scratchSurfaces": 0,
+              "scratchBytes": 0
+            },
+            "workers": 0,
+            "pending": 0,
+            "unclosedReceivedBitmaps": 0
+          },
+          "lastHealth": {
+            "stage": "live",
+            "fps": 30.003443018029262,
+            "latencyP95": 0.7000000029802322,
+            "errors": 0,
+            "audioHealthy": true,
+            "decision": "continue"
+          },
+          "admission": {
+            "essentialOwners": 2,
+            "decoderSlots": 5,
+            "surfaceBytes": 36864000,
+            "monitorOwners": 0,
+            "blockers": [],
+            "programReady": true
+          }
+        }
+      }
+    },
+    {
+      "name": "4 angles with fresh proxies render through the product owner and retire on pause",
+      "project": "chromium",
+      "status": "passed",
+      "durationMs": 16507,
+      "retry": 0,
+      "evidence": {
+        "live-ownership": {
+          "presentation": {
+            "enabled": true,
+            "phase": "live",
+            "detail": "10 fps angle previews · active angle in Program Monitor.",
+            "quality": "normal",
+            "angles": {
+              "multicam_angle_a7a7753a-229e-41a2-8e2d-8bb7cda56f96": "program",
+              "multicam_angle_ec525aaf-cc0c-458c-8527-02da1ffbcca0": "live",
+              "multicam_angle_dddc7897-5607-4ac6-ae87-0607ab09fb72": "live",
+              "multicam_angle_054783bd-304b-4df7-9dfb-a4a3cad84765": "live"
+            }
+          },
+          "pendingSetup": false,
+          "worker": {
+            "state": "ready",
+            "ledger": {
+              "inputs": 3,
+              "nativeDecoders": 1,
+              "nativeFrames": 1,
+              "createdDecoders": 153,
+              "closedDecoders": 152,
+              "frameBytes": 3686400,
+              "peakDecoders": 3,
+              "peakFrames": 4,
+              "peakFrameBytes": 14745600,
+              "scratchSurfaces": 1,
+              "scratchBytes": 230400
+            },
+            "workers": 1,
+            "pending": 0,
+            "received": 153,
+            "closedBitmaps": 153
+          },
+          "canvases": 4,
+          "surfacePixels": 172800,
+          "lastCleanup": null,
+          "lastHealth": {
+            "stage": "live",
+            "fps": 30.015253653540054,
+            "latencyP95": 0.7000000029802322,
+            "errors": 0,
+            "audioHealthy": true,
+            "decision": "continue"
+          },
+          "admission": {
+            "essentialOwners": 2,
+            "decoderSlots": 8,
+            "surfaceBytes": 60595200,
+            "monitorOwners": 1,
+            "blockers": [],
+            "programReady": true
+          }
+        }
+      }
+    },
+    {
+      "name": "8 angles with fresh proxies render through the product owner and retire on pause",
+      "project": "chromium",
+      "status": "passed",
+      "durationMs": 21963,
+      "retry": 0,
+      "evidence": {
+        "live-ownership": {
+          "presentation": {
+            "enabled": true,
+            "phase": "live",
+            "detail": "10 fps angle previews · active angle in Program Monitor.",
+            "quality": "normal",
+            "angles": {
+              "multicam_angle_303c91c6-7536-41e7-89fb-3599d15bc0d4": "program",
+              "multicam_angle_698a9a33-d978-4fe5-bcd4-3141ab6786e0": "live",
+              "multicam_angle_6bb2e69f-4175-41ac-bd53-0ba4da4e8209": "live",
+              "multicam_angle_5c86d0c5-e9ff-4907-8a60-6e28b072337a": "live",
+              "multicam_angle_0906e2e7-6f39-4f0d-863f-c49debc793d8": "live",
+              "multicam_angle_cc93795c-5433-49a7-aba7-41ca70f2baa1": "live",
+              "multicam_angle_95c1331a-07e8-4eef-ba1a-6be56deaca9b": "live",
+              "multicam_angle_4f72a300-16f6-4d81-a3a5-a1c1196f1bae": "live"
+            }
+          },
+          "pendingSetup": false,
+          "worker": {
+            "state": "ready",
+            "ledger": {
+              "inputs": 7,
+              "nativeDecoders": 1,
+              "nativeFrames": 1,
+              "createdDecoders": 350,
+              "closedDecoders": 349,
+              "frameBytes": 3686400,
+              "peakDecoders": 7,
+              "peakFrames": 8,
+              "peakFrameBytes": 29491200,
+              "scratchSurfaces": 1,
+              "scratchBytes": 230400
+            },
+            "workers": 1,
+            "pending": 0,
+            "received": 350,
+            "closedBitmaps": 350
+          },
+          "canvases": 8,
+          "surfacePixels": 403200,
+          "lastCleanup": null,
+          "lastHealth": {
+            "stage": "live",
+            "fps": 30.015253653430015,
+            "latencyP95": 0.7000000029802322,
+            "errors": 0,
+            "audioHealthy": true,
+            "decision": "continue"
+          },
+          "admission": {
+            "essentialOwners": 2,
+            "decoderSlots": 12,
+            "surfaceBytes": 91929600,
+            "monitorOwners": 1,
+            "blockers": [],
+            "programReady": true
+          }
+        }
+      }
+    }
+  ],
+  "exploratoryNative": {
+    "coreHashes": {
+      "src/app/mediaResourceAdmission.ts": "7f04835002871c230266fac91ef73afb7b7848052f1495dc4abdbb53f1f0d5ad",
+      "src/app/multicamMonitorController.ts": "ee508ec840289c9faa8d4e6da5462e6bd39257c19889dca03d3556469b637a65",
+      "src/app/multicamMonitorSession.ts": "51026a10cf846500840cec69e8ebcb4f13dace171130d8037ab9c3768d9b4f41",
+      "src/app/multicamMonitorWorkerBridge.ts": "d541985757146502caf3edb6189a47be3564eb66be580188d3e64998b471a1c9",
+      "src/domain/multicamMonitor.ts": "4f92425d860815515ef84be4d7fbf4b1bd279c03b951dfbd7475863deb947545",
+      "src/pipeline/multicamMonitorDecode.ts": "0381cda6fa8efa9a887cdca552ddca5a3997a04ade3e66bcb7e60ac0c584947e",
+      "src/pipeline/multicamMonitorProtocol.ts": "a80439e031cd10a2594547f42dac17a949b33e91bb7d5d85ab45c414ab03de62",
+      "src/state/multicamMonitorStore.ts": "3c9be29d9826c68c865afa79acdc1729b6af83ab67858f3811ea74dddb8d123e",
+      "src/workers/multicam-monitor.worker.ts": "9b12055343502f0c1ff17f64d1bbafe8b5071c4385828b1879b6040dad2f1a43"
+    },
+    "fullSourceStablePin": false,
+    "caveat": "Two passes and one pause-after-thaw failure. Monitor core unchanged across source pins; final partial-bridge initialization cleanup and independent-GPU harness adjustment occurred later. Final visible harness was not rerun after user requested no Chrome windows.",
+    "results": [
+      {
+        "name": "native visibility, initial hidden admission, freeze and GPU loss retire the worker",
+        "project": "chromium",
+        "status": "passed",
+        "durationMs": 20737,
+        "retry": 0,
+        "evidence": {
+          "native-lifecycle": {
+            "initialHidden": {
+              "presentation": {
+                "enabled": true,
+                "phase": "paused",
+                "detail": "Live previews paused while this page is hidden or media is being cleared. Retry when ready.",
+                "quality": "normal",
+                "angles": {}
+              },
+              "pendingSetup": false,
+              "worker": null,
+              "canvases": 2,
+              "surfacePixels": 0,
+              "lastCleanup": null,
+              "lastHealth": null,
+              "admission": {
+                "essentialOwners": 1,
+                "decoderSlots": 4,
+                "surfaceBytes": 36864000,
+                "monitorOwners": 0,
+                "blockers": [],
+                "programReady": true
+              }
+            },
+            "hidden": {
+              "presentation": {
+                "enabled": true,
+                "phase": "paused",
+                "detail": "Live previews paused while the page is hidden. Retry when ready.",
+                "quality": "normal",
+                "angles": {}
+              },
+              "pendingSetup": false,
+              "worker": null,
+              "canvases": 2,
+              "surfacePixels": 0,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "Live previews paused while the page is hidden. Retry when ready.",
+                "ledger": {
+                  "inputs": 1,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 9,
+                  "closedDecoders": 8,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 1,
+                  "peakFrames": 2,
+                  "peakFrameBytes": 7372800,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "baseline",
+                "fps": 30.049261083743843,
+                "latencyP95": 4.899999998509884,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "admit"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 5,
+                "surfaceBytes": 36864000,
+                "monitorOwners": 0,
+                "blockers": [],
+                "programReady": true
+              }
+            },
+            "frozen": {
+              "presentation": {
+                "enabled": true,
+                "phase": "paused",
+                "detail": "Live previews paused because the page was suspended. Retry when ready.",
+                "quality": "normal",
+                "angles": {}
+              },
+              "pendingSetup": false,
+              "worker": null,
+              "canvases": 2,
+              "surfacePixels": 0,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "Live previews paused while the page is hidden. Retry when ready.",
+                "ledger": {
+                  "inputs": 1,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 9,
+                  "closedDecoders": 8,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 1,
+                  "peakFrames": 2,
+                  "peakFrameBytes": 7372800,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "baseline",
+                "fps": 28.93778376494848,
+                "latencyP95": 0.5,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "admit"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 5,
+                "surfaceBytes": 36864000,
+                "monitorOwners": 0,
+                "blockers": [],
+                "programReady": true
+              }
+            },
+            "gpu": {
+              "presentation": {
+                "enabled": true,
+                "phase": "waiting",
+                "detail": "Checking Program playback after the edit or seek…",
+                "quality": "normal",
+                "angles": {}
+              },
+              "pendingSetup": false,
+              "worker": null,
+              "canvases": 2,
+              "surfacePixels": 0,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "Checking Program playback after the edit or seek…",
+                "ledger": {
+                  "inputs": 1,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 8,
+                  "closedDecoders": 7,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 1,
+                  "peakFrames": 2,
+                  "peakFrameBytes": 7372800,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "baseline",
+                "fps": 28.92768079800499,
+                "latencyP95": 4.100000001490116,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "admit"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 5,
+                "surfaceBytes": 36864000,
+                "monitorOwners": 0,
+                "blockers": [],
+                "programReady": true
+              }
+            },
+            "version": "151.0.7922.34"
+          }
+        }
+      },
+      {
+        "name": "native visibility, initial hidden admission, freeze and GPU loss retire the worker",
+        "project": "chromium",
+        "status": "failed",
+        "durationMs": 27554,
+        "retry": 0,
+        "error": "Error: expect(received).toMatchObject(expected)\n\n- Expected  - 1\n+ Received  + 1\n\n  Object {\n-   \"phase\": \"live\",\n+   \"phase\": \"paused\",\n  }\n\nCall Log:\n- Timeout 10000ms exceeded while waiting on the predicate",
+        "evidence": {}
+      },
+      {
+        "name": "native visibility, initial hidden admission, freeze and GPU loss retire the worker",
+        "project": "chromium",
+        "status": "passed",
+        "durationMs": 20755,
+        "retry": 0,
+        "evidence": {
+          "native-lifecycle": {
+            "initialHidden": {
+              "presentation": {
+                "enabled": true,
+                "phase": "paused",
+                "detail": "Live previews paused while this page is hidden or media is being cleared. Retry when ready.",
+                "quality": "normal",
+                "angles": {}
+              },
+              "pendingSetup": false,
+              "worker": null,
+              "canvases": 2,
+              "surfacePixels": 0,
+              "lastCleanup": null,
+              "lastHealth": null,
+              "admission": {
+                "essentialOwners": 1,
+                "decoderSlots": 4,
+                "surfaceBytes": 36864000,
+                "monitorOwners": 0,
+                "blockers": [],
+                "programReady": true
+              }
+            },
+            "hidden": {
+              "presentation": {
+                "enabled": true,
+                "phase": "paused",
+                "detail": "Live previews paused while the page is hidden. Retry when ready.",
+                "quality": "normal",
+                "angles": {}
+              },
+              "pendingSetup": false,
+              "worker": null,
+              "canvases": 2,
+              "surfacePixels": 0,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "Live previews paused while the page is hidden. Retry when ready.",
+                "ledger": {
+                  "inputs": 1,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 9,
+                  "closedDecoders": 8,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 1,
+                  "peakFrames": 2,
+                  "peakFrameBytes": 7372800,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "baseline",
+                "fps": 29.999016425603024,
+                "latencyP95": 4.699999995529652,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "admit"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 5,
+                "surfaceBytes": 36864000,
+                "monitorOwners": 0,
+                "blockers": [],
+                "programReady": true
+              }
+            },
+            "frozen": {
+              "presentation": {
+                "enabled": true,
+                "phase": "paused",
+                "detail": "Live previews paused because the page was suspended. Retry when ready.",
+                "quality": "normal",
+                "angles": {}
+              },
+              "pendingSetup": false,
+              "worker": null,
+              "canvases": 2,
+              "surfacePixels": 0,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "Live previews paused while the page is hidden. Retry when ready.",
+                "ledger": {
+                  "inputs": 1,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 8,
+                  "closedDecoders": 7,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 1,
+                  "peakFrames": 2,
+                  "peakFrameBytes": 7372800,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "baseline",
+                "fps": 28.968135051400292,
+                "latencyP95": 2.5,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "admit"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 5,
+                "surfaceBytes": 36864000,
+                "monitorOwners": 0,
+                "blockers": [],
+                "programReady": true
+              }
+            },
+            "gpu": {
+              "presentation": {
+                "enabled": true,
+                "phase": "waiting",
+                "detail": "Checking Program playback after the edit or seek…",
+                "quality": "normal",
+                "angles": {}
+              },
+              "pendingSetup": false,
+              "worker": null,
+              "canvases": 2,
+              "surfacePixels": 0,
+              "lastCleanup": {
+                "forced": true,
+                "reason": "Checking Program playback after the edit or seek…",
+                "ledger": {
+                  "inputs": 1,
+                  "nativeDecoders": 1,
+                  "nativeFrames": 1,
+                  "createdDecoders": 8,
+                  "closedDecoders": 7,
+                  "frameBytes": 3686400,
+                  "peakDecoders": 1,
+                  "peakFrames": 2,
+                  "peakFrameBytes": 7372800,
+                  "scratchSurfaces": 1,
+                  "scratchBytes": 230400
+                },
+                "workers": 0,
+                "pending": 0,
+                "unclosedReceivedBitmaps": 0
+              },
+              "lastHealth": {
+                "stage": "baseline",
+                "fps": 28.94933865734964,
+                "latencyP95": 0.5,
+                "errors": 0,
+                "audioHealthy": true,
+                "decision": "admit"
+              },
+              "admission": {
+                "essentialOwners": 2,
+                "decoderSlots": 5,
+                "surfaceBytes": 36864000,
+                "monitorOwners": 0,
+                "blockers": [],
+                "programReady": true
+              }
+            },
+            "version": "151.0.7922.34"
+          }
+        }
+      }
+    ]
+  },
+  "validation": {
+    "vitest": {
+      "passed": 3996,
+      "failed": 1,
+      "files": 289,
+      "baselineFailure": "pluginAppController.test.ts: threads lifecycle evidence through production composition and closes bounded export ownership; safe-mode. Reproduced on unchanged 3653c9a."
+    },
+    "focusedOwnershipTests": 97,
+    "runnerTests": 17,
+    "researchTests": 5,
+    "build": "passed; 4979 modules; existing large-chunk warning",
+    "lint": "passed",
+    "productionLabExclusion": "No issue195 lab or research entry in built JavaScript"
+  },
+  "rawArtifactHashes": {
+    "browser-headless-final.json": "23f51608ff2d79a235cc42725228928fc7b6924754cd0b3d55fd2e039f1d1365",
+    "browser-first.json": "c7a0e70ea32857208d3ceea08fdaf2066a29197687a5687c1fc965f51dfcbb3b",
+    "native-repeat.json": "1fe4a4d22b9294bd8dc387c6a3d516d40a07a4ca15e04ddbfd2d8c83977b8ab0",
+    "full-tests-final.log": "d0d3900e18b47270f30dedaeb62a67d2506a4d0ca45684247a82c2dd29afc78e",
+    "final-ownership-tests.log": "234538b20a7bfcaa5bfec676d75f31cb3b54067f67592761d2d81d88c7dbc7dc",
+    "build.log": "efbed4dc1118c7016009353556f00850ec1b1a3067c066439cbedaf1b18ebf54",
+    "lint.log": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+    "research-check.log": "bfc8491b2ca0c42ffa722f319fdfb9a6dcf714b2e041acac950917f27bde8de5"
+  }
+}
