@@ -349,6 +349,7 @@ function emptyTrack(id: string, kind: Track['kind']): Track {
     locked: false,
     volume: 1,
     balance: 0,
+    videoEffects: [],
     audioEffects: [],
   }
 }
@@ -405,6 +406,7 @@ export function createTimelineDoc(
     markers,
     captionTracks,
     masterAudio,
+    masterVideoEffects: [],
   }
 
   Object.freeze(doc.frameRate)
@@ -414,6 +416,7 @@ export function createTimelineDoc(
     Object.freeze(track.multicamInstances)
     Object.freeze(track.adjustments)
     Object.freeze(track.transitions)
+    Object.freeze(track.videoEffects)
     Object.freeze(track.audioEffects)
     Object.freeze(track)
   }
@@ -421,6 +424,7 @@ export function createTimelineDoc(
   Object.freeze(doc.markers)
   Object.freeze(doc.captionTracks)
   Object.freeze(doc.masterAudio?.audioEffects)
+  Object.freeze(doc.masterVideoEffects)
   Object.freeze(doc.masterAudio)
   return Object.freeze(doc)
 }

@@ -74,7 +74,7 @@ function clip(id: string, startFrame: number, linkGroupId?: string): Clip {
 
 function sequence(id: string, tracks: Track[] = []): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },

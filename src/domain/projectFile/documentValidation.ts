@@ -420,6 +420,13 @@ function validateTransition(
   return { startFrame, endFrame }
 }
 
+function validateVideoEffectStack(value: unknown, path: string, context: ValidationContext): void {
+  boundedArray(value, path, PROJECT_FILE_LIMITS.maxEffectsPerClip)
+  context.effectCount += value.length
+  if (context.effectCount > PROJECT_FILE_LIMITS.maxTotalEffects) fail(path, 'exceeds the project effect count limit')
+  for (let index = 0; index < value.length; index++) validateEffect(value[index], `${path}[${index}]`, context)
+}
+
 function validateMasterAudio(
   value: unknown,
   path: string,
@@ -437,7 +444,7 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   const track = record(value, path)
   exactKeys(
     track,
-    ['id', 'kind', 'name', 'clips', 'sequenceInstances', 'multicamInstances', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked', 'volume', 'balance', 'audioEffects'],
+    ['id', 'kind', 'name', 'clips', 'sequenceInstances', 'multicamInstances', 'adjustments', 'transitions', 'hidden', 'muted', 'solo', 'locked', 'volume', 'balance', 'audioEffects', 'videoEffects'],
     [],
     path,
   )
@@ -571,6 +578,8 @@ function validateTrack(value: unknown, path: string, trackIds: Set<string>, cont
   booleanValue(track.locked, `${path}.locked`)
   finiteNumber(track.volume, `${path}.volume`, 0, 2)
   finiteNumber(track.balance, `${path}.balance`, -1, 1)
+  validateVideoEffectStack(track.videoEffects, `${path}.videoEffects`, context)
+  if (track.kind !== 'video' && (track.videoEffects as unknown[]).length) fail(`${path}.videoEffects`, 'requires a video track')
   validateAudioEffectStack(track.audioEffects, `${path}.audioEffects`, context)
 }
 
@@ -594,7 +603,7 @@ function validateDocument(
   const document = record(value, path)
   exactKeys(
     document,
-    ['schemaVersion', 'id', 'name', 'frameRate', 'width', 'height', 'audioSampleRate', 'tracks', 'markers', 'captionTracks', 'masterAudio'],
+    ['schemaVersion', 'id', 'name', 'frameRate', 'width', 'height', 'audioSampleRate', 'tracks', 'markers', 'captionTracks', 'masterAudio', 'masterVideoEffects'],
     [],
     path,
   )
@@ -650,6 +659,7 @@ function validateDocument(
   }
   const captionError = captionDocumentValidationError(document as unknown as TimelineDoc)
   if (captionError) fail(`${path}.captionTracks`, captionError)
+  validateVideoEffectStack(document.masterVideoEffects, `${path}.masterVideoEffects`, context)
   validateMasterAudio(document.masterAudio, `${path}.masterAudio`, context)
 }
 

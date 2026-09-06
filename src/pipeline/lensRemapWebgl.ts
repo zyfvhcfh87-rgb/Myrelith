@@ -1,3 +1,4 @@
+import { hasVideoBusEffects, videoBusAdditionalBytes } from '../domain/videoBusStage'
 import {
   createValidatedLensCorrectionMap,
   isManualLensCorrectionModel,
@@ -601,6 +602,7 @@ export function createDocumentLensRemapProvider(
         width,
         height,
         activeIncludeExportReadback,
+        hasVideoBusEffects(doc) ? videoBusAdditionalBytes(activeOutputWidth, activeOutputHeight, doc.width, doc.height) : 0,
       )
       if (!budget.allowed) {
         throw new LensRemapUnavailableError(

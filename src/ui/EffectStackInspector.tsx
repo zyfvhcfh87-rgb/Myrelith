@@ -47,7 +47,7 @@ interface NumericFieldProps {
   onCommit: (value: number) => void
 }
 
-function NumericField({
+export function NumericField({
   label,
   value,
   min,

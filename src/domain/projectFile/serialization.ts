@@ -18,6 +18,10 @@ import {
   type SequenceProject,
 } from '../projectSequences';
 
+function cloneVideoEffect(effect: Effect): Effect {
+  return { id: effect.id, type: effect.type, version: effect.version, enabled: effect.enabled, params: cloneEffectParams(effect.params) }
+}
+
 function cloneEffectParams(params: Effect['params']): Effect['params'] {
   const copy: Effect['params'] = {}
   for (const key of Object.keys(params)) copy[key] = params[key]
@@ -58,9 +62,11 @@ function portableTimelineSnapshot(document: TimelineDoc): TimelineDoc {
       width: document.width,
       height: document.height,
       audioSampleRate: document.audioSampleRate,
+      masterVideoEffects: (document.masterVideoEffects ?? []).map(cloneVideoEffect),
       tracks: document.tracks.map((track) => ({
         id: track.id,
         kind: track.kind,
+        videoEffects: (track.videoEffects ?? []).map(cloneVideoEffect),
         name: track.name,
         clips: track.clips.map((clip) => ({
           id: clip.id,

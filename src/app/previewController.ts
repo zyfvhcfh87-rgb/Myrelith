@@ -27,6 +27,7 @@
  * dev-mode double-mount; nothing is torn down on effect cleanup. dispose()
  * exists for tests and real teardown.
  */
+import { hasVideoBusEffects, videoBusAdditionalBytes } from '../domain/videoBusStage'
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import {
@@ -298,6 +299,7 @@ interface ControllerState {
   maxSourcePixels: number
   maxVideoRequests: number
   maxOutputPixels: number
+  maxVideoBusBytes: number
   canvas: HTMLCanvasElement | null
   bridge: BridgeLike | null
   deps: PreviewDeps | null
@@ -328,6 +330,7 @@ const state: ControllerState = {
   maxSourcePixels: 0,
   maxVideoRequests: 0,
   maxOutputPixels: 0,
+  maxVideoBusBytes: 0,
   canvas: null,
   bridge: null,
   deps: null,
@@ -579,6 +582,7 @@ function currentPreviewRenderDocument(doc: TimelineDoc): TimelineDoc {
     doc,
   )
   const tracks = [] as TimelineDoc['tracks']
+  const masterVideoEffects = [] as NonNullable<TimelineDoc['masterVideoEffects']>
   const visited = new Set<string>()
   const queue = [documentState.activeSequenceId]
   while (queue.length > 0) {
@@ -588,11 +592,12 @@ function currentPreviewRenderDocument(doc: TimelineDoc): TimelineDoc {
     const sequence = sequenceById(project, sequenceId)
     if (!sequence) continue
     tracks.push(...sequence.tracks)
+    masterVideoEffects.push(...(sequence.masterVideoEffects ?? []))
     for (const track of sequence.tracks) {
       for (const instance of sequenceInstances(track)) queue.push(instance.sequenceId)
     }
   }
-  return visited.size === 1 ? doc : { ...doc, tracks }
+  return visited.size === 1 ? doc : { ...doc, tracks, masterVideoEffects }
 }
 
 function publishPreviewEffectStatuses(
@@ -617,11 +622,20 @@ function rebuildPreviewEffectStatusIndex(doc: TimelineDoc): void {
   publishPreviewEffectStatuses()
 }
 
+function reserveVideoBusWork(doc: TimelineDoc): void {
+  if (!hasVideoBusEffects(doc)) return
+  state.maxVideoBusBytes = Math.max(state.maxVideoBusBytes, videoBusAdditionalBytes(doc.width, doc.height))
+  state.resourceLease?.update({ kind: 'program', decoderSlots: state.maxVideoRequests * 2 + 2,
+    surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4 + state.maxVideoBusBytes,
+    monitorCompatible: true })
+}
+
 function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {
   mediaResourceAdmission.interrupt('program-changed')
   const doc = currentPreviewDocument()
   const renderDoc = currentPreviewRenderDocument(doc)
   state.visualPlanner = createCurrentVisualPlanner(deps, doc)
+  reserveVideoBusWork(renderDoc)
   bridge.setDoc(renderDoc)
   rebuildPreviewEffectStatusIndex(renderDoc)
   syncPresentationProfile(bridge, doc)
@@ -673,7 +687,8 @@ function scheduleRender(deps: PreviewDeps): void {
       kind: 'program', decoderSlots: state.maxVideoRequests * 2 + 2,
       // Two retained samples, conversion/transfer headroom and the two reusable
       // lens surfaces per source lane, plus the four compositor surfaces.
-      surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4,
+      surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4
+        + state.maxVideoBusBytes,
       monitorCompatible: true,
     })
     effectStatuses = projectPlannedPreviewEffectStatuses(
@@ -1094,6 +1109,7 @@ export function initPreview(
   const initialRenderDoc = currentPreviewRenderDocument(initialDoc)
   state.visualPlanner = createCurrentVisualPlanner(deps, initialDoc, initialBounds)
   state.effectStatusIndex = createPreviewEffectStatusIndex(initialRenderDoc)
+  reserveVideoBusWork(initialRenderDoc)
   bridge.setDoc(initialRenderDoc)
   publishPreviewEffectStatuses(null)
   syncPresentationProfile(bridge, initialDoc)
@@ -1161,7 +1177,7 @@ async function disposePreviewState(clearPluginBinding: boolean): Promise<void> {
   mediaResourceAdmission.interrupt('program-closed')
   const resourceLease = state.resourceLease
   state.resourceLease = null
-  state.maxOutputPixels = state.maxSourcePixels = state.maxVideoRequests = 0
+  state.maxVideoBusBytes = state.maxOutputPixels = state.maxSourcePixels = state.maxVideoRequests = 0
   cancelScheduledRender()
   state.renderGeneration++
   state.presentationGeneration++

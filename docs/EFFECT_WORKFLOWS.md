@@ -1,6 +1,6 @@
 # Issue #197: reusable effects and video buses
 
-Status: user approved the plan on 2026-09-06. Gates 1–4 passed; Gate 5 is next.
+Status: user approved the plan on 2026-09-06. Gates 1–5 passed; final acceptance is next.
 Inspected at merged master `573cb45`, on `codex/issue197`.
 
 Issue: [#197](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/197).
@@ -263,6 +263,21 @@ adjustments. The shared plan/compositor, preview status, worker protocol and
 export path all gain the same scope semantics. Update Program admission before
 allocating any additional accounted resources. UI reads status through state
 and app facades, including target-specific preset rejection reasons.
+
+Gate 5 accepted locally on 2026-09-06. Timeline schema 21 adds explicit empty
+track/master video arrays; project format 7 stays unchanged. Portable snapshots,
+validation, project-wide budgets/ids, dormant sequence duplication, history and
+recovery include the stacks. Static controls and presets reject source-only
+stages and preserve unknown intent. Production plans retain child-local frame
+and instance path, and the compositor reuses leg/group sequentially. Admission
+includes the bus readback/scratch in Program and exact lens source/output limits.
+
+306 focused tests in ten files, 17 runner checks, build/typecheck, lint and eight
+Chromium checks pass. Actual nested composition with WebGL lens correction,
+masks, captions, adjustments and blends matches explicit child composition byte
+for byte. Trusted-plugin clip effects plus track/master effects match decoded
+export within one RGB level; repeated preparation/cancellation returns the
+admission ledger to its original values. See [gate-5.md](evidence/issue197/gate-5.md).
 
 ## Gate 6: acceptance and delivery
 

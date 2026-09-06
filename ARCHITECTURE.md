@@ -257,6 +257,19 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   resolve multicam video and audio for preview, playback, nested sequences, and
   export. Mixed-settings nesting, automatic sync, unlimited angles, and a live
   simultaneous angle wall remain unsupported.
+- Schema 21 adds static `Track.videoEffects` and `TimelineDoc.masterVideoEffects`
+  using ordinary versioned descriptors; old documents migrate to empty arrays.
+  All stacks count toward global effect ids and budgets, including dormant
+  sequences. Track processing follows source effects, opacity and transition
+  mixing, before the track's outer blend. Adjustment items keep their existing
+  accumulated-picture stage. Captions precede each sequence master. Nested
+  plans carry sequence id, local frame and instance path; child master precedes
+  enclosing track processing. Current equal-size opaque sequence instances and
+  explicit `preservesOpaqueInput` registration permit sequential destination/
+  leg/group reuse. Future alpha-reducing stages cannot use this optimization.
+  Bus pixels borrow existing scratch after source/plugin completion, with one
+  readback plus bounded spatial scratch admitted in Program and exact lens
+  source/output budgets before allocation. No browser resources enter stacks.
 - `TimeRange` is **half-open** `[startFrame, startFrame + durationFrames)`;
   ranges that merely touch do not overlap. All ranges are integer frames at
   the document rate.

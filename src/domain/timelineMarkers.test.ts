@@ -14,7 +14,7 @@ import { docDurationFrames, timelineDisplayDurationFrames } from './selectors'
 
 function doc(markers: TimelineMarker[] = []): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id: 'doc-markers',
     name: 'Markers',
     frameRate: { num: 30, den: 1 },

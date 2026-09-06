@@ -677,6 +677,8 @@ export type TrackKind = 'video' | 'audio'
  * TimelineDoc.tracks defines compositing: index 0 is drawn first (bottom).
  */
 export interface Track {
+  /** Static post-composite video stack; schema-21 files always include it. */
+  videoEffects?: EffectDescriptor[]
   /** Unique track id. */
   id: TrackId
   /** Whether this lane composites video or mixes audio. */
@@ -815,7 +817,7 @@ export interface CaptionTrack {
  * never stored, so it cannot go stale.
  */
 export interface TimelineDoc {
-  /** Schema version for forward-compatible project files. Currently 20. */
+  /** Schema version for forward-compatible project files. Currently 21. */
   schemaVersion: number
   /** Unique document id. */
   id: string
@@ -847,4 +849,6 @@ export interface TimelineDoc {
    * fixtures stay source-compatible; portable schema-17 files always write it.
    */
   masterAudio?: MasterAudioSettings
+  /** Static video bus after all sequence tracks and captions (schema 21). */
+  masterVideoEffects?: EffectDescriptor[]
 }

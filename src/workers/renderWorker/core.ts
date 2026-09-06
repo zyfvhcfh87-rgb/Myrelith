@@ -656,7 +656,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       }
       if (!transitionGroup) {
         transitionGroup = env.createCanvas(profile.outputWidth, profile.outputHeight)
-        transitionGroupCtx = transitionGroup.getContext('2d', SRGB_2D_CONTEXT)
+        transitionGroupCtx = transitionGroup.getContext('2d', { ...SRGB_2D_CONTEXT, willReadFrequently: true })
       }
       if (!transitionLegCtx || !transitionGroupCtx) {
         throw new Error('transition canvas 2d context unavailable')

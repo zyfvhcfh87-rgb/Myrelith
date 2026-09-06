@@ -1,4 +1,5 @@
 /** Shared immutable visual plan for one project sequence, including nesting. */
+import { snapshotVideoBusStack } from './videoBusStage'
 
 import type {
   Clip,
@@ -108,6 +109,8 @@ function scopeNestedItem(
   instancePath: readonly SequenceInstanceId[],
 ): VideoCompositionItem {
   if (instancePath.length === 0) return item
+  if (item.kind === 'video-bus') return Object.freeze({ ...item, instancePath })
+  if ('busScope' in item && item.busScope) item = { ...item, busScope: Object.freeze({ ...item.busScope, instancePath }) }
   if (item.kind === 'clip') {
     return Object.freeze({
       ...item,
@@ -178,8 +181,10 @@ export function createProjectVideoCompositionPlanner(
         const base = planner.planFrame(localFrame)
         const byTrack = new Map<TrackId, VideoCompositionItem[]>()
         const captions: VideoCompositionItem[] = []
+        const masters: VideoCompositionItem[] = []
         for (const baseItem of base.items) {
           const item = scopeNestedItem(baseItem, instancePath)
+          if (item.kind === 'video-bus') { masters.push(item); continue }
           if (item.kind === 'caption') {
             captions.push(item)
             continue
@@ -190,6 +195,9 @@ export function createProjectVideoCompositionPlanner(
         }
         for (const track of sequence.tracks) {
           if (track.kind !== 'video' || track.hidden) continue
+          const finishInstanceTrack = () => {
+            if (track.videoEffects?.length) items.push(Object.freeze({ kind: 'video-bus', target: 'track', trackId: track.id, sequenceId: sequence.id, frame: localFrame, instancePath, effects: snapshotVideoBusStack(track.videoEffects) }))
+          }
           const instance = activeInstanceAt(sequence, track.id, localFrame)
           const multicamInstance = activeMulticamAt(sequence, track.id, localFrame)
           if (!instance && !multicamInstance) {
@@ -215,6 +223,7 @@ export function createProjectVideoCompositionPlanner(
                 - instance.timelineRange.startFrame,
               path,
             )
+            finishInstanceTrack()
             continue
           }
           const resolved = multicams.get(multicamInstance!.multicamId)
@@ -232,7 +241,7 @@ export function createProjectVideoCompositionPlanner(
             + localFrame
             - multicamInstance!.timelineRange.startFrame
           const selected = resolved.planner.select(definitionFrame)
-          if (selected.video.sourceFrame === null) continue
+          if (selected.video.sourceFrame === null) { finishInstanceTrack(); continue }
           const angle = resolved.angles.get(selected.video.angleId)!
           const clip = Object.freeze(multicamClip(multicamInstance!, angle))
           items.push(Object.freeze({
@@ -247,8 +256,9 @@ export function createProjectVideoCompositionPlanner(
               requestKey: nestedRequestKey(instancePath, clip.id),
             }),
           }))
+          finishInstanceTrack()
         }
-        items.push(...captions)
+        items.push(...captions, ...masters)
       }
       append(root, frame, [])
       const frozenItems = Object.freeze(items.map((item) => Object.freeze(item)))

@@ -57,7 +57,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -600,7 +600,7 @@ describe('videoCompositionPlanAtFrame', () => {
               }]
           : item.kind === 'adjustment'
             ? []
-          : item.kind === 'sequence-background'
+          : item.kind === 'video-bus' || item.kind === 'sequence-background'
             || item.kind === 'multicam-background'
             ? []
         : item.requests

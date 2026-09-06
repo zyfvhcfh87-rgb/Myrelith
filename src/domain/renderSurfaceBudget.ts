@@ -87,6 +87,7 @@ export function lensRemapSurfaceBudget(
   sourceWidth: number,
   sourceHeight: number,
   includeExportReadback: boolean,
+  additionalOwnedBytes = 0,
 ): LensRemapSurfaceBudget {
   const compositor = renderSurfaceBudget(outputWidth, outputHeight)
   const sourceValid = Number.isSafeInteger(sourceWidth)
@@ -104,7 +105,9 @@ export function lensRemapSurfaceBudget(
   const aggregateBytes = compositor.aggregateBytes
     + remapReusableBytes
     + exportReadbackBytes
+    + additionalOwnedBytes
   let reason = compositor.reason
+  if (!Number.isSafeInteger(additionalOwnedBytes) || additionalOwnedBytes < 0) reason ??= 'Additional owned render bytes must be a non-negative safe integer.'
   if (!sourceValid) {
     reason ??= 'Lens-remap source dimensions must be positive safe integers.'
   } else if (

@@ -1,3 +1,4 @@
+import VideoBusInspector from './VideoBusInspector'
 /**
  * Contextual Inspector composition root. Focused panels live under ui/inspector.
  * Layering remains ui/ -> state/ + domain selectors only.
@@ -33,6 +34,10 @@ const StabilizationEditor = lazy(() => import('./StabilizationEditor'))
 const MotionTrackingEditor = lazy(() => import('./MotionTrackingEditor'))
 
 export default function Inspector() {
+  return <><VideoBusInspector /><ClipInspector /></>
+}
+
+function ClipInspector() {
   const selectedClipId = useTransportStore((s) => s.selectedClipId)
   const selectedAdjustmentId = useTransportStore((s) => s.selectedAdjustmentId)
   const visualPreview = useTransportStore((s) => s.clipVisualPreview)

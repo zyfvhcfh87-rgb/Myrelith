@@ -59,7 +59,7 @@ function catalog(
 
 function document(): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id: 'plugin-export-doc',
     name: 'Plugin export',
     frameRate: { num: 30, den: 1 },
@@ -240,7 +240,7 @@ function deferred<T>() {
 
 describe('plugin export attempt controller', () => {
   test('preflights reachable child plugin effects and carries the exact project target', async () => {
-    const child = { ...document(), schemaVersion: 20, id: 'child' }
+    const child = { ...document(), schemaVersion: 21, id: 'child' }
     const root: TimelineDoc = {
       ...child,
       id: 'root',

@@ -34,6 +34,7 @@
  *   Preview and export consume that same
  *   ordered plan; this compositor never reconstructs groups by adjacency.
  */
+import { resolveVideoBusEffects, videoBusRenderBudgetError } from '../domain/videoBusStage'
 
 import type {
   AssetId,
@@ -42,6 +43,7 @@ import type {
   ClipId,
   ClipVisualSettings,
   TextProps,
+  EffectDescriptor,
   TimelineDoc,
   Transform,
 } from '../domain/schema'
@@ -269,6 +271,13 @@ export async function compositeFrame(
   lensRemapProvider?: LensRemapProvider | null,
   videoEffectStageExecutor?: VideoEffectStageExecutor | null,
 ): Promise<CompositeResult> {
+  const hasBuses = plan.items.some((item) => item.kind === 'video-bus'
+    ? resolveVideoBusEffects(item.effects, true).pixelEffects.length > 0
+    : 'trackEffects' in item && resolveVideoBusEffects(item.trackEffects ?? [], true).pixelEffects.length > 0)
+  if (hasBuses) {
+    const error = videoBusRenderBudgetError(presentation?.outputWidth ?? doc.width, presentation?.outputHeight ?? doc.height, doc.width, doc.height)
+    if (error) throw new VideoEffectStageExecutionError(error)
+  }
   // Phase 1 — collect what needs pixels, bottom-to-top.
   const requests = videoCompositionRequests(plan)
 
@@ -311,6 +320,10 @@ export async function compositeFrame(
     ctx.fillRect(0, 0, doc.width, doc.height)
 
     for (const item of plan.items) {
+      if (item.kind === 'video-bus') {
+        compositeOpaqueVideoBus(doc, ctx, transitionSurfaceProvider, item.effects, presentationScale)
+        continue
+      }
       if (
         item.kind === 'sequence-background'
         || item.kind === 'multicam-background'
@@ -358,24 +371,27 @@ export async function compositeFrame(
           lensRemapProvider,
           videoEffectStageExecutor,
           item.frame,
+          item.trackEffects,
         )
         continue
       }
 
       if (item.kind === 'text') {
         try {
-          await compositeTextLayer(
-            doc,
-            ctx,
-            transitionSurfaceProvider,
-            item.clip,
-            item.opacity,
-            item.blendMode,
-            presentationScale,
-            item.effectStagePlan,
-            videoEffectStageExecutor,
-            item.frame,
-          )
+          await compositeVideoTrackBus(doc, ctx, transitionSurfaceProvider, item.trackEffects, item.blendMode, presentationScale, async (target, blend) => {
+            await compositeTextLayer(
+              doc,
+              target,
+              transitionSurfaceProvider,
+              item.clip,
+              item.opacity,
+              blend,
+              presentationScale,
+              item.effectStagePlan,
+              videoEffectStageExecutor,
+              item.frame,
+            )
+          })
           drawn.push(item.clip.id)
         } catch (e) {
           rethrowVideoEffectStageExecutionError(e)
@@ -418,44 +434,46 @@ export async function compositeFrame(
         continue
       }
       try {
-        const correctedImage = correctedSourceForClip(clip, image, lensRemapProvider)
-        const effectStagePlan = request.effectStagePlan
-        const plannedSurfaces = effectStagePlan?.requiresOrderedPixelPath
-          ? orderedPixelSurfaces(transitionSurfaceProvider)
-          : null
-        if (plannedSurfaces && effectStagePlan) {
-          await compositeOrderedPixelMediaLayer(
-            doc,
-            ctx,
-            plannedSurfaces,
-            request,
-            correctedImage,
-            item.blendMode,
-            presentationScale,
-            effectStagePlan,
-            videoEffectStageExecutor,
-            item.frame,
-          )
-        } else if (
-          effectStagePlan?.requiresOrderedPixelPath
-          && videoEffectStageExecutor?.bypassPolicy === 'fail'
-        ) {
-          throw new VideoEffectStageExecutionError(
-            'Canvas pixel access is unavailable for fail-closed plugin composition',
-          )
-        } else if (requiresPixelEffects(ctx, clip)) {
-          compositePixelCorrectedMediaLayer(
-            doc,
-            ctx,
-            transitionSurfaceProvider,
-            request,
-            correctedImage,
-            item.blendMode,
-            presentationScale,
-          )
-        } else {
-          drawClip(ctx, doc, request, correctedImage, item.blendMode)
-        }
+        await compositeVideoTrackBus(doc, ctx, transitionSurfaceProvider, item.trackEffects, item.blendMode, presentationScale, async (target, blend) => {
+          const correctedImage = correctedSourceForClip(clip, image, lensRemapProvider)
+          const effectStagePlan = request.effectStagePlan
+          const plannedSurfaces = effectStagePlan?.requiresOrderedPixelPath
+            ? orderedPixelSurfaces(transitionSurfaceProvider)
+            : null
+          if (plannedSurfaces && effectStagePlan) {
+            await compositeOrderedPixelMediaLayer(
+              doc,
+              target,
+              plannedSurfaces,
+              request,
+              correctedImage,
+              blend,
+              presentationScale,
+              effectStagePlan,
+              videoEffectStageExecutor,
+              item.frame,
+            )
+          } else if (
+            effectStagePlan?.requiresOrderedPixelPath
+            && videoEffectStageExecutor?.bypassPolicy === 'fail'
+          ) {
+            throw new VideoEffectStageExecutionError(
+              'Canvas pixel access is unavailable for fail-closed plugin composition',
+            )
+          } else if (requiresPixelEffects(target, clip)) {
+            compositePixelCorrectedMediaLayer(
+              doc,
+              target,
+              transitionSurfaceProvider,
+              request,
+              correctedImage,
+              blend,
+              presentationScale,
+            )
+          } else {
+            drawClip(target, doc, request, correctedImage, blend)
+          }
+        })
         drawn.push(clip.id)
       } catch (e) {
         rethrowLensRemapUnavailable(e)
@@ -647,6 +665,7 @@ async function compositeTransitionGroup(
   lensRemapProvider: LensRemapProvider | null | undefined,
   videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
   timelineFrame: number,
+  trackEffects: readonly EffectDescriptor[] = [],
 ): Promise<void> {
   const ready: ClipId[] = []
   const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
@@ -748,6 +767,7 @@ async function compositeTransitionGroup(
     }
 
     if (ready.length === 0) return
+    applyVideoBusToSurface(surfaces.group.ctx, trackEffects, doc, presentationScale)
 
     destination.save()
     try {
@@ -1285,4 +1305,64 @@ function compositePostCompositeAdjustment(
   } finally {
     releaseSurfacePixels(surfaces.leg.ctx, doc, presentationScale)
   }
+}
+
+/** One readback after source/plugin completion; never retains pixels across an await. */
+function applyVideoBusToSurface(ctx: Composite2D, effects: readonly EffectDescriptor[], doc: TimelineDoc, scale: { readonly x: number; readonly y: number }): void {
+  const resolution = resolveVideoBusEffects(effects, true)
+  if (resolution.pixelEffects.length === 0) return
+  if (!ctx.getImageData || !ctx.putImageData) throw new VideoEffectStageExecutionError('Canvas pixel access is unavailable for video-bus effects.')
+  const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
+  try {
+    const data = ctx.getImageData(0, 0, width, height)
+    applyOrderedPixelEffectsToRgba(data.data, resolution.pixelEffects, { surfaceWidth: width, surfaceHeight: height, projectWidth: doc.width, projectHeight: doc.height })
+    ctx.putImageData(data, 0, 0)
+  } catch (cause) { throw new VideoEffectStageExecutionError('Video-bus pixel processing failed.', cause) }
+}
+
+/** Leg/source helpers settle before this owner processes the opacity-complete group. */
+async function compositeVideoTrackBus(
+  doc: TimelineDoc, destination: Composite2D, provider: TransitionSurfaceProvider,
+  effects: readonly EffectDescriptor[] | undefined, blend: BlendModeResolution,
+  scale: { readonly x: number; readonly y: number },
+  paint: (target: Composite2D, blend: BlendModeResolution) => Promise<void>,
+): Promise<void> {
+  if (!effects?.length || resolveVideoBusEffects(effects, true).pixelEffects.length === 0) { await paint(destination, blend); return }
+  const { group } = provider.get()
+  const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
+  try {
+    group.ctx.save()
+    try {
+      group.ctx.scale(scale.x, scale.y)
+      clearSurface(group.ctx, doc)
+      await paint(group.ctx, NORMAL_BLEND_MODE)
+    } finally { group.ctx.restore() }
+    applyVideoBusToSurface(group.ctx, effects, doc, scale)
+    destination.save()
+    try {
+      destination.globalAlpha = 1
+      applyCanvasBlendMode(destination, blend)
+      destination.drawImage(group.canvas, 0, 0, width, height, 0, 0, doc.width, doc.height)
+    } finally { destination.restore() }
+  } finally { releaseSurfacePixels(group.ctx, doc, scale) }
+}
+
+/** Opaque sequence/instance results borrow the existing readback-friendly leg. */
+function compositeOpaqueVideoBus(doc: TimelineDoc, destination: Composite2D, provider: TransitionSurfaceProvider, effects: readonly EffectDescriptor[], scale: { readonly x: number; readonly y: number }): void {
+  if (resolveVideoBusEffects(effects, true).pixelEffects.length === 0) return
+  if (!destination.canvas) throw new VideoEffectStageExecutionError('Canvas source access is unavailable for video-bus effects.')
+  const { leg } = provider.get()
+  const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
+  try {
+    leg.ctx.save()
+    try {
+      leg.ctx.globalAlpha = 1; leg.ctx.globalCompositeOperation = 'source-over'
+      leg.ctx.clearRect(0, 0, width, height)
+      leg.ctx.drawImage(destination.canvas, 0, 0, width, height, 0, 0, width, height)
+    } finally { leg.ctx.restore() }
+    applyVideoBusToSurface(leg.ctx, effects, doc, scale)
+    destination.save()
+    try { destination.globalAlpha = 1; destination.globalCompositeOperation = 'source-over'; destination.drawImage(leg.canvas, 0, 0, width, height, 0, 0, doc.width, doc.height) }
+    finally { destination.restore() }
+  } finally { releaseSurfacePixels(leg.ctx, doc, scale) }
 }

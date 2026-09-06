@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { writeFile } from 'node:fs/promises'
 
 test.setTimeout(90_000)
 
@@ -272,7 +273,9 @@ test('new effect controls coexist with an installed trusted plugin, local preset
   const manager = page.getByRole('dialog', { name: 'Manage plugins' })
   await manager.getByLabel('Choose a plugin package').setInputFiles('samples/plugins/audited-invert-v1/audited-invert-v1.myrelith-plugin')
   const review = page.getByRole('dialog', { name: 'Review Audited Invert' })
-  for (const decision of await review.getByRole('checkbox').all()) if (await decision.isEnabled() && !await decision.isChecked()) await decision.check()
+  await review.getByRole('checkbox', { name: /^Trust this signer/ }).check()
+  await review.getByRole('checkbox', { name: /^Video frame pixels/ }).check()
+  await expect(review.getByRole('button', { name: 'Install plugin', exact: true })).toBeEnabled()
   await review.getByRole('button', { name: 'Install plugin', exact: true }).click()
   await expect(manager.getByRole('heading', { name: 'Audited Invert', exact: true })).toBeVisible()
   await manager.getByRole('button', { name: 'Close', exact: true }).click()
@@ -305,6 +308,32 @@ test('new effect controls coexist with an installed trusted plugin, local preset
     const p = '/src/state/previewStatusStore.ts'
     return [...(await import(p)).usePreviewStatusStore.getState().effectStatuses.values()].some((status: { status: string }) => status.status === 'ready')
   })).toBe(true)
+  await page.evaluate(async () => {
+    const controllerPath = '/src/app/videoBusController.ts', d = '/src/state/documentStore.ts', e = '/src/domain/effectStack.ts'
+    const { openVideoBusEdit, applyVideoBusEdit } = await import(controllerPath), store = (await import(d)).useDocumentStore
+    const previewPath = '/src/app/previewController.ts'
+    const { subscribePreviewRenderDiagnostics } = await import(previewPath)
+    let requestedAfter = Number.POSITIVE_INFINITY
+    let unsubscribe = () => {}
+    let timer: ReturnType<typeof setTimeout>
+    const presented = new Promise<void>((resolve, reject) => {
+      timer = setTimeout(() => { unsubscribe(); reject(new Error('Updated bus preview did not present.')) }, 15_000)
+      unsubscribe = subscribePreviewRenderDiagnostics((event: { frame: number; requestedAt: number; result: { status: string } }) => {
+        if (event.frame === 75 && event.requestedAt >= requestedAfter && event.result.status === 'drawn') { clearTimeout(timer); unsubscribe(); resolve() }
+      })
+    })
+    const doc = store.getState().doc
+    const color = (await import(e)).createColorAdjustEffect('template'); color.params.exposure = 0.2
+    for (const [target, effects] of [
+      [{ kind: 'track', sequenceId: doc.id, trackId: doc.tracks[0].id }, [{ id: 'blur-template', type: 'builtin.box-blur', version: 1, enabled: true, params: { radius: 2 } }]],
+      [{ kind: 'master', sequenceId: doc.id }, [color]],
+    ]) {
+      const error = applyVideoBusEdit(openVideoBusEdit(target), { kind: 'apply', effects, mode: 'append' })
+      if (error) { clearTimeout(timer!); unsubscribe(); throw new Error(error) }
+    }
+    requestedAfter = performance.now()
+    await presented
+  })
   const previewPixel = await pixel(page)
   const width = await page.getByRole('region', { name: 'Effect stack', exact: true }).evaluate((element) => ({ content: element.scrollWidth, visible: element.clientWidth, right: element.getBoundingClientRect().right, areaRight: element.closest('.area-inspector')!.getBoundingClientRect().right }))
   expect(width.content).toBeLessThanOrEqual(width.visible + 1)
@@ -319,6 +348,8 @@ test('new effect controls coexist with an installed trusted plugin, local preset
     const { getPluginPreparedExportPort, disposePluginPreparedExportOwner } = await import(preparedPath)
     const port = getPluginPreparedExportPort()
     const before = JSON.stringify((await import(d)).useDocumentStore.getState().project)
+    const admission = (await import(a)).mediaResourceAdmission
+    const admissionBefore = admission.snapshot()
     let input
     const scratch = new OffscreenCanvas(1280, 720), ctx = scratch.getContext('2d')!
     const average = new OffscreenCanvas(1, 1), averageContext = average.getContext('2d')!
@@ -334,15 +365,30 @@ test('new effect controls coexist with an installed trusted plugin, local preset
       if (!sample) throw new Error('Export frame missing')
       try { sample.draw(ctx, 0, 0, 1280, 720) } finally { sample.close() }
       averageContext.drawImage(scratch, 0, 0, 1, 1)
+      // Repeat actual preparation, then cancel after the pipeline has rendered
+      // a frame. Join terminal cleanup before reading the ownership ledger.
+      const repeated = await port.prepare({ ...DEFAULT_EXPORT_PROFILE, videoBitrate: 5_000_000 })
+      if (repeated.status !== 'ready') throw new Error('Repeated plugin export was not ready')
+      let cancellation: Promise<void> | undefined
+      const cancelledResult = await port.start(repeated.token, { onProgress: (progress: number) => {
+        if (progress > 0 && !cancellation) cancellation = port.cancel('issue197-acceptance-cancel')
+      } })
+      await cancellation
+      await disposeExport(); await disposePluginPreparedExportOwner('issue197-acceptance-complete')
       return { bytes: result.buffer.byteLength, pixel: [...averageContext.getImageData(0, 0, 1, 1).data], duration: await input.computeDuration(),
-        unchanged: before === JSON.stringify((await import(d)).useDocumentStore.getState().project), admission: (await import(a)).mediaResourceAdmission.snapshot() }
+        cancelled: !!cancellation && cancelledResult === undefined,
+        unchanged: before === JSON.stringify((await import(d)).useDocumentStore.getState().project), admissionBefore, admissionAfter: admission.snapshot() }
     } finally { input?.dispose(); scratch.width = scratch.height = average.width = average.height = 0; await disposeExport(); await disposePluginPreparedExportOwner('issue197-acceptance-complete') }
   })
   expect(exported.bytes).toBeGreaterThan(1000)
   expect(exported.unchanged).toBe(true)
+  expect(exported.cancelled).toBe(true)
+  expect(exported.admissionAfter).toEqual(exported.admissionBefore)
   expect(exported.duration).toBeGreaterThanOrEqual(6)
   for (let channel = 0; channel < 4; channel++) expect(Math.abs(exported.pixel[channel] - previewPixel[channel]), `decoded channel ${channel}`).toBeLessThanOrEqual(8)
-  await info.attach('plugin-preset-export', { body: JSON.stringify({ previewPixel, exported }), contentType: 'application/json' })
+  const evidencePath = info.outputPath('plugin-preset-export.json')
+  await writeFile(evidencePath, JSON.stringify({ previewPixel, exported }, null, 2))
+  await info.attach('plugin-preset-export', { path: evidencePath, contentType: 'application/json' })
   expect(errors).toEqual([])
 })
 
@@ -437,4 +483,70 @@ test('Chromium compositor matches spatial reference pixels and all blend modes a
   expect(evidence.text.every((entry) => entry.delta <= 2), JSON.stringify(evidence.text)).toBe(true)
   await info.attach('spatial-compositor-and-blend-pixels', { body: JSON.stringify(evidence), contentType: 'application/json' })
   expect(errors).toEqual([])
+})
+
+test('video bus controls apply once, reject clip-only effects, reuse presets and recover static stacks', async ({ page, context }) => {
+  const errors = problems(page)
+  await seedProject(page); await select(page, ['First'], 75)
+  await expect.poll(async () => (await pixel(page))[2]).toBeGreaterThan(180)
+  const bus = page.locator('.video-bus-inspector')
+  await bus.locator('summary').click()
+  const firstTrack = (await snapshot(page)).project.sequences[0].tracks[0].id
+  await bus.getByLabel('Video effect target', { exact: true }).selectOption(firstTrack)
+  await bus.getByRole('button', { name: 'Browse effects…', exact: true }).click()
+  let dialog = page.getByRole('dialog', { name: 'Effect browser', exact: true })
+  await dialog.getByLabel('Search effects', { exact: true }).fill('mask')
+  await expect(dialog.getByRole('button', { name: 'Apply Mask', exact: true })).toBeDisabled()
+  await expect(dialog).toContainText('available on clips only')
+  await dialog.getByLabel('Search effects', { exact: true }).fill('Color adjustment')
+  const before = await snapshot(page)
+  await dialog.getByRole('button', { name: 'Apply Color adjustment', exact: true }).click()
+  expect((await snapshot(page)).history).toBe(before.history + 1)
+  const exposure = bus.locator('[data-testid$="-exposure"]')
+  await exposure.fill('-1'); await exposure.press('Enter')
+  await expect.poll(() => pixel(page)).toEqual([32, 64, 96, 255])
+  const trackState = await snapshot(page)
+  await page.evaluate(async () => { const d = '/src/state/documentStore.ts'; (await import(d)).useDocumentStore.getState().undo() })
+  await expect.poll(() => pixel(page)).toEqual([64, 128, 192, 255])
+  await page.evaluate(async () => { const d = '/src/state/documentStore.ts'; (await import(d)).useDocumentStore.getState().redo() })
+  expect((await snapshot(page)).project).toEqual(trackState.project)
+  await bus.getByRole('button', { name: 'Save preset…', exact: true }).click()
+  dialog = page.getByRole('dialog', { name: 'Save effect preset', exact: true })
+  await dialog.getByLabel('Preset name', { exact: true }).fill('Track dim')
+  await dialog.getByRole('button', { name: 'Save local preset', exact: true }).click()
+  await expect(dialog).toContainText('Preset saved in this browser.')
+  await page.keyboard.press('Escape')
+  await bus.getByLabel('Video effect target', { exact: true }).selectOption('master')
+  await bus.getByRole('button', { name: 'Browse effects…', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply preset Track dim', exact: true }).click()
+  await expect.poll(() => pixel(page)).toEqual([16, 32, 48, 255])
+  const after = await snapshot(page), sequence = after.project.sequences[0]
+  expect(sequence.masterVideoEffects[0].id).not.toBe(sequence.tracks[0].videoEffects[0].id)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await bus.locator('[data-testid$="-exposure"]').scrollIntoViewIfNeeded()
+  const width = await bus.evaluate((element) => ({ content: element.scrollWidth, visible: element.clientWidth }))
+  expect(width.content).toBeLessThanOrEqual(width.visible + 1)
+  await page.screenshot({ path: '/private/tmp/issue197-video-buses-720.png' })
+  const portable = await page.evaluate(async () => {
+    const d = '/src/state/documentStore.ts', m = '/src/state/mediaStore.ts', f = '/src/domain/projectFile.ts'
+    const { createProjectFileSnapshot, serializeProjectFile, parseProjectFile } = await import(f)
+    const media = (await import(m)).useMediaStore.getState()
+    const parsed = parseProjectFile(serializeProjectFile(createProjectFileSnapshot((await import(d)).useDocumentStore.getState().project, media.descriptors.values(), media.collections)))
+    return parsed.sequences[0]
+  })
+  expect(portable.schemaVersion).toBe(21)
+  expect(portable.masterVideoEffects).toEqual(sequence.masterVideoEffects)
+  expect(portable.tracks[0].videoEffects).toEqual(sequence.tracks[0].videoEffects)
+  await page.waitForTimeout(800)
+  await expect(page.getByText('Recovery copy updated', { exact: true })).toBeVisible()
+  expect(errors).toEqual([])
+  await page.close()
+  const recovered = await context.newPage(), recoveryErrors = problems(recovered)
+  await recovered.goto('/')
+  await recovered.getByRole('button', { name: 'Recover Effect workflows QA', exact: true }).click()
+  await recovered.getByRole('button', { name: 'Recover with 1 offline', exact: true }).click()
+  const recoveredDoc = (await snapshot(recovered)).project.sequences[0]
+  expect(recoveredDoc.masterVideoEffects).toEqual(sequence.masterVideoEffects)
+  expect(recoveredDoc.tracks[0].videoEffects).toEqual(sequence.tracks[0].videoEffects)
+  expect(recoveryErrors).toEqual([])
 })

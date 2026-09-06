@@ -106,7 +106,7 @@ describe('createMediabunnyExportSink video behavior', () => {
     )
     expect(fakeCanvases[2].getContext).toHaveBeenCalledWith(
       '2d',
-      { colorSpace: 'srgb' },
+      { colorSpace: 'srgb', willReadFrequently: true },
     )
     expect(sink.transitionSurfaceProvider.get()).toBe(transitionSurfaces)
     expect(fakeCanvases).toHaveLength(3)

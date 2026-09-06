@@ -5575,7 +5575,7 @@ publication authority.
 
 ## Post-MVP issue #197 - effect workflows
 
-**PLAN APPROVED; GATES 1–4 ACCEPTED LOCALLY (2026-09-06).**
+**PLAN APPROVED; GATES 1–5 ACCEPTED LOCALLY (2026-09-06).**
 
 Start with [EFFECT_WORKFLOWS.md](EFFECT_WORKFLOWS.md). The plan begins with atomic
 clip-attribute and effect-stack copy/paste/reset, then local static presets and
@@ -5612,3 +5612,15 @@ and scoped traces against explicit groups through nesting depth eight, plus
 preserve opaque input. See gate-4.md: production scope markers, dimension-based
 readback/scratch admission, full plugin/lens/mask/caption integration and UI are
 next. Bus product integration and full acceptance remain pending.
+
+Gate 5 implements static video track/master stacks with schema 21 empty-stack
+migration (outer project format stays 7). Global ids, budgets, duplicate/history,
+portable snapshots and recovery include all bus descriptors. Eligible stages
+explicitly preserve opaque input; source-only/unknown intent stays preserved
+and bypassed. Shared plans keep child-local scopes; production composition uses
+existing leg/group scratch, with dimension/source-aware readback admission.
+306 focused tests, 17 runner checks, build/lint and eight Chromium checks pass.
+Real nested lens/mask/caption/adjustment comparison is byte-identical; installed
+plugin + buses matches decoded export within one RGB level. Repeated export
+cancellation restores the admission ledger. See gate-5.md and its JSON evidence.
+Final full-suite acceptance remains next.

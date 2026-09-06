@@ -6,6 +6,7 @@
  * this module. Timeline render/edit callers continue to consume one
  * TimelineDoc selected by the state-layer adapter.
  */
+import { videoBusStacks, videoBusStackBoundsError } from './videoBusStage'
 
 import type {
   EffectId,
@@ -210,6 +211,12 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
     textCharacters: 0,
   }
   for (const sequence of project.sequences) {
+    for (const effects of videoBusStacks(sequence)) for (const effect of effects) {
+      counts.effects++
+      const budget = effectDescriptorBudget(effect)
+      counts.effectParams += budget.params
+      counts.effectStringCharacters += budget.stringCharacters
+    }
     counts.tracks += sequence.tracks.length
     counts.markers += sequence.markers?.length ?? 0
     counts.captionTracks += sequence.captionTracks?.length ?? 0
@@ -302,6 +309,7 @@ function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
   }
   for (const sequence of project.sequences) {
     sequenceCount++
+    for (const effects of videoBusStacks(sequence)) effectCount += effects.length
     audioEffectCount += sequence.masterAudio?.audioEffects?.length ?? 0
     const sequenceLinkGroups = new Map<string, number>()
     for (const track of sequence.tracks) {
@@ -385,6 +393,7 @@ export function sequenceProjectWithinEditBudget(
       multicamLinkedPairValidationError(sequence) !== null
     ))
     || !project.sequences.every((sequence) => sequenceSettingsEqual(root, sequence))
+    || project.sequences.some((sequence) => videoBusStacks(sequence).some((effects) => videoBusStackBoundsError(effects) !== null) || sequence.tracks.some((track) => track.kind !== 'video' && (track.videoEffects?.length ?? 0) > 0))
     || !sequenceProjectIdsAreUnique(project)
   ) return false
   try {
@@ -507,6 +516,7 @@ function collectUsedIds(project: SequenceProject): UsedIds {
   }
   for (const sequence of project.sequences) {
     used.sequence.add(sequence.id)
+    for (const effects of videoBusStacks(sequence)) for (const effect of effects) used.effect.add(effect.id)
     for (const effect of sequence.masterAudio?.audioEffects ?? []) {
       used.audioEffect.add(effect.id)
     }
@@ -616,6 +626,11 @@ function remapDuplicateIds(
   const clipIds = new Map<string, string>()
   const effectIds = new Map<EffectId, EffectId>()
   const linkGroupIds = new Map<string, string>()
+  for (const effects of videoBusStacks(duplicate)) for (const effect of effects) {
+    const id = allocateId(used, factory, 'effect', effect.id)
+    if (!id) return null
+    effect.id = id
+  }
   for (const effect of duplicate.masterAudio?.audioEffects ?? []) {
     const effectId = allocateId(used, factory, 'audio-effect', effect.id)
     if (!effectId) return null

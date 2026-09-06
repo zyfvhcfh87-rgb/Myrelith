@@ -1,3 +1,4 @@
+import { editVideoBus, type VideoBusEdit, type VideoBusTarget } from '../domain/videoBusEffects'
 /**
  * state/documentStore.ts — Zustand store owning the complete sequence project,
  * its active TimelineDoc adapter, and project-wide undo/redo history.
@@ -676,6 +677,7 @@ export interface DocumentState {
   ) => void
   resetAudioEffect: (target: AudioEffectTarget, effectId: AudioEffectId) => void
   removeAudioEffect: (target: AudioEffectTarget, effectId: AudioEffectId) => void
+  editVideoBus: (expectedProject: SequenceProject, target: VideoBusTarget, command: VideoBusEdit) => string | null
   applyAudioEffectPreset: (target: AudioEffectTarget, presetId: string) => void
   normalizeMasterLoudness: (measuredLufs: number, targetLufs?: number) => void
   /** Step back one snapshot. No-op when history is empty. */
@@ -780,6 +782,20 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   setDocWithHistory: (doc) =>
     set((state) => commit(state, doc)),
+
+  editVideoBus: (expectedProject, target, command) => {
+    let error: string | null = null
+    set((state) => {
+      if (state.project !== expectedProject || state.activeSequenceId !== target.sequenceId) {
+        error = 'The project or active sequence changed. Reopen the video-bus controls.'
+        return state
+      }
+      const result = editVideoBus(state.project, target, command, randomSequenceId)
+      if (!result.ok) { error = result.reason; return state }
+      return commitProject(state, result.project)
+    })
+    return error
+  },
 
   applyClipAttributes: (expectedProject, sequenceId, command) => {
     let error: string | null = null

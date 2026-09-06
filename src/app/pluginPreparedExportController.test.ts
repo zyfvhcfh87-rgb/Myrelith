@@ -128,7 +128,7 @@ function baseDependencies(
 
 function document(): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id: 'prepared-export-doc',
     name: 'Prepared export',
     frameRate: { num: 30, den: 1 },

@@ -1,3 +1,4 @@
+import { videoBusStacks, resolveVideoBusEffects } from '../domain/videoBusStage'
 /** App-owned projection from the real preview renderer into UI-readable state. */
 
 import {
@@ -11,7 +12,7 @@ import {
   effectAnimationTracks,
   resolveClipAnimationAtFrame,
 } from '../domain/clipAnimation'
-import type { Clip, EffectId, TimelineDoc } from '../domain/schema'
+import type { Clip, EffectDescriptor, EffectId, TimelineDoc } from '../domain/schema'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import type {
   PreviewEffectStatus,
@@ -52,6 +53,7 @@ function previewDetail(
 }
 
 export interface PreviewEffectStatusIndex {
+  readonly busEffects: readonly EffectDescriptor[]
   readonly effectClips: readonly Clip[]
   readonly animatedEffectClips: readonly Clip[]
 }
@@ -75,7 +77,7 @@ export function createPreviewEffectStatusIndex(
       }
     }
   }
-  return { effectClips, animatedEffectClips }
+  return { effectClips, animatedEffectClips, busEffects: videoBusStacks(doc).flat() }
 }
 
 function projectClips(
@@ -106,6 +108,9 @@ export function projectIndexedPreviewEffectStatuses(
 ): ReadonlyMap<EffectId, PreviewEffectStatus> {
   const projected = new Map<EffectId, PreviewEffectStatus>()
   projectClips(index.effectClips, capabilities, timelineFrame, projected)
+  for (const resolution of resolveVideoBusEffects(index.busEffects, capabilities?.canvasPixelAccess === true).effects) {
+    projected.set(resolution.effect.id, { label: resolution.label, status: resolution.status, detail: resolution.detail })
+  }
   return projected
 }
 

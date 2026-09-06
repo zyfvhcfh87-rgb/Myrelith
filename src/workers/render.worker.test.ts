@@ -719,7 +719,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 10, den: 1 },
@@ -1883,7 +1883,7 @@ describe('composite happy path', () => {
       ['2d', { colorSpace: 'srgb' }],
       ['2d', { colorSpace: 'srgb' }],
       ['2d', { colorSpace: 'srgb', willReadFrequently: true }],
-      ['2d', { colorSpace: 'srgb' }],
+      ['2d', { colorSpace: 'srgb', willReadFrequently: true }],
     ])
     expect(
       h.ops.filter(
