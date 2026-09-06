@@ -1,11 +1,10 @@
 # Issue #197: reusable effects and video buses
 
-Status: proposed implementation plan, awaiting user approval. No product code
-has changed for this issue. Inspected on 2026-09-06 at merged master `573cb45`,
-on `codex/issue197`.
+Status: user approved the plan on 2026-09-06. Gate 1 passed; Gate 2 is next.
+Inspected at merged master `573cb45`, on `codex/issue197`.
 
 Issue: [#197](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/197).
-The next implementation starts with Gate 1. Approval covers the sequence below;
+Approval covers the sequence below;
 ordinary successful gates do not require another permission round. A failed
 track/master proof requires a concrete revised proposal before that slice ships.
 
@@ -110,6 +109,15 @@ order; omitted defaults; unknown/future/orphan preservation; trimmed, retimed,
 frozen and different-duration destinations; locked mixed selections; boundary
 budgets; exact undo/redo and redo preservation after rejection; project change
 while Paste is open; keyboard activation, focus and narrow Inspector layout.
+
+Gate 1 accepted locally on 2026-09-06: 242 focused tests in six files, all
+17 repository runner checks, build/typecheck, lint, and two muted headless
+Chromium tests pass. Chromium verifies actual imported-image rendering,
+matching copied animation pixels, one-step undo/redo, portable roundtrip,
+keyboard focus/Escape, reset, and project replacement. Desktop and 1280×720
+screenshots were reviewed; the in-app browser also passed a native text-clip
+copy/dialog interaction in a narrow panel. Full issue acceptance, plugin/export
+coexistence and all later gates remain pending.
 
 ## Gate 2: local presets and searchable browser
 

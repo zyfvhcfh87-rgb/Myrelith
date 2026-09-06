@@ -832,3 +832,9 @@
   font-size: 0.78rem;
   line-height: 1.35;
 }
+/* Attribute workflows use native controls and the shared modal presentation. */
+.attribute-groups { display: grid; gap: 4px; border: 1px solid #48515e; border-radius: 5px; }
+.attribute-groups label, .attribute-option { display: flex; gap: 8px; align-items: center; min-height: 32px; }
+.attribute-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.attribute-dialog p { overflow-wrap: anywhere; }
+.attribute-groups input, .attribute-option input { flex: 0 0 auto; }

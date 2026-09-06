@@ -1336,6 +1336,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
 
 ## Folder layout
 
+Clip attribute workflows use `domain/clipAttributes.ts` for atomic candidate
+construction and validation. Fresh effect ids reserve all project sequences
+and orphan animation targets; copied keys keep local frame offsets while
+recomputing source-time intent through each destination map. The app clipboard
+is a defensive data snapshot scoped to `documentStore.projectGeneration`.
+That generation is session-only, advances on document replacement, and never
+enters history or portable files. Dialogs pin project, generation, sequence and
+explicit selection; the store commits the complete validated batch once.
+
 ```
 src/
   domain/      time, schema, operations, selectors      (pure TS)

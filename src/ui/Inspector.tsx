@@ -25,6 +25,7 @@ import TextOverlayFields from './inspector/TextOverlayFields'
 import TimingInspectorSection from './inspector/TimingInspectorSection'
 import VideoInspectorSections from './inspector/VideoInspectorSections'
 import AdjustmentInspector from './AdjustmentInspector'
+import ClipAttributeControls from './ClipAttributeControls'
 
 const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
 const DynamicZoomEditor = lazy(() => import('./DynamicZoomEditor'))
@@ -163,6 +164,7 @@ export default function Inspector() {
       )}
       <LinkSelectionControls key="linking-controls" />
       <TimingInspectorSection clip={clip} doc={timelineDoc} />
+      <ClipAttributeControls clipId={clip.id} />
       {videoClip?.text && (
         <TextOverlayFields
           key={`text:${videoClip.id}`}

@@ -1,6 +1,6 @@
 import type { Clip, MediaAsset, SourceTimeMap, TimeRange, TimelineDoc, TrackId } from '../schema';
 import { clipAnimation, clipAnimationKeyframeCount, clipAnimationKindError, clipAnimationValidationError, cloneClipAnimation, defaultClipAnimation, documentAnimationKeyframeGrowthAllowed } from '../clipAnimation';
-import { clipAudioSettings, clipAudioSettingsValidationError, clipVisualSettings, clipVisualSettingsValidationError, defaultClipAudioSettings, defaultClipVisualSettings, transformScaleValidationError } from '../clipInspector';
+import { clipAudioSettings, clipAudioSettingsValidationError, clipVisualSettings, clipVisualSettingsValidationError, defaultClipAudioSettings, defaultClipVisualSettings, defaultClipTransform, transformScaleValidationError } from '../clipInspector';
 import { defaultTextProps, proceduralTextAssetId, textOverlayName, textPropsValidationError } from '../textOverlay';
 import { DEFAULT_BLEND_MODE } from '../blendModes';
 import { effectCollectionAppendBudgetError } from '../effectBounds';
@@ -39,15 +39,7 @@ export function clipFromAssetRange(
     },
     sourceTimeMap: defaultSourceTimeMap(sourceStart, sourceDuration),
     timelineRange: { startFrame: timelineStartFrame, durationFrames },
-    transform: {
-      x: 0,
-      y: 0,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0,
-      anchorX: 0.5,
-      anchorY: 0.5,
-    },
+    transform: defaultClipTransform(),
     opacity: 1,
     blendMode: DEFAULT_BLEND_MODE,
     volume: 1,
@@ -106,15 +98,7 @@ export function createTextClip(
     sourceRange: { startFrame: 0, durationFrames },
     sourceTimeMap: defaultSourceTimeMap(0, durationFrames),
     timelineRange: { startFrame, durationFrames },
-    transform: {
-      x: 0,
-      y: 0,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0,
-      anchorX: 0.5,
-      anchorY: 0.5,
-    },
+    transform: defaultClipTransform(),
     opacity: 1,
     blendMode: DEFAULT_BLEND_MODE,
     volume: 1,

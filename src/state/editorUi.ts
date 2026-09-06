@@ -2,6 +2,7 @@
  * State-layer facade for pure editor facts consumed by React surfaces.
  * Keeping these exports here preserves the ui -> state -> domain direction.
  */
+export { CLIP_ATTRIBUTE_LABELS } from '../domain/clipAttributes'
 
 export {
   adjustmentEditDeltaBounds,

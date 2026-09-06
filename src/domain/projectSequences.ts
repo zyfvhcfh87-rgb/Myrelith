@@ -578,6 +578,31 @@ function allocateId(
   return null
 }
 
+/** Reserve live and dangling effect targets across every sequence before a batch. */
+export function createProjectEffectIdAllocator(
+  project: SequenceProject,
+  factory: SequenceIdFactory,
+  reserved: Iterable<string> = [],
+): () => string | null {
+  const used = collectUsedIds(project)
+  for (const id of reserved) used.effect.add(id)
+  for (const sequence of project.sequences) {
+    for (const track of sequence.tracks) {
+      for (const clip of track.clips) {
+        for (const animation of clip.animation?.effectTracks ?? []) {
+          used.effect.add(animation.effectId)
+        }
+      }
+      for (const adjustment of track.adjustments ?? []) {
+        for (const animation of adjustment.animation.effectTracks) {
+          used.effect.add(animation.effectId)
+        }
+      }
+    }
+  }
+  return () => allocateId(used, factory, 'effect')
+}
+
 function remapDuplicateIds(
   document: TimelineDoc,
   used: UsedIds,

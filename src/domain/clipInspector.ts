@@ -43,6 +43,10 @@ export function defaultClipVisualSettings(): ClipVisualSettings {
   }
 }
 
+export function defaultClipTransform(): Transform {
+  return { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, anchorX: 0.5, anchorY: 0.5 }
+}
+
 export function defaultClipAudioSettings(): ClipAudioSettings {
   return { ...DEFAULT_CLIP_AUDIO_SETTINGS }
 }

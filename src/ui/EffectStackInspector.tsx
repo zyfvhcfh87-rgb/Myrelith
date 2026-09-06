@@ -28,6 +28,7 @@ import {
 import { effectAppendBudgetError } from '../domain/effectBounds'
 import { useDocumentStore } from '../state/documentStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
+import { copyClipAttributes, copyClipEffectStack } from '../app/clipAttributeController'
 
 const PENDING_PREVIEW_EFFECT_DETAIL =
   'Preview renderer status has not been projected yet; the effect is preserved and bypassed.'
@@ -520,6 +521,10 @@ export default function EffectStackInspector({
   playheadFrame: number
 }) {
   const effectStatuses = usePreviewStatusStore((state) => state.effectStatuses)
+  const [effectSelection, setEffectSelection] = useState<{ clipId: string; ids: string[] }>({ clipId: clip.id, ids: [] })
+  const selectedIds = effectSelection.clipId === clip.id
+    ? effectSelection.ids.filter((id) => clip.effects.some((effect) => effect.id === id))
+    : []
   const probes = {
     color: createColorAdjustEffect('__effect-budget-color__'),
     chroma: createChromaKeyEffect('__effect-budget-chroma__'),
@@ -548,6 +553,10 @@ export default function EffectStackInspector({
     <section className="inspector-section inspector-effects" aria-labelledby="inspector-effects-heading">
       <div className="inspector-section-bar">
         <h3 id="inspector-effects-heading">Effect stack</h3>
+        <div className="inspector-effect-actions">
+          <button type="button" disabled={!clip.effects.length} onClick={() => copyClipEffectStack(clip.id)}>Copy stack</button>
+          <button type="button" disabled={!selectedIds.length} onClick={() => copyClipAttributes(clip.id, selectedIds)}>Copy selected effects</button>
+        </div>
         <div className="inspector-effect-actions" aria-label="Add effect">
           <button type="button" className="inspector-effect-add" disabled={locked || limits.color !== null} aria-describedby={addBudgetReasonId(limits.color)} onClick={() => add(createColorAdjustEffect(newId()))}>Add color</button>
           <button type="button" className="inspector-effect-add" disabled={locked || limits.chroma !== null} aria-describedby={addBudgetReasonId(limits.chroma)} onClick={() => add(createChromaKeyEffect(newId()))}>Add chroma key</button>
@@ -594,6 +603,12 @@ export default function EffectStackInspector({
                 const resettable = effectRegistration(effect.type)?.version === effect.version
                 return (
                   <li className="inspector-effect-card" key={effect.id}>
+                    <label className="attribute-option"><input type="checkbox"
+                      aria-label={`Select effect ${index + 1}: ${resolution.label}`}
+                      checked={selectedIds.includes(effect.id)}
+                      onChange={(event) => setEffectSelection({ clipId: clip.id,
+                        ids: event.target.checked ? [...selectedIds, effect.id] : selectedIds.filter((id) => id !== effect.id),
+                      })} /> Select for copy</label>
                     <div className="inspector-effect-card-heading">
                       <span><strong>{resolution.label}</strong><small>{index + 1} of {clip.effects.length}</small></span>
                       <span className={`inspector-effect-status is-${resolution.status}`} aria-label={`Effect status: ${resolution.status}`}>{resolution.status}</span>

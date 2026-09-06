@@ -19,6 +19,9 @@
  */
 
 import { create } from 'zustand'
+import {
+  pasteClipAttributes, resetClipAttributes, type ClipAttributeCommand,
+} from '../domain/clipAttributes'
 import type {
   AdjustmentAnimationKeyframe,
   AdjustmentItem,
@@ -219,6 +222,8 @@ const HISTORY_LIMIT = 100
 export interface DocumentState {
   /** Complete portable edit snapshot. Browser resources remain elsewhere. */
   project: SequenceProject
+  /** Session replacement identity, including reloading the same portable project. */
+  projectGeneration: number
   /** Session-only active navigation; never persisted or placed in history. */
   activeSequenceId: string
   /** Session-only breadcrumb stack for exact Open compound / Back navigation. */
@@ -236,6 +241,8 @@ export interface DocumentState {
   setDoc: (doc: TimelineDoc) => void
   /** Commit a prevalidated whole-document gesture without clearing history. */
   setDocWithHistory: (doc: TimelineDoc) => void
+  /** Validate and commit an entire attribute batch once against its opening snapshot. */
+  applyClipAttributes: (expectedProject: SequenceProject, sequenceId: string, command: ClipAttributeCommand) => string | null
   /** Navigate without persistence, dirty state, or history. */
   switchSequence: (sequenceId: string) => boolean
   openSequenceInstance: (
@@ -745,31 +752,50 @@ const INITIAL_PROJECT = sequenceProjectFromTimeline(INITIAL_DOCUMENT)
 
 export const useDocumentStore = create<DocumentState>()((set) => ({
   project: INITIAL_PROJECT,
+  projectGeneration: 0,
   activeSequenceId: INITIAL_DOCUMENT.id,
   sequenceNavigation: [],
   doc: INITIAL_DOCUMENT,
   past: [],
   future: [],
 
-  setProject: (project, activeSequenceId = project.rootSequenceId) => set({
+  setProject: (project, activeSequenceId = project.rootSequenceId) => set((state) => ({
     project,
+    projectGeneration: state.projectGeneration + 1,
     ...activeSequenceFor(project, activeSequenceId),
     sequenceNavigation: [],
     past: [],
     future: [],
-  }),
+  })),
 
-  setDoc: (doc) => set({
+  setDoc: (doc) => set((state) => ({
     project: sequenceProjectFromTimeline(doc),
+    projectGeneration: state.projectGeneration + 1,
     activeSequenceId: doc.id,
     sequenceNavigation: [],
     doc,
     past: [],
     future: [],
-  }),
+  })),
 
   setDocWithHistory: (doc) =>
     set((state) => commit(state, doc)),
+
+  applyClipAttributes: (expectedProject, sequenceId, command) => {
+    let error: string | null = null
+    set((state) => {
+      if (state.project !== expectedProject || state.activeSequenceId !== sequenceId) {
+        error = 'The project or active sequence changed. Reopen the attribute dialog.'
+        return state
+      }
+      const result = command.kind === 'paste'
+        ? pasteClipAttributes(state.project, sequenceId, command.targetIds, command.template, command.options, randomSequenceId)
+        : resetClipAttributes(state.project, sequenceId, command.targetIds, command.groups, command.selectedEffectIds)
+      if (!result.ok) { error = result.reason; return state }
+      return commitProject(state, result.project)
+    })
+    return error
+  },
 
   switchSequence: (sequenceId) => {
     let switched = false

@@ -5573,9 +5573,9 @@ interfering with jsdom. Build/typecheck and lint pass. No browser runtime change
 in this follow-up. Fresh PR checks and the final merged state remain the
 publication authority.
 
-## Post-MVP issue #197 - effect workflows planning checkpoint
+## Post-MVP issue #197 - effect workflows
 
-**PLAN PROPOSED; PRODUCT IMPLEMENTATION AWAITS USER APPROVAL (2026-09-06).**
+**PLAN APPROVED; GATE 1 ACCEPTED LOCALLY (2026-09-06).**
 
 Start with [EFFECT_WORKFLOWS.md](EFFECT_WORKFLOWS.md). The plan begins with atomic
 clip-attribute and effect-stack copy/paste/reset, then local static presets and
@@ -5584,6 +5584,13 @@ and product integration plus full acceptance. Ordinary successful gates do not
 need repeated approval after the plan is accepted. Track/master scope must
 preserve nested sequence ownership and fit measured render allocations.
 
-`codex/issue197` was fast-forwarded to merged master `573cb45`; the prior checkout
-`b3ee3d9` had the identical source tree. This checkpoint adds documentation only.
-No Issue #197 product tests or rendering acceptance have run yet.
+`codex/issue197` starts at merged master `573cb45`. Gate 1 adds atomic clip
+attribute and full/checked effect-stack copy/paste/reset. The app owns a
+project-session clipboard; the pure domain operation remaps global ids and
+destination source-time intent before the store commits one history entry.
+Project replacement clears the clipboard and invalidates open dialogs even
+when the portable id is unchanged. No portable schema changed.
+
+242 focused tests / six files, 17 runner checks, build/typecheck, lint and two
+muted Chromium checks pass. See EFFECT_WORKFLOWS.md for exact scope. Presets,
+new pixel effects, bus proof/integration and full acceptance remain pending.
