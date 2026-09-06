@@ -50,7 +50,7 @@ export function spatialEffectIsIdentity(kind: SpatialEffectKind, params: Readonl
 export function spatialEffectRegistrations(): EffectRegistration[] {
   return (Object.keys(SPATIAL_EFFECT_PARAMETERS) as SpatialEffectKind[]).map((kind): EffectRegistration => ({
     type: `builtin.${kind}`, version: 1, label: SPATIAL_EFFECT_LABELS[kind],
-    surfaces: ['source-layer', 'post-composite'],
+    surfaces: ['source-layer', 'post-composite'], preservesOpaqueInput: true,
     defaultParams: Object.freeze(spatialEffectParams(kind, {})),
     validateParams(raw) {
       for (const [key, spec] of Object.entries(SPATIAL_EFFECT_PARAMETERS[kind])) {

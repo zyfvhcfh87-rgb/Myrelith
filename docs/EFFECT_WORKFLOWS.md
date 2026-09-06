@@ -1,6 +1,6 @@
 # Issue #197: reusable effects and video buses
 
-Status: user approved the plan on 2026-09-06. Gates 1–3 passed; Gate 4 is next.
+Status: user approved the plan on 2026-09-06. Gates 1–4 passed; Gate 5 is next.
 Inspected at merged master `573cb45`, on `codex/issue197`.
 
 Issue: [#197](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/197).
@@ -240,6 +240,14 @@ Promote only after a measured design fits existing resource contracts. If it
 needs a separate implementation issue as #197 permits, retain explicit pending
 acceptance here and propose that child with the failed evidence. Do not call
 the whole parent issue complete or raise the memory ceiling implicitly.
+
+Gate 4 selected sequential reuse after identical scoped traces and pixels
+against explicit groups at depths 0, 1 and 8. Native 720p/1080p/4K measurements
+retain three compositor canvases; repeated owners and injected failure release
+all prototype resources. Opaque-input preservation is now an explicit registry
+trait. [The proof](evidence/issue197/gate-4.md) separates plugin/source allocations
+and lists the dimension-dependent admission and production integration checks
+that Gate 5 must satisfy before bus shipping.
 
 ## Gate 5: track/master product integration
 

@@ -146,6 +146,8 @@ export interface EffectRegistration {
   readonly version: number
   readonly label: string
   readonly surfaces: readonly EffectSurface[]
+  /** Explicit prerequisite for sharing an opaque nested composite with video buses. */
+  readonly preservesOpaqueInput?: true
   readonly capabilities: (effect: EffectDescriptor) => readonly EffectCapability[]
   readonly defaultParams: Readonly<Record<string, EffectParamValue>>
   readonly validateParams: (params: Readonly<Record<string, EffectParamValue>>) => string | null
@@ -160,6 +162,7 @@ const COLOR_ADJUST_REGISTRATION: EffectRegistration = Object.freeze({
   version: COLOR_ADJUST_EFFECT_VERSION,
   label: 'Color adjustment',
   surfaces: Object.freeze(['source-layer', 'post-composite'] as const),
+  preservesOpaqueInput: true,
   capabilities: colorAdjustCapabilities,
   defaultParams: DEFAULT_COLOR_ADJUST_PARAMS,
   validateParams: validateColorAdjustParams,

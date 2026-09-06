@@ -5100,6 +5100,6 @@ The contract and acceptance sequence are in
 - [x] Gate 1: atomic selected-attribute and complete/selected-stack copy/paste/reset.
 - [x] Gate 2: strict local presets and searchable capability-aware effect browser.
 - [x] Gate 3: measured built-ins and parity-proven blend expansion.
-- [ ] Gate 4: prove track/master order, nesting and bounded resource ownership.
+- [x] Gate 4: prove track/master order, nesting and bounded resource ownership.
 - [ ] Gate 5: integrate approved track/master descriptors, migration and UI.
 - [ ] Gate 6: full tests/build/lint/audit, Chromium acceptance and delivery evidence.
