@@ -2158,6 +2158,7 @@ describe('addTrack', () => {
       id: 'V3',
       kind: 'video',
       name: 'V3',
+      videoEffects: [],
       clips: [],
       sequenceInstances: [],
       multicamInstances: [],

@@ -80,6 +80,7 @@ export type CreateCompoundSequenceFailure =
   | 'partial-link'
   | 'selection-not-bounded'
   | 'boundary-transition'
+  | 'video-bus-scope'
   | 'id-generation-failed'
   | 'project-budget'
 
@@ -103,6 +104,7 @@ function collectAllIds(project: SequenceProject): Set<string> {
   }
   for (const sequence of project.sequences) {
     ids.add(sequence.id)
+    for (const effect of sequence.masterVideoEffects ?? []) ids.add(effect.id)
     for (const marker of sequence.markers ?? []) ids.add(marker.id)
     for (const captionTrack of sequence.captionTracks ?? []) {
       ids.add(captionTrack.id)
@@ -110,6 +112,7 @@ function collectAllIds(project: SequenceProject): Set<string> {
     }
     for (const track of sequence.tracks) {
       ids.add(track.id)
+      for (const effect of track.videoEffects ?? []) ids.add(effect.id)
       for (const clip of track.clips) {
         ids.add(clip.id)
         if (clip.linkGroupId) ids.add(clip.linkGroupId)
@@ -323,6 +326,15 @@ function generatedLinkGroupId(
   return null
 }
 
+/** A shared child picture cannot retain separate enclosing video-track buses. */
+export function compoundVideoBusScopeError(parent: TimelineDoc, selectedClipIds: readonly string[]): string | null {
+  const selected = new Set(selectedClipIds)
+  const videoTracks = parent.tracks.filter((track) => track.kind === 'video' && track.clips.some((clip) => selected.has(clip.id)))
+  return videoTracks.length > 1 && videoTracks.some((track) => track.videoEffects?.length)
+    ? 'These video tracks have separate effects. Create a compound for each video track to keep their processing order.'
+    : null
+}
+
 /** Replace one bounded clip selection with live instances of one new definition. */
 export function createCompoundSequenceFromClips(
   project: SequenceProject,
@@ -352,6 +364,7 @@ export function createCompoundSequenceFromClips(
   if (located.some(({ track }) => track.locked)) {
     return rejectedCompound(project, 'track-locked')
   }
+  if (compoundVideoBusScopeError(parent, selection)) return rejectedCompound(project, 'video-bus-scope')
   for (const { clip } of located) {
     if (!clip.linkGroupId) continue
     const linked = parent.tracks.flatMap((track) => track.clips)
@@ -408,6 +421,8 @@ export function createCompoundSequenceFromClips(
     childTracks.push({
       ...track,
       id: childTrackId,
+      // Track buses stay on the parent, just as the enclosing audio mix does.
+      videoEffects: [],
       clips: track.clips
         .filter((clip) => selected.has(clip.id))
         .map((clip) => ({
@@ -466,6 +481,7 @@ export function createCompoundSequenceFromClips(
     markers: [],
     captionTracks: [],
     masterAudio: defaultMasterAudio(),
+    masterVideoEffects: [],
   }
   const nextParent = { ...parent, tracks: parentTracks }
   const candidate = {

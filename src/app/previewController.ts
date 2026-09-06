@@ -627,7 +627,8 @@ function reserveVideoBusWork(doc: TimelineDoc): void {
   state.maxVideoBusBytes = Math.max(state.maxVideoBusBytes, videoBusAdditionalBytes(doc.width, doc.height))
   state.resourceLease?.update({ kind: 'program', decoderSlots: state.maxVideoRequests * 2 + 2,
     surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4 + state.maxVideoBusBytes,
-    monitorCompatible: true })
+    // Reserving bus bytes during initialization does not make Program ready.
+    monitorCompatible: state.maxOutputPixels > 0 })
 }
 
 function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {

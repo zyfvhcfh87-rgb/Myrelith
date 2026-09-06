@@ -7,6 +7,22 @@ import { duplicateProjectSequence, sequenceProjectWithinEditBudget } from './pro
 import { resolveVideoBusEffects, videoBusAdditionalBytes, videoBusRenderBudgetError } from './videoBusStage'
 import { lensRemapSurfaceBudget } from './renderSurfaceBudget'
 
+test('preserved invalid parameters remain invalid and can be reset without losing unknown intent', () => {
+  const { project, target, sequence } = make(), effect = createColorAdjustEffect('invalid-bus')
+  effect.params.exposure = 'broken'; effect.params.future = 'keep'
+  sequence.tracks[0].videoEffects = [effect]
+  for (const pixels of [true, false]) {
+    const resolution = resolveVideoBusEffects([effect], pixels)
+    expect(resolution.pixelEffects).toEqual([])
+    expect(resolution.effects[0].status).toBe('invalid')
+  }
+  const result = editVideoBus(project, target, { kind: 'reset', effectId: effect.id }, () => 'unused')
+  expect(result.ok).toBe(true); if (!result.ok) return
+  expect(result.project.sequences[0].tracks[0].videoEffects?.[0]).toMatchObject({ id: effect.id, params: { exposure: 0, future: 'keep' } })
+  expect(sequence.tracks[0].videoEffects[0].params.exposure).toBe('broken')
+})
+
+
 const make = () => {
   const project = attributeProject(), sequence = project.sequences[0]
   const target: VideoBusTarget = { sequenceId: sequence.id, kind: 'track', trackId: sequence.tracks[0].id }

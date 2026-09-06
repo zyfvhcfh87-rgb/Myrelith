@@ -2,7 +2,7 @@
 import type { EffectDescriptor, EffectParamValue } from './schema'
 import { cloneEffectDescriptor, effectParamsValidationError, effectRegistration } from './effectStack'
 import { createProjectEffectIdAllocator, replaceProjectSequence, sequenceById, type SequenceIdFactory, type SequenceProject } from './projectSequences'
-import { videoBusEffectIneligibility, videoBusRenderBudgetError, videoBusStackBoundsError } from './videoBusStage'
+import { videoBusEffectIneligibility, videoBusStageIneligibility, videoBusRenderBudgetError, videoBusStackBoundsError } from './videoBusStage'
 
 export type VideoBusTarget = { readonly sequenceId: string; readonly kind: 'master' } | { readonly sequenceId: string; readonly kind: 'track'; readonly trackId: string }
 export type VideoBusEdit =
@@ -53,7 +53,7 @@ export function editVideoBus(project: SequenceProject, target: VideoBusTarget, c
       if (typeof command.enabled !== 'boolean') return reject('Enabled must be a boolean.')
       effect.enabled = command.enabled
     } else {
-      if (videoBusEffectIneligibility(effect)) return reject('This preserved effect has no supported video-bus editing contract.')
+      if (videoBusStageIneligibility(effect)) return reject('This preserved effect has no supported video-bus editing contract.')
       effect.params = { ...effect.params, ...(command.kind === 'reset' ? effectRegistration(effect.type)!.defaultParams : command.patch) }
       const invalid = effectParamsValidationError(effect)
       if (invalid) return reject(invalid)

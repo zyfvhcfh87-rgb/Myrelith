@@ -5575,7 +5575,7 @@ publication authority.
 
 ## Post-MVP issue #197 - effect workflows
 
-**PLAN APPROVED; GATES 1–5 ACCEPTED LOCALLY (2026-09-06).**
+**IMPLEMENTATION AND LOCAL ACCEPTANCE COMPLETE (2026-09-06).**
 
 Start with [EFFECT_WORKFLOWS.md](EFFECT_WORKFLOWS.md). The plan begins with atomic
 clip-attribute and effect-stack copy/paste/reset, then local static presets and
@@ -5623,4 +5623,20 @@ existing leg/group scratch, with dimension/source-aware readback admission.
 Real nested lens/mask/caption/adjustment comparison is byte-identical; installed
 plugin + buses matches decoded export within one RGB level. Repeated export
 cancellation restores the admission ledger. See gate-5.md and its JSON evidence.
-Final full-suite acceptance remains next.
+Final acceptance is recorded below.
+
+Gate 6 completes the issue locally. Final validation: 4,093 Vitest tests across
+299 files, all 17 runner checks, build/typecheck, lint and zero production audit
+vulnerabilities. All 13 issue Chromium checks pass. Full Chromium reports
+32 passed / eight baseline-reproduced failures / three existing opt-in skips;
+see [gate-6.md](evidence/issue197/gate-6.md) and final-acceptance.json for exact
+failures, baseline provenance and source hashes. All 36 performance rows pass
+again with the original ceilings.
+
+Final integration keeps enclosing video buses on the parent during compound
+creation, rejects multi-video-track compounds that would lose separate bus
+scopes, reserves bus memory without dropping Program's initialization blocker,
+and repairs preserved invalid parameters through Reset. Native checks cover
+pixels/history/rejection, narrow layout and actual recovery. Presets remain
+browser-local/static; source-only stages stay on clips and bus parameters are
+static. Work is committed locally on codex/issue197; publication is separate.

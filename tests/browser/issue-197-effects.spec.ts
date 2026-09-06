@@ -1,6 +1,91 @@
 import { expect, test, type Page } from '@playwright/test'
 import { writeFile } from 'node:fs/promises'
 
+test('preserved invalid bus parameters stay visible and Reset repairs them in one edit', async ({ page }) => {
+  const errors = problems(page)
+  await seedProject(page)
+  await select(page, ['First'], 75)
+  await page.evaluate(async () => {
+    const d = '/src/state/documentStore.ts', e = '/src/domain/effectStack.ts'
+    const store = (await import(d)).useDocumentStore, doc = structuredClone(store.getState().doc)
+    const effect = (await import(e)).createColorAdjustEffect('invalid-master')
+    effect.params.exposure = 'broken'; effect.params.future = 'keep'
+    doc.masterVideoEffects = [effect]; store.getState().setDoc(doc)
+  })
+  await page.getByText('Track and master video effects', { exact: true }).click()
+  const stack = page.getByRole('list', { name: /Master video effect stack$/ })
+  await expect(stack).toContainText('invalid:')
+  await expect(stack).toContainText('Reset this effect to restore defaults')
+  await expect(stack.getByRole('spinbutton')).toHaveCount(0)
+  const before = await snapshot(page)
+  await stack.getByRole('button', { name: 'Reset', exact: true }).click()
+  const after = await snapshot(page)
+  expect(after.history).toBe(before.history + 1)
+  expect(after.project.sequences[0].masterVideoEffects[0]).toMatchObject({ id: 'invalid-master', params: { exposure: 0, future: 'keep' } })
+  await expect(stack.getByRole('spinbutton', { name: 'Exposure', exact: true })).toHaveValue('0')
+  expect(errors).toEqual([])
+})
+
+
+test('compound creation keeps the enclosing video bus once and explains incompatible multi-track scope', async ({ page }) => {
+  const errors = problems(page)
+  await seedProject(page)
+  await select(page, ['First'], 75)
+  await page.evaluate(async () => {
+    const b = '/src/app/videoBusController.ts', d = '/src/state/documentStore.ts', e = '/src/domain/effectStack.ts'
+    const { openVideoBusEdit, applyVideoBusEdit } = await import(b), doc = (await import(d)).useDocumentStore.getState().doc
+    const effect = (await import(e)).createColorAdjustEffect('template'); effect.params.exposure = -1
+    const error = applyVideoBusEdit(openVideoBusEdit({ kind: 'track', sequenceId: doc.id, trackId: doc.tracks[0].id }), { kind: 'apply', effects: [effect], mode: 'append' })
+    if (error) throw new Error(error)
+  })
+  await expect.poll(() => pixel(page)).toEqual([32, 64, 96, 255])
+  const before = await snapshot(page)
+  await page.getByRole('button', { name: 'Create compound', exact: true }).click()
+  await page.getByLabel('Create compound', { exact: true }).fill('Bus scope')
+  await page.getByRole('button', { name: 'Apply', exact: true }).click()
+  const after = await snapshot(page)
+  expect(after.history).toBe(before.history + 1)
+  expect(after.project.sequences).toHaveLength(2)
+  expect(after.project.sequences[1].tracks.every((track: { videoEffects: unknown[] }) => track.videoEffects.length === 0)).toBe(true)
+  await page.evaluate(async () => {
+    const p = '/src/app/previewController.ts', t = '/src/state/transportStore.ts'
+    const { subscribePreviewRenderDiagnostics } = await import(p)
+    const transport = (await import(t)).useTransportStore
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { unsubscribe(); reject(new Error('Compound frame did not present')) }, 10_000)
+      const unsubscribe = subscribePreviewRenderDiagnostics((event: { frame: number; result: { status: string } }) => {
+        if (event.frame === 76 && event.result.status === 'drawn') { clearTimeout(timer); unsubscribe(); resolve() }
+      })
+      transport.getState().setPlayheadFrame(76)
+    })
+  })
+  expect(await pixel(page)).toEqual([32, 64, 96, 255])
+  await page.evaluate(async () => {
+    const d = '/src/state/documentStore.ts'
+    const store = (await import(d)).useDocumentStore
+    store.getState().undo()
+    const doc = structuredClone(store.getState().doc)
+    const second = doc.tracks[0].clips.find((clip: { id: string }) => clip.id === 'Second')
+    doc.tracks[0].clips = doc.tracks[0].clips.filter((clip: { id: string }) => clip.id !== 'Second')
+    doc.tracks[1].clips = [second]
+    store.getState().setDoc(doc)
+  })
+  await select(page, ['First', 'Second'], 75)
+  const unchanged = await snapshot(page)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.getByRole('button', { name: 'Create compound', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Create a compound for each video track')
+  const explanation = await page.getByRole('alert').evaluate((element) => ({ left: element.getBoundingClientRect().left, right: element.getBoundingClientRect().right, viewport: window.innerWidth }))
+  expect(explanation.left).toBeGreaterThanOrEqual(0)
+  expect(explanation.right).toBeLessThanOrEqual(explanation.viewport)
+  await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled()
+  expect(await snapshot(page)).toEqual(unchanged)
+  await page.screenshot({ path: '.tmp/issue197-compound-scope.png' })
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(errors).toEqual([])
+})
+
+
 test.setTimeout(90_000)
 
 async function seedProject(page: Page) {

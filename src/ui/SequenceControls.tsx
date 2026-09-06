@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import { useSequenceInstanceSelectionStore } from '../state/sequenceInstanceSelectionStore'
+import { compoundVideoBusScopeError } from '../domain/sequenceInstanceOperations'
 
 type SequenceEditorKind = 'create' | 'duplicate' | 'rename' | 'compound'
 
@@ -48,6 +49,8 @@ export default function SequenceControls() {
   const root = project.sequences.find((sequence) => sequence.id === project.rootSequenceId)
     ?? project.sequences[0]
   const activeIsRoot = active?.id === project.rootSequenceId
+  const compoundScopeError = editor?.kind === 'compound' && active
+    ? compoundVideoBusScopeError(active, selectedClipIds) : null
   const selectedInstance = active?.tracks.flatMap((track) => (
     track.sequenceInstances ?? []
   )).find((instance) => instance.id === selectedInstanceId) ?? null
@@ -75,6 +78,7 @@ export default function SequenceControls() {
     }
     let succeeded: boolean
     if (editor.kind === 'compound') {
+      if (compoundScopeError) return
       const created = createCompoundFromClips(selectedClipIds, name)
       succeeded = created !== null
       if (created) {
@@ -323,7 +327,8 @@ export default function SequenceControls() {
               }}
             />
           </label>
-          <button type="submit">Apply</button>
+          {compoundScopeError && <p role="alert">{compoundScopeError}</p>}
+          <button type="submit" disabled={!!compoundScopeError}>Apply</button>
           <button type="button" onClick={() => setEditor(null)}>Cancel</button>
         </form>
       )}

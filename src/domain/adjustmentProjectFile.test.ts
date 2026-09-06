@@ -26,7 +26,7 @@ describe('adjustment project-file schema 15', () => {
     for (const track of legacy.sequences[0]!.tracks) delete track.adjustments
 
     const parsed = parseProjectFile(JSON.stringify(legacy))
-    expect(parsed.sequences[0].schemaVersion).toBe(20)
+    expect(parsed.sequences[0].schemaVersion).toBe(21)
     expect(parsed.sequences[0].tracks.every((track) => track.adjustments?.length === 0))
       .toBe(true)
     expect(parsed.sequences[0].name).toBe(document.name)

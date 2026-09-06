@@ -37,6 +37,7 @@ function expectedEmptyTrack(id: string, kind: 'video' | 'audio') {
     locked: false,
     volume: 1,
     balance: 0,
+    videoEffects: [],
     audioEffects: [],
   }
 }
@@ -312,6 +313,7 @@ describe('createTimelineDoc', () => {
       markers: [],
       captionTracks: [],
       masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
+      masterVideoEffects: [],
     })
     expect(Object.isFrozen(doc)).toBe(true)
     expect(Object.isFrozen(doc.frameRate)).toBe(true)
@@ -391,6 +393,7 @@ describe('createTimelineDoc', () => {
       markers: [],
       captionTracks: [],
       masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
+      masterVideoEffects: [],
     }))
   })
 

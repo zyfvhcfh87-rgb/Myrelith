@@ -8,11 +8,14 @@ export function videoBusStacks(doc: TimelineDoc): readonly (readonly EffectDescr
   return [doc.masterVideoEffects ?? [], ...doc.tracks.map((track) => track.videoEffects ?? [])]
 }
 export function hasVideoBusEffects(doc: TimelineDoc): boolean { return videoBusStacks(doc).some((effects) => effects.length > 0) }
-export function videoBusEffectIneligibility(effect: EffectDescriptor): string | null {
+export function videoBusStageIneligibility(effect: EffectDescriptor): string | null {
   const registration = effectRegistration(effect.type)
   if (!registration || registration.version !== effect.version) return `${effect.type} v${effect.version} has no supported video-bus stage.`
   if (!registration.surfaces.includes('post-composite') || !registration.preservesOpaqueInput) return `${registration.label} is available on clips only; video buses require an opaque-preserving post-composite effect.`
-  return effectParamsValidationError(effect)
+  return null
+}
+export function videoBusEffectIneligibility(effect: EffectDescriptor): string | null {
+  return videoBusStageIneligibility(effect) ?? effectParamsValidationError(effect)
 }
 export function videoBusStackBoundsError(effects: readonly EffectDescriptor[]): string | null {
   if (!Array.isArray(effects) || effects.length > EFFECT_STACK_LIMITS.maxEffectsPerClip) return `A video bus supports at most ${EFFECT_STACK_LIMITS.maxEffectsPerClip} effects.`
@@ -27,8 +30,8 @@ export function resolveVideoBusEffects(effects: readonly EffectDescriptor[], pix
   const executable = resolvePostCompositeEffectStack(supported, pixelsAvailable)
   const all = resolvePostCompositeEffectStack(effects, pixelsAvailable)
   return { ...executable, effects: all.effects.map((resolution) => {
-    const reason = videoBusEffectIneligibility(resolution.effect)
-      ?? (!pixelsAvailable && resolution.effect.enabled && effectRegistration(resolution.effect.type)?.pixelEffect(resolution.effect)
+    const reason = videoBusStageIneligibility(resolution.effect)
+      ?? (!pixelsAvailable && resolution.status !== 'invalid' && resolution.effect.enabled && effectRegistration(resolution.effect.type)?.pixelEffect(resolution.effect)
         ? 'Canvas pixel access is unavailable for video-bus effects.' : null)
     return reason ? { ...resolution, status: 'unsupported' as const, detail: reason, canvasFilter: null } : resolution
   }) }

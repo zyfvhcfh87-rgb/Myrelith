@@ -41,7 +41,7 @@ test('recovers an unsaved project after a fresh page and clears it on exit', asy
   await expect(page.getByText('Recovery copy updated', { exact: true }))
     .toBeVisible()
   await page.getByRole('button', { name: 'add video track', exact: true }).click()
-  await expect(page.getByText('V5', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('track-header-V5').getByText('V5', { exact: true })).toBeVisible()
   // The 500 ms recovery debounce can enter and leave its `saving` state between
   // Playwright polls. Wait past that explicit product boundary before crashing
   // the page, then confirm the settled status.
@@ -77,7 +77,7 @@ test('recovers an unsaved project after a fresh page and clears it on exit', asy
   })).toBeVisible()
   await expect(recoveryPage.getByText('Unsaved changes', { exact: true }))
     .toBeVisible()
-  await expect(recoveryPage.getByText('V5', { exact: true })).toBeVisible()
+  await expect(recoveryPage.getByTestId('track-header-V5').getByText('V5', { exact: true })).toBeVisible()
 
   const dialogPromise = recoveryPage.waitForEvent('dialog')
   const leavePromise = recoveryPage.getByRole('button', {

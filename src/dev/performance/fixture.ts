@@ -295,6 +295,7 @@ function track(
     locked: false,
     volume: 1,
     balance: 0,
+    videoEffects: [],
     audioEffects: [],
   }
 }
@@ -361,6 +362,7 @@ function fixtureDocument(
     markers: [],
     captionTracks: [],
     masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
+    masterVideoEffects: [],
   }
 }
 

@@ -69,6 +69,7 @@ function serializedProject(
     tracks: [],
     markers: [],
     captionTracks: [],
+    masterVideoEffects: [],
     masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: [] },
   }
   const project: ProjectFile = {

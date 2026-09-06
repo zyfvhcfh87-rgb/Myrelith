@@ -1,0 +1,108 @@
+{
+  "recordedAt": "2026-09-06T16:28:36.878830+00:00",
+  "baselineCommit": "573cb4531374e05c40cfbdf9da8b406a4bd4c238",
+  "baselineTree": "3261316b7dae8f40ae9c649cd3eba0b970381238",
+  "applicationAndTestsPatchSha256": "90b048c85d36638756c9dbf4b1405ef567484335e9870b83322340e2e684c9b5",
+  "patchCommand": "git diff 573cb45 -- src tests",
+  "node": "v26.8.1",
+  "chromium": "151.0.7922.34",
+  "platform": "darwin",
+  "arch": "arm64",
+  "unit": {
+    "passed": 4093,
+    "filesPassed": 299,
+    "runnerChecksPassed": 17
+  },
+  "build": "passed; existing chunk-size advisory",
+  "lint": "passed",
+  "productionAudit": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "browser": {
+    "passed": 32,
+    "failed": 8,
+    "skipped": 3,
+    "duration": "5.7m",
+    "issue197Passed": 13,
+    "issue197Cases": [
+      "\u2713  21 [chromium] \u203a tests/browser/issue-197-effects.spec.ts:4:1 \u203a preserved invalid bus parameters stay visible and Reset repairs them in one edit (2.3s)",
+      "\u2713  22 [chromium] \u203a tests/browser/issue-197-effects.spec.ts:30:1 \u203a compound creation keeps the enclosing video bus once and explains incompatible multi-track scope (2.6s)",
+      "\u2713  23 [chromium] \u203a tests/browser/issue-197-effects.spec.ts:164:1 \u203a copy/paste preserves animated appearance, fresh ids, unknown intent and one-step undo/redo (3.0s)",
+      "\u2713  24 [chromium] \u203a tests/browser/issue-197-effects.spec.ts:209:1 \u203a checked effects copy, keyboard dialog, narrow layout, reset and stale replacement (2.5s)",
+      "\u2713  25 [chromium] \u203a tests/browser/issue-197-effects.spec.ts:255:1 \u203a local presets capture static rendered values, persist across reload, rename and apply atomically (6.2s)",
+      "\u2713  26 [chromium] \u203a tests/browser/issue-197-effects.spec.ts:311:1 \u203a preset corruption, quota abort and future envelopes stay honest and preserve existing data (2.4s)",
+      "\u2713  27 [chromium] \u203a tests/browser/issue-197-effects.spec.ts:353:1 \u203a new effect controls coexist with an installed trusted plugin, local presets and original-media export (12.5s)",
+      "\u2713  28 [chromium] \u203a tests/browser/issue-197-effects.spec.ts:480:1 \u203a Chromium compositor matches spatial reference pixels and all blend modes across alpha and transitions (961ms)",
+      "\u2713  29 [chromium] \u203a tests/browser/issue-197-effects.spec.ts:573:1 \u203a video bus controls apply once, reject clip-only effects, reuse presets and recover static stacks (5.1s)",
+      "\u2713  30 [chromium] \u203a tests/browser/issue-197-pixel-candidates.spec.ts:5:1 \u203a measure spatial effects against the preregistered pixel and stack ceilings (41.5s)",
+      "\u2713  31 [chromium] \u203a tests/browser/issue-197-video-bus-proof.spec.ts:4:1 \u203a explicit groups and sequential buses preserve scoped order and release every borrowed surface (1.0s)",
+      "\u2713  32 [chromium] \u203a tests/browser/issue-197-video-bus-proof.spec.ts:33:1 \u203a sequential scoped buses keep the same three compositor canvases through 4K and repeated owners (14.8s)",
+      "\u2713  33 [chromium] \u203a tests/browser/issue-197-video-bus-render.spec.ts:4:1 \u203a production nested buses match explicit child composition with captions, adjustments, masks and lens correction (1.0s)"
+    ]
+  },
+  "pixelMeasurements": {
+    "rowsPassed": 36,
+    "rowsTotal": 36,
+    "originalCeilingsUnchanged": true,
+    "artifact": "pixel-candidate-measurements-final.json"
+  },
+  "baseline": {
+    "failures": [
+      {
+        "test": "command-palette-accessibility",
+        "result": "Existing disabled multicam button is 23px tall"
+      },
+      {
+        "test": "issue-188-ramped-audio",
+        "result": "Encoded duration 1.0453333333333332s versus expected 1.001s"
+      },
+      {
+        "test": "media-file-drop",
+        "result": "ffmpeg fixture dependency is absent (ENOENT)"
+      },
+      {
+        "test": "project-setup-overflow 1440x900",
+        "result": "Immediate wheel-scroll assertion observes scrollTop = 0"
+      },
+      {
+        "test": "project-setup-overflow 1050px",
+        "result": "Immediate wheel-scroll assertion observes scrollTop = 0"
+      },
+      {
+        "test": "project-setup-overflow 1051px",
+        "result": "Immediate wheel-scroll assertion observes scrollTop = 0"
+      },
+      {
+        "test": "project-setup-overflow 1100px",
+        "result": "Immediate wheel-scroll assertion observes scrollTop = 0"
+      },
+      {
+        "test": "project-setup-overflow 390x720",
+        "result": "Immediate wheel-scroll assertion observes scrollTop = 0"
+      }
+    ],
+    "initialNineCaseRun": {
+      "failed": 7,
+      "passed": 2
+    },
+    "desktopAndMobileScrollRepeat": {
+      "repetitionsEach": 3,
+      "failed": 6,
+      "passed": 0
+    }
+  },
+  "logSha256": {
+    "issue197-final-full-tests.log": "50c05c6d3a8a177d7eab63d6403323a82355065ae861eb0cf170618a853b4990",
+    "issue197-final-full-browser.log": "f0f2190928e4113fbdc4c4ec06a264d164da154b4ad4450549ae7a37d243b270",
+    "issue197-final-build.log": "444ddf08d64ad1d80ec138d2f3199ea19f73b62a689be1e23725314413a6d0c8",
+    "issue197-final-lint.log": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+    "issue197-production-audit.json": "e9e4f25424c373048cfd0be3ac14ee08b7c48bc3d8f59ef5da3902b3d7cd3f24",
+    "issue197-baseline-browser.log": "9a1a1e10115e22bce2650389a60f6994f81ed0aeaf02e149f67bf8d4988e9436",
+    "issue197-baseline-scroll-repeat.log": "9ac70ac035b63e450c261e926eb43281ec3c80be6a0fbc2085a3a9f46416ee50"
+  }
+}

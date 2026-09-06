@@ -1,6 +1,6 @@
 # Issue #197: reusable effects and video buses
 
-Status: user approved the plan on 2026-09-06. Gates 1–5 passed; final acceptance is next.
+Status: implementation and local acceptance complete on 2026-09-06. All six gates are recorded below; broader baseline browser failures remain explicit.
 Inspected at merged master `573cb45`, on `codex/issue197`.
 
 Issue: [#197](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/197).
@@ -21,10 +21,11 @@ effects in their authored order. Save preset stores a named local template.
 An effect browser searches built-ins, installed plugin contributions, and local
 presets, showing descriptions and the current target's capability restrictions.
 
-Later gates add reviewed pixel effects, blend modes, and video track/master
-stacks. Adjustment items remain the way to affect a chosen timeline interval.
+The browser includes reviewed pixel effects and blend modes; the Inspector
+also exposes static video track/master stacks. Adjustment items remain the way
+to affect a chosen timeline interval.
 
-## Current implementation and constraints
+## Initial architecture and constraints at `573cb45`
 
 These are source observations, not new acceptance results:
 
@@ -303,6 +304,19 @@ Record results and limitations in this document and `docs/evidence/issue197/`;
 update HANDOFF/PLAN as gates finish. Commit accepted steps with Aryel authorship,
 the required Codex co-author trailer, and a message file passed to `git commit
 -F`. Publication/merge is not part of this planning checkpoint.
+
+Gate 6 is complete locally: 4,093 tests in 299 files, 17 runner checks,
+build/typecheck, lint, zero production audit vulnerabilities, and all 13 issue
+Chromium cases pass. The full Chromium run has 32 passed, eight failures
+reproduced on unchanged baseline, and three existing opt-in skips. All 36
+preregistered timing/scratch rows pass again without changing ceilings.
+
+Final review also keeps bus ownership on the parent during compound creation,
+rejects combining multiple video tracks with separate bus intent, retains
+Program's initialization blocker while reserving bus memory, and lets Reset
+repair preserved invalid parameters. Native tests cover these behaviors and
+recovery. See [Gate 6 evidence](evidence/issue197/gate-6.md) for exact results,
+known baseline failures, source fingerprints and delivery limits.
 
 ## Alternatives and external references
 
