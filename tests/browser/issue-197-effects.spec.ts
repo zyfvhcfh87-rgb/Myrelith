@@ -263,3 +263,178 @@ test('preset corruption, quota abort and future envelopes stay honest and preser
   expect(raw).toBe(future)
   expect(errors).toEqual([])
 })
+
+test('new effect controls coexist with an installed trusted plugin, local presets and original-media export', async ({ page }, info) => {
+  test.setTimeout(150_000)
+  const errors = problems(page)
+  await seedProject(page)
+  await page.getByRole('button', { name: 'Plugins', exact: true }).click()
+  const manager = page.getByRole('dialog', { name: 'Manage plugins' })
+  await manager.getByLabel('Choose a plugin package').setInputFiles('samples/plugins/audited-invert-v1/audited-invert-v1.myrelith-plugin')
+  const review = page.getByRole('dialog', { name: 'Review Audited Invert' })
+  for (const decision of await review.getByRole('checkbox').all()) if (await decision.isEnabled() && !await decision.isChecked()) await decision.check()
+  await review.getByRole('button', { name: 'Install plugin', exact: true }).click()
+  await expect(manager.getByRole('heading', { name: 'Audited Invert', exact: true })).toBeVisible()
+  await manager.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('tab', { name: 'Effects', exact: true }).click()
+  await page.getByRole('button', { name: 'Browse effects…', exact: true }).click()
+  let dialog = page.getByRole('dialog', { name: 'Effect browser' })
+  await dialog.getByLabel('Show', { exact: true }).selectOption('plugins')
+  await expect(dialog.getByRole('button', { name: 'Add plugin Audited Invert' })).toBeEnabled()
+  await dialog.getByRole('button', { name: 'Add plugin Audited Invert' }).click()
+  await page.getByRole('button', { name: 'Browse effects…', exact: true }).click()
+  dialog = page.getByRole('dialog', { name: 'Effect browser' })
+  await dialog.getByLabel('Search effects').fill('vignette')
+  await dialog.getByRole('button', { name: 'Apply Vignette', exact: true }).click()
+  const strength = page.locator('[data-testid^="inspector-effect-vignette-strength-"]')
+  await strength.fill('0.7'); await strength.press('Enter')
+  await expect.poll(async () => (await snapshot(page)).project.sequences[0].tracks[0].clips[0].effects.at(-1).params.strength).toBe(0.7)
+  await page.getByRole('button', { name: 'Save preset…', exact: true }).click()
+  const save = page.getByRole('dialog', { name: 'Save effect preset' })
+  await save.getByLabel('Preset name', { exact: true }).fill('Plugin and vignette')
+  await save.getByRole('button', { name: 'Save local preset' }).click()
+  await expect(save).toContainText('Preset saved in this browser.')
+  await page.keyboard.press('Escape')
+  await select(page, ['First'], 75)
+  await page.getByRole('button', { name: 'Browse effects…', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply preset Plugin and vignette' }).click()
+  await expect.poll(async () => (await pixel(page))[0]).toBeGreaterThan(100)
+  // Stable paused preview after plugin completion, with the copied preset's
+  // static exposure matching the original playhead capture.
+  await expect.poll(async () => page.evaluate(async () => {
+    const p = '/src/state/previewStatusStore.ts'
+    return [...(await import(p)).usePreviewStatusStore.getState().effectStatuses.values()].some((status: { status: string }) => status.status === 'ready')
+  })).toBe(true)
+  const previewPixel = await pixel(page)
+  const width = await page.getByRole('region', { name: 'Effect stack', exact: true }).evaluate((element) => ({ content: element.scrollWidth, visible: element.clientWidth, right: element.getBoundingClientRect().right, areaRight: element.closest('.area-inspector')!.getBoundingClientRect().right }))
+  expect(width.content).toBeLessThanOrEqual(width.visible + 1)
+  expect(width.right).toBeLessThanOrEqual(width.areaRight + 1)
+  await strength.scrollIntoViewIfNeeded()
+  await page.screenshot({ path: '/private/tmp/issue197-plugin-vignette.png' })
+  const exported = await page.evaluate(async () => {
+    const e = '/src/app/exportController.ts', p = '/src/domain/exportProfile.ts', m = '/node_modules/.vite/deps/mediabunny.js'
+    const d = '/src/state/documentStore.ts', a = '/src/app/mediaResourceAdmission.ts'
+    const { disposeExport } = await import(e), { DEFAULT_EXPORT_PROFILE } = await import(p)
+    const preparedPath = '/src/app/pluginPreparedExportOwner.ts'
+    const { getPluginPreparedExportPort, disposePluginPreparedExportOwner } = await import(preparedPath)
+    const port = getPluginPreparedExportPort()
+    const before = JSON.stringify((await import(d)).useDocumentStore.getState().project)
+    let input
+    const scratch = new OffscreenCanvas(1280, 720), ctx = scratch.getContext('2d')!
+    const average = new OffscreenCanvas(1, 1), averageContext = average.getContext('2d')!
+    try {
+      const prepared = await port.prepare({ ...DEFAULT_EXPORT_PROFILE, videoBitrate: 5_000_000 })
+      if (prepared.status !== 'ready') throw new Error(`Plugin export preflight: ${JSON.stringify(prepared)}`)
+      const result = await port.start(prepared.token)
+      if (!result || result.destination !== 'download') throw new Error('Expected buffered export')
+      const { Input, BlobSource, ALL_FORMATS, VideoSampleSink } = await import(m)
+      input = new Input({ formats: ALL_FORMATS, source: new BlobSource(new Blob([result.buffer])) })
+      const video = await input.getPrimaryVideoTrack()
+      const sample = await new VideoSampleSink(video).getSample(2.5)
+      if (!sample) throw new Error('Export frame missing')
+      try { sample.draw(ctx, 0, 0, 1280, 720) } finally { sample.close() }
+      averageContext.drawImage(scratch, 0, 0, 1, 1)
+      return { bytes: result.buffer.byteLength, pixel: [...averageContext.getImageData(0, 0, 1, 1).data], duration: await input.computeDuration(),
+        unchanged: before === JSON.stringify((await import(d)).useDocumentStore.getState().project), admission: (await import(a)).mediaResourceAdmission.snapshot() }
+    } finally { input?.dispose(); scratch.width = scratch.height = average.width = average.height = 0; await disposeExport(); await disposePluginPreparedExportOwner('issue197-acceptance-complete') }
+  })
+  expect(exported.bytes).toBeGreaterThan(1000)
+  expect(exported.unchanged).toBe(true)
+  expect(exported.duration).toBeGreaterThanOrEqual(6)
+  for (let channel = 0; channel < 4; channel++) expect(Math.abs(exported.pixel[channel] - previewPixel[channel]), `decoded channel ${channel}`).toBeLessThanOrEqual(8)
+  await info.attach('plugin-preset-export', { body: JSON.stringify({ previewPixel, exported }), contentType: 'application/json' })
+  expect(errors).toEqual([])
+})
+
+test('Chromium compositor matches spatial reference pixels and all blend modes across alpha and transitions', async ({ page }, info) => {
+  const errors = problems(page)
+  await page.goto('/')
+  const evidence = await page.evaluate(async () => {
+    const r = '/src/pipeline/render.ts', f = '/src/test/clipAttributeFixtures.ts', v = '/src/domain/videoCompositionPlan.ts'
+    const defs = '/src/domain/spatialEffectDefinitions.ts', pix = '/src/domain/effectPixels.ts', b = '/src/domain/blendModes.ts'
+    const { compositeFrame } = await import(r), { attributeProject, attributeClip } = await import(f)
+    const { videoCompositionPlanAtFrame } = await import(v), { spatialEffectParams } = await import(defs)
+    const { applyOrderedPixelEffectsToRgba } = await import(pix), { BLEND_MODE_NAMES, compositeReferencePixel } = await import(b)
+    const w = 32, h = 24
+    const canvases: OffscreenCanvas[] = [], bitmaps: ImageBitmap[] = []
+    const make = (width = w, height = h) => { const canvas = new OffscreenCanvas(width, height); canvases.push(canvas); return { canvas, ctx: canvas.getContext('2d', { willReadFrequently: true })! } }
+    const source = make(), output = make(), leg = make(), group = make(), expected = make(), filtered = make()
+    const raw = Uint8ClampedArray.from({ length: w * h * 4 }, (_, i) => i % 4 === 3 ? [0, 64, 128, 255][Math.floor(i / 4) % 4] : i * 71 % 256)
+    source.ctx.putImageData(new ImageData(raw, w, h), 0, 0)
+    const bitmap = await createImageBitmap(source.canvas); bitmaps.push(bitmap)
+    source.ctx.clearRect(0, 0, w, h); source.ctx.drawImage(bitmap, 0, 0)
+    const canonical = source.ctx.getImageData(0, 0, w, h).data
+    const doc = attributeProject().sequences[0]; doc.width = w; doc.height = h
+    doc.tracks.forEach((track: { clips: unknown[] }) => { track.clips = [] })
+    const clip = attributeClip('rendered'); clip.animation = { tracks: [], effectTracks: [] }; doc.tracks[0].clips = [clip]
+    const params = [
+      ['box-blur', { radius: 3 }], ['sharpen', { amount: 1.5 }], ['vignette', { strength: 0.7, radius: 0.2, softness: 0.6 }],
+      ['drop-shadow', { radius: 2, offsetX: -3, offsetY: 4, opacity: 0.6, color: '#204080' }], ['outline', { width: 3, opacity: 0.7, color: '#204080' }],
+    ] as const
+    const deltas: { kind: string; maxDelta: number }[] = []
+    try {
+      for (const [kind, values] of params) {
+        const effect = { kind, params: spatialEffectParams(kind, values) }
+        clip.effects = [{ id: 'tested', type: `builtin.${kind}`, version: 1, enabled: true, params: effect.params }]
+        await compositeFrame(doc, videoCompositionPlanAtFrame(doc, 0), output.ctx, { getFrame: async () => bitmap }, { get: () => ({ leg, group }) })
+        const desired = canonical.slice(); applyOrderedPixelEffectsToRgba(desired, [effect], { surfaceWidth: w, surfaceHeight: h, projectWidth: w, projectHeight: h })
+        filtered.ctx.putImageData(new ImageData(desired, w, h), 0, 0)
+        expected.ctx.fillStyle = '#000'; expected.ctx.fillRect(0, 0, w, h); expected.ctx.drawImage(filtered.canvas, 0, 0)
+        const actual = output.ctx.getImageData(0, 0, w, h).data, reference = expected.ctx.getImageData(0, 0, w, h).data
+        deltas.push({ kind, maxDelta: actual.reduce((maximum, value, index) => Math.max(maximum, Math.abs(value - reference[index])), 0) })
+      }
+      const blendResults: { mode: string; maximum: number }[] = []
+      const native = make(1, 1)
+      for (const mode of BLEND_MODE_NAMES) {
+        let maximum = 0
+        for (const ab of [0, 128, 255]) for (const as of [0, 128, 255]) for (const opacity of [0, 0.5, 1]) {
+          native.ctx.clearRect(0, 0, 1, 1); native.ctx.globalAlpha = 1; native.ctx.globalCompositeOperation = 'source-over'
+          native.ctx.fillStyle = `rgba(64,128,192,${ab / 255})`; native.ctx.fillRect(0, 0, 1, 1)
+          native.ctx.globalCompositeOperation = mode === 'normal' ? 'source-over' : mode
+          native.ctx.globalAlpha = opacity; native.ctx.fillStyle = `rgba(192,96,32,${as / 255})`; native.ctx.fillRect(0, 0, 1, 1)
+          const actual = native.ctx.getImageData(0, 0, 1, 1).data
+          const reference = compositeReferencePixel({ r: 64, g: 128, b: 192, a: ab }, { r: 192, g: 96, b: 32, a: as }, mode, opacity)
+          for (const [channel, value] of [reference.r, reference.g, reference.b, reference.a].entries()) maximum = Math.max(maximum, Math.abs(actual[channel] - value))
+        }
+        blendResults.push({ mode, maximum })
+      }
+      const images = new Map<string, ImageBitmap>()
+      for (const [id, color] of [['backdrop', '#4080c0'], ['red', '#ff0000'], ['blue', '#0000ff']]) {
+        const solid = make(); solid.ctx.fillStyle = color; solid.ctx.fillRect(0, 0, w, h)
+        const image = await createImageBitmap(solid.canvas); bitmaps.push(image); images.set(id, image)
+      }
+      const lower = attributeClip('lower'), from = attributeClip('from'), to = attributeClip('to', 2)
+      lower.assetId = 'backdrop'; from.assetId = 'red'; to.assetId = 'blue'
+      from.timelineRange.durationFrames = to.timelineRange.durationFrames = 2
+      doc.tracks[0].clips = [lower]; doc.tracks[1].clips = [from, to]
+      doc.tracks[1].transitions = [{ id: 'crossfade', type: 'crossfade', fromClipId: 'from', toClipId: 'to', durationFrames: 1, audio: { enabled: false, curve: 'equal-power' } }]
+      const transitions: { mode: string; mixed: boolean; delta: number }[] = []
+      for (const mode of ['darken', 'lighten', 'difference', 'exclusion']) for (const mixed of [false, true]) {
+        from.blendMode = mode; to.blendMode = mixed ? 'normal' : mode
+        await compositeFrame(doc, videoCompositionPlanAtFrame(doc, 2, new Map([...images.keys()].map((id) => [id, { video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 1_000_000_000 }, audio: null }]))), output.ctx, { getFrame: async (id: string) => images.get(id) }, { get: () => ({ leg, group }) })
+        const actual = output.ctx.getImageData(16, 12, 1, 1).data
+        const reference = compositeReferencePixel({ r: 64, g: 128, b: 192, a: 255 }, { r: 128, g: 0, b: 128, a: 255 }, mixed ? 'normal' : mode)
+        transitions.push({ mode, mixed, delta: Math.max(...[reference.r, reference.g, reference.b, reference.a].map((value, i) => Math.abs(value - actual[i]))) })
+      }
+      const textPath = '/src/domain/textOverlay.ts'
+      const { defaultTextProps } = await import(textPath)
+      const title = attributeClip('title'); title.text = { ...defaultTextProps(w, h, 'X'), boxWidthPx: w, boxHeightPx: h, paddingPx: 0, fontSizePx: 8, color: '#c06020', backgroundEnabled: true, backgroundColor: '#c06020', outlineEnabled: false, shadowEnabled: false }
+      doc.tracks[1].clips = [title]; doc.tracks[1].transitions = []
+      const text: { mode: string; delta: number }[] = []
+      for (const mode of ['darken', 'lighten', 'difference', 'exclusion']) {
+        title.blendMode = mode; title.opacity = 0.5
+        await compositeFrame(doc, videoCompositionPlanAtFrame(doc, 0), output.ctx, { getFrame: async (id: string) => images.get(id) }, { get: () => ({ leg, group }) })
+        const actual = output.ctx.getImageData(16, 12, 1, 1).data
+        const reference = compositeReferencePixel({ r: 64, g: 128, b: 192, a: 255 }, { r: 192, g: 96, b: 32, a: 255 }, mode, 0.5)
+        text.push({ mode, delta: Math.max(...[reference.r, reference.g, reference.b, reference.a].map((value, i) => Math.abs(value - actual[i]))) })
+      }
+      return { deltas, blendResults, transitions, text, closedBitmaps: bitmaps.length, releasedCanvases: canvases.length }
+    } finally { bitmaps.forEach((value) => value.close()); canvases.forEach((value) => { value.width = value.height = 0 }) }
+  })
+  expect(evidence.deltas.every((entry) => entry.maxDelta <= 2), JSON.stringify(evidence.deltas)).toBe(true)
+  expect(evidence.blendResults.every((entry) => entry.maximum <= 2), JSON.stringify(evidence.blendResults)).toBe(true)
+  expect(evidence.transitions.every((entry) => entry.delta <= 2), JSON.stringify(evidence.transitions)).toBe(true)
+  expect(evidence.text.every((entry) => entry.delta <= 2), JSON.stringify(evidence.text)).toBe(true)
+  await info.attach('spatial-compositor-and-blend-pixels', { body: JSON.stringify(evidence), contentType: 'application/json' })
+  expect(errors).toEqual([])
+})

@@ -531,7 +531,7 @@ export async function createMediabunnyExportSink(
       get: () => {
         if (transitionSurfaces) return transitionSurfaces
         const legCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const legContext = legCanvas.getContext('2d', SRGB_2D_CONTEXT)
+        const legContext = legCanvas.getContext('2d', { ...SRGB_2D_CONTEXT, willReadFrequently: true })
         const groupCanvas = new OffscreenCanvas(doc.width, doc.height)
         const groupContext = groupCanvas.getContext('2d', SRGB_2D_CONTEXT)
         if (!legContext || !groupContext) {

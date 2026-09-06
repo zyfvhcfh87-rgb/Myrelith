@@ -28,6 +28,10 @@ const BLEND_MODE_LABELS: Readonly<Record<BlendModeName, string>> = {
   multiply: 'Multiply',
   screen: 'Screen',
   overlay: 'Overlay',
+  darken: 'Darken',
+  lighten: 'Lighten',
+  difference: 'Difference',
+  exclusion: 'Exclusion',
 }
 
 export default function VideoInspectorSections({

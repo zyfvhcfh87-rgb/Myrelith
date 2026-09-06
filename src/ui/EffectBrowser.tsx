@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { openAttributeEdit } from '../app/clipAttributeController'
-import { applyEffectTemplate, builtInEffectChoices, effectPresetController, openPresetSave, presetEffectAvailability, effectTemplatePreview, type PresetSaveSession } from '../app/effectPresetController'
+import { applyEffectTemplate, builtInEffectChoices, effectPresetController, openPresetSave, presetEffectAvailability, effectTemplatePreview, resetEffectGeometry, type PresetSaveSession } from '../app/effectPresetController'
 import { useEffectPresetStore } from '../state/effectPresetStore'
 import { useDocumentStore } from '../state/documentStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
@@ -75,6 +75,14 @@ function BrowserDialog({ clipId, saving, onClose }: { clipId: string; saving: bo
       {library.readOnlyReason && <p role="alert">{library.readOnlyReason}</p>}
       {(library.error || error) && <p role="alert">{error ?? library.error}</p>}
       <p role="status">{library.busy ? 'Updating local presets…' : library.message}</p>
+      {(filter === 'all' || filter === 'builtins') && <div className="inspector-effect-actions" aria-label="Geometry utilities">
+        {matches('Reset transform geometry position scale rotation anchor') && <button type="button" onClick={() => {
+          const failure = resetEffectGeometry(session, 'transform'); if (failure) setError(failure); else onClose()
+        }}>Reset transform</button>}
+        {matches('Reset crop flips geometry') && <button type="button" onClick={() => {
+          const failure = resetEffectGeometry(session, 'crop-and-flip'); if (failure) setError(failure); else onClose()
+        }}>Reset crop and flips</button>}
+      </div>}
       <ul className="effect-browser-list" aria-label="Matching effects">
         {(filter === 'all' || filter === 'builtins') && builtins.map((entry) => <li key={entry.effect.type}>
           <strong>{entry.label}</strong><span>Built-in · {entry.surfaces.includes('post-composite') ? 'Clips and composites' : 'Clips only'}</span><p>{entry.description}</p>
@@ -117,7 +125,7 @@ function BrowserDialog({ clipId, saving, onClose }: { clipId: string; saving: bo
         </li>)}
       </ul>
       {(filter === 'all' || filter === 'presets') && library.unavailable.map((entry) => <p key={entry.index}>Unavailable preset {entry.index + 1}: {entry.reason}</p>)}
-      {!((filter === 'all' || filter === 'builtins') && builtins.length) && !((filter === 'all' || filter === 'presets') && presets.length) && !((filter === 'all' || filter === 'plugins') && contributions.length) && <p>No matching effects.</p>}
+      {!((filter === 'all' || filter === 'builtins') && builtins.length) && !((filter === 'all' || filter === 'presets') && presets.length) && !((filter === 'all' || filter === 'plugins') && contributions.length) && !((filter === 'all' || filter === 'builtins') && (matches('Reset transform geometry position scale rotation anchor') || matches('Reset crop flips geometry'))) && <p>No matching effects.</p>}
       <footer className="text-overlay-dialog-actions"><button type="button" className="text-overlay-dialog-cancel" onClick={onClose}>Close</button></footer>
     </div>
   </dialog>

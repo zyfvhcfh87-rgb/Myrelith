@@ -1882,7 +1882,7 @@ describe('composite happy path', () => {
     ).toEqual([
       ['2d', { colorSpace: 'srgb' }],
       ['2d', { colorSpace: 'srgb' }],
-      ['2d', { colorSpace: 'srgb' }],
+      ['2d', { colorSpace: 'srgb', willReadFrequently: true }],
       ['2d', { colorSpace: 'srgb' }],
     ])
     expect(

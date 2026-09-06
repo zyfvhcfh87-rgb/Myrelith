@@ -16,6 +16,10 @@ const opaqueExpected: Readonly<Record<BlendModeName, object>> = {
   multiply: { r: 48, g: 48, b: 24, a: 255 },
   screen: { r: 208, g: 176, b: 200, a: 255 },
   overlay: { r: 96, g: 97, b: 145, a: 255 },
+  darken: { r: 64, g: 96, b: 32, a: 255 },
+  lighten: { r: 192, g: 128, b: 192, a: 255 },
+  difference: { r: 128, g: 32, b: 160, a: 255 },
+  exclusion: { r: 160, g: 128, b: 176, a: 255 },
 }
 
 const transparentExpected: Readonly<Record<BlendModeName, object>> = {
@@ -23,6 +27,10 @@ const transparentExpected: Readonly<Record<BlendModeName, object>> = {
   multiply: { r: 69, g: 78, b: 75, a: 160 },
   screen: { r: 110, g: 107, b: 98, a: 160 },
   overlay: { r: 75, g: 86, b: 80, a: 160 },
+  darken: { r: 70, g: 83, b: 83, a: 160 },
+  lighten: { r: 109, g: 102, b: 90, a: 160 },
+  difference: { r: 102, g: 90, b: 77, a: 160 },
+  exclusion: { r: 104, g: 99, b: 93, a: 160 },
 }
 
 function intent(blendMode?: string): Pick<Clip, 'blendMode'> {
@@ -30,8 +38,8 @@ function intent(blendMode?: string): Pick<Clip, 'blendMode'> {
 }
 
 describe('blend-mode domain contract', () => {
-  test('uses the explicit four-name vocabulary and historical normal default', () => {
-    expect(BLEND_MODE_NAMES).toEqual(['normal', 'multiply', 'screen', 'overlay'])
+  test('uses the explicit eight-name vocabulary and historical normal default', () => {
+    expect(BLEND_MODE_NAMES).toEqual(['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'difference', 'exclusion'])
     expect(DEFAULT_BLEND_MODE).toBe('normal')
     expect(clipBlendModeIntent(intent())).toBe('normal')
   })

@@ -48,6 +48,10 @@ const CANVAS_OPERATION: Readonly<Record<BlendModeName, GlobalCompositeOperation>
   multiply: 'multiply',
   screen: 'screen',
   overlay: 'overlay',
+  darken: 'darken',
+  lighten: 'lighten',
+  difference: 'difference',
+  exclusion: 'exclusion',
 }
 
 /**

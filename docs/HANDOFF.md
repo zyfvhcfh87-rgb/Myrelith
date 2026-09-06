@@ -5575,7 +5575,7 @@ publication authority.
 
 ## Post-MVP issue #197 - effect workflows
 
-**PLAN APPROVED; GATES 1–2 ACCEPTED LOCALLY (2026-09-06).**
+**PLAN APPROVED; GATES 1–3 ACCEPTED LOCALLY (2026-09-06).**
 
 Start with [EFFECT_WORKFLOWS.md](EFFECT_WORKFLOWS.md). The plan begins with atomic
 clip-attribute and effect-stack copy/paste/reset, then local static presets and
@@ -5601,5 +5601,9 @@ independent effects through Gate 1's batch operation.
 
 Gate 2 passes 60 focused tests / seven files, 17 runner checks, build/typecheck,
 lint and all four issue Chromium checks. Evidence and preregistered pixel-effect
-ceilings are in docs/evidence/issue197/. New pixel effects, bus proof/integration
-and full acceptance remain pending.
+ceilings are in docs/evidence/issue197/. Gate 3 adds measured blur, sharpen,
+vignette, shadow and outline plus darken/lighten/difference/exclusion blends.
+All 36 preregistered timing rows, 215 focused tests, 17 runner checks, build/lint
+and six Chromium tests pass, including real trusted-plugin preset/export parity.
+See gate-3.md for formulas, bounds, scaling and separate scratch/codec claims.
+Bus proof/integration and full acceptance remain pending.

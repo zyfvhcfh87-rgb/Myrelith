@@ -1,6 +1,6 @@
 # Issue #197: reusable effects and video buses
 
-Status: user approved the plan on 2026-09-06. Gates 1–2 passed; Gate 3 is next.
+Status: user approved the plan on 2026-09-06. Gates 1–3 passed; Gate 4 is next.
 Inspected at merged master `573cb45`, on `codex/issue197`.
 
 Issue: [#197](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/197).
@@ -194,6 +194,12 @@ Extend the pure sRGB/alpha oracle, allow-list, concrete-context probe and UI
 together. Test transparent pixels, partial opacity, text, same/mixed crossfade
 intent, setter rejection and thrown probes. Preserve unsupported authored
 names and source-over fallback. Existing output without new effects stays exact.
+
+Gate 3 accepted locally on 2026-09-06: five measured spatial effects, four new
+blend modes and canonical geometry reset utilities. All 36 preregistered timing
+rows pass, along with 215 focused tests, 17 runner checks, build/typecheck, lint
+and six Chromium acceptance tests including trusted-plugin preset/export parity.
+See [the exact contracts and evidence](evidence/issue197/gate-3.md).
 
 ## Gate 4: track/master stage and resource proof
 

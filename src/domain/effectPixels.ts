@@ -1,5 +1,6 @@
 /** Pure ordered pixel-effect executor shared by preview and export composition. */
 
+import { applySpatialEffect } from './spatialEffectPixels'
 import { applyColorCorrectionsToRgba } from './colorCorrection'
 import type {
   CanvasPixelEffect,
@@ -17,6 +18,8 @@ export interface PixelEffectGeometry {
 
 /** Optional deterministic work evidence for performance regressions. */
 export interface PixelEffectWorkMetrics {
+  spatialScratchBytesPeak?: number
+  spatialPixelVisits?: number
   maskScanlineEdgeTests: number
   maskDistanceSamples: number
   maskEllipseDistanceSolves?: number
@@ -604,8 +607,12 @@ export function applyOrderedPixelEffectsToRgba(
       applyColorCorrectionsToRgba(rgba, [effect.params])
     } else if (effect.kind === 'chroma-key') {
       applyChromaKey(rgba, effect.params)
-    } else {
+    } else if (effect.kind === 'mask') {
       applyMask(rgba, effect.params, geometry, scratch, metrics)
+    } else {
+      const work = metrics ? { scratchBytesPeak: metrics.spatialScratchBytesPeak ?? 0, pixelVisits: metrics.spatialPixelVisits ?? 0 } : undefined
+      applySpatialEffect(rgba, effect, geometry, work)
+      if (metrics && work) { metrics.spatialScratchBytesPeak = work.scratchBytesPeak; metrics.spatialPixelVisits = work.pixelVisits }
     }
   }
 }

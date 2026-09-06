@@ -48,6 +48,11 @@ export function applyEffectTemplate(session: AttributeEditSession, effects: read
     { groups: ['effects'], includeAnimation: false, effectsMode: mode })
 }
 const descriptions: Record<string, string> = {
+  'builtin.box-blur': 'Soften the picture with an alpha-aware box blur in project pixels.',
+  'builtin.sharpen': 'Emphasize local detail while preserving source transparency.',
+  'builtin.vignette': 'Darken the edges with a soft elliptical falloff.',
+  'builtin.drop-shadow': 'Place a colored, blurred silhouette behind the picture.',
+  'builtin.outline': 'Add a colored outer silhouette using a square neighborhood.',
   'builtin.color-adjust': 'Adjust exposure, contrast, saturation, temperature and tint.',
   'builtin.mask': 'Keep or hide a rectangle, ellipse or Bezier region with optional feathering.',
   'builtin.chroma-key': 'Remove a chosen color with soft edges and spill suppression.',
@@ -76,4 +81,8 @@ export function effectTemplatePreview(effects: readonly EffectDescriptor[], capa
   if (capabilities.canvasPixelAccess) available.add('canvas2d-pixel-access')
   return resolveEffectStack(effects.filter((effect) => !effect.type.startsWith('plugin:')), available)
     .map((result) => `${result.label}: ${result.status}. ${result.detail}`)
+}
+
+export function resetEffectGeometry(session: AttributeEditSession, group: 'transform' | 'crop-and-flip'): string | null {
+  return applyAttributeEdit(session, 'reset', { groups: [group], includeAnimation: false, effectsMode: 'append' })
 }

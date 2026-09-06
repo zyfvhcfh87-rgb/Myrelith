@@ -1,6 +1,7 @@
 /** Pure effect descriptor registry, validation, migration, and evaluation. */
 
 import type { EffectDescriptor, EffectParamValue } from './schema'
+import { spatialEffectRegistrations, type SpatialPixelEffect } from './spatialEffectDefinitions'
 import type { ColorCorrectionParameters } from './colorCorrection'
 import { maskBezierPathValidationError } from './maskPath'
 
@@ -114,6 +115,7 @@ export interface EffectAnimationParameterSpec {
 }
 
 export type CanvasPixelEffect =
+  | SpatialPixelEffect
   | { readonly kind: 'color-adjust'; readonly params: ColorCorrectionParameters }
   | { readonly kind: 'mask'; readonly params: MaskParams }
   | { readonly kind: 'chroma-key'; readonly params: ChromaKeyParams }
@@ -211,6 +213,7 @@ const CHROMA_KEY_REGISTRATION: EffectRegistration = Object.freeze({
 })
 
 const EFFECT_REGISTRY = new Map<string, EffectRegistration>([
+  ...spatialEffectRegistrations().map((entry): [string, EffectRegistration] => [entry.type, entry]),
   [COLOR_ADJUST_EFFECT_TYPE, COLOR_ADJUST_REGISTRATION],
   [MASK_EFFECT_TYPE, MASK_REGISTRATION],
   [CHROMA_KEY_EFFECT_TYPE, CHROMA_KEY_REGISTRATION],

@@ -99,3 +99,5 @@ export {
   sourceTimeSpeedRatePercent,
 } from '../domain/sourceTimeMap'
 export { rangeEnd, secondsToFrames } from '../domain/time'
+
+export { SPATIAL_EFFECT_PARAMETERS, spatialEffectKind, spatialEffectParams } from '../domain/spatialEffectDefinitions'

@@ -1,4 +1,5 @@
 import EffectBrowser from './EffectBrowser'
+import { SPATIAL_EFFECT_PARAMETERS, spatialEffectKind, spatialEffectParams } from '../state/editorUi'
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import type {
   Clip,
@@ -510,6 +511,25 @@ function ColorFields({
   )
 }
 
+
+function SpatialFields({ clip, effect, playheadFrame, locked }: { clip: Clip; effect: EffectDescriptor; playheadFrame: number; locked: boolean }) {
+  const kind = spatialEffectKind(effect.type)
+  if (!kind || effect.version !== 1) return null
+  const params = spatialEffectParams(kind, effect.params)
+  return <div className="inspector-effect-params">
+    {Object.entries(SPATIAL_EFFECT_PARAMETERS[kind]).map(([parameter, spec]) => <div key={parameter} className="inspector-effect-parameter">
+      <NumericField label={spec.label} value={Number(params[parameter])} min={spec.min} max={spec.max} step={spec.step}
+        disabled={locked} testId={`inspector-effect-${kind}-${parameter}-${effect.id}`}
+        onCommit={(value) => updateAtFrame(clip, effect, playheadFrame, { [parameter]: value })} />
+      {clip.text === undefined && <EffectParameterAnimation clip={clip} effect={effect} parameter={parameter} spec={spec}
+        value={Number(params[parameter])} playheadFrame={playheadFrame} locked={locked} />}
+    </div>)}
+    {(kind === 'drop-shadow' || kind === 'outline') && <label className="inspector-field"><span className="inspector-field-label">Effect color</span>
+      <input type="color" value={String(params.color)} disabled={locked} onChange={(event) => updateAtFrame(clip, effect, playheadFrame, { color: event.target.value })} />
+    </label>}
+  </div>
+}
+
 export default function EffectStackInspector({
   doc,
   clip,
@@ -622,6 +642,7 @@ export default function EffectStackInspector({
                       `inspector-effect-enabled-${effect.id}`,
                       (enabled) => store().setEffectEnabled(clip.id, effect.id, enabled),
                     )}
+                    <SpatialFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />
                     {editableColor && <ColorFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />}
                     {editableMask && <MaskFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />}
                     {editableChroma && <ChromaKeyFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />}
