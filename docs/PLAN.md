@@ -5097,8 +5097,8 @@ The contract and acceptance sequence are in
   and nested rendering, plugin execution, and resource accounting.
 - [x] Prepare a concrete plan on merged master `573cb45` without product changes.
 - [x] User approved the plan on 2026-09-06 and authorized implementation.
-- [ ] Gate 1: atomic selected-attribute and complete/selected-stack copy/paste/reset.
-- [ ] Gate 2: strict local presets and searchable capability-aware effect browser.
+- [x] Gate 1: atomic selected-attribute and complete/selected-stack copy/paste/reset.
+- [x] Gate 2: strict local presets and searchable capability-aware effect browser.
 - [ ] Gate 3: measured built-ins and parity-proven blend expansion.
 - [ ] Gate 4: prove track/master order, nesting and bounded resource ownership.
 - [ ] Gate 5: integrate approved track/master descriptors, migration and UI.

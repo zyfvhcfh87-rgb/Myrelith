@@ -149,3 +149,117 @@ test('checked effects copy, keyboard dialog, narrow layout, reset and stale repl
   await expect(paste).toBeDisabled()
   expect(errors).toEqual([])
 })
+
+async function writePresetLibrary(page: Page, raw: string) {
+  await page.evaluate(async (value) => {
+    await new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open('myrelith-effect-presets', 1)
+      open.onupgradeneeded = () => open.result.createObjectStore('library')
+      open.onerror = () => reject(open.error)
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('library', 'readwrite')
+        tx.objectStore('library').put(value, 'local')
+        tx.oncomplete = () => { db.close(); resolve() }
+        tx.onabort = () => { db.close(); reject(tx.error) }
+      }
+    })
+  }, raw)
+}
+
+test('local presets capture static rendered values, persist across reload, rename and apply atomically', async ({ page }) => {
+  const errors = problems(page)
+  await seedProject(page)
+  await expect.poll(async () => (await pixel(page))[2]).toBeGreaterThan(80)
+  const sourcePixel = await pixel(page)
+  await page.getByRole('tab', { name: 'Effects', exact: true }).click()
+  const beforeSave = await snapshot(page)
+  await page.getByRole('button', { name: 'Save preset…', exact: true }).click()
+  let dialog = page.getByRole('dialog', { name: 'Save effect preset' })
+  await expect(dialog.getByLabel('Preset name', { exact: true })).toBeFocused()
+  await dialog.getByLabel('Preset name', { exact: true }).fill('Half-stop look')
+  await dialog.getByRole('button', { name: 'Save local preset' }).click()
+  await expect(dialog).toContainText('Preset saved in this browser.')
+  expect(await snapshot(page)).toEqual(beforeSave)
+  await page.keyboard.press('Escape')
+  await page.reload()
+  await seedProject(page)
+  await page.getByRole('tab', { name: 'Effects', exact: true }).click()
+  await page.getByRole('button', { name: 'Browse effects…', exact: true }).click()
+  dialog = page.getByRole('dialog', { name: 'Effect browser' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel('Show', { exact: true }).selectOption('presets')
+  await expect(dialog.getByRole('button', { name: 'Apply preset Half-stop look' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Rename Half-stop look' }).click()
+  await dialog.getByLabel('New preset name').fill('Reusable look')
+  await dialog.getByRole('button', { name: 'Save name', exact: true }).click()
+  await expect(dialog.getByRole('button', { name: 'Apply preset Reusable look' })).toBeVisible()
+  await dialog.getByLabel('Search effects').fill('missing-word')
+  await expect(dialog).toContainText('No matching effects.')
+  await dialog.getByLabel('Search effects').fill('future.test')
+  await expect(dialog).toContainText('unavailable; preserved and bypassed')
+  await page.keyboard.press('Escape')
+  await select(page, ['First', 'Second'], 75)
+  const before = await snapshot(page)
+  await page.getByRole('button', { name: 'Browse effects…', exact: true }).click()
+  dialog = page.getByRole('dialog', { name: 'Effect browser' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel('Show', { exact: true }).selectOption('presets')
+  await page.screenshot({ path: '/private/tmp/issue197-presets-desktop.png' })
+  await dialog.getByRole('button', { name: 'Apply preset Reusable look' }).click()
+  const after = await snapshot(page)
+  expect(after.history).toBe(before.history + 1)
+  const targets = after.project.sequences[0].tracks[0].clips.slice(1)
+  expect(targets[0].effects[0].params.exposure).toBe(-0.5)
+  expect(targets[0].effects[0].id).not.toBe(targets[1].effects[0].id)
+  expect(targets[0].animation.effectTracks).toEqual([])
+  await expect.poll(() => pixel(page)).toEqual(sourcePixel)
+  await page.getByRole('button', { name: 'Browse effects…', exact: true }).click()
+  await page.getByRole('button', { name: 'Delete Reusable look' }).click()
+  await expect(page.getByRole('button', { name: 'Apply preset Reusable look' })).toHaveCount(0)
+  expect(await snapshot(page)).toEqual(after)
+  await page.keyboard.press('Escape')
+  await page.screenshot({ path: '/private/tmp/issue197-inspector-effects.png' })
+  expect(errors).toEqual([])
+})
+
+test('preset corruption, quota abort and future envelopes stay honest and preserve existing data', async ({ page }) => {
+  const errors = problems(page)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await seedProject(page)
+  await writePresetLibrary(page, JSON.stringify({ version: 1, presets: [
+    { id: 'valid', name: 'Valid sibling', effects: [{ id: 'future', type: 'plugin:com.example.missing/effect', version: 99, enabled: true, params: {} }] },
+    { id: 'broken', name: 'Corrupt', media: 'file:/secret' },
+  ] }))
+  await page.getByRole('tab', { name: 'Effects', exact: true }).click()
+  await page.getByRole('button', { name: 'Save preset…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Save effect preset' })
+  await expect(dialog).toContainText('Unavailable preset 2')
+  await expect(dialog.getByRole('button', { name: 'Apply preset Valid sibling' })).toBeVisible()
+  await expect(dialog).toContainText('Plugin is missing; the effect stays preserved and unavailable.')
+  await dialog.getByLabel('Preset name', { exact: true }).fill('Should fail')
+  await page.evaluate(() => {
+    const original = IDBObjectStore.prototype.put
+    IDBObjectStore.prototype.put = function (...args: Parameters<IDBObjectStore['put']>) {
+      if (this.name === 'library') { IDBObjectStore.prototype.put = original; throw new DOMException('Injected quota failure', 'QuotaExceededError') }
+      return original.apply(this, args)
+    }
+  })
+  await dialog.getByRole('button', { name: 'Save local preset' }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Injected quota failure')
+  await expect(dialog).not.toContainText('Preset saved in this browser.')
+  await page.screenshot({ path: '/private/tmp/issue197-presets-720.png' })
+  await page.keyboard.press('Escape')
+  const future = JSON.stringify({ version: 42, presets: [{ keep: 'future data' }] })
+  await writePresetLibrary(page, future)
+  await page.getByRole('button', { name: 'Save preset…', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('read-only')
+  await dialog.getByLabel('Preset name', { exact: true }).fill('Future')
+  await expect(dialog.getByRole('button', { name: 'Save local preset' })).toBeDisabled()
+  const raw = await page.evaluate(async () => new Promise((resolve, reject) => {
+    const open = indexedDB.open('myrelith-effect-presets', 1)
+    open.onerror = () => reject(open.error)
+    open.onsuccess = () => { const db = open.result, tx = db.transaction('library'), get = tx.objectStore('library').get('local'); get.onsuccess = () => resolve(get.result); tx.oncomplete = () => db.close() }
+  }))
+  expect(raw).toBe(future)
+  expect(errors).toEqual([])
+})

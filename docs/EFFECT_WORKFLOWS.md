@@ -1,6 +1,6 @@
 # Issue #197: reusable effects and video buses
 
-Status: user approved the plan on 2026-09-06. Gate 1 passed; Gate 2 is next.
+Status: user approved the plan on 2026-09-06. Gates 1–2 passed; Gate 3 is next.
 Inspected at merged master `573cb45`, on `codex/issue197`.
 
 Issue: [#197](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/197).
@@ -157,6 +157,17 @@ Proof: reload persistence, duplicate names/rename/delete, quota and transaction
 failure, corrupt records, future versions, bounds, forbidden payloads, missing
 plugin capability, search and keyboard use, and project replacement during an
 asynchronous save/load. No library operation enters timeline undo history.
+
+Gate 2 accepted locally on 2026-09-06: 60 focused tests in seven files and all
+17 runner checks pass, with build/typecheck, lint and four issue browser tests.
+Real IndexedDB reload, static pixel parity, batch history, rename/delete,
+corrupt siblings, missing plugin status, quota abort and future read-only
+versions pass. Reviewed desktop, 1280×720 and in-app narrow layouts. The large
+payload test exposed a quadratic resource-string regex; the corrected linear
+scan passes the same byte-bound cases. No preset file exchange is introduced.
+See [the gate evidence](evidence/issue197/gates-1-2.md). Gate 3 limits are
+[preregistered](evidence/issue197/pixel-effects-preregister.md).
+
 
 ## Gate 3: measured built-ins and blend expansion
 

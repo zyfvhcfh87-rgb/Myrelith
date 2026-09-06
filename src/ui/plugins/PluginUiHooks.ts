@@ -35,3 +35,10 @@ export function useOptionalPluginEditorSnapshot(): PluginAppEditorSnapshot | nul
   )
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
+
+export function useOptionalPluginAppSnapshot(): PluginAppSnapshot | null {
+  const value = useOptionalPluginUi()
+  const subscribe = useCallback((notify: () => void) => value?.controller.subscribe(() => notify()) ?? (() => {}), [value])
+  const getSnapshot = useCallback(() => value?.controller.getSnapshot() ?? null, [value])
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}

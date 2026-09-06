@@ -1334,6 +1334,16 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   a `frameReady`; superseded seeks are resolved by the bridge, and a
   worker `error` carrying a requestId also settles that request.
 
+Local effect presets use the exact versioned, bounded data contract in
+`domain/effectPresets.ts`. `app/localEffectPresetStorage.ts` owns one IndexedDB
+read/write transaction per mutation and closes each connection on completion
+or failure. Only transaction completion confirms a write. Valid siblings and
+unrecognized raw records survive mutations; a future envelope is read-only.
+`effectPresetStore` contains serializable presentation facts only. Presets
+capture resolved static effect values, carry no media or trust authority, and
+apply through the same atomic clip-attribute operation with fresh identities.
+They are independent of project save/recovery and timeline history.
+
 ## Folder layout
 
 Clip attribute workflows use `domain/clipAttributes.ts` for atomic candidate

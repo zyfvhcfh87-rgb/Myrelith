@@ -838,3 +838,11 @@
 .attribute-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; }
 .attribute-dialog p { overflow-wrap: anywhere; }
 .attribute-groups input, .attribute-option input { flex: 0 0 auto; }
+.effect-browser { width: min(680px, calc(100vw - 32px)); }
+.effect-browser-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, .65fr); gap: 12px; }
+.effect-browser-list { list-style: none; padding: 0; display: grid; gap: 12px; }
+.effect-browser-list > li { border: 1px solid #384657; border-radius: 6px; padding: 12px; overflow-wrap: anywhere; }
+.effect-browser-list > li > strong, .effect-browser-list > li > span { display: block; }
+.effect-browser-list > li > span { margin-top: 6px; color: #a8b8c8; font-size: 12px; }
+.effect-browser form { display: grid; gap: 10px; }
+.inspector-effects > .inspector-section-bar { flex-direction: column; align-items: stretch; }

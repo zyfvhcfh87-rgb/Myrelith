@@ -5575,7 +5575,7 @@ publication authority.
 
 ## Post-MVP issue #197 - effect workflows
 
-**PLAN APPROVED; GATE 1 ACCEPTED LOCALLY (2026-09-06).**
+**PLAN APPROVED; GATES 1–2 ACCEPTED LOCALLY (2026-09-06).**
 
 Start with [EFFECT_WORKFLOWS.md](EFFECT_WORKFLOWS.md). The plan begins with atomic
 clip-attribute and effect-stack copy/paste/reset, then local static presets and
@@ -5591,6 +5591,15 @@ destination source-time intent before the store commits one history entry.
 Project replacement clears the clipboard and invalidates open dialogs even
 when the portable id is unchanged. No portable schema changed.
 
-242 focused tests / six files, 17 runner checks, build/typecheck, lint and two
-muted Chromium checks pass. See EFFECT_WORKFLOWS.md for exact scope. Presets,
-new pixel effects, bus proof/integration and full acceptance remain pending.
+Gate 1 passed 242 focused tests / six files. Gate 2 adds a bounded, versioned,
+local IndexedDB preset library and searchable built-in/plugin/preset browser.
+Preset values resolve at the captured playhead; no animation, media, runtime
+or trust authority enters the library. Unknown effects remain visible and
+unavailable; corrupt siblings survive writes, future envelopes are read-only,
+and transaction failures do not announce success. Applied presets are ordinary
+independent effects through Gate 1's batch operation.
+
+Gate 2 passes 60 focused tests / seven files, 17 runner checks, build/typecheck,
+lint and all four issue Chromium checks. Evidence and preregistered pixel-effect
+ceilings are in docs/evidence/issue197/. New pixel effects, bus proof/integration
+and full acceptance remain pending.

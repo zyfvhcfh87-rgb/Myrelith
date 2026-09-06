@@ -1,3 +1,4 @@
+import EffectBrowser from './EffectBrowser'
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import type {
   Clip,
@@ -554,6 +555,7 @@ export default function EffectStackInspector({
       <div className="inspector-section-bar">
         <h3 id="inspector-effects-heading">Effect stack</h3>
         <div className="inspector-effect-actions">
+          <EffectBrowser clipId={clip.id} hasEffects={clip.effects.length > 0} />
           <button type="button" disabled={!clip.effects.length} onClick={() => copyClipEffectStack(clip.id)}>Copy stack</button>
           <button type="button" disabled={!selectedIds.length} onClick={() => copyClipAttributes(clip.id, selectedIds)}>Copy selected effects</button>
         </div>
