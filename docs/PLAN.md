@@ -5106,3 +5106,24 @@ The contract and acceptance sequence are in
   4,093 tests + 17 runner checks and all 13 issue Chromium cases pass. Broader
   Chromium: 32 pass / 8 baseline-reproduced failures / 3 opt-in skips. See
   [Gate 6](evidence/issue197/gate-6.md); the broader suite is not wholly green.
+
+## Post-MVP issue #196 - local SDR LUTs, curves and wheels
+
+**PLAN PREPARED; AWAITING USER APPROVAL (2026-09-07).**
+
+Contract and proposed gates: [COLOR_GRADING.md](COLOR_GRADING.md).
+
+- [x] Read #196, verify merged #197 base `368bd43`, and trace effects, presets,
+  project/history budgets, shared rendering and post-presentation scopes.
+- [x] Compare portable LUT representations and prepare the six-gate plan on
+  `codex/issue196`, without product changes.
+- [x] Check the base with 70 focused Vitest tests, 17 runner checks, production
+  build/typecheck and lint; retain the initial host-tooling failure in the plan.
+- [ ] User approves the plan, including project-owned embedded LUT data and
+  the bounded preset migration.
+- [ ] Gate 1: pure LUT/curve/wheel contracts and reference proof.
+- [ ] Gate 2: portable LUT ownership, import, history and migrations.
+- [ ] Gate 3: shared execution, cancellation, resource and timing proof.
+- [ ] Gate 4: keyboard-accessible import, curves, wheels and safe animation.
+- [ ] Gate 5: stable correction presets and measured RGB parade.
+- [ ] Gate 6: complete tests/build/lint/audit, Chromium acceptance and evidence.

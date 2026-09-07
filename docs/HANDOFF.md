@@ -5640,3 +5640,28 @@ and repairs preserved invalid parameters through Reset. Native checks cover
 pixels/history/rejection, narrow layout and actual recovery. Presets remain
 browser-local/static; source-only stages stay on clips and bus parameters are
 static. Work is committed locally on codex/issue197; publication is separate.
+
+## Post-MVP issue #196 - LUTs, curves and color wheels
+
+**PLAN PREPARED; IMPLEMENTATION AWAITS APPROVAL (2026-09-07).**
+
+Start with [COLOR_GRADING.md](COLOR_GRADING.md). `codex/issue196` starts at
+merged master `368bd43`, which includes #197 through PR #224. No product code
+has changed for #196. The proposed six gates cover pure color/parser contracts,
+a portable project LUT catalog, shared preview/export execution and resource
+proof, accessible editing, presets/scopes, and complete acceptance.
+
+The proposed format-8 catalog embeds immutable LUT data once per project and
+keeps existing primitive descriptors and timeline schema 21. The first subset
+supports 1D tables through 4,096 rows and 3D tables through edge 33, with explicit
+interpolation and SDR math. Preset version 2 needs bounded LUT bundles; this is
+part of the approval decision, not an implemented migration. Old five-control
+output and identity paths must remain exact.
+
+Initial base checks pass 70 focused tests across eight files, all 17 runner
+checks, build/typecheck and lint. The first runner attempt hit the unaccepted
+Xcode license through Git; using the installed Command Line Tools via
+`DEVELOPER_DIR=/Library/Developer/CommandLineTools` fixes those checks without
+accepting an agreement. Node 26 uses `NODE_OPTIONS=--no-experimental-webstorage`
+for Vitest. No fresh full-suite, grading-browser, performance or audit acceptance
+is claimed. Full commands, proposed budgets and remaining risks are in the plan.
