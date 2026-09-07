@@ -1,3 +1,4 @@
+import type { PortableColorLut } from '../colorLutCatalog'
 import type { AssetKind, FrameRate, MediaSourceBounds, MulticamDefinition, PartialTrackImportSelection } from '../schema';
 import { MAX_TIMELINE_MARKERS } from '../timelineMarkers';
 import { TEXT_OVERLAY_LIMITS } from '../textOverlay';
@@ -19,7 +20,7 @@ export const SUPPORTED_PROJECT_FILE_EXTENSIONS = Object.freeze([
   PROJECT_FILE_EXTENSION,
   LEGACY_PROJECT_FILE_EXTENSION,
 ] as const)
-export const CURRENT_PROJECT_FORMAT_VERSION = 7 as const
+export const CURRENT_PROJECT_FORMAT_VERSION = 8 as const
 export const CURRENT_TIMELINE_SCHEMA_VERSION = 21 as const
 
 /** Public bounds applied before or while walking untrusted project data. */
@@ -96,15 +97,16 @@ export interface PortableAssetDescriptor {
   audioChannels: number | null
 }
 
-export interface ProjectFileV7 extends SequenceProject {
+export interface ProjectFileV8 extends SequenceProject {
   format: typeof PROJECT_FILE_FORMAT
   formatVersion: typeof CURRENT_PROJECT_FORMAT_VERSION
   multicams: MulticamDefinition[]
+  colorLuts: readonly PortableColorLut[]
   assets: PortableAssetDescriptor[]
   collections: MediaCollection[]
 }
 
-export type ProjectFile = ProjectFileV7
+export type ProjectFile = ProjectFileV8
 
 export class ProjectFileError extends Error {
   constructor(message: string) {

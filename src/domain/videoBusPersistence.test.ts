@@ -13,7 +13,7 @@ function fixture() {
 test('video buses roundtrip unknown/wrong-stage intent, and schema 20 migrates to explicit empty stacks', () => {
   const project = fixture(), roundtrip = parseProjectFile(serializeProjectFile(project))
   expect(roundtrip).toEqual(project)
-  expect(roundtrip.formatVersion).toBe(7)
+  expect(roundtrip.formatVersion).toBe(8)
   const old = structuredClone(project)
   for (const sequence of old.sequences) {
     sequence.schemaVersion = 20

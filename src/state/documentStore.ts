@@ -1,3 +1,6 @@
+import { COLOR_LUT_LIMITS } from '../domain/colorLut'
+import { newColorLutReferenceError, retainedColorLutBytes, type PortableColorLut } from '../domain/colorLutCatalog'
+import { sequenceProjectWithinEditBudget } from '../domain/projectSequences'
 import { editVideoBus, type VideoBusEdit, type VideoBusTarget } from '../domain/videoBusEffects'
 /**
  * state/documentStore.ts — Zustand store owning the complete sequence project,
@@ -221,6 +224,10 @@ const HISTORY_LIMIT = 100
 
 /** The DocumentActions contract (see ARCHITECTURE.md, store contracts). */
 export interface DocumentState {
+  /** Data-only clipboard retention ledger; shares immutable project records. */
+  retainedClipboardColorLuts: readonly PortableColorLut[]
+  commitColorLutEdit: (expectedProject: SequenceProject, generation: number, next: SequenceProject) => string | null
+
   /** Complete portable edit snapshot. Browser resources remain elsewhere. */
   project: SequenceProject
   /** Session replacement identity, including reloading the same portable project. */
@@ -705,13 +712,25 @@ function commit(
     state.activeSequenceId,
     next,
   )
-  if (project === state.project) return state
+  if (project === state.project || colorLutCommitError(state, project)) return state
   return {
     project,
     doc: next,
     past: [...state.past, state.project].slice(-HISTORY_LIMIT),
     future: [],
   }
+}
+
+function colorLutCommitError(state: DocumentState, project: SequenceProject): string | null {
+  if (!state.project.colorLuts?.length && !project.colorLuts?.length && !state.retainedClipboardColorLuts.length) {
+    return newColorLutReferenceError(state.project, project)
+  }
+  const referenceError = newColorLutReferenceError(state.project, project)
+  if (referenceError) return referenceError
+  if (project.colorLuts !== state.project.colorLuts && retainedColorLutBytes(
+    [project, state.project, ...state.past, ...state.future], state.retainedClipboardColorLuts,
+  ) > COLOR_LUT_LIMITS.retainedBytes) return 'This edit exceeds 64 MiB of LUT history and clipboard data. Start a fresh project session before importing more tables.'
+  return null
 }
 
 function activeSequenceFor(
@@ -730,7 +749,7 @@ function commitProject(
   project: SequenceProject,
   preferredActiveId = state.activeSequenceId,
 ): Partial<DocumentState> | DocumentState {
-  if (project === state.project) return state
+  if (project === state.project || colorLutCommitError(state, project)) return state
   return {
     project,
     ...activeSequenceFor(project, preferredActiveId),
@@ -753,6 +772,17 @@ const INITIAL_DOCUMENT = createTimelineDoc(
 const INITIAL_PROJECT = sequenceProjectFromTimeline(INITIAL_DOCUMENT)
 
 export const useDocumentStore = create<DocumentState>()((set) => ({
+  retainedClipboardColorLuts: [],
+  commitColorLutEdit: (expectedProject, generation, next) => {
+    let error: string | null = null
+    set((state) => {
+      if (state.project !== expectedProject || state.projectGeneration !== generation) { error = 'The project changed. Reopen the grading controls.'; return state }
+      if (!sequenceProjectWithinEditBudget(next)) { error = 'The grading edit exceeds project limits.'; return state }
+      error = colorLutCommitError(state, next)
+      return error ? state : commitProject(state, next)
+    })
+    return error
+  },
   project: INITIAL_PROJECT,
   projectGeneration: 0,
   activeSequenceId: INITIAL_DOCUMENT.id,
@@ -764,6 +794,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   setProject: (project, activeSequenceId = project.rootSequenceId) => set((state) => ({
     project,
     projectGeneration: state.projectGeneration + 1,
+    retainedClipboardColorLuts: [],
     ...activeSequenceFor(project, activeSequenceId),
     sequenceNavigation: [],
     past: [],
@@ -773,6 +804,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   setDoc: (doc) => set((state) => ({
     project: sequenceProjectFromTimeline(doc),
     projectGeneration: state.projectGeneration + 1,
+    retainedClipboardColorLuts: [],
     activeSequenceId: doc.id,
     sequenceNavigation: [],
     doc,
@@ -792,7 +824,8 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       }
       const result = editVideoBus(state.project, target, command, randomSequenceId)
       if (!result.ok) { error = result.reason; return state }
-      return commitProject(state, result.project)
+      error = colorLutCommitError(state, result.project)
+      return error ? state : commitProject(state, result.project)
     })
     return error
   },
@@ -808,7 +841,8 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         ? pasteClipAttributes(state.project, sequenceId, command.targetIds, command.template, command.options, randomSequenceId)
         : resetClipAttributes(state.project, sequenceId, command.targetIds, command.groups, command.selectedEffectIds)
       if (!result.ok) { error = result.reason; return state }
-      return commitProject(state, result.project)
+      error = colorLutCommitError(state, result.project)
+      return error ? state : commitProject(state, result.project)
     })
     return error
   },

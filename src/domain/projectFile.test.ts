@@ -242,6 +242,7 @@ function makeProject(): ProjectFile {
     rootSequenceId: document.id,
     sequences: [document],
     multicams: [],
+    colorLuts: [],
     assets: makeAssets(),
     collections: [],
   }

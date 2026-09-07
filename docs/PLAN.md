@@ -5123,7 +5123,8 @@ Contract and proposed gates: [COLOR_GRADING.md](COLOR_GRADING.md).
   the bounded preset migration.
 - [x] Gate 1: pure LUT/curve/wheel contracts and reference proof; 61 grading
   cases, seven architecture cases, 17 runner checks, build/typecheck and lint.
-- [ ] Gate 2: portable LUT ownership, import, history and migrations.
+- [x] Gate 2: portable LUT ownership, import, history and migrations; 274 focused
+  tests, 17 runner checks, build/lint and real Chromium save/reopen/recovery.
 - [ ] Gate 3: shared execution, cancellation, resource and timing proof.
 - [ ] Gate 4: keyboard-accessible import, curves, wheels and safe animation.
 - [ ] Gate 5: stable correction presets and measured RGB parade.

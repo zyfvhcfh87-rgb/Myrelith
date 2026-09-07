@@ -1,3 +1,4 @@
+import { colorLutCatalogError, type PortableColorLut } from './colorLutCatalog'
 /**
  * Pure project-level sequence collection and edit authority.
  *
@@ -45,6 +46,8 @@ export interface SequenceProject {
   sequences: TimelineDoc[]
   /** Portable manually aligned source groups shared by their timeline items. */
   multicams?: MulticamDefinition[]
+  /** Immutable embedded color tables, shared across sequences and edit history. */
+  colorLuts?: readonly PortableColorLut[]
 }
 
 export type SequenceEntityKind =
@@ -177,6 +180,7 @@ export function sequenceProjectFromTimeline(
     rootSequenceId: document.id,
     sequences: [document],
     multicams: [],
+    colorLuts: [],
   }
 }
 
@@ -378,6 +382,7 @@ function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
 export function sequenceProjectWithinEditBudget(
   project: SequenceProject,
 ): boolean {
+  if (colorLutCatalogError(project.colorLuts ?? [])) return false
   if (
     project.sequences.length < 1
     || project.sequences.length > SEQUENCE_PROJECT_LIMITS.maxSequences

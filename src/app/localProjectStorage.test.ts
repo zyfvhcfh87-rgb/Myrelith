@@ -80,6 +80,7 @@ function serializedProject(
     rootSequenceId: documentId,
     sequences: [document],
     multicams: [],
+    colorLuts: [],
     assets: [],
     collections: [],
   }

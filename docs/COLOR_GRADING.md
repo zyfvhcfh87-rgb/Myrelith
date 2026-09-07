@@ -472,3 +472,38 @@ The two-point curve and wheel defaults are exact identity for all 256 inputs.
 The first build caught an unused test callback variable, and lint flagged a
 control-character regex. Both were corrected before recording this gate.
 No acceptance threshold or approved pixel formula changed.
+
+## Gate 2 evidence, 2026-09-08
+
+Format 8 now embeds immutable LUT records while timeline schema 21 stays fixed.
+Legacy formats migrate to an empty catalog. Current malformed table payloads
+reject; bounded future records and missing descriptor intent survive. Import
+uses one disposable worker, a five-second deadline and a pinned project/target.
+Apply revalidates the complete portable file with the live media catalog, then
+commits the table and descriptor once. Copy/paste retains required table records;
+ordinary edits, duplication, undo and redo share immutable catalog data.
+
+The catalog enforces its 16-record, 4 MiB decoded and 6 MiB serialized budgets.
+LUT-changing commits also count distinct table records across both history
+branches and the clipboard against 64 MiB before clearing redo. Removing unused
+tables is explicit; unknown effect contracts conservatively prevent removal.
+
+All 274 focused tests in 11 files pass, including 17 new ownership/controller
+cases. All 17 runner checks, build/typecheck, lint and diff whitespace checks
+pass. Focused reruns after the final bounded-reply and UTF-8 helper changes pass.
+The initial test failures were incomplete adjustment fixtures and an old-format
+fixture carrying a new field; these were corrected before the successful run.
+
+One muted headless Chromium flow imports a local 1D and native 33-cube through
+the real worker, verifies no pre-Apply edit, exactly one Apply edit, catalog
+identity through undo/redo, and canonical save/reopen equality without source
+Files. It then closes the page, recovers through real IndexedDB and verifies the
+complete portable snapshot by SHA-256. No page errors or console warnings/errors
+were observed. The first browser assertion compared JSON property insertion
+order; it was corrected to compare canonical serialization before the successful
+run. The screenshot shows the normal nonblank editor without a framework overlay.
+
+Browser plugin was unavailable; the approved repository Playwright setup used
+muted Chromium at http://127.0.0.1:41732, 1440 by 900. Local server startup needed
+the sandbox's loopback-listening allowance. Pixel grading UI/rendering is still
+outside this gate; this evidence does not claim those later acceptance flows.

@@ -1,3 +1,4 @@
+import { colorLutController } from './colorLutController'
 /**
  * app/EditorShell.tsx — Lazy editor-only composition root.
  *
@@ -96,6 +97,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
   useEffect(() => initMediaCapabilityLifecycle(), [])
   useEffect(() => initSelectionReconciliation(), [])
   useEffect(() => initClipAttributeClipboard(), [])
+  useEffect(() => colorLutController.init(), [])
   useEffect(() => initSourceMonitorLifecycle(), [])
   useEffect(() => initAudioEffectStatusProjection(), [])
   useEffect(() => {
