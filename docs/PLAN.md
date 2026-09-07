@@ -5109,7 +5109,7 @@ The contract and acceptance sequence are in
 
 ## Post-MVP issue #196 - local SDR LUTs, curves and wheels
 
-**PLAN PREPARED; AWAITING USER APPROVAL (2026-09-07).**
+**PLAN APPROVED; IMPLEMENTATION IN PROGRESS (2026-09-08).**
 
 Contract and proposed gates: [COLOR_GRADING.md](COLOR_GRADING.md).
 
@@ -5119,9 +5119,10 @@ Contract and proposed gates: [COLOR_GRADING.md](COLOR_GRADING.md).
   `codex/issue196`, without product changes.
 - [x] Check the base with 70 focused Vitest tests, 17 runner checks, production
   build/typecheck and lint; retain the initial host-tooling failure in the plan.
-- [ ] User approves the plan, including project-owned embedded LUT data and
+- [x] User approved the plan on 2026-09-08, including project-owned embedded LUT data and
   the bounded preset migration.
-- [ ] Gate 1: pure LUT/curve/wheel contracts and reference proof.
+- [x] Gate 1: pure LUT/curve/wheel contracts and reference proof; 61 grading
+  cases, seven architecture cases, 17 runner checks, build/typecheck and lint.
 - [ ] Gate 2: portable LUT ownership, import, history and migrations.
 - [ ] Gate 3: shared execution, cancellation, resource and timing proof.
 - [ ] Gate 4: keyboard-accessible import, curves, wheels and safe animation.

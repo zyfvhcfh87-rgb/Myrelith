@@ -5643,7 +5643,10 @@ static. Work is committed locally on codex/issue197; publication is separate.
 
 ## Post-MVP issue #196 - LUTs, curves and color wheels
 
-**PLAN PREPARED; IMPLEMENTATION AWAITS APPROVAL (2026-09-07).**
+**PLAN APPROVED; IMPLEMENTATION IN PROGRESS (2026-09-08).**
+
+The user approved the complete six-gate plan on 2026-09-08. Successful gates
+proceed without repeated approval. The following initial inspection is historical.
 
 Start with [COLOR_GRADING.md](COLOR_GRADING.md). `codex/issue196` starts at
 merged master `368bd43`, which includes #197 through PR #224. No product code

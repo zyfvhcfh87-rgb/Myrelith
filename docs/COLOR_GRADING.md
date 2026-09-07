@@ -1,6 +1,6 @@
 # Issue #196: local SDR color grading
 
-Status: proposed implementation plan, awaiting user approval.
+Status: approved on 2026-09-08; implementation in progress.
 Inspected on 2026-09-07 at merged master `368bd43`, on `codex/issue196`.
 Issue: [#196](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/196).
 
@@ -10,7 +10,8 @@ another approval round. A failed proof must retain its evidence; changing the
 portable representation, color math, supported subset, or acceptance limits
 requires a concrete revised proposal before that affected slice ships.
 
-This document is a design, not evidence that grading has been implemented.
+The user approved the complete plan on 2026-09-08. Gate evidence below will
+distinguish implemented and verified behavior from work still pending.
 
 ## Editing workflow
 
@@ -445,3 +446,29 @@ The main risks to resolve early are catalog retention through history/copying,
 the primitive-descriptor/catalog lookup boundary, deterministic curve/wheel
 materialization, and existing plugin/lens memory at 4K. Gate failures can narrow
 support only with recorded evidence and the review boundary stated above.
+
+## Gate 1 evidence, 2026-09-08
+
+The pure LUT parser/encoding/interpolator, curve materializer and wheel math
+are implemented without production effect registration. 61 grading cases plus
+seven architecture cases and all 17 runner checks pass. Build/typecheck and lint
+pass. There is no new observable browser behavior at this gate.
+
+Curve slopes use the weighted harmonic PCHIP interior rule and sign-limited
+one-sided endpoint rule, as documented by [SciPy's PCHIP reference](https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.PchipInterpolator.html).
+Zero or opposite-sign adjacent secants produce a zero interior derivative.
+The endpoint candidate is `((2*h0+h1)*d0-h0*d1)/(h0+h1)`; reject its opposite
+sign and limit it to `3*d0` when neighboring secants disagree. Evaluate with
+the standard cubic Hermite basis. Hand-calculated 0.078125 and 0.546875 midpoint
+fixtures, extrema/flat/decreasing segments and full 8-bit maps pass.
+
+Wheel scale is two thirds of each group's numeric range, so all valid numeric
+triplets project inside the unit hue disc. Pointer position projects radially
+onto that disc, then shortens uniformly at channel limits while retaining the
+mean. Brightness applies one common bounded offset. Keyboard movement will use
+0.01 normalized position steps and 0.1 with Shift; Home centers chroma.
+The two-point curve and wheel defaults are exact identity for all 256 inputs.
+
+The first build caught an unused test callback variable, and lint flagged a
+control-character regex. Both were corrected before recording this gate.
+No acceptance threshold or approved pixel formula changed.
