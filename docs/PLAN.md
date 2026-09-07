@@ -5125,7 +5125,8 @@ Contract and proposed gates: [COLOR_GRADING.md](COLOR_GRADING.md).
   cases, seven architecture cases, 17 runner checks, build/typecheck and lint.
 - [x] Gate 2: portable LUT ownership, import, history and migrations; 274 focused
   tests, 17 runner checks, build/lint and real Chromium save/reopen/recovery.
-- [ ] Gate 3: shared execution, cancellation, resource and timing proof.
+- [x] Gate 3: shared execution, cancellation, resource and timing proof; 381 focused
+  tests, 17 runner checks, build/lint, 45 timing cells and three Chromium flows.
 - [ ] Gate 4: keyboard-accessible import, curves, wheels and safe animation.
 - [ ] Gate 5: stable correction presets and measured RGB parade.
 - [ ] Gate 6: complete tests/build/lint/audit, Chromium acceptance and evidence.

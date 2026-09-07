@@ -1,3 +1,4 @@
+import { colorGradingRegistrations, colorGradingResourceError, type ColorGradingContext, type ColorGradingPixelEffect } from './colorGradingEffects'
 /** Pure effect descriptor registry, validation, migration, and evaluation. */
 
 import type { EffectDescriptor, EffectParamValue } from './schema'
@@ -115,6 +116,7 @@ export interface EffectAnimationParameterSpec {
 }
 
 export type CanvasPixelEffect =
+  | ColorGradingPixelEffect
   | SpatialPixelEffect
   | { readonly kind: 'color-adjust'; readonly params: ColorCorrectionParameters }
   | { readonly kind: 'mask'; readonly params: MaskParams }
@@ -148,12 +150,12 @@ export interface EffectRegistration {
   readonly surfaces: readonly EffectSurface[]
   /** Explicit prerequisite for sharing an opaque nested composite with video buses. */
   readonly preservesOpaqueInput?: true
-  readonly capabilities: (effect: EffectDescriptor) => readonly EffectCapability[]
+  readonly capabilities: (effect: EffectDescriptor, context?: ColorGradingContext) => readonly EffectCapability[]
   readonly defaultParams: Readonly<Record<string, EffectParamValue>>
   readonly validateParams: (params: Readonly<Record<string, EffectParamValue>>) => string | null
   readonly migrateLegacy: (effect: EffectDescriptor) => EffectDescriptor | null
   readonly canvasFilter: (effect: EffectDescriptor) => string
-  readonly pixelEffect: (effect: EffectDescriptor) => CanvasPixelEffect | null
+  readonly pixelEffect: (effect: EffectDescriptor, context?: ColorGradingContext) => CanvasPixelEffect | null
   readonly animatableParams: Readonly<Record<string, EffectAnimationParameterSpec>>
 }
 
@@ -216,6 +218,7 @@ const CHROMA_KEY_REGISTRATION: EffectRegistration = Object.freeze({
 })
 
 const EFFECT_REGISTRY = new Map<string, EffectRegistration>([
+  ...colorGradingRegistrations().map((entry): [string, EffectRegistration] => [entry.type, entry]),
   ...spatialEffectRegistrations().map((entry): [string, EffectRegistration] => [entry.type, entry]),
   [COLOR_ADJUST_EFFECT_TYPE, COLOR_ADJUST_REGISTRATION],
   [MASK_EFFECT_TYPE, MASK_REGISTRATION],
@@ -493,6 +496,7 @@ function colorAdjustFilter(effect: EffectDescriptor): string {
 export function resolveEffectStack(
   effects: readonly EffectDescriptor[],
   capabilities: ReadonlySet<EffectCapability>,
+  context?: ColorGradingContext,
 ): readonly EffectResolution[] {
   return effects.map((effect) => {
     const registration = effectRegistration(effect.type)
@@ -524,7 +528,9 @@ export function resolveEffectStack(
         canvasFilter: null,
       }
     }
-    const missingCapability = registration.capabilities(effect).find((capability) =>
+    const resourceError = context ? colorGradingResourceError(effect, context) : null
+    if (resourceError) return { effect, label: registration.label, status: 'unsupported', detail: `${resourceError} The effect is preserved and bypassed.`, canvasFilter: null }
+    const missingCapability = registration.capabilities(effect, context).find((capability) =>
       !capabilities.has(capability),
     )
     if (missingCapability) {
@@ -574,12 +580,13 @@ export interface CanvasEffectStackResolution {
 export function resolvePostCompositeEffectStack(
   effects: readonly EffectDescriptor[],
   supportsPixelAccess: boolean,
+  context?: ColorGradingContext,
 ): CanvasEffectStackResolution {
   const capabilities = new Set<EffectCapability>([
     CANVAS_FILTER_EFFECT_CAPABILITY,
     ...(supportsPixelAccess ? [CANVAS_PIXEL_EFFECT_CAPABILITY] : []),
   ])
-  const effectsResolution = resolveEffectStack(effects, capabilities).map((resolution) => {
+  const effectsResolution = resolveEffectStack(effects, capabilities, context).map((resolution) => {
     if (effectSupportsSurface(resolution.effect, 'post-composite')) return resolution
     const registration = effectRegistration(resolution.effect.type)
     return {
@@ -595,7 +602,7 @@ export function resolvePostCompositeEffectStack(
   const pixelEffects = supportsPixelAccess
     ? effectsResolution.flatMap((resolution) => (
         resolution.status === 'ready'
-          ? effectRegistration(resolution.effect.type)?.pixelEffect(resolution.effect) ?? []
+          ? effectRegistration(resolution.effect.type)?.pixelEffect(resolution.effect, context) ?? []
           : []
       ))
     : []
@@ -614,21 +621,22 @@ export function resolveCanvasEffectStack(
   effects: readonly EffectDescriptor[],
   supportsCanvasFilter: boolean,
   supportsPixelAccess = false,
+  context?: ColorGradingContext,
 ): CanvasEffectStackResolution {
   const capabilities = new Set<EffectCapability>()
   if (supportsCanvasFilter) capabilities.add(CANVAS_FILTER_EFFECT_CAPABILITY)
   if (supportsPixelAccess) capabilities.add(CANVAS_PIXEL_EFFECT_CAPABILITY)
-  const resolutions = resolveEffectStack(effects, capabilities)
+  const resolutions = resolveEffectStack(effects, capabilities, context)
   const usePixelPath = resolutions.some((resolution) => (
     resolution.status === 'ready'
-    && effectRegistration(resolution.effect.type)?.pixelEffect(resolution.effect) !== null
-    && effectRegistration(resolution.effect.type)?.capabilities(resolution.effect)
+    && effectRegistration(resolution.effect.type)?.pixelEffect(resolution.effect, context) !== null
+    && effectRegistration(resolution.effect.type)?.capabilities(resolution.effect, context)
       .includes(CANVAS_PIXEL_EFFECT_CAPABILITY)
   ))
   const pixelEffects = usePixelPath
     ? resolutions.flatMap((resolution) => (
         resolution.status === 'ready'
-          ? effectRegistration(resolution.effect.type)?.pixelEffect(resolution.effect) ?? []
+          ? effectRegistration(resolution.effect.type)?.pixelEffect(resolution.effect, context) ?? []
           : []
       ))
     : []

@@ -1,3 +1,4 @@
+import { isColorGradingType } from '../domain/colorGradingEffects'
 import { captureEffectPreset, presetAttributeTemplate, type EffectPreset, type PresetLibraryMutation } from '../domain/effectPresets'
 import { effectRegistration, registeredEffects, resolveEffectStack, type EffectCapability } from '../domain/effectStack'
 import type { EffectDescriptor } from '../domain/schema'
@@ -58,7 +59,7 @@ const descriptions: Record<string, string> = {
   'builtin.chroma-key': 'Remove a chosen color with soft edges and spill suppression.',
 }
 export function builtInEffectChoices() {
-  return registeredEffects().map((registration) => ({
+  return registeredEffects().filter((registration) => !isColorGradingType(registration.type)).map((registration) => ({
     label: registration.label, description: descriptions[registration.type] ?? registration.label,
     surfaces: registration.surfaces,
     effect: { id: 'template', type: registration.type, version: registration.version, enabled: true, params: { ...registration.defaultParams } },

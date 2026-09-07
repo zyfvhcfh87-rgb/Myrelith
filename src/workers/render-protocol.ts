@@ -1,3 +1,4 @@
+import type { PortableColorLut } from '../domain/colorLutCatalog'
 /**
  * workers/render-protocol.ts — The canonical message contract between the
  * main-thread render bridge (engine/, Phase 4.1c) and workers/
@@ -72,6 +73,14 @@ export interface RenderWorkerCapabilities {
  * exact decoded-byte ledger.
  */
 export interface RenderWorkerRuntimeTelemetrySnapshot {
+  readonly colorGrading?: {
+    readonly bytes: number
+    readonly peakBytes: number
+    readonly entries: number
+    readonly pendingTasks: number
+    readonly active: boolean
+    readonly ports: number
+  }
   readonly enabled: boolean
   readonly active: {
     readonly videoSources: number
@@ -199,6 +208,7 @@ export interface RenderFrameMessage {
 
 /** Messages the main thread sends to the render worker. */
 export type ToRenderWorker =
+  | { readonly type: 'setColorLuts'; readonly catalog: readonly PortableColorLut[] }
   | {
       /** Hand over the visible drawing surface. Sent once; transferred. */
       type: 'init'

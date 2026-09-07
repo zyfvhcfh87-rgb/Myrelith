@@ -1,3 +1,5 @@
+import { resolveAdjustmentAtFrame } from '../domain/adjustmentItems'
+import { EMPTY_COLOR_GRADING_CONTEXT, type ColorGradingContext } from '../domain/colorGradingEffects'
 import { videoBusStacks, resolveVideoBusEffects } from '../domain/videoBusStage'
 /** App-owned projection from the real preview renderer into UI-readable state. */
 
@@ -5,6 +7,7 @@ import {
   CANVAS_FILTER_EFFECT_CAPABILITY,
   CANVAS_PIXEL_EFFECT_CAPABILITY,
   resolveEffectStack,
+  resolvePostCompositeEffectStack,
   type EffectCapability,
 } from '../domain/effectStack'
 import {
@@ -12,7 +15,7 @@ import {
   effectAnimationTracks,
   resolveClipAnimationAtFrame,
 } from '../domain/clipAnimation'
-import type { Clip, EffectDescriptor, EffectId, TimelineDoc } from '../domain/schema'
+import type { AdjustmentItem, Clip, EffectDescriptor, EffectId, TimelineDoc } from '../domain/schema'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import type {
   PreviewEffectStatus,
@@ -53,6 +56,8 @@ function previewDetail(
 }
 
 export interface PreviewEffectStatusIndex {
+  readonly adjustments: readonly AdjustmentItem[]
+  readonly animatedAdjustments: readonly AdjustmentItem[]
   readonly busEffects: readonly EffectDescriptor[]
   readonly effectClips: readonly Clip[]
   readonly animatedEffectClips: readonly Clip[]
@@ -77,7 +82,8 @@ export function createPreviewEffectStatusIndex(
       }
     }
   }
-  return { effectClips, animatedEffectClips, busEffects: videoBusStacks(doc).flat() }
+  const adjustments = doc.tracks.flatMap((track) => track.adjustments ?? [])
+  return { adjustments, animatedAdjustments: adjustments.filter((item) => item.animation.effectTracks.length > 0), effectClips, animatedEffectClips, busEffects: videoBusStacks(doc).flat() }
 }
 
 function projectClips(
@@ -86,12 +92,13 @@ function projectClips(
   timelineFrame: number,
   projected: Map<EffectId, PreviewEffectStatus>,
   work?: PreviewEffectStatusWork,
+  context: ColorGradingContext = EMPTY_COLOR_GRADING_CONTEXT,
 ): void {
   const available = previewCapabilities(capabilities)
   for (const clip of clips) {
     if (work) work.clipsResolved++
     const resolvedClip = resolveClipAnimationAtFrame(clip, timelineFrame)
-    for (const resolution of resolveEffectStack(resolvedClip.effects, available)) {
+    for (const resolution of resolveEffectStack(resolvedClip.effects, available, context)) {
       projected.set(resolution.effect.id, {
         label: resolution.label,
         status: resolution.status,
@@ -105,11 +112,15 @@ export function projectIndexedPreviewEffectStatuses(
   index: PreviewEffectStatusIndex,
   capabilities: RenderWorkerCapabilities | null,
   timelineFrame: number,
+  context: ColorGradingContext = EMPTY_COLOR_GRADING_CONTEXT,
 ): ReadonlyMap<EffectId, PreviewEffectStatus> {
   const projected = new Map<EffectId, PreviewEffectStatus>()
-  projectClips(index.effectClips, capabilities, timelineFrame, projected)
-  for (const resolution of resolveVideoBusEffects(index.busEffects, capabilities?.canvasPixelAccess === true).effects) {
+  projectClips(index.effectClips, capabilities, timelineFrame, projected, undefined, context)
+  for (const resolution of resolveVideoBusEffects(index.busEffects, capabilities?.canvasPixelAccess === true, context).effects) {
     projected.set(resolution.effect.id, { label: resolution.label, status: resolution.status, detail: resolution.detail })
+  }
+  for (const item of index.adjustments) for (const resolution of resolvePostCompositeEffectStack(resolveAdjustmentAtFrame(item, timelineFrame).effects, capabilities?.canvasPixelAccess === true, context).effects) {
+    projected.set(resolution.effect.id, { label: resolution.label, status: resolution.status, detail: previewDetail(resolution.status, resolution.detail, capabilities) })
   }
   return projected
 }
@@ -126,6 +137,7 @@ export function projectPlannedPreviewEffectStatuses(
   plan: VideoCompositionPlan,
   capabilities: RenderWorkerCapabilities | null,
   current: ReadonlyMap<EffectId, PreviewEffectStatus>,
+  context: ColorGradingContext = EMPTY_COLOR_GRADING_CONTEXT,
 ): ReadonlyMap<EffectId, PreviewEffectStatus> {
   if (!plan.items.some((item) => item.kind === 'sequence-background')) return current
   const available = previewCapabilities(capabilities)
@@ -135,8 +147,12 @@ export function projectPlannedPreviewEffectStatuses(
       : item.kind === 'text' ? [item.clip]
         : item.kind === 'crossfade' ? item.requests.map((request) => request.clip)
           : []
-    for (const clip of clips) {
-      for (const resolution of resolveEffectStack(clip.effects, available)) {
+    const stacks = clips.map((clip) => resolveEffectStack(clip.effects, available, context))
+    if (item.kind === 'adjustment') stacks.push(resolvePostCompositeEffectStack(item.adjustment.effects, capabilities?.canvasPixelAccess === true, context).effects)
+    if (item.kind === 'video-bus') stacks.push(resolveVideoBusEffects(item.effects, capabilities?.canvasPixelAccess === true, context).effects)
+    if ('trackEffects' in item) stacks.push(resolveVideoBusEffects(item.trackEffects ?? [], capabilities?.canvasPixelAccess === true, context).effects)
+    for (const stack of stacks) {
+      for (const resolution of stack) {
         const previous = planned.get(resolution.effect.id)
         // One durable effect can be active at different times in two instances.
         // Report an unavailable instance even if another instance is ready.
@@ -172,14 +188,15 @@ export function refreshAnimatedPreviewEffectStatuses(
   timelineFrame: number,
   current: ReadonlyMap<EffectId, PreviewEffectStatus>,
   work?: PreviewEffectStatusWork,
+  context: ColorGradingContext = EMPTY_COLOR_GRADING_CONTEXT,
 ): ReadonlyMap<EffectId, PreviewEffectStatus> {
-  if (index.animatedEffectClips.length === 0) return current
+  if (index.animatedEffectClips.length === 0 && index.animatedAdjustments.length === 0) return current
   const available = previewCapabilities(capabilities)
   let projected: Map<EffectId, PreviewEffectStatus> | null = null
   for (const clip of index.animatedEffectClips) {
     if (work) work.clipsResolved++
     const resolvedClip = resolveClipAnimationAtFrame(clip, timelineFrame)
-    for (const resolution of resolveEffectStack(resolvedClip.effects, available)) {
+    for (const resolution of resolveEffectStack(resolvedClip.effects, available, context)) {
       const next = {
         label: resolution.label,
         status: resolution.status,
@@ -195,6 +212,12 @@ export function refreshAnimatedPreviewEffectStatuses(
       projected.set(resolution.effect.id, next)
     }
   }
+  for (const item of index.animatedAdjustments) for (const resolution of resolvePostCompositeEffectStack(resolveAdjustmentAtFrame(item, timelineFrame).effects, capabilities?.canvasPixelAccess === true, context).effects) {
+    const next = { label: resolution.label, status: resolution.status, detail: previewDetail(resolution.status, resolution.detail, capabilities) }
+    const previous = current.get(resolution.effect.id)
+    if (previous?.status === next.status && previous.detail === next.detail && previous.label === next.label) continue
+    projected ??= new Map(current); projected.set(resolution.effect.id, next)
+  }
   return projected ?? current
 }
 
@@ -207,10 +230,12 @@ export function projectPreviewEffectStatuses(
   doc: TimelineDoc,
   capabilities: RenderWorkerCapabilities | null,
   timelineFrame: number,
+  context: ColorGradingContext = EMPTY_COLOR_GRADING_CONTEXT,
 ): ReadonlyMap<EffectId, PreviewEffectStatus> {
   return projectIndexedPreviewEffectStatuses(
     createPreviewEffectStatusIndex(doc),
     capabilities,
     timelineFrame,
+    context,
   )
 }

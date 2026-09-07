@@ -18,6 +18,7 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
+import { DEFAULT_COLOR_WHEELS } from '../domain/colorWheels'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import { DEFAULT_MANUAL_LENS_CORRECTION } from '../domain/lensCorrection'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
@@ -3775,4 +3776,43 @@ describe('static-image worker ownership', () => {
       h.posts.filter((post) => post.type === 'assetConfigured'),
     ).toHaveLength(0)
   })
+})
+
+
+test('grading owner settles supersession before catalog replacement and releases its ledger on close', async () => {
+  const h = makeHarness({ supportsCanvasPixels: true })
+  const doc = makeDoc([])
+  doc.masterVideoEffects = [{ id: 'grade', type: 'builtin.lift-gamma-gain', version: 1, enabled: true, params: { ...DEFAULT_COLOR_WHEELS, liftR: 0.2 } }]
+  await h.core.handleMessage(initMsg(h)); await h.core.handleMessage(docMsg(doc))
+  const scratch = h.scratch()!.canvas
+  Object.defineProperty(scratch.getContext('2d'), 'canvas', { value: scratch })
+  const telemetry = async (id: number) => {
+    await h.core.handleMessage({ type: 'requestRuntimeTelemetry', requestId: id })
+    const result = h.posts.at(-1)
+    if (result?.type !== 'runtimeTelemetry') throw new Error('No grading ledger')
+    return result.snapshot.colorGrading
+  }
+  const gradingMsg = (id: number) => ({ ...renderMsg(id, 0, 'seek', []), plan: { frame: 0, items: [{ kind: 'video-bus' as const, target: 'master' as const, sequenceId: doc.id, trackId: '', frame: 0, instancePath: [], effects: doc.masterVideoEffects! }] } })
+  try {
+    await h.core.handleMessage(gradingMsg(801))
+    expect(h.posts.filter((post) => post.type === 'error')).toEqual([])
+    expect(await telemetry(802)).toMatchObject({ bytes: 768, entries: 1, active: false, pendingTasks: 0 })
+    let replacement: Promise<void> | undefined
+    for (const surface of h.createdSurfaces()) {
+      const ctx = surface.canvas.getContext('2d')!
+      if (!ctx.getImageData) continue
+      const read = ctx.getImageData.bind(ctx)
+      ctx.getImageData = (...args) => {
+        const data = read(...args)
+        if (!replacement) replacement = Promise.resolve().then(() => h.core.handleMessage({ type: 'setColorLuts', catalog: [] }))
+        return data
+      }
+    }
+    await h.core.handleMessage(gradingMsg(803))
+    await replacement
+    expect(h.posts.find((post) => post.type === 'compositeDone' && post.requestId === 803)).toMatchObject({ status: 'superseded' })
+    await h.core.handleMessage(gradingMsg(804))
+    expect(h.posts.find((post) => post.type === 'compositeDone' && post.requestId === 804)).toMatchObject({ status: 'drawn' })
+  } finally { await h.core.handleMessage({ type: 'close' }) }
+  expect(await telemetry(805)).toMatchObject({ bytes: 0, entries: 0, active: false, pendingTasks: 0, ports: 0 })
 })

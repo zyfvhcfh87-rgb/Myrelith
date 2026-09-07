@@ -1,5 +1,6 @@
+import { EMPTY_COLOR_GRADING_CONTEXT, type ColorGradingContext } from '../domain/colorGradingEffects'
 import { COLOR_LUT_LIMITS, type PortableColorLutV1 } from '../domain/colorLut'
-import { immutableColorLuts, isColorLutV1 } from '../domain/colorLutCatalog'
+import { immutableColorLuts, isColorLutV1, colorLutContext, type PortableColorLut } from '../domain/colorLutCatalog'
 import { applyColorLutToProject, removeUnusedColorLuts, type ColorGradingTarget } from '../domain/colorGradingEdits'
 import type { ColorLutImportReply, ColorLutImportRequest } from '../domain/colorLutImport'
 import { createProjectFileSnapshot, serializeProjectFile } from '../domain/projectFile'
@@ -107,4 +108,13 @@ export function removeUnusedProjectColorLuts(): string | null {
   const state = useDocumentStore.getState()
   try { return commitPortableColorEdit(state.project, state.projectGeneration, removeUnusedColorLuts(state.project)) }
   catch (cause) { return cause instanceof Error ? cause.message : 'Could not remove unused LUTs.' }
+}
+
+let contextCatalog: readonly PortableColorLut[] | undefined
+let currentContext: ColorGradingContext = EMPTY_COLOR_GRADING_CONTEXT
+/** One app-owned facts snapshot; UI never decodes table data. */
+export function currentColorGradingContext(): ColorGradingContext {
+  const catalog = useDocumentStore.getState().project.colorLuts
+  if (catalog !== contextCatalog) { contextCatalog = catalog; currentContext = colorLutContext(catalog ?? []) }
+  return currentContext
 }

@@ -507,3 +507,58 @@ Browser plugin was unavailable; the approved repository Playwright setup used
 muted Chromium at http://127.0.0.1:41732, 1440 by 900. Local server startup needed
 the sandbox's loopback-listening allowance. Pixel grading UI/rendering is still
 outside this gate; this evidence does not claim those later acceptance flows.
+
+
+## Gate 3 evidence, 2026-09-08
+
+The three versioned grading stages now execute through one bounded asynchronous
+owner shared by preview and export. Catalog messages are separate from frame
+plans; failed sends remain retryable, generation changes supersede active work,
+and replacement waits for the previous borrow to settle. Runtime telemetry
+reports lookup bytes, entry count, pending tasks and ports. Readback/context-loss
+failures on grading reject the frame; older unrelated stacks retain their policy.
+Unavailable enabled grading blocks export and remains visibly bypassed in preview.
+Clip, transition, text, adjustment, nested track/master and ordered plugin paths
+all use the same registry and evaluator. New controls remained hidden for this gate.
+
+All 381 focused tests in 11 files and all 17 runner checks pass. Build/typecheck,
+lint and diff whitespace checks pass. New tests cover cache eviction before
+allocation, content replacement under a reused id, 256 animated cache entries,
+budget rejection before source fetch, exact stage/alpha bytes, context-loss and
+readback injection, transactional bridge sends, supersession and settled close.
+Initial new-test failures were a missing helper scope, an incomplete fake Canvas
+source and a timer racing an already completed tiny frame. The final lifecycle
+test delivers replacement from the first readback to exercise active work reliably.
+
+The muted Chromium 151.0.7922.34 CPU matrix passes all 45 cells on macOS 25.6.0,
+arm64 Apple M5 Max, Node 26.8.1. Each uses two warmups and ten recorded samples.
+Worst p95 single/eight-stage times are 19.5/152.3 ms at 720p, 39.1/335.7 ms at
+1080p and 157.4/1261.0 ms at 4K. Mixed eight-stage 4K p95 is 711.6 ms. Delivered
+4K cancellation settles in 0.2 ms; final lookup bytes, entries, ports and requests
+are zero. Peak lookup storage is 1,080,480 bytes. Cold catalog decode/identity
+materialization takes 21.4 ms. The raw samples and evaluator source hashes are
+in [issue196-grading-runtime.json](evidence/issue196-grading-runtime.json).
+These measure CPU evaluation and task-yield overhead, not real-time 4K playback
+or native GPU memory. GPU details were not captured for this CPU run.
+
+Three functional Chromium checks pass: production nested composition including
+transitions, captions, adjustments, masks and a working WebGL2 lens path; real
+Program worker plus original-media VP9 export; and the same flow with the
+repository's installed, trusted Audited Invert plugin. The explicit child
+compositor matches every byte (maximum difference zero). Pre-encode same-raster
+preview/export pixels are separately exact in the pixel tests. Before the codec
+run, the fixture declares VP9 at 5 Mbps, a flat interior patch and at most six
+RGB code values with alpha exactly 255. Observed codec error is at most one RGB
+value; the plugin fixture is exact. Repeated export cancellation leaves the shared
+media-admission ledger equal to its initial state. Missing embedded LUTs reject
+export. No page errors or console warnings/errors were observed.
+
+Separate two-warmup/ten-sample browser measurements give native-33 text parser
+p95 8.6 ms, readback p95 at most 0.8/4.5/8.0 ms at 720p/1080p/4K, and full 720p
+Program render p95 27.5 ms (built-ins) / 31.2 ms (trusted plugin). These include
+complete source-to-presentation work as reported by the production worker;
+readback and parser measurements are separate. Evidence is in
+[issue196-grading-compositor.json](evidence/issue196-grading-compositor.json).
+Canvas context loss is qualified by injected reported loss/readback failure;
+this does not claim an operating-system GPU reset test. UI, presets, parade and
+complete acceptance remain later gates.

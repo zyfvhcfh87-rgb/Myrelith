@@ -414,6 +414,9 @@ function frozenPixelEffect(effect: CanvasPixelEffect | null): CanvasPixelEffect 
   if (effect.kind === 'chroma-key') {
     return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
   }
+  if (effect.kind === 'cube-lut') return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
+  if (effect.kind === 'rgb-curves') return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
+  if (effect.kind === 'lift-gamma-gain') return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
   return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
 }
 

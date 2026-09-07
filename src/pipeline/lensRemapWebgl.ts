@@ -1,3 +1,4 @@
+import { colorGradingAdditionalBytes, documentGradingEffects } from '../domain/colorGradingBudget'
 import { hasVideoBusEffects, videoBusAdditionalBytes } from '../domain/videoBusStage'
 import {
   createValidatedLensCorrectionMap,
@@ -602,7 +603,8 @@ export function createDocumentLensRemapProvider(
         width,
         height,
         activeIncludeExportReadback,
-        hasVideoBusEffects(doc) ? videoBusAdditionalBytes(activeOutputWidth, activeOutputHeight, doc.width, doc.height) : 0,
+        Math.max(hasVideoBusEffects(doc) ? videoBusAdditionalBytes(activeOutputWidth, activeOutputHeight, doc.width, doc.height) : 0,
+          colorGradingAdditionalBytes(documentGradingEffects(doc), activeOutputWidth, activeOutputHeight, doc.width, doc.height)),
       )
       if (!budget.allowed) {
         throw new LensRemapUnavailableError(

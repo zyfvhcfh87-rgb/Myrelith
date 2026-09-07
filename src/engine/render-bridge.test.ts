@@ -13,6 +13,7 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
+import { parseCube, portableColorLut } from '../domain/colorLut'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { Clip, FrameRate, TimelineDoc, Track } from '../domain/schema'
 import {
@@ -2320,4 +2321,20 @@ describe('postMessage send failures', () => {
     await expect(bridge.openAsset('C', new Blob(['retry']), R30, BUDGET))
       .rejects.toThrow('Worker has been terminated')
   })
+})
+
+
+test('LUT catalog is sent once per snapshot/generation and failed sends remain retryable', () => {
+  const { worker, bridge } = makeBridge(makeDoc([]))
+  const catalog = [portableColorLut('table', 'Table', parseCube('LUT_1D_SIZE 2\n0.1 0.2 0.3\n0.8 0.7 0.6'))]
+  bridge.setColorLuts(catalog, 1); bridge.setColorLuts(catalog, 1)
+  expect(worker.posted.filter(({ msg }) => msg.type === 'setColorLuts')).toHaveLength(1)
+  bridge.setColorLuts(catalog, 2)
+  expect(worker.posted.filter(({ msg }) => msg.type === 'setColorLuts')).toHaveLength(2)
+  const replacement = [...catalog]
+  worker.throwOnPost = (message) => message.type === 'setColorLuts' ? new Error('structured clone failed') : null
+  expect(() => bridge.setColorLuts(replacement, 2)).toThrow('structured clone failed')
+  worker.throwOnPost = null
+  bridge.setColorLuts(replacement, 2)
+  expect(worker.posted.filter(({ msg }) => msg.type === 'setColorLuts')).toHaveLength(3)
 })

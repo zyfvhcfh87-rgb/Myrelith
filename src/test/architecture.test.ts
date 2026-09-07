@@ -159,6 +159,7 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
       'pipeline/static-image.ts',
     ])],
     ['workers/renderWorker/core.ts', new Set([
+      'pipeline/colorGradingRuntime.ts',
       'pipeline/lensRemap.ts',
       'pipeline/lensRemapWebgl.ts',
       'pipeline/render.ts',

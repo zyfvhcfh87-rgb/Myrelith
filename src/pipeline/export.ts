@@ -1,3 +1,5 @@
+import { ColorGradingRuntime, ColorGradingCancelledError, type ColorGradingFrame } from './colorGradingRuntime'
+import type { PortableColorLut } from '../domain/colorLutCatalog'
 /**
  * pipeline/export.ts — CFR timeline export orchestration.
  *
@@ -123,6 +125,8 @@ export interface ExportVideoSink {
 }
 
 export interface ExportDeps {
+  readonly colorLuts?: readonly PortableColorLut[]
+  readonly checkColorGradingCurrent?: () => void
   composite: typeof compositeFrame
   /** Attempt-scoped executor shared with the declarative preview plan contract. */
   videoEffectStageExecutor?: VideoEffectStageExecutor | null
@@ -194,6 +198,7 @@ async function compositeAndCloseLease(
   lease: ExportFrameLease,
   composite: typeof compositeFrame,
   videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
+  grading: ColorGradingFrame,
 ): Promise<void> {
   let failed = false
   let failure: unknown
@@ -239,6 +244,7 @@ async function compositeAndCloseLease(
       fullResolutionPresentationProfile(doc, 'export'),
       sink.lensRemapProvider,
       trackedVideoEffectStageExecutor,
+      grading,
     )
     // Preview intentionally softens source failures into `missing` so a later
     // repaint can recover. Export has no retry boundary: preserve the exact
@@ -320,6 +326,7 @@ export async function* exportTimeline(
   let mediaClosed = false
   let operationalFailure = false
   let operationalCause: unknown
+  let gradingRuntime: ColorGradingRuntime | null = null
 
   const closeMedia = async (): Promise<void> => {
     if (mediaClosed) return
@@ -332,6 +339,10 @@ export async function* exportTimeline(
     const validatedSettings = admission.settings
     const frameCount = admission.frameCount
     const frameDurationSec = admission.frameDurationSec
+    gradingRuntime = new ColorGradingRuntime()
+    const check = deps.checkColorGradingCurrent ?? (() => {})
+    gradingRuntime.setCatalog(deps.colorLuts ?? [], check)
+    const grading: ColorGradingFrame = { runtime: gradingRuntime, context: gradingRuntime.context, check, policy: 'fail' }
     yield 0
 
     sink = await deps.createVideoSink(doc, validatedSettings)
@@ -344,6 +355,7 @@ export async function* exportTimeline(
         lease,
         deps.composite,
         deps.videoEffectStageExecutor,
+        grading,
       )
 
       const timestampSec = assertBoundaryTime(
@@ -358,14 +370,17 @@ export async function* exportTimeline(
     // output. A close failure can still cancel a direct-file target here;
     // after finalize succeeds the file is intentionally a completed result.
     await closeMedia()
+    check()
     const result = await sink.finalize()
     sinkFinalized = true
     return result
   } catch (cause) {
+    if (cause instanceof ColorGradingCancelledError) return undefined
     operationalFailure = true
     operationalCause = cause
     throw cause
   } finally {
+    gradingRuntime?.dispose()
     await cleanupExport(
       sink,
       sinkFinalized,

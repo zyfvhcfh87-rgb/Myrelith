@@ -1,3 +1,6 @@
+import { documentGradingEffects } from '../domain/colorGradingBudget'
+import { isColorGradingType } from '../domain/colorGradingEffects'
+import { ColorGradingCancelledError } from '../pipeline/colorGradingRuntime'
 /**
  * app/exportController.ts — composition root for timeline export (Phase 5.2a).
  *
@@ -508,6 +511,7 @@ async function drainExport(
       if (step.done) {
         session.generatorDone = true
         if (step.value === undefined) {
+          if (session.cancelRequested) return undefined
           throw new Error('Export completed without an export result')
         }
         return step.value
@@ -666,7 +670,11 @@ async function preflightAndRunExport(
       await media.close()
       return undefined
     }
-    generator = deps.runExport(doc, settings, media, pipelineDeps)
+    const gradingAuthored = reachableSequences(projectTarget).some((sequence) => documentGradingEffects(sequence).some((effect) => isColorGradingType(effect.type)))
+    generator = deps.runExport(doc, settings, media, gradingAuthored ? { ...pipelineDeps,
+      colorLuts: projectTarget.project.colorLuts,
+      checkColorGradingCurrent: () => { if (lifecycle.cancelRequested) throw new ColorGradingCancelledError() },
+    } : pipelineDeps)
     // Factories may synchronously re-enter cancellation. A never-started async
     // generator has no finally ownership, so close controller-owned media here.
     if (lifecycle.cancelRequested) {

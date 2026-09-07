@@ -1,3 +1,4 @@
+import type { ColorGradingContext } from './colorGradingEffects'
 /** Immutable portable tables, budgeted independently of derived render caches. */
 import { COLOR_LUT_LIMITS, COLOR_LUT_TYPE, colorLutMetadataError, colorLutSampleCount, decodeColorLut, type PortableColorLutV1 } from './colorLut'
 import type { EffectDescriptor } from './schema'
@@ -139,4 +140,13 @@ export function newColorLutReferenceError(previous: SequenceProject, next: Seque
     if (typeof effect.params.lutId !== 'string' || !(next.colorLuts ?? []).some((entry) => entry.id === effect.params.lutId)) return 'The LUT reference is unavailable. Choose an embedded table first.'
   }
   return null
+}
+
+/** Derive small serializable status facts once per admitted catalog, retaining no decoded buffers. */
+export function colorLutContext(catalog: readonly PortableColorLut[]): ColorGradingContext {
+  return { colorLuts: catalog.map((entry) => {
+    if (!isColorLutV1(entry)) return { id: entry.id, identity: false, error: `Embedded LUT version ${entry.version} is unsupported.` }
+    try { return { id: entry.id, identity: decodeColorLut(entry).identity, error: null } }
+    catch (cause) { return { id: entry.id, identity: false, error: cause instanceof Error ? cause.message : 'Invalid embedded LUT.' } }
+  }) }
 }

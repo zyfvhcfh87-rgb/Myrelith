@@ -92,7 +92,9 @@ non-negotiable rules. Re-read it at the start of every coding session.
     `workers/renderWorker/core.ts` may import `pipeline/render.ts` (the pure
     compositing core: imports domain/ only, no browser I/O — the render worker
     is its runtime host, as `export.ts` is the finite export host),
-    `pipeline/lensRemap.ts` and `pipeline/lensRemapWebgl.ts` (the bounded
+    `pipeline/colorGradingRuntime.ts` (one bounded lookup cache and disposable
+    task queue, shared with finite export; replacement waits for the serial
+    composite chain), `pipeline/lensRemap.ts` and `pipeline/lensRemapWebgl.ts` (the bounded
     source-space WebGL2 contract/backend owned by that worker),
     `pipeline/static-image.ts` (the bounded browser/worker-safe still-image
     inspection + decode boundary). The focused
