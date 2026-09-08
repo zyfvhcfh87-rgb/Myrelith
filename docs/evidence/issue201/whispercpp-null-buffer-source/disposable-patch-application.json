@@ -1,0 +1,19 @@
+{
+  "status": "proposed-patches-applied-to-disposable-exact-source",
+  "files": [
+    {
+      "path": "ggml/src/ggml-alloc.c",
+      "bytes": 48060,
+      "sha256": "ef30215c5021f2754823383d28d860d2c874b2102ef0e74d0117b06ca4427464"
+    },
+    {
+      "path": "ggml/src/ggml-backend.cpp",
+      "bytes": 96141,
+      "sha256": "ba799b8d2ef1045a4b9fc0df1f1114989578159977e76908de42c88c0ad42603"
+    }
+  ],
+  "cCompiled": false,
+  "wasmExecuted": false,
+  "scope": "Textual application and exact changed-source inspection only; no C syntax or runtime qualification.",
+  "initialReceiptCheckFailure": "A count assertion expected one guarded reserve call in the whole file; another function already guards an identical call. Corrected to require exactly one additional guard relative to the accepted source. Both patch applications had already succeeded; no reapplication or native execution occurred."
+}
