@@ -70,6 +70,21 @@ function cubicCoordinate(
     + amount * amount * amount
 }
 
+/** Shared exact bisection path; callers supply progress already clamped to [0, 1]. */
+export function solveAnimationBezierParameter(
+  easing: Extract<ClipAnimationEasing, { type: 'cubic-bezier' }>,
+  bounded: number,
+): number {
+  let low = 0
+  let high = 1
+  for (let iteration = 0; iteration < 24; iteration++) {
+    const middle = (low + high) / 2
+    if (cubicCoordinate(middle, easing.x1, easing.x2) < bounded) low = middle
+    else high = middle
+  }
+  return (low + high) / 2
+}
+
 /** Deterministic CSS-style cubic-bezier progress using a fixed bisection budget. */
 export function animationEasingProgress(
   easing: ClipAnimationEasing,
@@ -78,14 +93,7 @@ export function animationEasingProgress(
   const bounded = Math.min(1, Math.max(0, progress))
   if (easing.type === 'hold') return 0
   if (easing.type === 'linear') return bounded
-  let low = 0
-  let high = 1
-  for (let iteration = 0; iteration < 24; iteration++) {
-    const middle = (low + high) / 2
-    if (cubicCoordinate(middle, easing.x1, easing.x2) < bounded) low = middle
-    else high = middle
-  }
-  return cubicCoordinate((low + high) / 2, easing.y1, easing.y2)
+  return cubicCoordinate(solveAnimationBezierParameter(easing, bounded), easing.y1, easing.y2)
 }
 
 function evaluateValidatedAnimationTrackPosition(

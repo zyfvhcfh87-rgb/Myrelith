@@ -1,6 +1,7 @@
 /** Held path values and budget hooks; shared timeline traversal belongs to #199. */
 import { EFFECT_STACK_LIMITS, isUnsafeEffectParamKey } from './effectBounds'
 import { maskBezierPathValidationError, MAX_MASK_PATH_CHARACTERS } from './maskPath'
+import { MAX_KEYFRAME_FRAME } from './scalarAnimation'
 import type { EffectDescriptor } from './schema'
 
 export const MASK_PATH_VALUE_TYPE = 'mask-bezier-path'
@@ -14,7 +15,7 @@ export const MASK_PATH_ANIMATION_LIMITS = Object.freeze({
   keyMetadataBytes: 128,
   trackMetadataBytes: 128,
   historySnapshotsPerBranch: 100,
-  maximumFrameMagnitude: 1_000_000_000,
+  maximumFrameMagnitude: MAX_KEYFRAME_FRAME,
 })
 
 export interface EffectPathAnimationKeyframe {

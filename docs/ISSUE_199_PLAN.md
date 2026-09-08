@@ -1,9 +1,10 @@
 # Issue #199 — unified animation editor plan
 
-Status: Gate 0 review permits representation-neutral scalar/timing extraction.
-The first extraction is under validation; schema 22 and feature implementation
-remain gated on reviewed title/path adapter commits. This document does not
-approve its own contract, schema migration, or acceptance gates.
+Status: The supervisor accepted the scalar/timing extraction and both pure
+title/path foundations. A standalone crop certificate is being committed for
+review; crop runtime promotion remains gated on that review. Schema 22 foundation
+work is now authorized after merging the exact shared integration commit. Batch
+operations and UI remain later gates. This document does not approve itself.
 
 Issue: <https://github.com/zyfvhcfh87-rgb/Myrelith/issues/199>
 
@@ -115,16 +116,16 @@ Resolve crop in the same `resolveClipAnimationAtFrame` result consumed by the
 composition planner, Program geometry, tracking/stabilization projection, and
 export. Never resolve it only in Inspector or CSS.
 
-Proposed admission proof: partition each opposing pair at its key boundaries.
-First prove a monotone enclosure for the exact admitted Bézier/evaluator,
-including the fixed 24-step bisection error and floating-point evaluation.
-Mathematical cubic monotonicity alone is insufficient. Use conservative outward
-numeric error bounds for endpoint ranges and their sum. Certify an interval
-only when the proven sum of upper bounds is at most 0.99; otherwise subdivide
-at exact integer
-midpoints, test actual endpoints, and recurse only until neighboring integer
-frames. Bound proof work to a proposed 16,384 interval visits per clip edit or
-validation, plus a proposed 1,048,576-visit whole-project ceiling. An unsafe
+The standalone certificate partitions all four lanes at the union of key
+boundaries. The shared 24-step decision tree orders its resulting parameter by
+progress; the rounded cubic output need not itself be monotone. Directed
+interval arithmetic follows the exact scalar polynomial operation tree and
+value interpolation. Exact keys and holds use their actual short-circuits.
+Certify an interval only when both rounded upper-bound sums are at most 0.99
+and every individual edge stays in range. Otherwise subdivide at integer
+midpoints until a singleton is evaluated by the canonical scalar authority.
+Work stops at 16,384 interval visits per clip edit or validation, plus a
+1,048,576-visit whole-project ceiling and 100,000 retained key visits. An unsafe
 frame or exhausted proof budget rejects with a specific
 reason before mutation. Include endpoint-held regions and the ranges needed
 for real crossfade handles. Keep this proof cached by immutable relevant
@@ -139,6 +140,12 @@ to conceal an invalid interpolated rectangle. Tests must cover opposing
 different-easing keys whose endpoints are valid but interior sum is unsafe,
 ordinary opposing moves that are safe, huge signed frame ranges, and equality
 at the crop boundary.
+
+The implementation, numerical argument, bounded-memory argument and qualified
+evidence are in [the crop certificate gate](evidence/issue199/crop-certificate.md).
+It has no runtime or serialization caller yet. A range certificate applies only
+to that exact immutable crop/tracks/range; crossfade handles and invalidation
+must be included when the reviewed proof is integrated.
 
 ## Dependencies and shared ownership
 

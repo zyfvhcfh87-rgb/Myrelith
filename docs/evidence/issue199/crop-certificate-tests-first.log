@@ -1,0 +1,29 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/domain/cropAnimationCertificate.test.ts src/domain/scalarAnimation.test.ts src/domain/animationTiming.test.ts src/domain/maskPathAnimation.test.ts --maxWorkers=1
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/domain/cropAnimationCertificate.test.ts (14 tests | 1 failed) 42ms
+     × does not admit one representable number above 0.99 or a rounded opposing-edge excess 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/domain/cropAnimationCertificate.test.ts > standalone crop animation certificate > does not admit one representable number above 0.99 or a rounded opposing-edge excess
+AssertionError: expected 0.99 to be greater than 0.99
+ ❯ src/domain/cropAnimationCertificate.test.ts:53:35
+     51|     expect(certifyCropAnimation({ ...request(), crop: { ...zero, left:…
+     52|     const candidate = request({ left: { keyframes: [key(0, 0.5, hold)]…
+     53|     expect(0.5 + nextAbove(0.49)).toBeGreaterThan(MAX_CROP_SUM)
+       |                                   ^
+     54|     const result = certifyCropAnimation(candidate)
+     55|     expect(result).toMatchObject({ ok: false, reason: 'unsafe-crop', f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  1 failed | 34 passed (35)
+   Start at  11:23:43
+   Duration  1.15s (transform 83ms, setup 67ms, import 105ms, tests 84ms, environment 692ms)

@@ -1,0 +1,11 @@
+Parent 9fa4bb7b388afad69da4eb39214e1976c5c641ad
+Timeline CURRENT_TIMELINE_SCHEMA_VERSION = 21
+f3e0f4906079c74651362621d4ad6ba256c76ccbfaa591eb4a9ae97ea3324ac3  src/domain/cropAnimationCertificate.ts
+d3b5aba5c22e485bafb5caea913f58f758b7c1797c207ea3538bad50e367a9f0  src/domain/cropAnimationCertificate.test.ts
+eccb657fd0ab91b3ee4bb095513a4e45659f8b7b27c7fb8c945447a0a9f6b7a4  src/domain/scalarAnimation.ts
+0f1d6d8a905e3f1aa1a771a8ad1c2a3d9f5a2870dd86a662112f1dba40ab6c87  src/domain/maskPathAnimation.ts
+e94adb7a2a12f395f17a405138fec929083b3cc1ac903d1c957e5a678dc9caba  src/test/fixtures/animation-scalar-baseline.json
+8c334a2b614522b9dd4d2716ca5ea833f1bc949235463f4cddb70f2456b1b3d6  src/test/fixtures/animation-timing-baseline.json
+Certificate references: src/domain/cropAnimationCertificate.test.ts:8:} from './cropAnimationCertificate'
+Built JS contains none of the three unique crop proof messages.
+All proof imports are test-only; no schema/runtime enablement.
