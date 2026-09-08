@@ -1,3 +1,6 @@
+import { observeProjectSession, type SessionEvent } from './sessionObservation'
+import { RECOVERY_SAVE_DELAY_MS } from '../../../src/app/projectPersistenceController'
+import { useProjectSessionStore } from '../../../src/state/projectSessionStore'
 import { PcmCoverage } from './pcmCoverage'
 import { buildFixtureProject } from './fixture'
 /** Disposable source-module browser adapter. Never imported by the production app. */
@@ -56,10 +59,17 @@ async function imported(file: File) {
   const asset = useMediaStore.getState().assets.get(result.assetId); check(asset, 'Imported asset absent'); return asset
 }
 export async function prepare() {
+  const launcherProject = useDocumentStore.getState().project
   originals = [await mediaFile(), wave(true)]
   const video = await imported(originals[0]), sound = await imported(originals[1])
   const project = buildFixtureProject(video, sound)
-  useDocumentStore.getState().setProject(project)
+  check(useDocumentStore.getState().project === launcherProject, 'Fixture generation changed the active project')
+  return savePortable(project)
+}
+export function retimeAndSplit() {
+  const project = useDocumentStore.getState().project
+  check(project.id === 'g4' && JSON.stringify(project.sequences) === JSON.stringify(parseProjectFile(portable).sequences), 'Canonical fixture activation differs')
+  const videoId = project.sequences[0].tracks.flatMap((t) => t.clips).find((c) => c.id === 'g4-video')!.assetId
   const beforeRetime = useDocumentStore.getState().project
   useDocumentStore.getState().retimeClip('g4-video', { numerator: 2, denominator: 1 })
   check(useDocumentStore.getState().project !== beforeRetime, 'Retime was refused')
@@ -72,7 +82,7 @@ export async function prepare() {
   useDocumentStore.getState().undo(); check(useDocumentStore.getState().project === beforeSplit, 'Split undo differs')
   useDocumentStore.getState().redo(); check(useDocumentStore.getState().project === split, 'Split redo differs')
   useTransportStore.getState().setSelectedClip('g4-video'); useTransportStore.getState().setPlayheadFrame(1)
-  return { retimed: retimed.sourceTimeMap, split: useDocumentStore.getState().doc.tracks.flatMap((t) => t.clips).filter((c) => c.assetId === video.id).map((c) => ({ id: c.id, timeline: c.timelineRange, source: c.sourceTimeMap, animation: c.animation })) }
+  return { retimed: retimed.sourceTimeMap, split: useDocumentStore.getState().doc.tracks.flatMap((t) => t.clips).filter((c) => c.assetId === videoId).map((c) => ({ id: c.id, timeline: c.timelineRange, source: c.sourceTimeMap, animation: c.animation })) }
 }
 let titleKeyCheckpoint: ReturnType<typeof useDocumentStore.getState> | null = null
 export function titleKeyFrame(frame: number) { titleKeyCheckpoint ??= useDocumentStore.getState(); useTransportStore.getState().setPlayheadFrame(frame) }
@@ -91,8 +101,11 @@ export async function installOracleAndSave() {
   const audioFile = wave(false), asset = await imported(audioFile); originals = [originals[0], audioFile]
   const project = useDocumentStore.getState().project
   useDocumentStore.getState().setProject({ ...project, sequences: project.sequences.map((s) => ({ ...s, tracks: s.tracks.map((t) => ({ ...t, clips: t.clips.map((c) => c.id === 'g4-audio' ? { ...c, assetId: asset.id, name: audioFile.name } : c) })) })) })
-  const current = useDocumentStore.getState().project, used = new Set(current.sequences.flatMap((s) => s.tracks.flatMap((t) => t.clips.map((c) => c.assetId))))
-  portable = serializeProjectFile(createProjectFileSnapshot(current, [...useMediaStore.getState().descriptors.values()].filter((d) => used.has(d.id))))
+  return savePortable(useDocumentStore.getState().project)
+}
+async function savePortable(project: ReturnType<typeof useDocumentStore.getState>['project']) {
+  const used = new Set(project.sequences.flatMap((s) => s.tracks.flatMap((t) => t.clips.map((c) => c.assetId))))
+  portable = serializeProjectFile(createProjectFileSnapshot(project, [...useMediaStore.getState().descriptors.values()].filter((d) => used.has(d.id))))
   return { portable, files: await Promise.all(originals.map(async (f) => { const bytes = new Uint8Array(await f.arrayBuffer()); return { name: f.name, bytes: encode(bytes), sha256: await digest(bytes) } })) }
 }
 export function verifyReopened() {
@@ -186,3 +199,28 @@ export async function rejectMissingFont() {
   check(/font|fallback/i.test(reason), `Missing font refusal absent: ${reason}`); return { reason }
 }
 export async function dispose() { await pauseAndDrainPlayback(); await disposeExport(); await disposeTransport(); await disposePreview(); originals = []; raw = []; portable = ''; encoded = null; referenceProject = null; return mediaResourceAdmission.snapshot() }
+
+let sessionObservation: ReturnType<typeof observeProjectSession> | null = null
+export function observeSession(write: (event: SessionEvent) => Promise<void>) {
+  check(!sessionObservation, 'Session observation already active')
+  sessionObservation = observeProjectSession(write)
+  return sessionObservation.flush()
+}
+export async function sessionCheckpoint() {
+  check(sessionObservation, 'Session observation is absent')
+  await sessionObservation.flush()
+  const events = sessionObservation.snapshot()
+  check(events.every((e) => !e.errors.length), 'Project session error was observed')
+  return { events: events.length, last: events.at(-1) }
+}
+export async function finishSessionObservation() {
+  // Allow the real recovery debounce to fire, then await its projected terminal state.
+  await new Promise((resolve) => setTimeout(resolve, RECOVERY_SAVE_DELAY_MS + 100))
+  const start = performance.now()
+  while (useProjectSessionStore.getState().recoveryPhase === 'saving' || useProjectSessionStore.getState().savePhase === 'saving') {
+    check(performance.now() - start < 3000, 'Project persistence did not settle')
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  // Keep observing through the driver's final evidence and context-close cleanup.
+  return sessionCheckpoint()
+}

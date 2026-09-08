@@ -1,0 +1,37 @@
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/test/issue199G4Session.test.ts src/test/issue199G4Fixture.test.ts
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+
+ Test Files  2 passed (2)
+      Tests  9 passed (9)
+   Start at  23:00:58
+   Duration  1.02s (transform 796ms, setup 64ms, import 1.01s, tests 28ms, environment 508ms)
+
+✔ cold samples each use and close a fresh BrowserContext (0.672792ms)
+✔ source identity rejects end-of-run drift (0.234167ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (221.83625ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (135.561458ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.384833ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.776ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.129208ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.279708ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.141ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.102667ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.309084ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.58475ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.851167ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.103708ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.154917ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.196ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.112875ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 546.162917

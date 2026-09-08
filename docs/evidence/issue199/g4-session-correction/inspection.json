@@ -1,0 +1,76 @@
+{
+  "trace": "/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z/trace.zip",
+  "traceSha256": "71bebf745f0c5ae82887ffcbccf60e1178f8ae5b4e663a045eb7a7f64bdeb716",
+  "recoveryAlerts": [
+    [
+      "SPAN",
+      {
+        "class": "toolbar-recovery-status",
+        "data-state": "error",
+        "aria-live": "polite",
+        "aria-atomic": "true",
+        "role": "alert",
+        "title": "Could not update the recovery copy: Recovery journal belongs to a different document"
+      },
+      "Recovery copy failed"
+    ]
+  ],
+  "transportButtons": [
+    {
+      "class": "transport-button transport-play",
+      "aria-label": "play",
+      "title": "play"
+    }
+  ],
+  "sourceCause": [
+    {
+      "path": "scripts/issue199/g4/scenario.ts at cbb9ad8",
+      "finding": "prepare replaced active project with g4 through setProject after launcher started its own persistence journal."
+    },
+    {
+      "path": "src/app/projectPersistenceController.ts",
+      "finding": "startSession owns recoveryJournalId until canonical suspend/start; runRecoverySave captures the current document and appends under that journal."
+    },
+    {
+      "path": "src/app/localProjectStorage.ts",
+      "finding": "appendRecoverySnapshot rejects stored.documentId differing from incoming snapshot.documentId with the exact observed error."
+    },
+    {
+      "path": "src/app/projectController/projectControllerCore.ts",
+      "finding": "leave and activateProject own asynchronous teardown, media replacement, setProject, local binding and fresh persistence start."
+    }
+  ],
+  "selectorAudit": [
+    {
+      "selector": "Start a new project / Project name / .project-field-resolution select / Create project / Commands",
+      "source": "ProjectLaunch.tsx and Toolbar.tsx; retained first and second traces",
+      "status": "Initial setup passed attempt2; selection720retained."
+    },
+    {
+      "selector": "play / pause exact button names",
+      "source": "TransportBar.tsx aria-label isPlaying ? pause : play; retained play node",
+      "status": "Both corrected to actual lowercase labels."
+    },
+    {
+      "selector": "Animation / Animation workspace / Filter animation lanes / Rectangle Position Y row / Set key / key value / Copy / Paste / Back to Timeline",
+      "source": "ToolButtons.tsx, AnimationEntry.tsx, AnimationWorkspace.tsx, AnimationGrid.tsx, AnimationKeyControls.tsx",
+      "status": "Native step passed attempt2; no selector change. Tool entry remains available without selection."
+    },
+    {
+      "selector": "Projects / Open a project / portable file accept .myrelith,.webcut / Open with 2 offline",
+      "source": "Toolbar.tsx and ProjectLaunch.tsx real file-change/openProjectFile/activateResumedProject flow",
+      "status": "Used for initial canonical activation and final roundtrip; native proof pending."
+    },
+    {
+      "selector": "Relink <file> once OR Relink <file> exact labels",
+      "source": "MediaPool.tsx input aria-label branches on handlePickerAvailable",
+      "status": "Union covers only the two actual capability-dependent source labels; strictness retained."
+    },
+    {
+      "selector": "Dope sheet / Back to Timeline / Animation focus return",
+      "source": "AnimationWorkspace.tsx and ToolButtons.tsx",
+      "status": "Actual button texts/aria labels verified; fixed viewport/overflow/focus assertions unchanged."
+    }
+  ],
+  "profile": "Retained artifact; no profile relaunch, inspection through a browser, deletion or native retry during diagnosis."
+}

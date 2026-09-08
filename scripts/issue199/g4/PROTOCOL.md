@@ -24,10 +24,20 @@ caffeinate helper. Every tracked production source, adapter and configuration pa
 is hashed before launch and rechecked after cleanup. This is a diagnostic using
 actual production controllers/pipelines through source imports, **not ordinary
 production-bundle or first-paint acceptance**. No new application entry, production
-source import of the adapter, engine UI import, or engine resource global is introduced. One temporary data-only Playwright binding
-writes partial decoded facts to the private evidence directory. Raw results identify this qualification and exact source SHA.
+source import of the adapter, engine UI import, or engine resource global is introduced. Temporary data-only Playwright bindings
+write partial decoded facts and passive project-session evidence to the private
+directory. Raw results identify this qualification and exact source SHA.
 
 ## Bounded mixed case
+
+Fixture generation first returns a portable file and source bytes without replacing
+the launcher's active document. The driver preserves those bytes, then opens the
+fixture through the real Projects / Open file / Open with two offline / per-file
+relink flow. Only after canonical activation does it retime and split. This creates
+the fixture's own persistence session and recovery journal. The earlier direct
+document replacement caused the retained different-document recovery-journal
+error; that failure remains preserved. Product persistence is not disabled or reset
+by the diagnostic. Native transport locators use the observed lowercase play/pause.
 
 A native shared-Animation step sets a rectangle title key at frame 14, enters
 -120 through the numeric field, copies it and pastes at frame 20. Each action
@@ -113,6 +123,20 @@ finally; inputs, temporary surfaces and export ownership are explicitly disposed
   stationary crawl, wrong gain/pan, truncated PCM, wrong fps and RGB mismatch.
 
 ## Failure and release
+
+A passive observer subscribes to the real project-session store before creating
+the initial project and remains active through context close. It records each
+distinct session/save/recovery phase, errors, recovery/save timestamps and current
+project ID, including errors subsequently cleared by the UI. It writes at most256
+events, with at most16messages of2048characters each per event; reaching the event
+limit records a failure instead of silently dropping later states. Every session,
+save, recovery or media-relink error fails the current action immediately through
+the driver race and is retained in `session-events.json` and the raw result.
+Each checkpoint flushes evidence under a5-second deadline. The final checkpoint
+allows the actual500ms recovery debounce plus100ms, then at most3seconds for an
+active write to settle, all inside a5-second driver bound. Empty console output
+cannot override any recorded session error. This observes the actual lifecycle;
+it does not inject recovery state, suppress errors or claim long-term crash recovery.
 
 After awaited playback drain and export, transport and preview disposal, the final
 admission snapshot is saved before asserting zero essential owners, monitor

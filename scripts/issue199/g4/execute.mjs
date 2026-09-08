@@ -22,19 +22,34 @@ assert.match(head, /^[a-f0-9]{40}$/); assert.equal(git('rev-parse', 'HEAD'), hea
 const pin = () => { assert.equal(git('rev-parse', 'HEAD'), head); assert.equal(git('status', '--porcelain'), ''); for (const [p, expected] of Object.entries(sourceHashes)) assert.equal(hash(readFileSync(join(root, p))), expected, p) }
 const out = process.env.ISSUE199_G4_OUTPUT; assert.ok(out?.startsWith('/private/tmp/issue199-g4/')); const profile = join(out, 'chromium-profile')
 mkdirSync(out, { recursive: true }); const { chromium } = await import('@playwright/test')
-const report = { format: 'issue199-g4-v1', head, startedAt: new Date().toISOString(), status: 'preflight', sourceHashes, limits: LIMITS, steps: [], problems: [], processes: [], cleanup: {}, qualification: 'Source-module diagnostic against production implementations, Vite dev server; not ordinary production bundle/first-paint, performance or OS Save-picker acceptance.' }
+const report = { format: 'issue199-g4-v1', head, startedAt: new Date().toISOString(), status: 'preflight', sourceHashes, limits: LIMITS, steps: [], problems: [], sessionEvents: [], processes: [], cleanup: {}, qualification: 'Source-module diagnostic against production implementations, Vite dev server; not ordinary production bundle/first-paint, performance or OS Save-picker acceptance.' }
 const save = () => writeFileSync(join(out, 'result.json'), JSON.stringify(report, null, 2) + '\n')
 const delay = (ms) => new Promise((r) => setTimeout(r, ms)), known = []
 const listening = () => new Promise((r) => { const s = createConnection({ host: '127.0.0.1', port: 5199 }); s.once('connect', () => { s.destroy(); r(true) }); s.once('error', () => r(false)); s.setTimeout(500, () => { s.destroy(); r(false) }) })
 function processRows() { const p = spawnSync('/bin/ps', ['-axo', 'pid=,ppid=,lstart=,command='], { encoding: 'utf8', timeout: 5000 }); assert.equal(p.status, 0, p.stderr); return parseProcessRows(p.stdout) }
 function sample(label) { const rows = ownedProcessRows(processRows(), profile, known); for (const row of rows) if (!known.some((r) => sameProcessIdentity(r, row))) known.push(row); report.processes.push({ label, at: new Date().toISOString(), rows }); save(); return rows }
-let server, awake, context, page, serverLog = '', current = 'preflight'
-const call = (name, arg) => page.evaluate(async ({ name, arg }) => { const module = await import('/scripts/issue199/g4/scenario.ts'); return module[name](name === 'decodeOutput' ? (value) => globalThis.__issue199Evidence(value) : arg) }, { name, arg })
+let server, awake, context, page, serverLog = '', current = 'preflight', rejectSessionFailure
+const sessionFailure = new Promise((_, reject) => { rejectSessionFailure = reject }); void sessionFailure.catch(() => undefined)
+const call = (name, arg) => page.evaluate(async ({ name, arg }) => { const module = await import('/scripts/issue199/g4/scenario.ts'); return module[name](name === 'decodeOutput' ? (value) => globalThis.__issue199Evidence(value) : name === 'observeSession' ? (value) => globalThis.__issue199Session(value) : arg) }, { name, arg })
+function preservePortable(saved, name) {
+  writeFileSync(join(out, name), saved.portable)
+  for (const file of saved.files) { const bytes = Buffer.from(file.bytes, 'base64'); assert.equal(hash(bytes), file.sha256); writeFileSync(join(out, file.name), bytes) }
+  return { portableSha256: hash(saved.portable), files: saved.files.map(({ bytes: _bytes, ...metadata }) => metadata) }
+}
+async function openPortable(name, sources) {
+  await page.getByRole('button', { name: 'Projects', exact: true }).click(); await page.getByRole('button', { name: 'Open a project', exact: true }).click()
+  await page.locator('input[type="file"][accept=".myrelith,.webcut"]').setInputFiles(join(out, name))
+  await page.getByRole('button', { name: 'Open with 2 offline', exact: true }).click()
+  for (const source of sources) await page.getByLabel(`Relink ${source} once`, { exact: true }).or(page.getByLabel(`Relink ${source}`, { exact: true })).setInputFiles(join(out, source))
+  await page.waitForFunction(async () => { const { useMediaStore } = await import('/src/state/mediaStore.ts'); return useMediaStore.getState().assets.size === 2 })
+}
 async function step(name, action) {
   current = name; console.log(`START ${name}`); sample(`before ${name}`)
+  assert.deepEqual(report.problems, [])
   let timer
   try {
-    const detail = await Promise.race([action(), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${name}: 90 second deadline`)), 90000) })])
+    const detail = await Promise.race([action(), sessionFailure, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${name}: 90 second deadline`)), 90000) })])
+    await bounded('session evidence flush', 5000, () => call('sessionCheckpoint'))
     await bounded('post-step settle', 5000, () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))))
     const stem = `step-${String(report.steps.length + 1).padStart(2, '0')}`
     await bounded('post-step screenshot', 5000, () => page.screenshot({ path: join(out, `${stem}.png`) })); writeFileSync(join(out, `${stem}-dom.txt`), await bounded('post-step DOM', 5000, () => page.locator('body').innerText()))
@@ -54,14 +69,22 @@ try {
   report.chromium = context.browser().version(); await context.tracing.start({ screenshots: true, snapshots: true, sources: true })
   page = context.pages()[0]; page.setDefaultTimeout(15000)
   await page.exposeFunction('__issue199Evidence', (partial) => writeFileSync(join(out, 'partial-decode.json'), JSON.stringify(partial, null, 2) + '\n'))
+  await page.exposeFunction('__issue199Session', (event) => {
+    assert.equal(event.sequence, report.sessionEvents.length); assert.ok(report.sessionEvents.length < 256)
+    report.sessionEvents.push({ step: current, ...event })
+    writeFileSync(join(out, 'session-events.json'), JSON.stringify(report.sessionEvents, null, 2) + '\n')
+    if (event.errors.length) { report.problems.push({ step: current, type: 'project-session', errors: event.errors }); save(); rejectSessionFailure(new Error(`Project session failure: ${event.errors.join('; ')}`)) }
+  })
   page.on('pageerror', (e) => report.problems.push({ step: current, type: 'pageerror', text: e.stack }))
   page.on('console', (m) => { if (['warning', 'error'].includes(m.type())) report.problems.push({ step: current, type: m.type(), text: m.text() }) })
   page.on('dialog', async (d) => { if (d.type() === 'confirm' && d.message() === 'This project has unsaved changes. Leave them behind and return to Projects?') await d.accept(); else { report.problems.push({ step: current, type: 'dialog', text: d.message() }); await d.dismiss() } })
   await step('bounded encoded fixture, canonical retime/split and undo', async () => {
-    await page.goto('http://127.0.0.1:5199'); await page.getByRole('button', { name: 'Start a new project', exact: true }).click()
+    await page.goto('http://127.0.0.1:5199'); await call('observeSession'); await page.getByRole('button', { name: 'Start a new project', exact: true }).click()
     await page.getByLabel('Project name').fill('Mixed encoded Animation G4'); await page.locator('.project-field-resolution select').selectOption('720')
     await page.getByRole('button', { name: 'Create project', exact: true }).click(); await page.getByRole('button', { name: 'Commands', exact: true }).waitFor()
-    return call('prepare')
+    const files = preservePortable(await call('prepare'), 'initial-mixed.myrelith')
+    await openPortable('initial-mixed.myrelith', ['g4-source.webm', 'g4-silence.wav'])
+    return { files, ...await call('retimeAndSplit') }
   })
   await step('native shared title Set key, numeric value, copy and paste', async () => {
     await page.getByRole('button', { name: 'Animation', exact: true }).click()
@@ -77,19 +100,13 @@ try {
     await workspace.getByRole('button', { name: 'Back to Timeline', exact: true }).click(); return facts
   })
   await step('muted native playback uses silent live audio', async () => {
-    await page.getByRole('button', { name: 'Play', exact: true }).click()
+    await page.getByRole('button', { name: 'play', exact: true }).click()
     await page.waitForFunction(async () => { const { useTransportStore } = await import('/src/state/transportStore.ts'); return useTransportStore.getState().playheadFrame >= 8 })
-    await page.getByRole('button', { name: 'Pause', exact: true }).click()
-    const saved = await call('installOracleAndSave'); writeFileSync(join(out, 'mixed.myrelith'), saved.portable)
-    for (const f of saved.files) { const bytes = Buffer.from(f.bytes, 'base64'); assert.equal(hash(bytes), f.sha256); writeFileSync(join(out, f.name), bytes) }
-    return { portableSha256: hash(saved.portable), files: saved.files.map(({ bytes: _bytes, ...metadata }) => metadata) }
+    await page.getByRole('button', { name: 'pause', exact: true }).click()
+    return preservePortable(await call('installOracleAndSave'), 'mixed.myrelith')
   })
   await step('portable reopen and exact media relink', async () => {
-    await page.getByRole('button', { name: 'Projects', exact: true }).click(); await page.getByRole('button', { name: 'Open a project', exact: true }).click()
-    await page.locator('input[type="file"][accept=".myrelith,.webcut"]').setInputFiles(join(out, 'mixed.myrelith'))
-    await page.getByRole('button', { name: 'Open with 2 offline', exact: true }).click()
-    for (const name of ['g4-source.webm', 'g4-oracle.wav']) await page.getByLabel(`Relink ${name} once`, { exact: true }).setInputFiles(join(out, name))
-    await page.waitForFunction(async () => { const { useMediaStore } = await import('/src/state/mediaStore.ts'); return useMediaStore.getState().assets.size === 2 })
+    await openPortable('mixed.myrelith', ['g4-source.webm', 'g4-oracle.wav'])
     const result = await call('verifyReopened'); assert.equal(result.retainedUnknownEffect, true); return result
   })
   await step('Animation workspace 1440/720 layout and focus', async () => {
@@ -125,7 +142,9 @@ try {
   await step('drain all owned media', async () => {
     const admission = await call('dispose')
     writeFileSync(join(out, 'final-admission.json'), JSON.stringify(admission, null, 2) + '\n')
-    verifyDrained(admission); return admission
+    verifyDrained(admission)
+    const session = await bounded('final passive session observation', 5000, () => call('finishSessionObservation'))
+    assert.deepEqual(report.sessionEvents.flatMap((e) => e.errors), []); return { admission, session }
   })
   report.status = 'passed'
 } catch (error) {
