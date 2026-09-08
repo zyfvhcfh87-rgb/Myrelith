@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /** Shared descriptor transaction used by mask gestures and numeric editing. */
 import { clipAnimation, clipAnimationKeyframeCount, documentAnimationKeyframeGrowthAllowed, MAX_KEYFRAMES_PER_TRACK, resolveClipAnimationAtFrame } from './clipAnimation'
 import { effectDescriptorBoundsError, effectReplacementBudgetError } from './effectBounds'
@@ -60,7 +61,7 @@ export function editMaskParamsAtFrame(project: SequenceProject, target: MaskEdit
   if (Object.keys(changedPatch).length === 0) return doc
   const animated = (clipAnimation(owner.clip).effectTracks ?? []).filter((track) => track.effectId === target.effectId && Object.hasOwn(changedPatch, track.parameter))
   if (animated.length) {
-    if (owner.clip.text) throw new Error('Text mask parameters are static.')
+    if (isProceduralTitleClip(owner.clip)) throw new Error('Text mask parameters are static.')
     if (animated.some((track) => !effectAnimationParameterSpec(owner.effect, track.parameter))) throw new Error('This mask parameter animation is unavailable.')
     const growing = animated.filter((track) => !track.keyframes.some((key) => key.frame === localFrame))
     if (growing.some((track) => track.keyframes.length >= MAX_KEYFRAMES_PER_TRACK) || !documentAnimationKeyframeGrowthAllowed(doc, growing.length)) throw new Error('This mask edit exceeds the keyframe budget.')

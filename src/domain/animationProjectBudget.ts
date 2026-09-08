@@ -54,11 +54,12 @@ export function animationRetentionError(
   return result.ok ? null : result.reason
 }
 
-/** Preserve complete orphan lane references; never invent a title owner on disk. */
+/** Pair real title payloads with their lanes; retain tracks-only orphan owners. */
 export function projectTitleAnimationOwners(project: SequenceProject): TitleBudgetOwner[] {
   const owners: TitleBudgetOwner[] = []
   for (const sequence of project.sequences) for (const track of sequence.tracks) for (const clip of track.clips) {
-    if (clip.animation?.titleTracks?.length) owners.push({ titleTracks: clip.animation.titleTracks })
+    if (clip.title !== undefined) owners.push({ title: clip.title, titleTracks: clip.animation?.titleTracks })
+    else if (clip.animation?.titleTracks?.length) owners.push({ titleTracks: clip.animation.titleTracks })
     if (owners.length > TITLE_BUDGET_LIMITS.ownersPerSnapshot) return owners
   }
   return owners

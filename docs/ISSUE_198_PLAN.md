@@ -370,5 +370,6 @@ is accepted and its separate pure planning/operation slice is committed as
 `9c3cb54`; app review/preview implementation is now tested, with no Inspector
 activation yet. See
 [tracking implementation evidence](evidence/issue198/tracking-attachment.md).
-The shared schema 23 checkpoint must be merged before Inspector authoring and
-tracking browser acceptance. No tracking code was included in the held-path gate.
+The shared schema 23 checkpoint `4340f967` is now merged with the canonical title
+guard and all preview owners preserved. Inspector authoring and tracking browser
+acceptance remain open. No tracking code was included in the held-path gate.

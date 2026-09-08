@@ -6,6 +6,7 @@ import { evaluatePreparedEffectPathAnimationTrack, MASK_PATH_ANIMATION_LIMITS, M
 import { prepareCachedEffectPathAnimationTrack } from './effectPathAnimationResolution'
 import { clipSourceTimeMap, sourceTicksAtTimelineOffset } from './sourceTimeMap'
 import type { Clip, ClipAnimation, EffectDescriptor } from './schema'
+import { isProceduralTitleClip } from './textOverlay'
 
 export type MaskPathKeyEdit =
   | { readonly kind: 'set'; readonly frame: number; readonly value: string }
@@ -22,7 +23,7 @@ export function maskPathAnimationStatus(clip: Clip, effect: EffectDescriptor): {
   const dormant = effect.params.shape !== 'bezier'
   const commonError = clipAnimationValidationError(animation)
   if (commonError) return { track, dormant, reason: commonError }
-  if (clip.text) return { track, dormant, reason: 'Text mask paths stay static.' }
+  if (isProceduralTitleClip(clip)) return { track, dormant, reason: 'Text mask paths stay static.' }
   if (effect.type !== 'builtin.mask' || effect.version !== 1) return { track, dormant, reason: 'This mask effect version is unavailable.' }
   if (animation.effectTracks?.some((item) => item.effectId === effect.id && item.parameter === 'path')) {
     return { track, dormant, reason: 'Preserved scalar intent already owns the path parameter.' }

@@ -9,6 +9,7 @@ import { applyMaskTrackingWithResult } from './operations/maskTracking'
 import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import type { Clip, ClipAnimationKeyframe, EffectAnimationTrack, TimelineDoc } from './schema'
 import { clipSourceTimeMap, sourceTicksAtTimelineOffset } from './sourceTimeMap'
+import { expandedTitleProject, legacyTitleProject } from '../test/titleOwnerFixtures'
 
 function key(frame: number, value: number): ClipAnimationKeyframe {
   return { frame, value, sourceTimeTicks: frame * 1_000_000, easing: { type: 'linear' } }
@@ -152,6 +153,19 @@ describe('mask tracking project-space planning', () => {
 })
 
 describe('whole-proposal refusal', () => {
+  test('canonical legacy, supported and preserved-future title owners cannot receive or source mask tracking', () => {
+    const owners = [legacyTitleProject().sequences[0]!.tracks[0]!.clips[0]!, expandedTitleProject().sequences[0]!.tracks[0]!.clips[0]!, { title: { version: 99, future: 'preserve' } }]
+    for (const owner of owners) for (const subject of ['source', 'target'] as const) {
+      const f = fixture()
+      Object.assign(f[subject], { ...('text' in owner ? { text: owner.text } : {}), ...('title' in owner ? { title: owner.title } : {}) })
+      expect(createMaskTrackingPlan(f.doc, f.request)).toMatchObject({ ok: false, reason: expect.stringMatching(/media clip|timed video/) })
+      // Independently exercise the operation with a previously valid plan and a new title owner.
+      const clean = fixture(), candidate = plan(clean.doc, clean.request)
+      Object.assign(clean.target, { ...('text' in owner ? { text: owner.text } : {}), ...('title' in owner ? { title: owner.title } : {}) })
+      expect(applyMaskTrackingWithResult(clean.doc, candidate, null)).toMatchObject({ ok: false, reason: expect.stringMatching(/media clip/) })
+    }
+  })
+
   test.each(['forward', 'backward'] as const)('refuses first, interior and final loss caused by animated source crop in %s order', (direction) => {
     for (const kind of ['point', 'box'] as const) for (const badIndex of [0, 1, 2]) {
       const { doc, source, request } = fixture()

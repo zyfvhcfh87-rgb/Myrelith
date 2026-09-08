@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /** Immutable history-ready edits for manual source-geometry intent. */
 
 import type { ClipId, TimelineDoc } from './schema'
@@ -18,7 +19,7 @@ export function setManualLensCorrection(
     const clipIndex = track.clips.findIndex((clip) => clip.id === clipId)
     if (clipIndex < 0) continue
     const clip = track.clips[clipIndex]!
-    if (track.locked || track.kind !== 'video' || clip.text !== undefined) return doc
+    if (track.locked || track.kind !== 'video' || isProceduralTitleClip(clip)) return doc
     if (model !== null) {
       const error = lensCorrectionValidationError(model)
       if (error) return doc

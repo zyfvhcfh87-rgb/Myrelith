@@ -286,8 +286,8 @@ function transitionAtTarget(
     !from
     || !to
     || to.id !== target.toClipId
-    || from.text !== undefined
-    || to.text !== undefined
+    || from.text !== undefined || from.title !== undefined
+    || to.text !== undefined || to.title !== undefined
     || rangeEnd(from.timelineRange) !== to.timelineRange.startFrame
   ) return null
   const transition = track.transitions.find((candidate) => (

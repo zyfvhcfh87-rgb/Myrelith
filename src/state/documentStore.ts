@@ -3,6 +3,7 @@ import type { TitleElementIntent } from '../domain/titleElements'
 import { animationRetentionError } from '../domain/animationProjectBudget'
 import type { EffectPathAnimationTrack } from '../domain/maskPathAnimation'
 import { COLOR_LUT_LIMITS } from '../domain/colorLut'
+import { createTitleElementIdAllocator } from '../domain/titleOwnership'
 import { newColorLutReferenceError, retainedColorLutBytes, type PortableColorLut } from '../domain/colorLutCatalog'
 import { sequenceProjectWithinEditBudget } from '../domain/projectSequences'
 import { editVideoBus, type VideoBusEdit, type VideoBusTarget } from '../domain/videoBusEffects'
@@ -235,6 +236,7 @@ export interface DocumentState {
   retainedTitleClipboardOwners: readonly TitleBudgetOwner[]
   retainedTitleClipboardElements: readonly TitleElementIntent[]
   retainedTitleClipboardKeys: readonly object[]
+  commitAnimationEdit: (expectedProject: SequenceProject, generation: number, sequenceId: string, next: SequenceProject) => string | null
   commitProjectEdit: (expectedProject: SequenceProject, generation: number, next: SequenceProject) => string | null
 
   /** Complete portable edit snapshot. Browser resources remain elsewhere. */
@@ -791,6 +793,17 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   retainedTitleClipboardOwners: [],
   retainedTitleClipboardElements: [],
   retainedTitleClipboardKeys: [],
+  commitAnimationEdit: (expectedProject, generation, sequenceId, next) => {
+    let error: string | null = null
+    set((state) => {
+      if (state.project !== expectedProject || state.projectGeneration !== generation || state.activeSequenceId !== sequenceId) { error = 'The animation project or active sequence changed.'; return state }
+      if (next === expectedProject) return state
+      if (!sequenceProjectWithinEditBudget(next)) { error = 'The animation edit exceeds project limits.'; return state }
+      error = projectCommitError(state, next)
+      return error ? state : commitProject(state, next)
+    })
+    return error
+  },
   commitProjectEdit: (expectedProject, generation, next) => {
     let error: string | null = null
     set((state) => {
@@ -1120,6 +1133,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   splitClipAtPlayhead: (playheadFrame) =>
     set((state) => {
       let next = state.doc
+      const allocateTitleId = createTitleElementIdAllocator(state.project, () => `title-element_${crypto.randomUUID()}`)
       // Collect targets from the CURRENT doc; left halves keep their ids, so
       // each original clip is split at most once even as `next` evolves.
       // A linked group is split via whichever member is visited first; mark
@@ -1137,7 +1151,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
               if (splitGroups.has(clip.linkGroupId)) continue
               splitGroups.add(clip.linkGroupId)
             }
-            next = linkedSplitClipAtFrame(next, clip.id, playheadFrame)
+            next = linkedSplitClipAtFrame(next, clip.id, playheadFrame, allocateTitleId)
           }
         }
       }
@@ -1315,7 +1329,8 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     )),
 
   splitClipAt: (clipId, frame) =>
-    set((state) => commit(state, linkedSplitClipAtFrame(state.doc, clipId, frame))),
+    set((state) => commit(state, linkedSplitClipAtFrame(state.doc, clipId, frame,
+      createTitleElementIdAllocator(state.project, () => `title-element_${crypto.randomUUID()}`)))),
 
   trimClip: (clipId, edge, deltaFrames) =>
     set((state) => commit(state, linkedTrimClip(state.doc, clipId, edge, deltaFrames))),
@@ -1362,7 +1377,8 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   applySequenceEdit: (plan, asset, catalog) =>
     set((state) => commit(
       state,
-      applySequenceEditToDocument(state.doc, plan, asset, catalog),
+      applySequenceEditToDocument(state.doc, plan, asset, catalog,
+        createTitleElementIdAllocator(state.project, () => `title-element_${crypto.randomUUID()}`)),
     )),
 
   addCrossfade: (fromClipId, toClipId, durationFrames) =>

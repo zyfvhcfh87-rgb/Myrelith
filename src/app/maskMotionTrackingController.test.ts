@@ -156,7 +156,10 @@ test('owned preview arbitration restores a sibling and background frame changes 
   useTransportStore.getState().setColorGradingPreview({ sequenceId: doc.id, effectId: 'grading', params: {}, document: doc })
   review.preview(true); expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('mask-tracking')
   useTransportStore.getState().setMaskPreview({ sequenceId: doc.id, effectId: 'gesture', params: {}, document: doc })
+  useTransportStore.getState().setAnimationPreview({ sequenceId: doc.id, document: doc })
   useTransportStore.getState().setPlayheadFrame(1)
+  expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('animation-gesture')
+  useTransportStore.getState().setAnimationPreview(null)
   expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('mask-gesture')
   useTransportStore.getState().setMaskPreview(null); expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('mask-tracking')
   review.cancel(); expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('color-grading')
@@ -216,4 +219,11 @@ test('Apply requires paused playback and an unchanged reviewed candidate', async
   if (!planned.ok || planned.kind !== 'mask-effect') throw new Error('Missing plan')
   expect(() => beginMaskMotionTrackingReview(analyzed, target, false, planned.plan.reviewKey + 'stale')).toThrow(/changed/)
   expect(useDocumentStore.getState()).toMatchObject({ project: before, past: [] })
+})
+
+test('mask dispatch refuses preserved future title owners even if connected media facts remain present', async () => {
+  const analyzed = await session()
+  editDoc((doc) => { doc.tracks.at(-1)!.clips[0]!.title = { version: 99, future: 'preserve' } })
+  expect(planMotionTrackingAttachment(analyzed, target, false)).toMatchObject({ ok: false, reason: expect.stringMatching(/media clip/) })
+  expect(useDocumentStore.getState().past).toEqual([])
 })

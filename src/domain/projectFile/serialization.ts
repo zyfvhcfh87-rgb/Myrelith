@@ -1,4 +1,5 @@
 import { immutableColorLuts } from '../colorLutCatalog'
+import { copyTitleDefinition } from '../titleOwnership'
 import type { Effect, TimelineDoc } from '../schema';
 import { masterAudioSettings, trackBalance, trackVolume } from '../audioMixer';
 import { compareTimelineMarkers } from '../timelineMarkers';
@@ -114,6 +115,7 @@ function portableTimelineSnapshot(document: TimelineDoc): TimelineDoc {
             params: cloneEffectParams(effect.params),
           })),
           ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
+          ...(clip.title === undefined ? {} : { title: copyTitleDefinition(clip.title) }),
           ...(clip.linkGroupId === undefined ? {} : { linkGroupId: clip.linkGroupId }),
         })),
         sequenceInstances: (track.sequenceInstances ?? []).map((instance) => ({

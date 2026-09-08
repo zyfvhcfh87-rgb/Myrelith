@@ -110,16 +110,40 @@ failed only because two new tests called nonexistent store setters; they now
 exercise the actual `setClipSelection` and `setIsPlaying` APIs. Both failed logs
 and the corrected narrow run remain separate. No production check was weakened.
 
-The Inspector does not yet expose these commands. Before UI integration, the
-parent directed merging exact shared title/animation checkpoint
-`4340f9675ad56aa320f2498cf107fd55f8819568` after committing the current edits.
-Its integration evidence has been read; the canonical title guard will be adopted
-by the new mask planner at that seam.
+The controller slice is committed as `05bb72b5f00f5bf26b92bd890247fe07bab0325d`.
+The Inspector does not yet expose these commands.
+
+## Shared schema 23 and preview integration
+
+Under the parent's explicit direction, exact shared title/animation checkpoint
+`4340f9675ad56aa320f2498cf107fd55f8819568` was merged after committing the app slice.
+Its integration evidence was read. The only source merge conflict was the
+effect-document preview owner union and its common input type. The resolution
+retains color grading, mask gestures, animation gestures and mask tracking under
+the same existing activation-order arbitration, using the shared narrow preview
+input type. No sibling owner or setter was dropped.
+
+The new mask planner now uses canonical `isProceduralTitleClip`, covering legacy,
+supported and opaque future titles. Source applicability consumes the integrated
+motion-tracking authority. New domain and app checks reject these title targets
+even when stale connected media facts are present. The combined preview test
+also proves animation-gesture precedence and restoration through all four owners.
+
+Combined focused checks passed **220 tests in 15 files plus 17 runner checks**;
+the actual `animationEditingController.test.ts` then passed **25 tests plus 17
+runner checks**. The first command had named a nonexistent
+`animationEditorController.test.ts`, which Vitest ignored; it is not counted in
+the 15-file result. The separate correct-path run closes that validation gap.
+Build/typecheck, lint and diff hygiene passed, with the existing Vite chunk
+advisory only. Logs: `.tmp/issue198-tracking-schema23-first-{tests,build,lint}.log`
+and `.tmp/issue198-tracking-schema23-animation-controller-tests.log`.
+
+The parent independently accepted pure source `9c3cb54` with 50 checks in four
+files plus 17 runner checks. App source and this combined checkpoint are now
+ready for parent review. No combined tracking browser or performance claim is made.
 
 ## Remaining gates
 
-- Merge and verify the accepted schema 23 title/animation checkpoint; adopt its
-  canonical supported/future title applicability guard.
 - Add dedicated tracking near-cap portable admission and remaining source/loss
   cases alongside the final Inspector slice.
 - Inspector must expose separate transform/mask targets and exact owned-lane

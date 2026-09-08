@@ -17,6 +17,7 @@ import { effectDescriptorBoundsError, effectDescriptorBudget } from '../effectBo
 import { audioEffectDescriptorBudget } from '../audioEffectBounds';
 import { sourceRangeForMap, sourceTimeSpeedCurveValidationError, sourceTimeMapValidationError, MAX_SOURCE_TIME_SPEED_FRAME, SOURCE_TIME_SPEED_EASINGS, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
 import { PROJECT_FILE_LIMITS, type PortableAssetDescriptor } from './projectTypes';
+import { readTitleDefinition } from '../titleElements';
 import { booleanValue, boundedArray, exactKeys, fail, finiteNumber, record, safeInteger, stringValue, validateLensCorrectionIntent } from './validationPrimitives';
 
 export function validateRange(value: unknown, path: string, minimumDuration: number): void {
@@ -371,10 +372,12 @@ export function validateSourceTimeMap(
 
 export function validateClip(value: unknown, path: string, trackKind: Track['kind'], context: ValidationContext): asserts value is Clip {
   const clip = record(value, path)
+  const procedural = clip.text !== undefined || clip.title !== undefined
+  if (clip.text !== undefined && clip.title !== undefined) fail(path, 'text and title are mutually exclusive')
   exactKeys(
     clip,
     ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'sourceTimeMap', 'timelineRange', 'transform', 'opacity', 'blendMode', 'volume', 'lensCorrection', 'visual', 'audio', 'effects', 'audioEffects'],
-    ['animation', 'text', 'linkGroupId'],
+    ['animation', 'text', 'title', 'linkGroupId'],
     path,
   )
   stringValue(clip.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
@@ -384,13 +387,13 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   context.timelineItemIds.add(clip.id)
   stringValue(clip.assetId, `${path}.assetId`, PROJECT_FILE_LIMITS.maxIdCharacters)
   if (
-    clip.text !== undefined
+    procedural
     && clip.assetId !== proceduralTextAssetId(clip.id)
   ) {
     fail(`${path}.assetId`, 'text clips must use their reserved procedural asset id')
   }
   const asset = context.assetsById.get(clip.assetId)
-  const proceduralText = clip.text !== undefined
+  const proceduralText = procedural
     && isProceduralTextAssetId(clip.assetId)
   if (!asset && !proceduralText) {
     fail(`${path}.assetId`, 'references an unknown asset')
@@ -434,7 +437,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
       || map.speedCurve?.points.length !== 0
     ) fail(`${path}.sourceTimeMap`, 'still clips must use the canonical 1x map')
   }
-  if (clip.text !== undefined) {
+  if (procedural) {
     if (stillSource) fail(`${path}.sourceMode`, 'text clips must use timed source mode')
     if (sourceRange.startFrame !== 0) {
       fail(`${path}.sourceRange.startFrame`, 'text clips must use procedural source start 0')
@@ -450,10 +453,10 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
       || map.speedCurve?.points.length !== 0
     ) fail(`${path}.sourceTimeMap`, 'text clips must use the canonical 1x map')
   }
-  if (clip.text === undefined && asset?.kind === 'image' && !stillSource) {
+  if (!procedural && asset?.kind === 'image' && !stillSource) {
     fail(`${path}.sourceMode`, 'image clips must use still source mode')
   }
-  if (stillSource && (asset?.kind !== 'image' || clip.text !== undefined)) {
+  if (stillSource && (asset?.kind !== 'image' || procedural)) {
     fail(`${path}.sourceMode`, 'still source mode requires an image media clip')
   }
   if (context.documentFrameRate === null) {
@@ -467,7 +470,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
     : 0
   if (
     !stillSource
-    && clip.text === undefined
+    && !procedural
     && sourceRange.startFrame + sourceRange.durationFrames > assetDurationFrames
   ) {
     fail(`${path}.sourceRange`, 'extends beyond the referenced asset duration')
@@ -480,7 +483,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   validateLensCorrectionIntent(clip.lensCorrection, `${path}.lensCorrection`)
   if (
     clip.lensCorrection !== null
-    && (trackKind !== 'video' || clip.text !== undefined)
+    && (trackKind !== 'video' || procedural)
   ) {
     fail(`${path}.lensCorrection`, 'manual lens correction requires a visual media clip')
   }
@@ -494,7 +497,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   validateClipAnimation(animation, `${path}.animation`, context)
   const animationKindError = clipAnimationKindError(
     trackKind,
-    clip.text !== undefined,
+    clip.title === undefined && procedural,
     animation,
   )
   if (animationKindError) fail(`${path}.animation`, animationKindError)
@@ -510,6 +513,10 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
     validateEffect(clip.effects[index], `${path}.effects[${index}]`, context)
   }
   validateAudioEffectStack(clip.audioEffects, `${path}.audioEffects`, context)
+  if (clip.title !== undefined) {
+    const title = readTitleDefinition(clip.title)
+    if (title.status === 'invalid') fail(`${path}.title`, title.reason)
+  }
   if (clip.text !== undefined) {
     validateText(clip.text, `${path}.text`)
     context.textCharacterCount += clip.text.content.length
@@ -528,9 +535,9 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
     )
   }
   if (trackKind === 'audio') {
-    if (clip.text !== undefined) fail(path, 'text clips cannot be placed on audio tracks')
+    if (procedural) fail(path, 'text and title clips cannot be placed on audio tracks')
     if (!asset?.hasAudio) fail(`${path}.assetId`, 'audio-track clip references an asset without audio')
-  } else if (clip.text === undefined && asset?.kind === 'audio') {
+  } else if (!procedural && asset?.kind === 'audio') {
     fail(`${path}.assetId`, 'video-track clip references an audio-only asset')
   }
 }

@@ -22,6 +22,7 @@ import {
   type SimilarityPathSample,
   type SimilarityTransform,
 } from './motionAnalysis'
+import { isProceduralTitleClip } from './textOverlay'
 import { MAX_ANALYSIS_SAMPLES } from './analysisCache'
 import type {
   Clip,
@@ -127,7 +128,7 @@ export function videoStabilizationAvailabilityReason(
   clip: Clip,
   source: VideoStabilizationSource | null,
 ): string | null {
-  if (clip.text !== undefined || clip.sourceMode !== 'timed') {
+  if (isProceduralTitleClip(clip) || clip.sourceMode !== 'timed') {
     return 'Stabilization is available only for timed video clips.'
   }
   if (clip.timelineRange.durationFrames < 2) {
