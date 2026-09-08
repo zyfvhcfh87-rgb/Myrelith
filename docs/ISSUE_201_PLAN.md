@@ -31,9 +31,11 @@ Current source inspection establishes these integration points:
 | `src/app/mediaJobScheduler.ts`, `mediaResourceAdmission.ts` | Scheduler already reserves shared analysis admission. One bounded speech job must use this authority and retain admission through cleanup. |
 | `src/app/audioAlignmentService.ts`, `audioAlignmentWorkerBridge.ts` | Reference ownership patterns only; do not reuse the alignment feature cache or its 200 Hz audio as transcription PCM. |
 
-No migration number is claimed. Request one timeline-schema allocation from the
-orchestrator after the other initial plans are reviewed. No project-format bump
-is proposed. #200 confirms its title adapter will preserve the shared painter;
+The orchestrator allocated timeline **schema 24**, following #199's common
+animation schema 22 and #200's title-owner schema 23. Do not edit migration
+globals until those committed foundations are shared; independently approved
+pure modules/lab work may proceed first. No project-format bump is proposed.
+#200 confirms its title adapter will preserve the shared painter;
 coordinate any extraction before either task edits that implementation. Caption
 styles remain static and introduce no dependency on #199's scalar animation.
 
@@ -52,8 +54,16 @@ styles remain static and introduce no dependency on #199's scalar animation.
   `marginYPermille` (0–250). No per-span styling, arbitrary fonts, animation,
   shadows with new semantics, or unbounded CSS enters this descriptor.
 - Known v1 values must validate before edits/persistence. Bound every descriptor
-  to 24 primitive keys, 128-character keys/strings, 4 KiB serialized, finite
+  to 24 primitive keys, 128-character keys/strings, 4 KiB serialized UTF-8, finite
   numbers, and 2 MiB aggregate styling/provenance per project before history.
+  Add a conservative **32 MiB retained styling/provenance cap** across current
+  project, complete proposed candidate, past/future snapshots and all app-owned
+  clipboard/preview copies. Charge each retained project/copy occurrence without
+  assuming shared-object deduplication or counting only the active sequence.
+  Preflight this whole set **before clearing redo or mutating history/clipboard**;
+  failure leaves all prior owners/history untouched. Check capture, import,
+  split/merge, duplicate, Apply, save/recovery and undo/redo admission. This is a
+  byte ceiling for new style/origin payloads, not total project or browser memory.
   Unknown future versions/keys within the envelope survive save, load, undo,
   split and duplicate unchanged. The entire unknown override is unavailable,
   not partly interpreted. Preview reports the fallback; burned-in export blocks

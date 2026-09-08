@@ -76,8 +76,15 @@ orchestrator's exclusive slot. The first model decision is a concrete measured
 candidate with explicit remaining enablement blockers, not an approved runtime.
 
 Requested decisions: review/approve or correct the plan and ASS/style/batch
-contracts; allocate the timeline migration later; authorize and schedule the
+contracts; share schema-22/23 foundations before implementing the allocated
+caption schema 24; authorize and schedule the
 separate pinned model lab. Optional dictionary/translation assets are proposed
 absent with explicit status. If the required speech path receives a final
 NO-GO, #201's mandatory speech criteria remain unresolved; do not close the
 issue on caption-only work.
+
+The orchestrator's Gate 0 feedback assigned schema 24 and requested a retained
+styling/provenance cap. The revised plan specifies 32 MiB across current,
+candidate, past/future and clipboard/preview copies, preflighted before clearing
+redo or mutating any retained owner. These remain contract proposals, not product
+implementation or a relaxation of the separate model enablement gate.
