@@ -4,7 +4,8 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 import { expandedTitleProject } from '../test/titleOwnerFixtures'
-import { createMaskEffect, DEFAULT_MASK_BEZIER_PATH } from '../domain/effectStack'
+import { createColorAdjustEffect, createMaskEffect, DEFAULT_MASK_BEZIER_PATH } from '../domain/effectStack'
+import { resolveClipAnimationAtFrame } from '../domain/clipAnimation'
 import type { AnimationLaneAddress } from '../domain/animationAddresses'
 
 vi.mock('./pluginAppController', () => ({ getPluginAppController: () => ({
@@ -15,6 +16,21 @@ let release: (() => void) | undefined
 afterEach(() => { release?.(); release = undefined; useTransportStore.getState().resetTransport() })
 
 describe('schema23 titles in the composed animation facade', () => {
+  test('authors completed-title scalar effects through the facade with one undoable edit', () => {
+    const project = expandedTitleProject(), clip = project.sequences[0].tracks[0].clips[0]
+    clip.effects = [createColorAdjustEffect('color')]
+    useDocumentStore.getState().setProject(project)
+    useMediaStore.setState({ descriptors: new Map(), collections: [] })
+    useTransportStore.getState().resetTransport()
+    release = animationEditorController.init()
+    const lane: AnimationLaneAddress = { owner: { kind: 'clip', id: clip.id }, kind: 'effect', effectId: 'color', parameter: 'exposure' }
+    expect(animationEditorController.setKey(lane, 5, 0.4)).toBeNull()
+    const authored = useDocumentStore.getState()
+    expect(authored.past).toEqual([project])
+    expect(resolveClipAnimationAtFrame(authored.doc.tracks[0].clips[0], 5).effects[0].params.exposure).toBe(0.4)
+    useDocumentStore.getState().undo()
+    expect(useDocumentStore.getState().project).toBe(project)
+  })
   test('authors and pastes actual element keys with local ticks and one history entry per edit', () => {
     const project = expandedTitleProject()
     useDocumentStore.getState().setProject(project)

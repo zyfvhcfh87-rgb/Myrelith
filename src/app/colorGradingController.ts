@@ -1,3 +1,4 @@
+import { animationRetentionError } from './projectAnimationRetention'
 import { addColorGradingEffect, colorGradingOwner, editColorGradingParams } from '../domain/colorGradingParameterEdit'
 import type { ColorGradingTarget } from '../domain/colorGradingEdits'
 import type { EffectParamValue } from '../domain/schema'
@@ -42,6 +43,8 @@ export function beginColorGradingEdit(target: ColorGradingTarget, effectId: stri
         cancel()
         return useDocumentStore.getState().commitProjectEdit(state.project, state.projectGeneration, next)
       }
+      const retention = animationRetentionError(useDocumentStore.getState(), next)
+      if (retention) return retention
       useTransportStore.getState().setColorGradingPreview({ sequenceId: target.sequenceId, effectId,
         params: patch, document: next.sequences.find((sequence) => sequence.id === target.sequenceId)! })
       return null

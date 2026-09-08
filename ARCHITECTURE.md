@@ -706,6 +706,32 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   shader fallback. Canvas filters use the existing saved context and reusable
   text/transition surfaces; effects never allocate per-frame scratch resources.
   Preview and export share this exact plan/compositor path.
+- Expanded `Clip.title` contributes a resource-free `title` composition item.
+  The domain planner resolves ordered elements, scalar values and explicit
+  generic-font intent; enabled unavailable elements or animation produce named
+  preview status and block strict export. Nested occurrences count toward the
+  4,096 visible-element bound before layout or source/surface acquisition.
+  Supported text elements reuse the compact text/caption painter. Elements with
+  opacity 1 paint directly into the existing leg; translucent elements borrow
+  the existing group, copy once at element opacity, and release it before any
+  clip effect or track bus begins. The complete leg then receives clip effects,
+  clip opacity/blend and the existing enclosing bus exactly once. There are no
+  per-element canvases or synthetic media owners.
+- `titleEffectAnimationParameterSpec` is the canonical title effect boundary:
+  only supported expanded owners and exact registered numeric post-composite
+  parameters are available. Compact text authoring stays static; its existing
+  evaluation remains unchanged. Stored unavailable title lanes stay portable.
+  Upgrade refuses potentially active bound plugin animation and actually
+  resolved source-only scalar changes so it cannot silently change compact
+  text's animation. Registry/property/evaluator authority stays below owner
+  composition; no effectStack-to-titleOwnership-to-clipAnimation cycle is added.
+- Title-definition caches admit only deeply frozen JSON graphs. Mutable and
+  shallow-frozen inputs are revalidated; cached parsed copies are also frozen.
+  Text layout retains at most 64 entries / 8 MiB of conservatively priced data
+  per context, with 512 lines per element. Document/font intent replacement,
+  presentation resize and completed worker disposal invalidate derived layouts.
+  Generic font aliases remain platform dependent; no font bytes or remote font
+  service enters this owner.
 - Manual lens correction is the first authored source-geometry operation. A
   decoded, orientation-normalized visual source is remapped before crop,
   transform, masks/chroma, ordered effects, opacity/blend, and transitions.
@@ -974,12 +1000,11 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   through last accepted sample keys; ordinary endpoint hold must never present
   unaccepted frames as tracked. Planning rechecks the latest source,
   media connection, project binding, target overlap/lock/dimensions, ordinary
-  animation validity, exact selection snapshot, and that source and target are
-  distinct clip identities. The Inspector must not offer the tracked source as
-  its own target; this prevents applying source motion back onto itself as a
-  doubled target transform. Accepted samples map
+  animation validity and exact selection snapshot. Clip-transform attachment
+  requires distinct source and target clip identities. The Inspector must never
+  offer the tracked source as its own transform target. Accepted samples map
   through each frame's resolved source crop, flips, anchor, and transform into
-  project space. Preserved target Rotation and, when Scale is not authored,
+  project space. For clip-transform attachment, preserved target Rotation and, when Scale is not authored,
   target Scale are resolved again at every accepted frame so cropped/anchored
   compensation and box extents use the actual target-local axes. Point tracking
   may author Position X/Y; box tracking may also author Scale X/Y, but never
@@ -990,6 +1015,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   document aggregate key budget reject before mutation. Apply replaces only
   the explicitly confirmed owned properties in one immutable history entry and
   leaves unrelated clip/effect animation unchanged.
+- A separately validated mask-effect attachment may address an enabled, supported
+  mask on the source clip or another eligible media clip that overlaps the complete
+  accepted tracking range and the exact selection frame. It authors only that
+  effect's ordinary x/y and optional width/height scalar tracks; it never changes
+  clip transforms or retiming. Masks remain in project space, so source motion is
+  mapped once and target transforms do not rebase the mask. Each accepted sample
+  uses freshly resolved source geometry. A point outside the resolved source crop,
+  or a box not wholly inside it, rejects the complete attachment proposal. No
+  accepted sample may be clamped, dropped or extrapolated to obtain an attachment.
 - Motion-tracking selection and analysis are unavailable while the source clip
   owns any manual or preserved-future lens-correction intent. The picker and
   marker overlay operate in decoded-source coordinates, so the UI suppresses
@@ -1408,3 +1442,23 @@ src/
   app/styles/  launcher then editor feature styles in binding cascade order
   dev/         explicitly guarded, build-gated benchmark UI/runtime only
 ```
+
+### Expanded title authoring and retained preview admission (Issue #200 G3)
+
+`domain/titleEditing.ts` owns bounded immutable element edits and geometry;
+`domain/titleTemplates.ts` owns data-only capture, explicit canvas fitting and
+independent identity remapping. App controllers pin project/generation/sequence,
+clip/element selection and playhead, and use the canonical animation planners.
+UI controls consume these facades; safe guides and motion samples are ephemeral.
+Local template storage publishes summaries only, preserves unknown siblings and
+future read-only envelopes, and reports success at IDB transaction completion.
+
+The transport arbiter now has five named document owners: color grading, mask
+gesture, animation gesture, mask tracking and title authoring. Title replacement
+can release its document while retaining its activation order. Hidden previews
+still own data. `retainedEffectPreviewDocuments()` exposes their immutable
+references for accounting, without transport reading/writing documentStore.
+The app `projectAnimationRetention.ts` facade and actual document-store commit
+boundary include all retained previews in the existing 64 MiB title budget;
+shared immutable subtrees count once. Every app preview publisher admits its
+candidate against these other owners. A rejection never clears project redo.

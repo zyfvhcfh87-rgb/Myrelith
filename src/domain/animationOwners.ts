@@ -9,6 +9,7 @@ import { clipAnimation, effectAnimationTracks } from './clipAnimation'
 import { resolveScalarAnimationProperty, type ScalarAnimationPropertyResolution } from './animationPropertyCatalog'
 import { prepareEffectPathAnimationTrack } from './maskPathAnimation'
 import { effectSupportsSurface } from './effectStack'
+import { titleEffectAnimationParameterSpec } from './titleEffectAnimation'
 import { clipSourceTimeMap, sourceTicksAtTimelineOffset, SOURCE_TIME_TICKS_PER_FRAME } from './sourceTimeMap'
 
 /** #200 implements this protocol with its schema 23 owner; no title parsing is duplicated here. */
@@ -75,11 +76,10 @@ export function scalarLaneProperty(owner: AnimationOwner, lane: AnimationLaneAdd
     if ((context.titles ?? LEGACY_ANIMATION_TITLE_OWNERS).isTitleClip(owner.clip) && lane.property !== 'opacity') return unavailable('Title clips expose only outer opacity.')
     return resolveScalarAnimationProperty({ kind: 'clip', clip: owner.clip, trackKind: owner.track.kind, property: lane.property, propertyVersion: lane.propertyVersion })
   }
-  // Title effect applicability is a separate text-stage contract. Preserve its
-  // timing data, but do not bypass the existing static-title authoring boundary.
-  if (owner.clip && (context.titles ?? LEGACY_ANIMATION_TITLE_OWNERS).isTitleClip(owner.clip)) return unavailable('This title effect does not support animation.')
   const effect = owner.item.effects.find((effect) => effect.id === lane.effectId)
   if (!effect || (owner.clip ? owner.track.kind !== 'video' : !effectSupportsSurface(effect, 'post-composite'))) return unavailable('The effect owner or stage is unavailable.')
+  if (owner.clip && (owner.clip.title !== undefined || (context.titles ?? LEGACY_ANIMATION_TITLE_OWNERS).isTitleClip(owner.clip))
+    && !titleEffectAnimationParameterSpec(owner.clip, effect, lane.parameter)) return unavailable('This title effect does not support animation.')
   return resolveScalarAnimationProperty({ kind: 'effect', effect, parameter: lane.parameter, identity: lane.parameterIdentity,
     declaration: context.plugins?.declarations.find((item) => item.effectType === effect.type) })
 }

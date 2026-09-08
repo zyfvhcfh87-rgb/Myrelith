@@ -1,12 +1,13 @@
 # Issue #198: direct masks and bounded manual path animation
 
-Status: **plan approved; independent pure value/geometry gate implemented for review.**
+Status: **static/open/held authoring and the 7/7 focused tracking browser gate accepted. Resource, performance and whole-issue acceptance remain open.**
 
 Prepared on `codex/issue198` from `ce91074c276ca6892a74addb7dd673b9a19c7eeb`.
 The Milestone 9 orchestrator owns approval, migration ordering, integration and
 publication. The orchestrator approved the independent pure gate before shared
 integration and assigned timeline schema 22 to #199; no separate mask migration
-is needed. Product UI, shared traversal and rendering integration remain pending.
+is needed. Shared traversal, rendering and direct mask authoring are now integrated;
+the tracking Inspector and remaining whole-issue acceptance are tracked below.
 
 Independent gate evidence and concrete APIs:
 [pure foundation](evidence/issue198/pure-foundation.md).
@@ -361,9 +362,39 @@ of Gate 3 under explicit authorization. That earlier gate added only domain
 modules/tests; shared schema/traversal, pixel stages and UI were unchanged then.
 
 Current continuation: static/open-path authoring and the resize-release correction
-are accepted through integration `6888fd8`. The held-path authoring source gate
-consumes the reviewed shared schema/timing/resolution/admission contracts; see
-[its current evidence and pending browser request](evidence/issue198/held-path-authoring.md).
+are accepted through integration `6888fd8`. Held-path product `f923315`, test
+correction `13f0cfe` and evidence `1254007` passed all five browser flows and
+were accepted through integration `f091560`; see
+[held-path evidence](evidence/issue198/held-path-authoring.md).
 The narrow [tracking contract](evidence/issue198/tracking-attachment-contract.md)
-is accepted for later separate implementation; no tracking code is included in
-the held-path gate.
+is accepted and its separate pure planning/operation slice is committed as
+`9c3cb54`; the corrected app review/preview implementation is accepted. See
+[tracking implementation evidence](evidence/issue198/tracking-attachment.md).
+The shared schema 23 checkpoint `4340f967` is now merged with the canonical title
+guard and all preview owners preserved. No tracking code was included in the
+held-path gate; the later Inspector/browser result is recorded below.
+Parent review found three app defects on `8d22cbc`; the corrected project-budget,
+post-cleanup playback and preview-priority boundaries pass the unchanged parent
+reproducer and 253 focused tests. Parent accepted correction `8cc1fe9` and the
+complete controller gate, integrated at `08805c57`. The subsequent Inspector
+slice now exposes the accepted mask review and passes 324 focused tests across
+19 files plus 17 runner checks, build/typecheck and lint. It also exercises real
+10-million-character tracking/history admission. See the
+[Inspector source evidence](evidence/issue198/tracking-inspector.md) and
+[preregistered browser/export/resource protocol](evidence/issue198/tracking-browser-protocol.md).
+Parent accepted Inspector product `c0bce34` and each subsequent test-only
+correction. Exact frozen `2b3dbd7281909777c558766279729af21ac89611` passed all seven
+browser flows in 26.8 seconds under the granted exclusive slot. Real point and
+backward box analysis, preview/Apply/history, portable offline Open/relink and
+decoded short export assertions all passed. All nine screenshots were inspected;
+native cleanup and slot release were verified. The successful list reporter did
+not preserve raw body attachments or a trace, so export/resource values are
+qualified by passed assertions, not independently inspected raw JSON. See the
+[complete browser evidence](evidence/issue198/tracking-browser-acceptance.md),
+including the non-overlapping host sleep timeline and retained earlier failures.
+Parent accepted this functional gate after independently reviewing the complete
+log, all nine screenshots, actual portable file and native/sleep evidence.
+Resource authority and cleanup implementation is authorized under the previously
+accepted proposal only after the parent supplies the accepted integration SHA
+for synchronization. No resource/performance run is included in that grant.
+Full/performance/retention and cross-feature acceptance remain open.

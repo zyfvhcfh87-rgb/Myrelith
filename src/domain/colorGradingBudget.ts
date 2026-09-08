@@ -8,10 +8,11 @@ import type { VideoCompositionPlan } from './videoCompositionPlan'
 
 export function gradingPlanStacks(plan: VideoCompositionPlan): readonly (readonly EffectDescriptor[])[] {
   return plan.items.flatMap((item): (readonly EffectDescriptor[])[] => {
+    if (item.kind === 'title' && !item.title.elements.length) return []
     const tracks = 'trackEffects' in item ? [item.trackEffects ?? []] : []
     if (item.kind === 'clip') return [...tracks, item.request.clip.effects]
     if (item.kind === 'crossfade') return [...tracks, ...item.requests.map((request) => request.clip.effects)]
-    if (item.kind === 'text') return [...tracks, item.clip.effects]
+    if (item.kind === 'text' || item.kind === 'title') return [...tracks, item.clip.effects]
     if (item.kind === 'adjustment') return [item.adjustment.effects]
     if (item.kind === 'video-bus') return [item.effects]
     return []

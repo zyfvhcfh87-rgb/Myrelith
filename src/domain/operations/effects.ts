@@ -1,4 +1,4 @@
-import { isProceduralTitleClip } from '../textOverlay'
+import { titleEffectAnimationParameterSpec } from '../titleEffectAnimation'
 import type { ClipId, Effect, EffectId, EffectParamValue, TimelineDoc } from '../schema';
 import { clipAnimation, documentAnimationKeyframeGrowthAllowed, effectAnimationTrack, effectAnimationTracks, LINEAR_ANIMATION_EASING, removeEffectAnimationTracks, upsertEffectAnimationKeyframe } from '../clipAnimation';
 import { effectParamsValidationError, effectAnimationParameterSpec, effectRegistration, cloneEffectDescriptor } from '../effectStack';
@@ -136,7 +136,8 @@ export function updateEffectParamsAtFrame(
   const staticPatch: Record<string, EffectParamValue> = {}
   for (const [parameter, value] of Object.entries(patch)) {
     if (effectAnimationTrack(currentAnimation, effectId, parameter)) {
-      const spec = effectAnimationParameterSpec(effect, parameter)
+      const spec = loc.clip.title === undefined ? effectAnimationParameterSpec(effect, parameter)
+        : titleEffectAnimationParameterSpec(loc.clip, effect, parameter)
       if (
         !spec
         || typeof value !== 'number'
@@ -152,7 +153,7 @@ export function updateEffectParamsAtFrame(
   const localFrame = timelineFrame - loc.clip.timelineRange.startFrame
   if (
     animated.size > 0
-    && (loc.track.kind !== 'video' || isProceduralTitleClip(loc.clip))
+    && (loc.track.kind !== 'video' || loc.clip.text !== undefined)
   ) return reject(doc, op, 'effect keyframes are supported only on visual media clips')
   if (
     animated.size > 0

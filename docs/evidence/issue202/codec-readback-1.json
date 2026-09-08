@@ -1,0 +1,388 @@
+{
+  "kind": "issue202-saved-packet-visible-readback",
+  "collectedAt": "2026-09-08T10:06:16.010Z",
+  "browserVersion": "151.0.7922.34",
+  "startingCommit": "ea530ecc9b88d5f36fa44cced849d9056a0166ba",
+  "startingScriptSha256": "32253befb82da5fe8803a446840ff22e2beeb9c6f84d381f1e64ed0a596d8b63",
+  "scriptSha256": "32253befb82da5fe8803a446840ff22e2beeb9c6f84d381f1e64ed0a596d8b63",
+  "sourceIdentityUnchanged": true,
+  "inputResultSha256": "2ebd1857328981b1ba0b5738a1911a947e66cba1db4ff3e6789939291a1a4a93",
+  "commandLine": {
+    "unavailable": "Error: cdpSession.send: Protocol error (Browser.getBrowserCommandLine): Command line not returned because --enable-automation not set.",
+    "requestedAdditionalFlags": [
+      "--mute-audio"
+    ]
+  },
+  "gpu": {
+    "devices": [
+      {
+        "vendorId": 65535,
+        "deviceId": 65535,
+        "vendorString": "Google Inc. (Google)",
+        "deviceString": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+        "driverVendor": "SwANGLE",
+        "driverVersion": "5.0.0"
+      }
+    ],
+    "featureStatus": {
+      "2d_canvas": "unavailable_software",
+      "direct_rendering_display_compositor": "disabled_off_ok",
+      "gpu_compositing": "disabled_software",
+      "multiple_raster_threads": "enabled_on",
+      "opengl": "disabled_off",
+      "rasterization": "disabled_software",
+      "raw_draw": "disabled_off_ok",
+      "skia_graphite": "disabled_off",
+      "trees_in_viz": "disabled_off",
+      "video_decode": "disabled_software",
+      "video_encode": "disabled_software",
+      "webgl": "unavailable_software",
+      "webgpu": "unavailable_software",
+      "webnn": "unavailable_software"
+    },
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0)"
+  },
+  "qualification": "Three saved packets, same-browser decode and visible-rectangle copy only. No new encoding, external decoder, lossy quality threshold, mastering metadata, performance, native-memory or physical HDR qualification.",
+  "rows": [
+    {
+      "id": "sdr709",
+      "packetSha256": "f8b58aaf85300f45bfddb5ed2c4b2aa4936fd3f3cb2906e770ab9b16ee1280ea",
+      "expected": {
+        "width": 1024,
+        "height": 16,
+        "format": "I420P10",
+        "luma": "code(x,y)=x",
+        "chroma": 512,
+        "uniqueLuma": 1024,
+        "tags": {
+          "primaries": "bt709",
+          "transfer": "bt709",
+          "matrix": "bt709",
+          "fullRange": true
+        }
+      },
+      "ledger": {
+        "framesOpened": 1,
+        "framesClosed": 1,
+        "decodersOpened": 1,
+        "decodersClosed": 1,
+        "retainedFrames": 0,
+        "decodedCopyBytes": 49152
+      },
+      "decoded": [
+        {
+          "format": "I420P10",
+          "codedWidth": 1088,
+          "codedHeight": 16,
+          "visibleRect": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 16
+          },
+          "displayWidth": 1024,
+          "displayHeight": 16,
+          "tags": {
+            "fullRange": true,
+            "matrix": "bt709",
+            "primaries": "bt709",
+            "transfer": "bt709"
+          },
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 2048
+            },
+            {
+              "offset": 32768,
+              "stride": 1024
+            },
+            {
+              "offset": 40960,
+              "stride": 1024
+            }
+          ],
+          "planes": [
+            {
+              "plane": 0,
+              "width": 1024,
+              "height": 16,
+              "samples": 16384,
+              "unique": 896,
+              "mismatches": 4496,
+              "maximumAbsoluteError": 1,
+              "meanSignedError": -0.2509765625
+            },
+            {
+              "plane": 1,
+              "width": 512,
+              "height": 8,
+              "samples": 4096,
+              "unique": 1,
+              "mismatches": 0,
+              "maximumAbsoluteError": 0,
+              "meanSignedError": 0
+            },
+            {
+              "plane": 2,
+              "width": 512,
+              "height": 8,
+              "samples": 4096,
+              "unique": 1,
+              "mismatches": 0,
+              "maximumAbsoluteError": 0,
+              "meanSignedError": 0
+            }
+          ],
+          "sha256": "c25ca144caaf4cc9552c572d12cb9fba704686e0dadc003d5a067831665d9b23"
+        }
+      ],
+      "decoderSupport": {
+        "config": {
+          "codec": "vp09.02.40.10.01.01.01.01.01",
+          "codedHeight": 16,
+          "codedWidth": 1024,
+          "colorSpace": {
+            "fullRange": true,
+            "matrix": "bt709",
+            "primaries": "bt709",
+            "transfer": "bt709"
+          },
+          "flip": false,
+          "hardwareAcceleration": "no-preference",
+          "rotation": 0
+        },
+        "supported": true
+      },
+      "outcome": "completed-diagnostic",
+      "terminalOwnedResources": 0
+    },
+    {
+      "id": "pq2020",
+      "packetSha256": "e73424f9a8fc69e54ae94d2b1a5a3151d54491cb8d8b490e2d5d2773790f3d64",
+      "expected": {
+        "width": 1024,
+        "height": 16,
+        "format": "I420P10",
+        "luma": "code(x,y)=x",
+        "chroma": 512,
+        "uniqueLuma": 1024,
+        "tags": {
+          "primaries": "bt2020",
+          "transfer": "pq",
+          "matrix": "bt2020-ncl",
+          "fullRange": true
+        }
+      },
+      "ledger": {
+        "framesOpened": 1,
+        "framesClosed": 1,
+        "decodersOpened": 1,
+        "decodersClosed": 1,
+        "retainedFrames": 0,
+        "decodedCopyBytes": 49152
+      },
+      "decoded": [
+        {
+          "format": "I420P10",
+          "codedWidth": 1088,
+          "codedHeight": 16,
+          "visibleRect": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 16
+          },
+          "displayWidth": 1024,
+          "displayHeight": 16,
+          "tags": {
+            "fullRange": true,
+            "matrix": "bt2020-ncl",
+            "primaries": "bt2020",
+            "transfer": "pq"
+          },
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 2048
+            },
+            {
+              "offset": 32768,
+              "stride": 1024
+            },
+            {
+              "offset": 40960,
+              "stride": 1024
+            }
+          ],
+          "planes": [
+            {
+              "plane": 0,
+              "width": 1024,
+              "height": 16,
+              "samples": 16384,
+              "unique": 896,
+              "mismatches": 4496,
+              "maximumAbsoluteError": 1,
+              "meanSignedError": -0.2509765625
+            },
+            {
+              "plane": 1,
+              "width": 512,
+              "height": 8,
+              "samples": 4096,
+              "unique": 1,
+              "mismatches": 0,
+              "maximumAbsoluteError": 0,
+              "meanSignedError": 0
+            },
+            {
+              "plane": 2,
+              "width": 512,
+              "height": 8,
+              "samples": 4096,
+              "unique": 1,
+              "mismatches": 0,
+              "maximumAbsoluteError": 0,
+              "meanSignedError": 0
+            }
+          ],
+          "sha256": "c25ca144caaf4cc9552c572d12cb9fba704686e0dadc003d5a067831665d9b23"
+        }
+      ],
+      "decoderSupport": {
+        "config": {
+          "codec": "vp09.02.40.10.01.09.16.09.01",
+          "codedHeight": 16,
+          "codedWidth": 1024,
+          "colorSpace": {
+            "fullRange": true,
+            "matrix": "bt2020-ncl",
+            "primaries": "bt2020",
+            "transfer": "pq"
+          },
+          "flip": false,
+          "hardwareAcceleration": "no-preference",
+          "rotation": 0
+        },
+        "supported": true
+      },
+      "outcome": "completed-diagnostic",
+      "terminalOwnedResources": 0
+    },
+    {
+      "id": "hlg2020",
+      "packetSha256": "e73424f9a8fc69e54ae94d2b1a5a3151d54491cb8d8b490e2d5d2773790f3d64",
+      "expected": {
+        "width": 1024,
+        "height": 16,
+        "format": "I420P10",
+        "luma": "code(x,y)=x",
+        "chroma": 512,
+        "uniqueLuma": 1024,
+        "tags": {
+          "primaries": "bt2020",
+          "transfer": "hlg",
+          "matrix": "bt2020-ncl",
+          "fullRange": true
+        }
+      },
+      "ledger": {
+        "framesOpened": 1,
+        "framesClosed": 1,
+        "decodersOpened": 1,
+        "decodersClosed": 1,
+        "retainedFrames": 0,
+        "decodedCopyBytes": 49152
+      },
+      "decoded": [
+        {
+          "format": "I420P10",
+          "codedWidth": 1088,
+          "codedHeight": 16,
+          "visibleRect": {
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 16
+          },
+          "displayWidth": 1024,
+          "displayHeight": 16,
+          "tags": {
+            "fullRange": true,
+            "matrix": "bt2020-ncl",
+            "primaries": "bt2020",
+            "transfer": "hlg"
+          },
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 2048
+            },
+            {
+              "offset": 32768,
+              "stride": 1024
+            },
+            {
+              "offset": 40960,
+              "stride": 1024
+            }
+          ],
+          "planes": [
+            {
+              "plane": 0,
+              "width": 1024,
+              "height": 16,
+              "samples": 16384,
+              "unique": 896,
+              "mismatches": 4496,
+              "maximumAbsoluteError": 1,
+              "meanSignedError": -0.2509765625
+            },
+            {
+              "plane": 1,
+              "width": 512,
+              "height": 8,
+              "samples": 4096,
+              "unique": 1,
+              "mismatches": 0,
+              "maximumAbsoluteError": 0,
+              "meanSignedError": 0
+            },
+            {
+              "plane": 2,
+              "width": 512,
+              "height": 8,
+              "samples": 4096,
+              "unique": 1,
+              "mismatches": 0,
+              "maximumAbsoluteError": 0,
+              "meanSignedError": 0
+            }
+          ],
+          "sha256": "c25ca144caaf4cc9552c572d12cb9fba704686e0dadc003d5a067831665d9b23"
+        }
+      ],
+      "decoderSupport": {
+        "config": {
+          "codec": "vp09.02.40.10.01.09.18.09.01",
+          "codedHeight": 16,
+          "codedWidth": 1024,
+          "colorSpace": {
+            "fullRange": true,
+            "matrix": "bt2020-ncl",
+            "primaries": "bt2020",
+            "transfer": "hlg"
+          },
+          "flip": false,
+          "hardwareAcceleration": "no-preference",
+          "rotation": 0
+        },
+        "supported": true
+      },
+      "outcome": "completed-diagnostic",
+      "terminalOwnedResources": 0
+    }
+  ],
+  "consoleErrors": []
+}

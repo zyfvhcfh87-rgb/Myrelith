@@ -1,0 +1,8 @@
+Listing tests:
+  [chromium] › ../../browser/issue-200-title-authoring.spec.ts:28:1 › compact upgrade, elements, static editing and real project undo/redo
+  [chromium] › ../../browser/issue-200-title-authoring.spec.ts:52:1 › direct manipulation, Escape cancellation and editor-only safe guides
+  [chromium] › ../../browser/issue-200-title-authoring.spec.ts:140:1 › motion preview, cancellation, Apply and explicit Reapply
+  [chromium] › ../../browser/issue-200-title-authoring.spec.ts:162:1 › unknown font gets an explicit persisted fallback through real controls
+  [chromium] › ../../browser/issue-200-title-authoring.spec.ts:181:1 › local template save/use/delete retains independent project copies and real IndexedDB data
+  [chromium] › ../../browser/issue-200-title-authoring.spec.ts:203:1 › narrow dialog controls stay reachable and project changes invalidate open reviews
+Total: 6 tests in 1 file

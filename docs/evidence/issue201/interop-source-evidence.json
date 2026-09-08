@@ -1,0 +1,53 @@
+{
+  "revision": "b7804b056c30aa35c1748f8e4e239d0e2ff25d6d",
+  "files": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/optimizer/qdq_transformer/selectors_actions/qdq_actions.cc",
+      "bytes": 33633,
+      "sha256": "1594740e1a49a716b2cbdf534889a321e959fb9a3b48209cf9f12595b8f046bd",
+      "path": "onnxruntime/core/optimizer/qdq_transformer/selectors_actions/qdq_actions.cc"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/optimizer/graph_transformer_utils.cc",
+      "bytes": 31459,
+      "sha256": "49ea5066cdcb14e00bf429b0f926734a00f2f491b47e0fc2b9d8802e53d35b99",
+      "path": "onnxruntime/core/optimizer/graph_transformer_utils.cc"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h",
+      "bytes": 30682,
+      "sha256": "d7eb2353dc9f4280e57a05626cb4cbe8df299441e1e9fde446c3b6f7ea6a77b1",
+      "path": "include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/js/common/lib/inference-session.ts",
+      "bytes": 20695,
+      "sha256": "1a9a41279254d096e972cf92f600e5ffda1fda54968ee372b082a598ed2dbb0f",
+      "path": "js/common/lib/inference-session.ts"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/js/web/lib/wasm/session-options.ts",
+      "bytes": 10896,
+      "sha256": "ffdb6352b62bd4a2a68b17334403be97cb01ba06d14b4093943d47de4f882598",
+      "path": "js/web/lib/wasm/session-options.ts"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/optimizer/qdq_transformer/selectors_actions/qdq_selector_action_transformer.cc",
+      "path": "onnxruntime/core/optimizer/qdq_transformer/selectors_actions/qdq_selector_action_transformer.cc",
+      "bytes": 22423,
+      "sha256": "3793d1f35ac5090b07f10f3d30b47fc8869a450e8ac2f5eea813abd9c7d98242"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/include/onnxruntime/core/graph/graph.h",
+      "path": "include/onnxruntime/core/graph/graph.h",
+      "bytes": 95517,
+      "sha256": "fc5991cfdd249c5b8cfe8e4548542bc1c9f95fad0dc80aa152586e06f0f760e9"
+    }
+  ],
+  "qualification": "Source inspection only. No model import or inference; pinned optimizer configuration candidate remains unqualified.",
+  "archiveSourceMapProof": {
+    "mapSha256": "7906581c1113825cbc5c038ada81af3fc7b31b7a458cd1915fc2ec80f29ddc68",
+    "entry": "../lib/wasm/session-options.ts",
+    "matchesPinnedSourceSha256": "ffdb6352b62bd4a2a68b17334403be97cb01ba06d14b4093943d47de4f882598"
+  }
+}

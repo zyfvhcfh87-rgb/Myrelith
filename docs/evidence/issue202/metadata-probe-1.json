@@ -1,0 +1,387 @@
+{
+  "kind": "issue202-structural-metadata-probe",
+  "collectedAt": "2026-09-08T09:10:54.446Z",
+  "mediabunny": "1.50.9",
+  "scriptSha256": "bbef2751f5a29293be37e695f58da19bfe8e8a429db553e6302d1b284cbfbee7",
+  "qualification": "Synthetic VP9 uncompressed header ONLY; no compressed picture, encoder, decoder, usable HDR video, bitstream round-trip or codec pixel oracle is qualified. Independent container/header parsers inspect mux output.",
+  "rows": [
+    {
+      "id": "mp4-sdr709",
+      "requestedTags": {
+        "primaries": "bt709",
+        "transfer": "bt709",
+        "matrix": "bt709",
+        "fullRange": false
+      },
+      "expectedCicp": [
+        1,
+        1,
+        1
+      ],
+      "bytes": 664,
+      "filename": "structural-mp4-sdr709.container.bin",
+      "sha256": "9568e1486bb45d80966b867311accaff582937311a5b103f1e8a2f909f671fa3",
+      "color": {
+        "type": "nclx",
+        "primaries": 1,
+        "transfer": 1,
+        "matrix": 1,
+        "fullRange": false
+      },
+      "configuration": {
+        "profile": 2,
+        "level": 40,
+        "depth": 10,
+        "chroma": 1,
+        "fullRange": false,
+        "primaries": 1,
+        "transfer": 1,
+        "matrix": 1
+      },
+      "masteringBoxes": [],
+      "reopenedTags": {
+        "primaries": "bt709",
+        "transfer": "bt709",
+        "matrix": "bt709",
+        "fullRange": false
+      },
+      "packetBefore": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 2,
+        "fullRange": false
+      },
+      "packetAfter": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 2,
+        "fullRange": false
+      },
+      "packetUnchanged": true,
+      "packetSha256": "4b1d2f34acf0fca46135d2e354c4a0e1e303c4f037cc7fec139f7e298598e728"
+    },
+    {
+      "id": "mp4-pq2020",
+      "requestedTags": {
+        "primaries": "bt2020",
+        "transfer": "pq",
+        "matrix": "bt2020-ncl",
+        "fullRange": false
+      },
+      "expectedCicp": [
+        9,
+        16,
+        9
+      ],
+      "bytes": 664,
+      "filename": "structural-mp4-pq2020.container.bin",
+      "sha256": "f4983c85c241c3cdd1d1079ca0cccc15a363f919ac809a0b7542042ea53ed89c",
+      "color": {
+        "type": "nclx",
+        "primaries": 9,
+        "transfer": 16,
+        "matrix": 9,
+        "fullRange": false
+      },
+      "configuration": {
+        "profile": 2,
+        "level": 40,
+        "depth": 10,
+        "chroma": 1,
+        "fullRange": false,
+        "primaries": 9,
+        "transfer": 16,
+        "matrix": 9
+      },
+      "masteringBoxes": [],
+      "reopenedTags": {
+        "primaries": "bt2020",
+        "transfer": "pq",
+        "matrix": "bt2020-ncl",
+        "fullRange": false
+      },
+      "packetBefore": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 5,
+        "fullRange": false
+      },
+      "packetAfter": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 5,
+        "fullRange": false
+      },
+      "packetUnchanged": true,
+      "packetSha256": "1e8be280ff072cc473ac26eaaf6c1c544f3497be5ce25b061d4a4c3c17ec0f6b"
+    },
+    {
+      "id": "mp4-hlg2020",
+      "requestedTags": {
+        "primaries": "bt2020",
+        "transfer": "hlg",
+        "matrix": "bt2020-ncl",
+        "fullRange": false
+      },
+      "expectedCicp": [
+        9,
+        18,
+        9
+      ],
+      "bytes": 664,
+      "filename": "structural-mp4-hlg2020.container.bin",
+      "sha256": "ae0d5e860c6d81927ca84c09cf91ff21bb31168e58fc2e62005cbd7fe0ab6b5a",
+      "color": {
+        "type": "nclx",
+        "primaries": 9,
+        "transfer": 18,
+        "matrix": 9,
+        "fullRange": false
+      },
+      "configuration": {
+        "profile": 2,
+        "level": 40,
+        "depth": 10,
+        "chroma": 1,
+        "fullRange": false,
+        "primaries": 9,
+        "transfer": 18,
+        "matrix": 9
+      },
+      "masteringBoxes": [],
+      "reopenedTags": {
+        "primaries": "bt2020",
+        "transfer": "hlg",
+        "matrix": "bt2020-ncl",
+        "fullRange": false
+      },
+      "packetBefore": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 5,
+        "fullRange": false
+      },
+      "packetAfter": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 5,
+        "fullRange": false
+      },
+      "packetUnchanged": true,
+      "packetSha256": "1e8be280ff072cc473ac26eaaf6c1c544f3497be5ce25b061d4a4c3c17ec0f6b"
+    },
+    {
+      "id": "mp4-missing-transfer",
+      "requestedTags": {
+        "primaries": "bt2020",
+        "matrix": "bt2020-ncl",
+        "fullRange": false
+      },
+      "expectedCicp": [
+        9,
+        2,
+        9
+      ],
+      "bytes": 645,
+      "filename": "structural-mp4-missing-transfer.container.bin",
+      "sha256": "843e701c8c3c4d339aef5fe35c2e3e8cc1654e53a199205dd4161c25a42eb0c3",
+      "color": null,
+      "configuration": {
+        "profile": 2,
+        "level": 40,
+        "depth": 10,
+        "chroma": 1,
+        "fullRange": false,
+        "primaries": 9,
+        "transfer": 2,
+        "matrix": 9
+      },
+      "masteringBoxes": [],
+      "reopenedTags": {},
+      "packetBefore": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 5,
+        "fullRange": false
+      },
+      "packetAfter": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 5,
+        "fullRange": false
+      },
+      "packetUnchanged": true,
+      "packetSha256": "1e8be280ff072cc473ac26eaaf6c1c544f3497be5ce25b061d4a4c3c17ec0f6b"
+    },
+    {
+      "id": "webm-sdr709",
+      "requestedTags": {
+        "primaries": "bt709",
+        "transfer": "bt709",
+        "matrix": "bt709",
+        "fullRange": false
+      },
+      "expectedCicp": [
+        1,
+        1,
+        1
+      ],
+      "bytes": 328,
+      "filename": "structural-webm-sdr709.container.bin",
+      "sha256": "72009e2ac158fdf63ce7dd25aa3db5b31a45e9eca39d09fe75c39257836b310c",
+      "color": {
+        "primaries": 1,
+        "transfer": 1,
+        "matrix": 1,
+        "range": 1
+      },
+      "masteringElements": [],
+      "reopenedTags": {
+        "primaries": "bt709",
+        "transfer": "bt709",
+        "matrix": "bt709",
+        "fullRange": false
+      },
+      "packetBefore": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 2,
+        "fullRange": false
+      },
+      "packetAfter": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 2,
+        "fullRange": false
+      },
+      "packetUnchanged": true,
+      "packetSha256": "4b1d2f34acf0fca46135d2e354c4a0e1e303c4f037cc7fec139f7e298598e728"
+    },
+    {
+      "id": "webm-pq2020",
+      "requestedTags": {
+        "primaries": "bt2020",
+        "transfer": "pq",
+        "matrix": "bt2020-ncl",
+        "fullRange": false
+      },
+      "expectedCicp": [
+        9,
+        16,
+        9
+      ],
+      "bytes": 328,
+      "filename": "structural-webm-pq2020.container.bin",
+      "sha256": "24bcebd174e6c3beb28dc07b20b33c1d4299124cf4fbd4c6c457c96ace8b5b24",
+      "color": {
+        "primaries": 9,
+        "transfer": 16,
+        "matrix": 9,
+        "range": 1
+      },
+      "masteringElements": [],
+      "reopenedTags": {
+        "primaries": "bt2020",
+        "transfer": "pq",
+        "matrix": "bt2020-ncl",
+        "fullRange": false
+      },
+      "packetBefore": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 5,
+        "fullRange": false
+      },
+      "packetAfter": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 0,
+        "fullRange": false
+      },
+      "packetUnchanged": false,
+      "packetSha256": "121735079701b6707dc58df9334c6990382a8d8709867a0c8b92ac3e918314b3"
+    },
+    {
+      "id": "webm-hlg2020",
+      "requestedTags": {
+        "primaries": "bt2020",
+        "transfer": "hlg",
+        "matrix": "bt2020-ncl",
+        "fullRange": false
+      },
+      "expectedCicp": [
+        9,
+        18,
+        9
+      ],
+      "bytes": 328,
+      "filename": "structural-webm-hlg2020.container.bin",
+      "sha256": "9767252998c950e91f2e46484e4a655c080800132627a61303a5405fbb1c52a7",
+      "color": {
+        "primaries": 9,
+        "transfer": 18,
+        "matrix": 9,
+        "range": 1
+      },
+      "masteringElements": [],
+      "reopenedTags": {
+        "primaries": "bt2020",
+        "transfer": "hlg",
+        "matrix": "bt2020-ncl",
+        "fullRange": false
+      },
+      "packetBefore": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 5,
+        "fullRange": false
+      },
+      "packetAfter": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 0,
+        "fullRange": false
+      },
+      "packetUnchanged": false,
+      "packetSha256": "121735079701b6707dc58df9334c6990382a8d8709867a0c8b92ac3e918314b3"
+    },
+    {
+      "id": "webm-missing-transfer",
+      "requestedTags": {
+        "primaries": "bt2020",
+        "matrix": "bt2020-ncl",
+        "fullRange": false
+      },
+      "expectedCicp": [
+        9,
+        2,
+        9
+      ],
+      "bytes": 306,
+      "filename": "structural-webm-missing-transfer.container.bin",
+      "sha256": "5e5bc7edeb605baec93be7d27c65e07265ac0cd9ad8590adae45d4153fb719e7",
+      "color": {
+        "primaries": null,
+        "transfer": null,
+        "matrix": null,
+        "range": null
+      },
+      "masteringElements": [],
+      "reopenedTags": {},
+      "packetBefore": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 5,
+        "fullRange": false
+      },
+      "packetAfter": {
+        "profile": 2,
+        "depth": 10,
+        "colorId": 0,
+        "fullRange": false
+      },
+      "packetUnchanged": false,
+      "packetSha256": "121735079701b6707dc58df9334c6990382a8d8709867a0c8b92ac3e918314b3"
+    }
+  ]
+}

@@ -197,7 +197,7 @@ function matchingPlannedExecution(
     if (item.kind === 'clip') {
       const execution = inspect(item.request.effectStagePlan)
       if (execution) return execution
-    } else if (item.kind === 'text') {
+    } else if ((item.kind === 'text' || item.kind === 'title')) {
       const execution = inspect(item.effectStagePlan)
       if (execution) return execution
     } else if (item.kind === 'crossfade') {

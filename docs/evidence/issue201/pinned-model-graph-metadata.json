@@ -1,0 +1,1167 @@
+[
+  {
+    "file": "encoder_model_quantized.onnx",
+    "bytes": 10124910,
+    "sha256": "fd9d995b9dcb0520f0dbf6cf68651af639fc385f594d9d876e69ca2802dc438e",
+    "graph": {
+      "scope": "root",
+      "name": "torch_jit",
+      "nodes": 607,
+      "operators": {
+        "Constant": 128,
+        "Reshape": 42,
+        "DynamicQuantizeLinear": 18,
+        "Mul": 81,
+        "ConvInteger": 2,
+        "Cast": 26,
+        "Add": 55,
+        "Div": 15,
+        "Erf": 6,
+        "Transpose": 21,
+        "ReduceMean": 18,
+        "Sub": 9,
+        "Pow": 9,
+        "Sqrt": 9,
+        "Shape": 12,
+        "Gather": 12,
+        "MatMulInteger": 24,
+        "Unsqueeze": 68,
+        "Concat": 40,
+        "MatMul": 8,
+        "Softmax": 4
+      },
+      "initializerCount": 121,
+      "inputs": [
+        {
+          "name": "input_features",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            "feature_size",
+            "encoder_sequence_length"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "last_hidden_state",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            "encoder_sequence_length / 2",
+            384
+          ]
+        },
+        {
+          "name": "encoder_attentions.0",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            1500,
+            1500
+          ]
+        },
+        {
+          "name": "encoder_attentions.1",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            1500,
+            1500
+          ]
+        },
+        {
+          "name": "encoder_attentions.2",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            1500,
+            1500
+          ]
+        },
+        {
+          "name": "encoder_attentions.3",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            1500,
+            1500
+          ]
+        }
+      ],
+      "scaleLocations": [],
+      "subgraphs": []
+    }
+  },
+  {
+    "file": "decoder_model_merged_quantized.onnx",
+    "bytes": 30727765,
+    "sha256": "6c0c125986b007d2e3734bec84c18bda0152071b90b87fadac6d7764499927a0",
+    "graph": {
+      "scope": "root",
+      "name": "merged",
+      "nodes": 2,
+      "operators": {
+        "DynamicQuantizeLinear": 1,
+        "If": 1
+      },
+      "initializerCount": 182,
+      "inputs": [
+        {
+          "name": "input_ids",
+          "type": 7,
+          "shape": [
+            "batch_size",
+            "decoder_sequence_length"
+          ]
+        },
+        {
+          "name": "encoder_hidden_states",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            "encoder_sequence_length / 2",
+            384
+          ]
+        },
+        {
+          "name": "past_key_values.0.decoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.0.decoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.0.encoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.0.encoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.1.decoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.1.decoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.1.encoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.1.encoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.2.decoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.2.decoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.2.encoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.2.encoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.3.decoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.3.decoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.3.encoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "past_key_values.3.encoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "use_cache_branch",
+          "type": 9,
+          "shape": [
+            1
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "logits",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            "decoder_sequence_length",
+            51865
+          ]
+        },
+        {
+          "name": "present.0.decoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length + 1",
+            64
+          ]
+        },
+        {
+          "name": "present.0.decoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length + 1",
+            64
+          ]
+        },
+        {
+          "name": "present.0.encoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "present.0.encoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "present.1.decoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length + 1",
+            64
+          ]
+        },
+        {
+          "name": "present.1.decoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length + 1",
+            64
+          ]
+        },
+        {
+          "name": "present.1.encoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "present.1.encoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "present.2.decoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length + 1",
+            64
+          ]
+        },
+        {
+          "name": "present.2.decoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length + 1",
+            64
+          ]
+        },
+        {
+          "name": "present.2.encoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "present.2.encoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "present.3.decoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length + 1",
+            64
+          ]
+        },
+        {
+          "name": "present.3.decoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "past_decoder_sequence_length + 1",
+            64
+          ]
+        },
+        {
+          "name": "present.3.encoder.key",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "present.3.encoder.value",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "encoder_sequence_length_out",
+            64
+          ]
+        },
+        {
+          "name": "decoder_attentions.0",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "decoder_sequence_length",
+            "past_decoder_sequence_length + 1"
+          ]
+        },
+        {
+          "name": "decoder_attentions.1",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "decoder_sequence_length",
+            "past_decoder_sequence_length + 1"
+          ]
+        },
+        {
+          "name": "decoder_attentions.2",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "decoder_sequence_length",
+            "past_decoder_sequence_length + 1"
+          ]
+        },
+        {
+          "name": "decoder_attentions.3",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "decoder_sequence_length",
+            "past_decoder_sequence_length + 1"
+          ]
+        },
+        {
+          "name": "cross_attentions.0",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "decoder_sequence_length",
+            "encoder_sequence_length_out"
+          ]
+        },
+        {
+          "name": "cross_attentions.1",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "decoder_sequence_length",
+            "encoder_sequence_length_out"
+          ]
+        },
+        {
+          "name": "cross_attentions.2",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "decoder_sequence_length",
+            "encoder_sequence_length_out"
+          ]
+        },
+        {
+          "name": "cross_attentions.3",
+          "type": 1,
+          "shape": [
+            "batch_size",
+            6,
+            "decoder_sequence_length",
+            "encoder_sequence_length_out"
+          ]
+        }
+      ],
+      "scaleLocations": [
+        {
+          "name": "model.decoder.embed_tokens.weight_merged_0_scale",
+          "scope": "root",
+          "type": 1,
+          "rawBytes": 0
+        }
+      ],
+      "subgraphs": [
+        {
+          "scope": "root/1:If/else_branch/0",
+          "name": "no_past",
+          "nodes": 1130,
+          "operators": {
+            "Shape": 30,
+            "Constant": 247,
+            "Gather": 28,
+            "Unsqueeze": 170,
+            "Concat": 92,
+            "Reshape": 91,
+            "ConstantOfShape": 2,
+            "Slice": 3,
+            "Squeeze": 2,
+            "Cast": 43,
+            "Range": 1,
+            "Add": 80,
+            "Less": 1,
+            "Where": 2,
+            "Mul": 118,
+            "Equal": 1,
+            "Expand": 1,
+            "DequantizeLinear": 2,
+            "ReduceMean": 26,
+            "Sub": 13,
+            "Pow": 13,
+            "Sqrt": 13,
+            "Div": 17,
+            "DynamicQuantizeLinear": 24,
+            "MatMulInteger": 40,
+            "Transpose": 41,
+            "MatMul": 17,
+            "Softmax": 8,
+            "Erf": 4
+          },
+          "initializerCount": 0,
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "logits",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                "decoder_sequence_length",
+                51865
+              ]
+            },
+            {
+              "name": "present.0.decoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.0.decoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.0.encoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "encoder_sequence_length_out",
+                64
+              ]
+            },
+            {
+              "name": "present.0.encoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "encoder_sequence_length_out",
+                64
+              ]
+            },
+            {
+              "name": "present.1.decoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.1.decoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.1.encoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "encoder_sequence_length_out",
+                64
+              ]
+            },
+            {
+              "name": "present.1.encoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "encoder_sequence_length_out",
+                64
+              ]
+            },
+            {
+              "name": "present.2.decoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.2.decoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.2.encoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "encoder_sequence_length_out",
+                64
+              ]
+            },
+            {
+              "name": "present.2.encoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "encoder_sequence_length_out",
+                64
+              ]
+            },
+            {
+              "name": "present.3.decoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.3.decoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.3.encoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "encoder_sequence_length_out",
+                64
+              ]
+            },
+            {
+              "name": "present.3.encoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "encoder_sequence_length_out",
+                64
+              ]
+            },
+            {
+              "name": "decoder_attentions.0",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "past_decoder_sequence_length + 1"
+              ]
+            },
+            {
+              "name": "decoder_attentions.1",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "past_decoder_sequence_length + 1"
+              ]
+            },
+            {
+              "name": "decoder_attentions.2",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "past_decoder_sequence_length + 1"
+              ]
+            },
+            {
+              "name": "decoder_attentions.3",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "past_decoder_sequence_length + 1"
+              ]
+            },
+            {
+              "name": "cross_attentions.0",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "encoder_sequence_length_out"
+              ]
+            },
+            {
+              "name": "cross_attentions.1",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "encoder_sequence_length_out"
+              ]
+            },
+            {
+              "name": "cross_attentions.2",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "encoder_sequence_length_out"
+              ]
+            },
+            {
+              "name": "cross_attentions.3",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "encoder_sequence_length_out"
+              ]
+            }
+          ],
+          "scaleLocations": [
+            {
+              "node": "/model/decoder/embed_tokens/Gather_output_0_DequantizeLinear",
+              "operator": "DequantizeLinear",
+              "scope": "root/1:If/else_branch/0",
+              "localInitializer": false,
+              "outerInitializer": true
+            },
+            {
+              "node": "model.decoder.embed_tokens.weight_transposed_DequantizeLinear",
+              "operator": "DequantizeLinear",
+              "scope": "root/1:If/else_branch/0",
+              "localInitializer": false,
+              "outerInitializer": true
+            }
+          ],
+          "subgraphs": []
+        },
+        {
+          "scope": "root/1:If/then_branch/0",
+          "name": "with_past",
+          "nodes": 960,
+          "operators": {
+            "Shape": 27,
+            "Constant": 212,
+            "Gather": 28,
+            "Unsqueeze": 131,
+            "Concat": 81,
+            "Reshape": 73,
+            "Add": 72,
+            "Slice": 1,
+            "DequantizeLinear": 2,
+            "ReduceMean": 26,
+            "Sub": 13,
+            "Pow": 13,
+            "Sqrt": 13,
+            "Div": 17,
+            "Mul": 101,
+            "DynamicQuantizeLinear": 24,
+            "MatMulInteger": 32,
+            "Cast": 32,
+            "Transpose": 33,
+            "MatMul": 17,
+            "Softmax": 8,
+            "Erf": 4
+          },
+          "initializerCount": 0,
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "logits",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                "decoder_sequence_length",
+                51865
+              ]
+            },
+            {
+              "name": "present.0.decoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.0.decoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.0.encoder.key",
+              "type": 1,
+              "shape": [
+                0,
+                6,
+                1,
+                64
+              ]
+            },
+            {
+              "name": "present.0.encoder.value",
+              "type": 1,
+              "shape": [
+                0,
+                6,
+                1,
+                64
+              ]
+            },
+            {
+              "name": "present.1.decoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.1.decoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.1.encoder.key",
+              "type": 1,
+              "shape": [
+                0,
+                6,
+                1,
+                64
+              ]
+            },
+            {
+              "name": "present.1.encoder.value",
+              "type": 1,
+              "shape": [
+                0,
+                6,
+                1,
+                64
+              ]
+            },
+            {
+              "name": "present.2.decoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.2.decoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.2.encoder.key",
+              "type": 1,
+              "shape": [
+                0,
+                6,
+                1,
+                64
+              ]
+            },
+            {
+              "name": "present.2.encoder.value",
+              "type": 1,
+              "shape": [
+                0,
+                6,
+                1,
+                64
+              ]
+            },
+            {
+              "name": "present.3.decoder.key",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.3.decoder.value",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "past_decoder_sequence_length + 1",
+                64
+              ]
+            },
+            {
+              "name": "present.3.encoder.key",
+              "type": 1,
+              "shape": [
+                0,
+                6,
+                1,
+                64
+              ]
+            },
+            {
+              "name": "present.3.encoder.value",
+              "type": 1,
+              "shape": [
+                0,
+                6,
+                1,
+                64
+              ]
+            },
+            {
+              "name": "decoder_attentions.0",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "past_decoder_sequence_length + 1"
+              ]
+            },
+            {
+              "name": "decoder_attentions.1",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "past_decoder_sequence_length + 1"
+              ]
+            },
+            {
+              "name": "decoder_attentions.2",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "past_decoder_sequence_length + 1"
+              ]
+            },
+            {
+              "name": "decoder_attentions.3",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "past_decoder_sequence_length + 1"
+              ]
+            },
+            {
+              "name": "cross_attentions.0",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "encoder_sequence_length_out"
+              ]
+            },
+            {
+              "name": "cross_attentions.1",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "encoder_sequence_length_out"
+              ]
+            },
+            {
+              "name": "cross_attentions.2",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "encoder_sequence_length_out"
+              ]
+            },
+            {
+              "name": "cross_attentions.3",
+              "type": 1,
+              "shape": [
+                "batch_size",
+                6,
+                "decoder_sequence_length",
+                "encoder_sequence_length_out"
+              ]
+            }
+          ],
+          "scaleLocations": [
+            {
+              "node": "/model/decoder/embed_tokens/Gather_output_0_DequantizeLinear",
+              "operator": "DequantizeLinear",
+              "scope": "root/1:If/then_branch/0",
+              "localInitializer": false,
+              "outerInitializer": true
+            },
+            {
+              "node": "model.decoder.embed_tokens.weight_transposed_DequantizeLinear",
+              "operator": "DequantizeLinear",
+              "scope": "root/1:If/then_branch/0",
+              "localInitializer": false,
+              "outerInitializer": true
+            }
+          ],
+          "subgraphs": []
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "files": {
+    "build-timing.json": "21d9acbf62d4a3eabba3aead50f4f44b7caad3713b1b0a457ebbf3ffc6efcf99",
+    "build.log": "d9f0d57a8b0b917b169046b0677a33b0ad080dfe2d8911ae6ff170fcc9292098",
+    "diagnostic-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "focused.log": "654175f488800e1c28f7c92ec84264baaad9c86538a37d4d38b4775d7d00a7dc",
+    "green.log": "c109cbc3e58aeb419d6fd5545653c84139d32517c625c18cddd9d5f1826b9a5d",
+    "lint.log": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c",
+    "list.log": "0659398220cc1428250d85905526dc4e596f8647ddacebd2aabc05424915c9f8",
+    "parent-reproducer.log": "aede5f9ffc070c43c25d521b5f2296d086c34ab37f077385002739acfe2be5a4",
+    "raw-logs.tar.gz": "0194287379cd2d6aa3784b3957c6f7476f901a0d0910b3114c7f92354980583d",
+    "red.log": "e2fe70f6802a62fce1a659cb4c8c8025a7d34d01c339930fc4acf97fe52d24a0",
+    "reproduction-source.json": "93522ecb0eb3613f2edc8f6371b6580e46ef5d97a344c89e182932ec9c724138"
+  },
+  "rawMembers": {
+    "red.log": "4f90b0c1dc28805affb797ba0eeaf03339d5d2a8b17130a934381eab7e1688ba",
+    "green.log": "3a15068cc574d7453b838b3f50e2d33b213e2865fe81cfd276d97d0f7c193254",
+    "parent-reproducer.log": "01fa8e954d8bb36630da6f42367eb2a7b9df6f654af3987380762eac042d1704",
+    "focused.log": "654175f488800e1c28f7c92ec84264baaad9c86538a37d4d38b4775d7d00a7dc",
+    "build.log": "d1c4bdf9fb9d67ffd6c6df15b17315fb9f1f24340be82842907c05deed61487f",
+    "lint.log": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+    "diagnostic-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "list.log": "0659398220cc1428250d85905526dc4e596f8647ddacebd2aabc05424915c9f8"
+  }
+}

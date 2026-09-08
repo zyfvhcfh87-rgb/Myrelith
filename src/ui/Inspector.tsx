@@ -1,4 +1,5 @@
 import VideoBusInspector from './VideoBusInspector'
+import TitleInspector from './TitleInspector'
 /**
  * Contextual Inspector composition root. Focused panels live under ui/inspector.
  * Layering remains ui/ -> state/ + domain selectors only.
@@ -176,6 +177,7 @@ function ClipInspector() {
           locked={videoLocked}
         />
       )}
+      {videoClip && (videoClip.text || videoClip.title) && <TitleInspector key={`title:${videoClip.id}`} clip={videoClip} locked={videoLocked} />}
       {displayedVideoClip && (
         <VideoInspectorSections
           doc={timelineDoc}
@@ -193,6 +195,7 @@ function ClipInspector() {
           hidden={activeVideoTab !== 'animation'}
         >
           <AnimationEntry lane={{ kind: 'scalar', owner: { kind: 'clip', id: videoClip.id }, property: 'opacity', propertyVersion: 1 }} />
+          {videoClip.title && <span className="inspector-note">Use Title elements to edit base values or generate roll / crawl motion.</span>}
           {!isProceduralTitleClip(videoClip) && animationSurfaceOpened && (
                 <LazySurfaceBoundary
                   loadingLabel="Loading animation curves…"

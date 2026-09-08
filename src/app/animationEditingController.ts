@@ -3,7 +3,7 @@ import { copyAnimationKeys, planAnimationPaste, type AnimationKeyClipboard, type
 import { planAnimationBatch, planSetAnimationKey, reconcileAnimationKeys, nearestAnimationKey, type AnimationBatchCommand, type AnimationBatchResult } from '../domain/animationBatch'
 import type { ClipAnimationEasing } from '../domain/schema'
 import { animationKeyKey, type AnimationLaneAddress } from '../domain/animationAddresses'
-import { animationRetentionError } from '../domain/animationProjectBudget'
+import { animationRetentionError } from './projectAnimationRetention'
 import type { AnimationEditContext } from '../domain/animationOwners'
 import type { SequenceProject } from '../domain/projectSequences'
 import { useDocumentStore } from '../state/documentStore'

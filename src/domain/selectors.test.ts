@@ -585,7 +585,7 @@ describe('videoCompositionPlanAtFrame', () => {
             opacity: item.request.opacity,
             weight: null,
           }]
-        : item.kind === 'text'
+        : (item.kind === 'text' || item.kind === 'title')
           ? [{
               id: item.clip.id,
               sourceFrame: 0,

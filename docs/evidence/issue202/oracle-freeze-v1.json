@@ -1,0 +1,38 @@
+{
+  "contract": "issue202-numerical-v1",
+  "frozenBeforeCandidate": true,
+  "baseCommit": "87f1df2e3aca6cb866a75060cceff7f2048085bb",
+  "python": "3.9.6",
+  "decimalPrecision": 60,
+  "cases": 118,
+  "files": [
+    {
+      "path": "equations-v1.md",
+      "sha256": "d54eae132b47903184e3375777f003bebba0b92d90f6ddcf6ba3bdbd7a91f3d9"
+    },
+    {
+      "path": "make-inputs.py",
+      "sha256": "228db444185569ebab37a16421174afd2c8d35487565153eb816c4b1df6944d7"
+    },
+    {
+      "path": "oracle.py",
+      "sha256": "7693bfa016b0bf33dee39c95827c70876ac531cf7de96886d969558b025655da"
+    },
+    {
+      "path": "inputs-v1.json",
+      "sha256": "1770793571147c1ce111f13c43d5d56ab93352d4033b943362e963616729af4f"
+    },
+    {
+      "path": "goldens-v1.json",
+      "sha256": "1dace6f40f31efb710e8bf30340e62c069fdb0d22a3b996429e9d50c1fe65e56"
+    },
+    {
+      "path": "presentation-oracle.py",
+      "sha256": "48e0c71c255395ab1e398f3b7668672e61a8fd36fe80d7bfd442babc9d35d106"
+    },
+    {
+      "path": "presentations-v1.json",
+      "sha256": "c45d7add1d910383fbbe9e96c2e70d37221f6e273aed15badd258a9b9e9b2e09"
+    }
+  ]
+}

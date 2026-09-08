@@ -1,3 +1,5 @@
+import { captionProjectIntentError } from './captionIntentBudget'
+import { captionDocumentValidationError } from './captions'
 import { projectTitleAnimationError } from './animationProjectBudget'
 import { projectTitleOwnershipError, titleDefinitionUsage, copyTitleForNewOwner } from './titleOwnership'
 import { projectCropAnimationError } from './projectCropAnimation'
@@ -386,7 +388,8 @@ function sequenceProjectIdsAreUnique(project: SequenceProject): boolean {
 export function sequenceProjectWithinEditBudget(
   project: SequenceProject,
 ): boolean {
-  if (colorLutCatalogError(project.colorLuts ?? [])) return false
+  if (colorLutCatalogError(project.colorLuts ?? []) || captionProjectIntentError(project)
+    || project.sequences.some((sequence) => captionDocumentValidationError(sequence))) return false
   if (
     project.sequences.length < 1
     || project.sequences.length > SEQUENCE_PROJECT_LIMITS.maxSequences
@@ -570,6 +573,13 @@ function collectUsedIds(project: SequenceProject): UsedIds {
   return used
 }
 
+/** Reserve against every entity category and every dormant sequence. */
+export function sequenceProjectReservedIds(project: SequenceProject): ReadonlySet<string> {
+  const reserved = new Set<string>([project.id])
+  for (const ids of Object.values(collectUsedIds(project))) for (const id of ids) reserved.add(id)
+  return reserved
+}
+
 function idSet(used: UsedIds, kind: SequenceEntityKind): Set<string> {
   switch (kind) {
     case 'sequence': return used.sequence
@@ -600,7 +610,8 @@ function allocateId(
   const ids = idSet(used, kind)
   for (let attempt = 0; attempt < 32; attempt++) {
     const candidate = factory(kind, sourceId)
-    if (!validGeneratedId(candidate) || ids.has(candidate)) continue
+    if (!validGeneratedId(candidate) || ids.has(candidate)
+      || ((kind === 'caption-track' || kind === 'caption-item') && Object.values(used).some((reserved) => reserved.has(candidate)))) continue
     ids.add(candidate)
     return candidate
   }

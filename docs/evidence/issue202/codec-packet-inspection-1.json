@@ -1,0 +1,60 @@
+{
+  "kind": "issue202-static-vp9-header-inspection",
+  "collectedAt": "2026-09-08T09:55:34.635Z",
+  "scriptSha256": "069996d699432c37814ab3b9206c36eb72b4e4da20cafde123b229ed7ce4d551",
+  "inputResultSha256": "2ebd1857328981b1ba0b5738a1911a947e66cba1db4ff3e6789939291a1a4a93",
+  "qualification": "Limited independent VP9 key-header parse of saved packets, not an independent pixel decoder. VideoFrame visibleRect was not recorded by run1. No rerun.",
+  "rows": [
+    {
+      "id": "sdr709",
+      "packet": "codec-probe-1-sdr709-0.vp9-packet.bin",
+      "sha256": "f8b58aaf85300f45bfddb5ed2c4b2aa4936fd3f3cb2906e770ab9b16ee1280ea",
+      "profile": 2,
+      "depth": 10,
+      "colorId": 2,
+      "fullRange": true,
+      "width": 1024,
+      "height": 16,
+      "renderWidth": 1024,
+      "renderHeight": 16,
+      "recordedVideoFrameCodedWidth": 1088,
+      "recordedVideoFrameCodedHeight": 16,
+      "recordedVisibleRect": null,
+      "rawPixelComparisonPerformed": false
+    },
+    {
+      "id": "pq2020",
+      "packet": "codec-probe-1-pq2020-0.vp9-packet.bin",
+      "sha256": "e73424f9a8fc69e54ae94d2b1a5a3151d54491cb8d8b490e2d5d2773790f3d64",
+      "profile": 2,
+      "depth": 10,
+      "colorId": 5,
+      "fullRange": true,
+      "width": 1024,
+      "height": 16,
+      "renderWidth": 1024,
+      "renderHeight": 16,
+      "recordedVideoFrameCodedWidth": 1088,
+      "recordedVideoFrameCodedHeight": 16,
+      "recordedVisibleRect": null,
+      "rawPixelComparisonPerformed": false
+    },
+    {
+      "id": "hlg2020",
+      "packet": "codec-probe-1-hlg2020-0.vp9-packet.bin",
+      "sha256": "e73424f9a8fc69e54ae94d2b1a5a3151d54491cb8d8b490e2d5d2773790f3d64",
+      "profile": 2,
+      "depth": 10,
+      "colorId": 5,
+      "fullRange": true,
+      "width": 1024,
+      "height": 16,
+      "renderWidth": 1024,
+      "renderHeight": 16,
+      "recordedVideoFrameCodedWidth": 1088,
+      "recordedVideoFrameCodedHeight": 16,
+      "recordedVisibleRect": null,
+      "rawPixelComparisonPerformed": false
+    }
+  ]
+}

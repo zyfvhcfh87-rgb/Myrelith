@@ -1,0 +1,9 @@
+{
+  "archive": "/private/tmp/issue200-g3-3d5b39f-01-evidence.tar.gz",
+  "bytes": 1248864,
+  "sha256": "b6f9ff2bc153011ca019c8c9412a2147ac555b671825338b3281a7407a303778",
+  "members": 58,
+  "hashedMembers": 57,
+  "testedHead": "3d5b39fab76354f2a30f3d834cda3e40ba5461f7",
+  "result": "6passed/0failed/0skipped/0retries; visual glyph screenshot qualification retained"
+}

@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --run src/domain/titleComposition.test.ts src/domain/titleDefinitionCache.test.ts src/domain/titleEffectAnimation.test.ts src/domain/pluginVideoEffectStagePlan.test.ts src/domain/projectVideoCompositionPlan.test.ts src/domain/videoCompositionPlan.test.ts src/app/previewTitleStatus.test.ts src/app/titleUpgradePlugin.test.ts src/app/animationTitleIntegration.test.ts src/app/exportController.test.ts src/app/previewController.test.ts src/pipeline/render.test.ts src/pipeline/render.pixels.test.ts src/pipeline/export.test.ts src/workers/render.worker.test.ts src/test/architecture.test.ts src/test/titleRenderProof.test.ts src/ui/Preview.test.tsx --maxWorkers=2
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue200
+
+
+ Test Files  18 passed (18)
+      Tests  390 passed (390)
+   Start at  14:53:49
+   Duration  5.07s (transform 1.05s, setup 309ms, import 2.64s, tests 2.47s, environment 3.47s)
+
+✔ cold samples each use and close a fresh BrowserContext (0.619417ms)
+✔ source identity rejects end-of-run drift (0.1655ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (210.988083ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (123.181875ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.301333ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.691ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.108791ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.242834ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.121834ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.097416ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.247625ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.546459ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.82ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.10075ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.145459ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.16625ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.111916ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 513.818875

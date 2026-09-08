@@ -1,0 +1,107 @@
+Corrected G2 test/evidence checkpoint checks; corrected browser gate not run.
+Product source remains unchanged from54581222b3c46208efea47f71a0d865f52778bc9.
+
+Focused fixture/isolation tests
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/test/titleCanvasDiagnostic.test.ts src/test/titleRenderProof.test.ts src/test/architecture.test.ts --maxWorkers=2
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue200
+
+
+ Test Files  3 passed (3)
+      Tests  11 passed (11)
+   Start at  16:07:04
+   Duration  1.05s (transform 310ms, setup 71ms, import 1.03s, tests 138ms, environment 589ms)
+
+✔ cold samples each use and close a fresh BrowserContext (0.683167ms)
+✔ source identity rejects end-of-run drift (0.179333ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (222.0735ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (130.458833ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.311583ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.919084ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.111916ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.2875ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.134833ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.106208ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.2775ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (3.414375ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.853541ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.091459ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.137583ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.163458ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.1155ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 538.664959
+
+Build/typecheck
+
+> myrelith@0.2.0-alpha.1 build
+> tsc -b && vite build
+
+vite v8.1.2 building client environment for production...
+[2K
+transforming...✓ 5052 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/rolldown-runtime-BHe-jwch.js                  0.95 kB
+dist/index.html                                           1.26 kB │ gzip:   0.54 kB
+dist/assets/video-scopes.worker-qT4VxaOS.js               2.84 kB
+dist/assets/color-lut-import.worker-cpGuStVq.js           5.41 kB
+dist/assets/mediabunny-prores-CPm4yC5N.js               206.10 kB
+dist/assets/mediabunny-prores-CUDWMC8E.js               206.11 kB
+dist/assets/mediabunny-prores-CqsZsYY4.js               206.11 kB
+dist/assets/multicam-monitor.worker-CgdQdvN3.js         306.39 kB
+dist/assets/audio-alignment.worker-CE13GrYs.js          364.83 kB
+dist/assets/motion-analysis.worker-CB6JgBPu.js          379.43 kB
+dist/assets/render.worker-Dw2M3_sc.js                   516.50 kB
+dist/assets/mediabunny-ac3-CtkQNEii.js                1,144.16 kB
+dist/assets/mediabunny-ac3-Bab0yg6L.js                1,144.18 kB
+dist/assets/mediabunny-ac3-QsdFtuRy.js                1,144.18 kB
+dist/assets/index-DsADjVaB.css                           36.31 kB │ gzip:   7.93 kB
+dist/assets/EditorShell-gRQl285x.css                    142.50 kB │ gzip:  27.46 kB
+dist/assets/editorUi-EcjKDgcY.js                          0.02 kB │ gzip:   0.04 kB
+dist/assets/motionTrackingSelectionStore-DLsbad6o.js      0.46 kB │ gzip:   0.20 kB
+dist/assets/PluginDialogFrame-BVigElOU.js                 2.05 kB │ gzip:   0.86 kB
+dist/assets/AdjustmentDialog-CNyzsN5S.js                  3.66 kB │ gzip:   1.47 kB
+dist/assets/TextOverlayDialog-DsI2Op64.js                 3.71 kB │ gzip:   1.49 kB
+dist/assets/pluginPreparedExportOwner-CVWQHsFj.js         6.44 kB │ gzip:   2.23 kB
+dist/assets/DynamicZoomEditor-0uXUUOoE.js                 6.57 kB │ gzip:   2.42 kB
+dist/assets/exportCapabilitiesController-DR50b2WW.js      6.97 kB │ gzip:   2.56 kB
+dist/assets/AnimationCurveEditor-D0B4I1sg.js              7.31 kB │ gzip:   2.68 kB
+dist/assets/export-mediabunny-profile-CyxtTq_k.js        12.77 kB │ gzip:   4.34 kB
+dist/assets/StabilizationEditor-B4N0s2iq.js              16.15 kB │ gzip:   5.58 kB
+dist/assets/motionAnalysisRuntime-C3umkDSc.js            17.49 kB │ gzip:   5.45 kB
+dist/assets/CaptionEditor-CnO_LR4g.js                    18.18 kB │ gzip:   5.95 kB
+dist/assets/MotionTrackingEditor-DdqBCwD7.js             20.10 kB │ gzip:   6.59 kB
+dist/assets/exportController-v3ZaabrJ.js                 23.89 kB │ gzip:   7.80 kB
+dist/assets/PluginAppRoot-CFuVAzI6.js                    24.13 kB │ gzip:   6.34 kB
+dist/assets/export-mediabunny-DX8GHJE8.js                30.87 kB │ gzip:  10.09 kB
+dist/assets/ExportDialog-5qYWnFU-.js                     36.83 kB │ gzip:  10.69 kB
+dist/assets/pluginAppController-DpjjOILb.js             177.17 kB │ gzip:  49.09 kB
+dist/assets/mediabunny-prores-DTSL-QpF.js               205.86 kB │ gzip:  49.07 kB
+dist/assets/EditorShell-CZeOjxPh.js                     583.12 kB │ gzip: 154.18 kB
+dist/assets/mediabunny-ac3-DoIFaRaW.js                1,144.06 kB │ gzip: 303.56 kB
+dist/assets/index-Tu0CaTJT.js                         1,662.80 kB │ gzip: 455.30 kB
+
+✓ built in 346ms
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Lint
+
+> myrelith@0.2.0-alpha.1 lint
+> oxlint
+
+
+Additional checks passed: diagnostic/G2 observer TypeScript project; both native runner syntax checks without cache writes; exactly six G2 tests discovered without browser launch; archive SHA and2057 recorded member hashes; all778 baseline blobs and18 fixture hashes; production-output proof/diagnostic isolation; diff hygiene.
