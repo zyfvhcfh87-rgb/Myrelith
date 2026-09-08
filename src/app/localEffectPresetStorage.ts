@@ -41,7 +41,7 @@ function transaction<T>(mode: IDBTransactionMode, action: (raw: unknown) => { re
   })
 }
 export const localEffectPresetStorage: EffectPresetRepository = {
-  load: () => transaction('readonly', (raw) => ({ result: readEffectPresetLibrary(raw).view })),
+  load: () => transaction('readwrite', (raw) => { const parsed = readEffectPresetLibrary(raw); return { result: parsed.view, write: parsed.migration } }),
   mutate: (mutation, isCurrent = () => true) => transaction('readwrite', (raw) => {
     if (!isCurrent()) throw new Error('The project changed before the preset could be saved. Reopen Save preset.')
     const write = mutateEffectPresetLibrary(raw, mutation)

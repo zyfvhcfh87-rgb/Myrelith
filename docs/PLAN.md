@@ -5129,5 +5129,8 @@ Contract and proposed gates: [COLOR_GRADING.md](COLOR_GRADING.md).
   tests, 17 runner checks, build/lint, 45 timing cells and three Chromium flows.
 - [x] Gate 4: keyboard-accessible import, curves, wheels and safe animation;
   171 focused tests, 17 runner checks, build/lint and two Chromium UI flows.
-- [ ] Gate 5: stable correction presets and measured RGB parade.
+- [x] Gate 5: portable correction presets and numeric recipes; 56 focused tests,
+  17 runner checks, build/lint and two Chromium flows. Optional parade deferred
+  after its repeated presentation timing exceeded the approved ceiling; existing
+  scopes stay unchanged. Both runs and the removed prototype are recorded.
 - [ ] Gate 6: complete tests/build/lint/audit, Chromium acceptance and evidence.

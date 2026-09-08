@@ -1,0 +1,28 @@
+
+test('RGB parade is a live, keyboard-accessible scope at narrow widths and releases on close', async ({ page }) => {
+  const problems: string[] = []
+  page.on('pageerror', (error) => problems.push(error.message))
+  page.on('console', (message) => { if (['warning', 'error'].includes(message.type())) problems.push(message.text()) })
+  await gradingProject(page)
+  await page.getByRole('button', { name: 'Scopes', exact: true }).click()
+  const parade = page.getByRole('tab', { name: 'RGB parade', exact: true })
+  await parade.click()
+  await page.evaluate(async () => { const path = '/src/state/transportStore.ts'; (await import(path)).useTransportStore.getState().setPlayheadFrame(12) })
+  await expect(page.getByRole('img', { name: /rgb-parade scope/ })).toHaveAttribute('aria-label', /14400 visible samples from frame/)
+  await parade.press('ArrowRight')
+  await expect(page.getByRole('tab', { name: 'histogram', exact: true })).toBeFocused()
+  await page.keyboard.press('ArrowLeft')
+  await expect(parade).toBeFocused()
+  await expect(parade).toHaveAttribute('aria-selected', 'true')
+  for (const width of [1280, 720]) {
+    await page.setViewportSize({ width, height: 800 })
+    const bounds = await page.getByRole('tablist', { name: 'Video scope type' }).evaluate((element) => ({ width: element.clientWidth, scroll: element.scrollWidth }))
+    expect(bounds.scroll).toBeLessThanOrEqual(bounds.width + 1)
+  }
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.screenshot({ path: '/tmp/myrelith-196-rgb-parade.png' })
+  await page.getByRole('button', { name: 'Scopes', exact: true }).click()
+  const cleared = await page.evaluate(async () => { const path = '/src/state/videoScopesStore.ts'; const state = (await import(path)).useVideoScopesStore.getState(); return !state.enabled && state.analysis === null })
+  expect(cleared).toBe(true)
+  expect(problems).toEqual([])
+})

@@ -1,0 +1,596 @@
+diff --git a/src/domain/videoScopes.test.ts b/src/domain/videoScopes.test.ts
+index 7a28bfb..37fef21 100644
+--- a/src/domain/videoScopes.test.ts
++++ b/src/domain/videoScopes.test.ts
+@@ -1,6 +1,7 @@
+ import { describe, expect, test } from 'vitest'
+ import {
+   analyzeVideoScopes,
++  analyzeRgbParade,
+   VIDEO_SCOPE_MAX_PIXELS,
+   VIDEO_SCOPE_VECTOR_SIZE,
+   VIDEO_SCOPE_WAVEFORM_HEIGHT,
+@@ -191,3 +192,29 @@ describe('bounded SDR video scope fixtures', () => {
+     )).toThrow(/limited/)
+   })
+ })
++
++test('RGB parade keeps channel identity, horizontal position and alpha-over-black bins', () => {
++  const rgba = new Uint8ClampedArray([
++    255, 0, 0, 255, 255, 255, 255, 128, 250, 250, 250, 0,
++    64, 128, 192, 255, 0, 0, 0, 255, 0, 0, 255, 255,
++  ])
++  const result = analyzeVideoScopes(rgba, 3, 2)
++  const sparse = (plane: Uint16Array) => [...plane.entries()].filter(([, count]) => count)
++  expect(sparse(result.rgbParade.red)).toEqual([[0, 1], [94, 1], [141, 1], [190, 1], [191, 1]])
++  expect(sparse(result.rgbParade.green)).toEqual([[93, 1], [94, 1], [189, 1], [190, 1], [191, 1]])
++  expect(sparse(result.rgbParade.blue)).toEqual([[2, 1], [48, 1], [94, 1], [189, 1], [190, 1]])
++  expect(analyzeRgbParade(rgba, 3, 2)).toEqual(result.rgbParade)
++  expect(result.sampleCount).toBe(5)
++})
++
++test('the complete fixed scope result and sampled pixels stay below 160 KiB', () => {
++  const rgba = new Uint8ClampedArray(160 * 90 * 4)
++  const result = analyzeVideoScopes(rgba, 160, 90)
++  const added = result.rgbParade.red.byteLength + result.rgbParade.green.byteLength + result.rgbParade.blue.byteLength
++  const bytes = added + Object.values(result.histogram).reduce((sum, bins) => sum + bins.byteLength, 0) + result.waveform.density.byteLength + result.vectorscope.density.byteLength
++  expect(added).toBe(61_440)
++  expect(bytes).toBe(92_160)
++  expect(bytes + rgba.byteLength).toBeLessThan(160 * 1024)
++  expect(() => analyzeVideoScopes(new Uint8ClampedArray(161 * 4), 161, 1)).toThrow(/160 by 90/)
++  expect(() => analyzeRgbParade(new Uint8ClampedArray(161 * 4), 161, 1)).toThrow()
++})
+diff --git a/src/domain/videoScopes.ts b/src/domain/videoScopes.ts
+index 572f4f6..e3c546c 100644
+--- a/src/domain/videoScopes.ts
++++ b/src/domain/videoScopes.ts
+@@ -1,4 +1,4 @@
+-/** Pure, bounded SDR histogram/waveform/vectorscope analysis. */
++/** Pure, bounded SDR histogram, waveform, vectorscope and RGB parade analysis. */
+ 
+ export const VIDEO_SCOPE_SAMPLE_WIDTH = 160
+ export const VIDEO_SCOPE_SAMPLE_HEIGHT = 90
+@@ -25,7 +25,16 @@ export const VIDEO_SCOPE_LEGACY_TIE_DOWN = {
+   cr: 1 << 3,
+ } as const
+ 
++export interface RgbParadeAnalysis {
++  readonly width: number
++  readonly height: number
++  readonly red: Uint16Array
++  readonly green: Uint16Array
++  readonly blue: Uint16Array
++}
++
+ export interface VideoScopeAnalysis {
++  readonly rgbParade: RgbParadeAnalysis
+   readonly sourceWidth: number
+   readonly sourceHeight: number
+   readonly sampleCount: number
+@@ -212,6 +221,7 @@ export function analyzeVideoScopes(
+   if (!Number.isSafeInteger(height) || height <= 0) {
+     throw new RangeError('Scope height must be a positive safe integer')
+   }
++  if (width > VIDEO_SCOPE_SAMPLE_WIDTH || height > VIDEO_SCOPE_SAMPLE_HEIGHT) throw new RangeError('Scope samples are limited to 160 by 90 pixels')
+   const pixels = width * height
+   if (!Number.isSafeInteger(pixels) || pixels > VIDEO_SCOPE_MAX_PIXELS) {
+     throw new RangeError(`Scope samples are limited to ${VIDEO_SCOPE_MAX_PIXELS} pixels`)
+@@ -226,6 +236,7 @@ export function analyzeVideoScopes(
+   const lumaBins = new Uint16Array(VIDEO_SCOPE_HISTOGRAM_BINS)
+   const waveform = new Uint16Array(width * VIDEO_SCOPE_WAVEFORM_HEIGHT)
+   const vectorscope = new Uint16Array(VIDEO_SCOPE_VECTOR_SIZE * VIDEO_SCOPE_VECTOR_SIZE)
++  const rgbParade = createRgbParade(width)
+   let sampleCount = 0
+ 
+   for (let pixel = 0; pixel < pixels; pixel++) {
+@@ -266,6 +277,7 @@ export function analyzeVideoScopes(
+     increment(lumaBins, luma)
+ 
+     const sourceX = pixel % width
++    incrementRgbParade(rgbParade, sourceX, red, green, blue)
+     const waveformBin = waveformLevel(
+       lumaNumerator,
+       Boolean(legacyTieDownMask & VIDEO_SCOPE_LEGACY_TIE_DOWN.waveform),
+@@ -290,6 +302,7 @@ export function analyzeVideoScopes(
+   }
+ 
+   return {
++    rgbParade,
+     sourceWidth: width,
+     sourceHeight: height,
+     sampleCount,
+@@ -311,3 +324,26 @@ export function analyzeVideoScopes(
+     },
+   }
+ }
++
++
++function createRgbParade(width: number): RgbParadeAnalysis {
++  const height = VIDEO_SCOPE_WAVEFORM_HEIGHT
++  return { width, height, red: new Uint16Array(width * height), green: new Uint16Array(width * height), blue: new Uint16Array(width * height) }
++}
++function incrementRgbParade(parade: RgbParadeAnalysis, x: number, red: number, green: number, blue: number): void {
++  const last = parade.height - 1, width = parade.width
++  increment(parade.red, (last - Math.round(red * last / 255)) * width + x)
++  increment(parade.green, (last - Math.round(green * last / 255)) * width + x)
++  increment(parade.blue, (last - Math.round(blue * last / 255)) * width + x)
++}
++/** Completes the opt-in GPU experiment with the same bounded CPU parade rule. */
++export function analyzeRgbParade(rgba: Uint8ClampedArray, width: number, height: number): RgbParadeAnalysis {
++  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || width > VIDEO_SCOPE_SAMPLE_WIDTH || height > VIDEO_SCOPE_SAMPLE_HEIGHT || rgba.length !== width * height * 4) throw new RangeError('RGB parade samples are limited to 160 by 90 RGBA pixels')
++  const parade = createRgbParade(width)
++  for (let pixel = 0; pixel < width * height; pixel++) {
++    const offset = pixel * 4, alpha = rgba[offset + 3]
++    if (!alpha) continue
++    incrementRgbParade(parade, pixel % width, displayedChannel(rgba[offset], alpha), displayedChannel(rgba[offset + 1], alpha), displayedChannel(rgba[offset + 2], alpha))
++  }
++  return parade
++}
+diff --git a/src/state/videoScopesStore.ts b/src/state/videoScopesStore.ts
+index e76dfe7..c509226 100644
+--- a/src/state/videoScopesStore.ts
++++ b/src/state/videoScopesStore.ts
+@@ -3,7 +3,7 @@
+ import { create } from 'zustand'
+ import type { VideoScopeAnalysis } from '../domain/videoScopes'
+ 
+-export type VideoScopeMode = 'histogram' | 'waveform' | 'vectorscope'
++export type VideoScopeMode = 'histogram' | 'waveform' | 'vectorscope' | 'rgb-parade'
+ export type VideoScopeStatus = 'idle' | 'waiting' | 'ready' | 'unsupported'
+ 
+ export interface VideoScopesState {
+diff --git a/src/ui/VideoScopesPanel.tsx b/src/ui/VideoScopesPanel.tsx
+index 73c546f..e8e230a 100644
+--- a/src/ui/VideoScopesPanel.tsx
++++ b/src/ui/VideoScopesPanel.tsx
+@@ -1,121 +1,19 @@
+ /** Lightweight UI renderer for render-worker scope analysis. */
+ 
+ import { useEffect, useRef } from 'react'
+-import type { VideoScopeAnalysis } from '../domain/videoScopes'
++import { paintVideoScope, SCOPE_WIDTH, SCOPE_HEIGHT } from './paintVideoScope'
+ import {
+   useVideoScopesStore,
+   type VideoScopeMode,
+ } from '../state/videoScopesStore'
+ 
+-const SCOPE_WIDTH = 320
+-const SCOPE_HEIGHT = 144
+ const MODES: readonly VideoScopeMode[] = [
+   'histogram',
+   'waveform',
+   'vectorscope',
++  'rgb-parade',
+ ]
+ 
+-function paintGrid(ctx: CanvasRenderingContext2D): void {
+-  ctx.fillStyle = '#071019'
+-  ctx.fillRect(0, 0, SCOPE_WIDTH, SCOPE_HEIGHT)
+-  ctx.strokeStyle = 'rgb(125 155 184 / 20%)'
+-  ctx.lineWidth = 1
+-  for (let quarter = 1; quarter < 4; quarter++) {
+-    const x = quarter * SCOPE_WIDTH / 4
+-    const y = quarter * SCOPE_HEIGHT / 4
+-    ctx.beginPath()
+-    ctx.moveTo(x, 0)
+-    ctx.lineTo(x, SCOPE_HEIGHT)
+-    ctx.stroke()
+-    ctx.beginPath()
+-    ctx.moveTo(0, y)
+-    ctx.lineTo(SCOPE_WIDTH, y)
+-    ctx.stroke()
+-  }
+-}
+-
+-function paintHistogram(
+-  ctx: CanvasRenderingContext2D,
+-  analysis: VideoScopeAnalysis,
+-): void {
+-  const series = [
+-    { bins: analysis.histogram.luma, color: '#eaf3ff' },
+-    { bins: analysis.histogram.red, color: '#ff6677' },
+-    { bins: analysis.histogram.green, color: '#63dd95' },
+-    { bins: analysis.histogram.blue, color: '#669dff' },
+-  ]
+-  let maximum = 1
+-  for (const { bins } of series) {
+-    for (const count of bins) maximum = Math.max(maximum, count)
+-  }
+-  ctx.globalAlpha = 0.75
+-  for (const { bins, color } of series) {
+-    ctx.strokeStyle = color
+-    ctx.beginPath()
+-    for (let bin = 0; bin < bins.length; bin++) {
+-      const x = bin / (bins.length - 1) * (SCOPE_WIDTH - 1)
+-      const y = SCOPE_HEIGHT - 1 - bins[bin] / maximum * (SCOPE_HEIGHT - 8)
+-      if (bin === 0) ctx.moveTo(x, y)
+-      else ctx.lineTo(x, y)
+-    }
+-    ctx.stroke()
+-  }
+-  ctx.globalAlpha = 1
+-}
+-
+-function paintDensity(
+-  ctx: CanvasRenderingContext2D,
+-  density: Uint16Array,
+-  width: number,
+-  height: number,
+-  color: string,
+-): void {
+-  let maximum = 1
+-  for (const count of density) maximum = Math.max(maximum, count)
+-  const cellWidth = SCOPE_WIDTH / width
+-  const cellHeight = SCOPE_HEIGHT / height
+-  ctx.fillStyle = color
+-  for (let index = 0; index < density.length; index++) {
+-    const count = density[index]
+-    if (count === 0) continue
+-    ctx.globalAlpha = Math.max(0.12, Math.sqrt(count / maximum))
+-    ctx.fillRect(
+-      index % width * cellWidth,
+-      Math.floor(index / width) * cellHeight,
+-      Math.max(1, cellWidth),
+-      Math.max(1, cellHeight),
+-    )
+-  }
+-  ctx.globalAlpha = 1
+-}
+-
+-function paintScope(
+-  ctx: CanvasRenderingContext2D,
+-  mode: VideoScopeMode,
+-  analysis: VideoScopeAnalysis | null,
+-): void {
+-  paintGrid(ctx)
+-  if (!analysis) return
+-  if (mode === 'histogram') paintHistogram(ctx, analysis)
+-  else if (mode === 'waveform') {
+-    paintDensity(
+-      ctx,
+-      analysis.waveform.density,
+-      analysis.waveform.width,
+-      analysis.waveform.height,
+-      '#72e6b1',
+-    )
+-  } else {
+-    paintDensity(
+-      ctx,
+-      analysis.vectorscope.density,
+-      analysis.vectorscope.width,
+-      analysis.vectorscope.height,
+-      '#75d8ff',
+-    )
+-  }
+-}
+-
+ export default function VideoScopesPanel() {
+   const canvasRef = useRef<HTMLCanvasElement>(null)
+   const mode = useVideoScopesStore((state) => state.mode)
+@@ -126,7 +24,7 @@ export default function VideoScopesPanel() {
+ 
+   useEffect(() => {
+     const context = canvasRef.current?.getContext('2d')
+-    if (context) paintScope(context, mode, analysis)
++    if (context) paintVideoScope(context, mode, analysis)
+   }, [analysis, mode])
+ 
+   const statusText = status === 'unsupported'
+@@ -165,7 +63,7 @@ export default function VideoScopesPanel() {
+               tabs?.[next]?.focus()
+             }}
+           >
+-            {item}
++            {item === 'rgb-parade' ? 'RGB parade' : item}
+           </button>
+         ))}
+       </div>
+diff --git a/src/workers/video-scopes-webgpu.test.ts b/src/workers/video-scopes-webgpu.test.ts
+index 6da67b3..47e75dd 100644
+--- a/src/workers/video-scopes-webgpu.test.ts
++++ b/src/workers/video-scopes-webgpu.test.ts
+@@ -202,6 +202,19 @@ describe('optional WebGPU video scope adapter', () => {
+     expect(gpu.release).toHaveBeenCalledOnce()
+   })
+ 
++  test('an old-shaped WebGPU result falls back to a complete CPU parade', async () => {
++    const gpu = fakeSession({ analyze: async (rgba, width, height) => {
++      const { rgbParade: _parade, ...legacy } = analyzeVideoScopes(rgba, width, height)
++      return legacy as VideoScopeAnalysis
++    } })
++    const analyzer = createOptionalVideoScopeAnalyzer({ preferWebGpu: true, requestSession: async () => ({ status: 'ready', session: gpu.session }) })
++    const result = await analyzer.analyze(fixture(), VIDEO_SCOPE_SAMPLE_WIDTH, VIDEO_SCOPE_SAMPLE_HEIGHT)
++    expect(result.backend).toBe('cpu')
++    expect(result.analysis.rgbParade).toEqual(analyzeVideoScopes(fixture(), VIDEO_SCOPE_SAMPLE_WIDTH, VIDEO_SCOPE_SAMPLE_HEIGHT).rgbParade)
++    expect(gpu.release).toHaveBeenCalledOnce()
++    analyzer.release()
++  })
++
+   test('falls back after execution failure and device loss without retaining the session', async () => {
+     let calls = 0
+     const failing = fakeSession({
+diff --git a/src/workers/video-scopes-webgpu.ts b/src/workers/video-scopes-webgpu.ts
+index 62359f0..7a8e7ad 100644
+--- a/src/workers/video-scopes-webgpu.ts
++++ b/src/workers/video-scopes-webgpu.ts
+@@ -2,6 +2,7 @@
+ 
+ import {
+   analyzeVideoScopes,
++  analyzeRgbParade,
+   VIDEO_SCOPE_HISTOGRAM_BINS,
+   VIDEO_SCOPE_LEGACY_TIE_DOWN,
+   VIDEO_SCOPE_SAMPLE_HEIGHT,
+@@ -287,10 +288,12 @@ function copyU16(source: Uint32Array, start: number, length: number): Uint16Arra
+ 
+ function decodeGpuOutput(
+   values: Uint32Array,
++  rgba: Uint8ClampedArray,
+   width: number,
+   height: number,
+ ): VideoScopeAnalysis {
+   return {
++    rgbParade: analyzeRgbParade(rgba, width, height),
+     sourceWidth: width,
+     sourceHeight: height,
+     sampleCount: values[SAMPLE_COUNT_OFFSET],
+@@ -500,7 +503,7 @@ async function createBrowserWebGpuSession(): Promise<VideoScopeWebGpuSessionRequ
+       }
+       const values = new Uint32Array(readback.getMappedRange()).slice()
+       readback.unmap()
+-      return decodeGpuOutput(values, width, height)
++      return decodeGpuOutput(values, rgba, width, height)
+     } finally {
+       if (readback?.mapState === 'mapped') readback.unmap()
+       for (const buffer of ownedBuffers) buffer.destroy()
+@@ -573,6 +576,10 @@ export function videoScopeAnalysesEqual(
+     && left.vectorscope.width === right.vectorscope.width
+     && left.vectorscope.height === right.vectorscope.height
+     && equalArrays(left.vectorscope.density, right.vectorscope.density)
++    && left.rgbParade.width === right.rgbParade.width && left.rgbParade.height === right.rgbParade.height
++    && equalArrays(left.rgbParade.red, right.rgbParade.red)
++    && equalArrays(left.rgbParade.green, right.rgbParade.green)
++    && equalArrays(left.rgbParade.blue, right.rgbParade.blue)
+ }
+ 
+ export function createOptionalVideoScopeAnalyzer(
+diff --git a/src/ui/paintVideoScope.ts b/src/ui/paintVideoScope.ts
+new file mode 100644
+index 0000000..81a65b3
+--- /dev/null
++++ b/src/ui/paintVideoScope.ts
+@@ -0,0 +1,117 @@
++/** Canvas presentation of bounded scope data; no renderer ownership. */
++import type { VideoScopeAnalysis } from '../domain/videoScopes'
++import type { VideoScopeMode } from '../state/videoScopesStore'
++
++export const SCOPE_WIDTH = 320
++export const SCOPE_HEIGHT = 144
++
++function paintGrid(ctx: CanvasRenderingContext2D): void {
++  ctx.fillStyle = '#071019'
++  ctx.fillRect(0, 0, SCOPE_WIDTH, SCOPE_HEIGHT)
++  ctx.strokeStyle = 'rgb(125 155 184 / 20%)'
++  ctx.lineWidth = 1
++  for (let quarter = 1; quarter < 4; quarter++) {
++    const x = quarter * SCOPE_WIDTH / 4
++    const y = quarter * SCOPE_HEIGHT / 4
++    ctx.beginPath()
++    ctx.moveTo(x, 0)
++    ctx.lineTo(x, SCOPE_HEIGHT)
++    ctx.stroke()
++    ctx.beginPath()
++    ctx.moveTo(0, y)
++    ctx.lineTo(SCOPE_WIDTH, y)
++    ctx.stroke()
++  }
++}
++
++function paintHistogram(
++  ctx: CanvasRenderingContext2D,
++  analysis: VideoScopeAnalysis,
++): void {
++  const series = [
++    { bins: analysis.histogram.luma, color: '#eaf3ff' },
++    { bins: analysis.histogram.red, color: '#ff6677' },
++    { bins: analysis.histogram.green, color: '#63dd95' },
++    { bins: analysis.histogram.blue, color: '#669dff' },
++  ]
++  let maximum = 1
++  for (const { bins } of series) {
++    for (const count of bins) maximum = Math.max(maximum, count)
++  }
++  ctx.globalAlpha = 0.75
++  for (const { bins, color } of series) {
++    ctx.strokeStyle = color
++    ctx.beginPath()
++    for (let bin = 0; bin < bins.length; bin++) {
++      const x = bin / (bins.length - 1) * (SCOPE_WIDTH - 1)
++      const y = SCOPE_HEIGHT - 1 - bins[bin] / maximum * (SCOPE_HEIGHT - 8)
++      if (bin === 0) ctx.moveTo(x, y)
++      else ctx.lineTo(x, y)
++    }
++    ctx.stroke()
++  }
++  ctx.globalAlpha = 1
++}
++
++function paintDensity(
++  ctx: CanvasRenderingContext2D,
++  density: Uint16Array,
++  width: number,
++  height: number,
++  color: string,
++): void {
++  let maximum = 1
++  for (const count of density) maximum = Math.max(maximum, count)
++  const cellWidth = SCOPE_WIDTH / width
++  const cellHeight = SCOPE_HEIGHT / height
++  ctx.fillStyle = color
++  for (let index = 0; index < density.length; index++) {
++    const count = density[index]
++    if (count === 0) continue
++    ctx.globalAlpha = Math.max(0.12, Math.sqrt(count / maximum))
++    ctx.fillRect(
++      index % width * cellWidth,
++      Math.floor(index / width) * cellHeight,
++      Math.max(1, cellWidth),
++      Math.max(1, cellHeight),
++    )
++  }
++  ctx.globalAlpha = 1
++}
++
++export function paintVideoScope(
++  ctx: CanvasRenderingContext2D,
++  mode: VideoScopeMode,
++  analysis: VideoScopeAnalysis | null,
++): void {
++  paintGrid(ctx)
++  if (!analysis) return
++  if (mode === 'histogram') paintHistogram(ctx, analysis)
++  else if (mode === 'waveform') {
++    paintDensity(
++      ctx,
++      analysis.waveform.density,
++      analysis.waveform.width,
++      analysis.waveform.height,
++      '#72e6b1',
++    )
++  } else if (mode === 'rgb-parade') {
++    const parade = analysis.rgbParade
++    const planes = [parade.red, parade.green, parade.blue], colors = ['#ff6677', '#63dd95', '#669dff']
++    for (let channel = 0; channel < 3; channel++) {
++      ctx.save(); ctx.translate(channel * SCOPE_WIDTH / 3, 0); ctx.scale(1 / 3, 1)
++      paintDensity(ctx, planes[channel], parade.width, parade.height, colors[channel]); ctx.restore()
++    }
++    ctx.globalAlpha = 1; ctx.font = '11px sans-serif'; ctx.textAlign = 'center'
++    for (let channel = 0; channel < 3; channel++) { ctx.fillStyle = colors[channel]; ctx.fillText(['R', 'G', 'B'][channel], (channel + 0.5) * SCOPE_WIDTH / 3, 12) }
++  } else {
++    paintDensity(
++      ctx,
++      analysis.vectorscope.density,
++      analysis.vectorscope.width,
++      analysis.vectorscope.height,
++      '#75d8ff',
++    )
++  }
++}
++
+diff --git a/tests/browser/issue-196-parade-proof.spec.ts b/tests/browser/issue-196-parade-proof.spec.ts
+new file mode 100644
+index 0000000..3960390
+--- /dev/null
++++ b/tests/browser/issue-196-parade-proof.spec.ts
+@@ -0,0 +1,111 @@
++import { expect, test } from '@playwright/test'
++import { writeFile, readFile } from 'node:fs/promises'
++import { createHash } from 'node:crypto'
++import { arch, cpus, platform, release } from 'node:os'
++import { gradingProject } from './issue-196-grading-fixtures.js'
++
++// Registered before exposing the tab: each sample/analysis/paint p95 <= 8 ms;
++// Program p95 growth <= max(2 ms, 10% of paired scopes-off baseline).
++test('RGB parade stays within its sample, paint, playback and ownership gates', async ({ page, browser }) => {
++  test.setTimeout(90_000)
++  const problems: string[] = []
++  page.on('pageerror', (error) => problems.push(error.message))
++  page.on('console', (message) => { if (['warning', 'error'].includes(message.type())) problems.push(message.text()) })
++  const sourcePaths = ['src/domain/videoScopes.ts', 'src/ui/VideoScopesPanel.tsx', 'src/ui/paintVideoScope.ts', 'src/workers/renderWorker/core.ts', 'src/workers/video-scopes.worker.ts', 'src/workers/video-scopes-webgpu.ts']
++  const hashes = () => Promise.all(sourcePaths.map(async (path) => [path, createHash('sha256').update(await readFile(path)).digest('hex')]))
++  const before = await hashes()
++  await gradingProject(page, 600)
++  const isolated = await page.evaluate(async () => {
++    const domainPath = '/src/domain/videoScopes.ts', uiPath = '/src/ui/paintVideoScope.ts'
++    const { analyzeVideoScopes } = await import(domainPath), { paintVideoScope } = await import(uiPath)
++    const source = new OffscreenCanvas(1280, 720), sourceCtx = source.getContext('2d')!
++    const rgba = new ImageData(1280, 720)
++    for (let i = 0; i < rgba.data.length; i += 4) {
++      rgba.data[i] = i % 251; rgba.data[i + 1] = i * 73 % 253; rgba.data[i + 2] = i * 119 % 255; rgba.data[i + 3] = i % 7 ? 255 : 128
++    }
++    sourceCtx.putImageData(rgba, 0, 0)
++    const sample = new OffscreenCanvas(160, 90), sampleCtx = sample.getContext('2d', { willReadFrequently: true })!
++    const output = document.createElement('canvas'); output.width = 320; output.height = 144
++    const paint = output.getContext('2d', { willReadFrequently: true })!
++    const times = { sampleMs: [] as number[], analysisMs: [] as number[], paintMs: [] as number[] }
++    let bytes = 0
++    try {
++      for (let run = 0; run < 22; run++) {
++        const start = performance.now()
++        sampleCtx.clearRect(0, 0, 160, 90); sampleCtx.drawImage(source, 0, 0, 160, 90)
++        const pixels = sampleCtx.getImageData(0, 0, 160, 90), sampled = performance.now()
++        const analysis = analyzeVideoScopes(pixels.data, 160, 90), analyzed = performance.now()
++        paintVideoScope(paint, 'rgb-parade', analysis)
++        const painted = performance.now()
++        // Include completion of queued Canvas work in the conservative paint measurement.
++        paint.getImageData(0, 0, 320, 144)
++        const completed = performance.now()
++        if (run >= 2) { times.sampleMs.push(sampled - start); times.analysisMs.push(analyzed - sampled); times.paintMs.push(Math.max(painted, completed) - analyzed) }
++        bytes = pixels.data.byteLength + analysis.rgbParade.red.byteLength * 3 + 256 * 2 * 4 + analysis.waveform.density.byteLength + analysis.vectorscope.density.byteLength
++        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
++      }
++    } finally { source.width = source.height = sample.width = sample.height = output.width = output.height = 0 }
++    return { ...times, bytes }
++  })
++  const paired = await page.evaluate(async () => {
++    const previewPath = '/src/app/previewController.ts', transportPath = '/src/app/transportController.ts'
++    const statePath = '/src/state/transportStore.ts', scopesPath = '/src/state/videoScopesStore.ts'
++    const { subscribePreviewRenderDiagnostics, setVideoScopesEnabled } = await import(previewPath)
++    const { play, pauseAndDrainPlayback } = await import(transportPath)
++    const { useTransportStore } = await import(statePath), { useVideoScopesStore } = await import(scopesPath)
++    const rows: { enabled: boolean; renderMs: number[]; requestToPresentationMs: number[]; scopeResults: number; minScopeInterval: number | null; lastPlaneBytes: number }[] = []
++    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
++    try {
++      // Alternate order to reduce warmup/order bias, three paired cells per condition.
++      for (const enabled of [false, true, true, false, false, true]) {
++        await pauseAndDrainPlayback()
++        useTransportStore.getState().setPlayheadFrame(1)
++        setVideoScopesEnabled(enabled); useVideoScopesStore.getState().setMode('rgb-parade')
++        await wait(300)
++        const row = { enabled, renderMs: [] as number[], requestToPresentationMs: [] as number[], scopeResults: 0, minScopeInterval: null as number | null, lastPlaneBytes: 0 }
++        let previousScope: number | null = null
++        const start = performance.now()
++        const unsubscribeRender = subscribePreviewRenderDiagnostics((event: { mode: string; requestedAt: number; presentedAt: number; result: { status: string; renderMs: number } }) => {
++          if (event.mode === 'playback' && event.result.status === 'drawn' && event.requestedAt >= start + 800) {
++            row.renderMs.push(event.result.renderMs); row.requestToPresentationMs.push(event.presentedAt - event.requestedAt)
++          }
++        })
++        const unsubscribeScopes = useVideoScopesStore.subscribe((next: { analysis: { rgbParade: { red: Uint16Array; green: Uint16Array; blue: Uint16Array } } | null; analyzedAt: number | null }, previous: { analysis: unknown }) => {
++          if (next.analysis && next.analysis !== previous.analysis) {
++            row.scopeResults++
++            if (previousScope !== null && next.analyzedAt !== null) row.minScopeInterval = Math.min(row.minScopeInterval ?? Infinity, next.analyzedAt - previousScope)
++            previousScope = next.analyzedAt
++            const parade = next.analysis.rgbParade
++            row.lastPlaneBytes = parade.red.byteLength + parade.green.byteLength + parade.blue.byteLength
++          }
++        })
++        try { play(); await wait(3800) }
++        finally { unsubscribeRender(); unsubscribeScopes(); await pauseAndDrainPlayback() }
++        rows.push(row)
++      }
++    } finally { setVideoScopesEnabled(false); await pauseAndDrainPlayback() }
++    await wait(300)
++    return { rows, disabled: useVideoScopesStore.getState().analysis === null }
++  })
++  const p95 = (values: number[]) => [...values].sort((a, b) => a - b)[Math.ceil(values.length * 0.95) - 1]
++  const phases = { sample: p95(isolated.sampleMs), analysis: p95(isolated.analysisMs), paint: p95(isolated.paintMs) }
++  const renderOff = paired.rows.filter((row) => !row.enabled).flatMap((row) => row.renderMs)
++  const renderOn = paired.rows.filter((row) => row.enabled).flatMap((row) => row.renderMs)
++  const totalOff = paired.rows.filter((row) => !row.enabled).flatMap((row) => row.requestToPresentationMs)
++  const totalOn = paired.rows.filter((row) => row.enabled).flatMap((row) => row.requestToPresentationMs)
++  const render = { offP95: p95(renderOff), onP95: p95(renderOn), allowance: Math.max(2, p95(renderOff) * 0.1) }
++  const completion = { offP95: p95(totalOff), onP95: p95(totalOn), allowance: Math.max(2, p95(totalOff) * 0.1) }
++  await writeFile('/tmp/myrelith-196-parade-proof.json', JSON.stringify({ sources: Object.fromEntries(before), browser: browser.version(), host: { platform: platform(), arch: arch(), release: release(), cpu: cpus()[0]?.model }, qualification: 'Headless CPU scopes; 720p still-source Program playback; scopes-off baseline includes the cost of all scopes in the enabled condition; paint includes readback; no GPU acceleration claim.', isolated, phases, paired, render, completion, problems }, null, 2))
++  expect(await hashes(), 'Source changed during measurement').toEqual(before)
++  expect(Object.values(phases).every((ms) => ms <= 8)).toBe(true)
++  expect(isolated.bytes).toBeLessThan(160 * 1024)
++  for (const row of paired.rows) {
++    expect(row.renderMs.length).toBeGreaterThanOrEqual(10)
++    if (row.enabled) { expect(row.scopeResults).toBeGreaterThanOrEqual(8); expect(row.lastPlaneBytes).toBe(61_440); expect(row.minScopeInterval).toBeGreaterThanOrEqual(250) }
++    else expect(row.scopeResults).toBe(0)
++  }
++  expect(render.onP95 - render.offP95).toBeLessThanOrEqual(render.allowance)
++  expect(completion.onP95 - completion.offP95).toBeLessThanOrEqual(completion.allowance)
++  expect(paired.disabled).toBe(true)
++  expect(problems).toEqual([])
++})

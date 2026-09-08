@@ -597,3 +597,51 @@ The reused picker also needed explicit accessible dialog/select labels; its fina
 flow is now checked by those names. One automatic approval review timed out while
 launching the local browser-test server; its permitted retry succeeded. No user
 scope or approval gate changed.
+
+## Gate 5 evidence, 2026-09-08
+
+Local preset version 2 now carries exactly the supported LUT records referenced
+by its static descriptors. Version 1 migrates in one IndexedDB read/write
+transaction with empty bundles. Invalid siblings retain their data; future
+versions remain read-only, including envelopes with future fields. Saves enforce
+2 MiB per preset and 8 MiB per library, including invalid siblings. A native
+33-cube fits; two distinct native-33 tables exceed the per-preset ceiling.
+Application merges exact tables, remaps conflicting identities and commits once.
+Missing data, catalog overflow and stale sessions reject without clearing redo.
+The first-party Gentle contrast, Lifted shadows and Warm balance recipes contain
+only numeric correction descriptors and no external assets.
+
+All 56 focused tests in seven files, 17 runner checks, build/typecheck, lint and
+diff checks pass. Two Chromium preset flows pass: real LUT import/save/reload,
+application to a fresh project, exact graded pixels, undo/redo, independent
+deletion and a correction recipe; plus actual IndexedDB migration with injected
+quota rollback, corrupt-sibling preservation and untouched future envelopes.
+
+The optional RGB parade was **not promoted**. Its prototype satisfies golden
+bins, alpha handling, complete optional-backend output and exact byte limits
+(61,440 added bytes; 149,760 sampled/result bytes). The UI prototype passed live
+updates, keyboard navigation, 720-pixel layout and disable cleanup. However,
+the final repeat failed the preregistered Program presentation allowance:
+request-to-presentation p95 increased from 18.4 to 22.4 ms, a 4.0 ms increase
+against 2.0 ms allowed. Worker render p95 stayed 0.2 ms; sample/readback,
+analysis and paint p95 were 1.2, 0.6 and 2.5 ms (each below 8 ms).
+
+The earlier qualified run had only 1.4 ms presentation growth; that pass does
+not erase the later failure. Both raw runs are retained in
+[initial evidence](evidence/issue196-rgb-parade-initial.json) and
+[failed final evidence](evidence/issue196-rgb-parade-failed.json). Each alternates
+three scopes-off and three scopes-on 720p Program playback cells, records at least
+89 warmed frames per cell, and includes 45 complete scope results. The isolated
+Canvas checks use two warmups and 20 samples; CPU paint includes a readback.
+This qualifies a still-image source on this headless Chromium host, not a moving
+codec matrix or GPU acceleration. The scope-enabled condition includes all
+scope overhead relative to scopes-off. The opt-in WebGPU prototype completes
+its parade on CPU; it never claims that parade is GPU-accelerated.
+
+All prototype changes were removed from production, retaining the existing
+scope analyzer, output shape and UI. The reproducible
+[prototype patch](evidence/issue196-rgb-parade-prototype.patch) and
+[UI check](evidence/issue196-rgb-parade-ui-check.txt) are evidence only. A future
+parade attempt needs a revised measured plan. The first timing harness attempt
+listened for the wrong completion status and was unqualified; it was corrected
+before either retained measurement. No timing ceiling was relaxed.
