@@ -1,9 +1,9 @@
 /** One resource-free caption review owner; Apply validates the complete live file. */
 import { planCaptionBatch, type CaptionBatchOperation, type CaptionBatchScope, type CaptionBatchPreviewRow } from '../domain/captionBatch'
-import { captionDocumentValidationError, findCaptionTrack } from '../domain/captions'
+import { CAPTION_LIMITS, captionDocumentValidationError, findCaptionTrack } from '../domain/captions'
 import { captionIntentOwners, captionRetentionError, type CaptionIntentOwner } from '../domain/captionIntentBudget'
-import { copyCaptionIntent } from '../domain/captionIntent'
-import type { CaptionStyleDescriptor } from '../domain/captionStyle'
+import { captionIntentEqual, copyCaptionIntent } from '../domain/captionIntent'
+import { inspectCaptionStyle, type CaptionStyleDescriptor } from '../domain/captionStyle'
 import { replaceProjectSequence, sequenceProjectReservedIds, type SequenceProject } from '../domain/projectSequences'
 import type { CaptionItem, TimelineDoc } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
@@ -125,18 +125,36 @@ export class CaptionEditSession {
     if (result.kind === 'unchanged') { this.clearReview(); return null }
     return this.prepareDocument(result.document, result)
   }
-  prepareStyle(trackId: string, cueIds: readonly string[] | null, style: CaptionStyleDescriptor | null): CaptionEditReview {
+  prepareStyle(trackId: string, cueIds: readonly string[] | null, style: CaptionStyleDescriptor | null): CaptionEditReview | null {
     this.assertNotAdmitting()
     const doc = this.document(), track = findCaptionTrack(doc, trackId)
     if (!track) throw new RangeError('The caption track no longer exists')
+    if (cueIds !== null && cueIds.length > CAPTION_LIMITS.maxItemsPerTrack) throw new RangeError('Caption style selection exceeds the track budget')
     const ids = cueIds === null ? null : new Set(cueIds)
-    if (ids && (ids.size !== cueIds!.length || [...ids].some((id) => !track.items.some((item) => item.id === id)))) throw new RangeError('Caption style selection has missing or duplicate IDs')
-    const change = <T extends { style?: CaptionStyleDescriptor }>(owner: T): T => {
-      const { style: _old, ...rest } = owner
-      return { ...rest, ...(style === null ? {} : { style: copyCaptionIntent(style) }) } as T
+    if (ids) {
+      const existing = new Set(track.items.map((item) => item.id))
+      if (ids.size !== cueIds!.length || [...ids].some((id) => !existing.has(id))) throw new RangeError('Caption style selection has missing or duplicate IDs')
     }
-    const nextTrack = ids ? { ...track, items: track.items.map((item) => ids.has(item.id) ? change(item) : item) } : change(track)
-    return this.prepareDocument({ ...doc, captionTracks: doc.captionTracks!.map((item) => item.id === trackId ? nextTrack : item) }, { changedCueCount: ids?.size ?? track.items.length })
+    // Validate once even for an empty selection. Opaque bounded intent remains
+    // opaque; equality compares stored intent rather than current render output.
+    const inspected = style === null ? null : inspectCaptionStyle(style)
+    if (inspected?.kind === 'invalid') throw new RangeError(inspected.reason)
+    const replacement = inspected?.descriptor
+    let changedCueCount = 0
+    const change = <T extends { style?: CaptionStyleDescriptor }>(owner: T): T => {
+      if (captionIntentEqual(owner.style, replacement)) return owner
+      const { style: _old, ...rest } = owner
+      return { ...rest, ...(replacement === undefined ? {} : { style: replacement }) } as T
+    }
+    const items = ids ? track.items.map((item) => {
+      const next = ids.has(item.id) ? change(item) : item
+      if (next !== item) changedCueCount++
+      return next
+    }) : track.items
+    const nextTrack = ids ? (changedCueCount ? { ...track, items } : track) : change(track)
+    if (nextTrack === track) { this.clearReview(); return null }
+    return this.prepareDocument({ ...doc, captionTracks: doc.captionTracks!.map((item) => item.id === trackId ? nextTrack : item) },
+      { changedCueCount: ids ? changedCueCount : track.items.length })
   }
   apply(review: CaptionEditReview, acceptLoss = false): string | null {
     try {

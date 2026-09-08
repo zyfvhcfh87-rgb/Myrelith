@@ -42,7 +42,7 @@ describe('whole-project caption review and retention', () => {
     expect(useDocumentStore.getState().doc.captionTracks![0].items[1].origin).toEqual(source.sequences[0].captionTracks![0].items[0].origin)
   })
   it.each(['dormant', 'generation', 'navigation'] as const)('rejects a stale %s change without clearing redo', (kind) => {
-    const session = begin(), review = session.prepareStyle('captions', null, { version: 1, params: { italic: true } })
+    const session = begin(), review = session.prepareStyle('captions', null, { version: 1, params: { italic: true } })!
     const state = useDocumentStore.getState()
     if (kind === 'dormant') useDocumentStore.setState({ project: { ...state.project, name: 'Changed dormant project' } })
     else if (kind === 'generation') state.setProject(state.project)
@@ -62,7 +62,7 @@ describe('whole-project caption review and retention', () => {
     expect(() => session.createId(() => 'fresh')).toThrow(/100 attempts/)
   })
   it('invalidates replaced/no-op reviews and retains old owners on failed replacement', () => {
-    const session = begin(), old = session.prepareStyle('captions', null, { version: 1, params: { italic: true } })
+    const session = begin(), old = session.prepareStyle('captions', null, { version: 1, params: { italic: true } })!
     const before = useDocumentStore.getState()
     expect(() => session.prepareStyle('captions', null, { version: 1, params: { italic: 'yes' } })).toThrow(/italic/)
     expect(useDocumentStore.getState()).toBe(before)
@@ -117,7 +117,7 @@ describe('whole-project caption review and retention', () => {
     ] }] }
     useMediaStore.setState({ descriptors: new Map([[ATTRIBUTE_ASSET_DESCRIPTOR.id, ATTRIBUTE_ASSET_DESCRIPTOR]]) })
     useDocumentStore.getState().setProject(project)
-    const session = begin(), review = session.prepareStyle('captions', null, { version: 1, params: { italic: true } })
+    const session = begin(), review = session.prepareStyle('captions', null, { version: 1, params: { italic: true } })!
     const before = useDocumentStore.getState()
     useMediaStore.setState({ descriptors: new Map([[ATTRIBUTE_ASSET_DESCRIPTOR.id, { ...ATTRIBUTE_ASSET_DESCRIPTOR, fileName: 'x'.repeat(4096) }]]) })
     expect(session.apply(review)).toMatch(/serialized|characters|10000000/i)
