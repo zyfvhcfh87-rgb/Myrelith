@@ -1,0 +1,5 @@
+LLVM_ROOT = '/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/bin'
+BINARYEN_ROOT = '/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install'
+NODE_JS = ['/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/node/node-v24.19.0-darwin-arm64/bin/node', '--no-expose-wasm']
+CACHE = '/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/cache'
+PORTS = '/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/ports'

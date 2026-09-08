@@ -313,3 +313,8 @@ artifacts, current advisory/notice results, actual transfer/cache/resident
 measurements and qualified browser/hardware/language limits. If any mandatory
 condition fails, retain the optional no-model editor, report NO-GO and leave the
 speech acceptance criteria unresolved for the orchestrator's scope decision.
+
+Private extraction/version preparation stopped before any build; see
+[the exact failure and proposed correction](WHISPER_CPP_BUILD_PREPARATION.md).
+The exclusive build slot was released. Generated-runtime and speech acceptance
+remain open.
