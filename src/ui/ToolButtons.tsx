@@ -23,6 +23,7 @@ import { useTransportStore } from '../state/transportStore'
 import { usePreferencesStore } from '../state/preferencesStore'
 import { shortcutForCommand, type EditorCommandId } from '../app/editorCommands'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
+import AnimationEntry from './animation/AnimationEntry'
 
 const TextOverlayDialog = lazy(() => import('./TextOverlayDialog'))
 const AdjustmentDialog = lazy(() => import('./AdjustmentDialog'))
@@ -113,6 +114,7 @@ export default function ToolButtons() {
         >
           <Magnet aria-hidden="true" size={17} weight="bold" />
         </button>
+        <AnimationEntry variant="tool" label="Animation" />
       </div>
       {textOpen && (
         <LazySurfaceBoundary

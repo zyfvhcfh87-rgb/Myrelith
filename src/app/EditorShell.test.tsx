@@ -300,6 +300,19 @@ describe('EditorShell', () => {
       .toBeInTheDocument()
   })
 
+  test('docks Animation with timeline tools and opens it without changing the project or clip selection', async () => {
+    useTransportStore.getState().setSelectedClip('clipA')
+    render(<EditorShell closing={false} />)
+    const entry = screen.getByRole('button', { name: 'Animation' })
+    expect(screen.getByRole('group', { name: 'timeline tools' })).toContainElement(entry)
+    const project = useDocumentStore.getState().project
+    fireEvent.click(entry)
+    expect(await screen.findByRole('region', { name: 'Animation workspace' })).toBeInTheDocument()
+    expect(useDocumentStore.getState().project).toBe(project)
+    expect(useTransportStore.getState().selectedClipIds).toEqual(['clipA'])
+    expect(entry).toHaveAttribute('aria-expanded', 'true')
+  })
+
   test('owns and releases document-to-selection reconciliation', () => {
     useTransportStore.getState().setSelectedClip('clipA')
     useTransportStore.getState().toggleClipSelection('clipB')

@@ -62,7 +62,6 @@ import { initSourceMonitorLifecycle } from './sourceMonitorController'
 import { initAudioEffectStatusProjection } from './audioEffectStatus'
 import SequenceControls from '../ui/SequenceControls'
 import MulticamControls from '../ui/MulticamControls'
-import AnimationEntry from '../ui/animation/AnimationEntry'
 import LazySurfaceBoundary from '../ui/LazySurfaceBoundary'
 import { closeAnimationWorkspace } from './animationWorkspaceController'
 
@@ -342,7 +341,6 @@ export default function EditorShell({ closing }: EditorShellProps) {
       <section className="area-transport" inert={closing}>
         <ToolButtons />
         <TransportBar />
-        <AnimationEntry label="Animation" />
         <TimelineZoomControls />
       </section>
       <WorkspaceResizeHandle
