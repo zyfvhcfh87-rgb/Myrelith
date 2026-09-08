@@ -1,0 +1,11 @@
+{
+  "scope": "Read-only verification; no private staging, build, SDK invocation or runtime",
+  "verified": {
+    "checkpointSha256": "a0e423b220967a42586a9f4601671d5cccecb8cc8feeb9a6550d5df0ccee5386",
+    "recipeSha256": "bc68e94197b6e819f8d5257a536b02bd0a5931c525005b994c2046fad80ba0a6",
+    "adapterSha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22",
+    "tokenHelperSha256": "e0dc2d7ec04a52e47214de3536ca479f710b6957d422260eb5bc87b7bfe9ff9b",
+    "configSha256": "bb05af20f9fa2c7218d7e82f9441299060b8033e348430bf764e8967ba2cf166",
+    "guardSha256": "4c9ba6b9267a14db07ec6ed901ddde8eaef0f314b3b53aa7dd10128c4bd9f764"
+  }
+}

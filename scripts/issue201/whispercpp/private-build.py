@@ -27,6 +27,7 @@ LOGS = BUILD / 'logs'
 CONFIG = BUILD / 'config/.emscripten'
 DENY_WASM = BUILD / 'config/deny-wasm.cjs'
 DENY_RUNTIME = BUILD / 'config/deny-runtime.sh'
+LINK_SETTINGS_CHECKPOINT_SHA256 = 'a0e423b220967a42586a9f4601671d5cccecb8cc8feeb9a6550d5df0ccee5386'
 
 
 def sha(path):
@@ -208,6 +209,88 @@ def build():
     (LOGS / 'build-result.json').write_text(json.dumps(dict(status='built-unexecuted', runtimeExecuted=False), indent=2) + '\n')
 
 
+def verify_link_settings_retry_inputs():
+    """Read-only verification of the exact accepted correction and predecessor."""
+    evidence = ROOT / 'docs/evidence/issue201/whispercpp-link-settings'
+    checkpoint_path = evidence / 'checkpoint.json'
+    if sha(checkpoint_path) != LINK_SETTINGS_CHECKPOINT_SHA256:
+        raise RuntimeError('Unreviewed linker-setting checkpoint')
+    checkpoint = json.loads(checkpoint_path.read_text())
+    for row in checkpoint['sourceFiles'] + [dict(row, path=str(evidence.relative_to(ROOT) / row['path']))
+                                          for row in checkpoint['records']]:
+        path = ROOT / row['path']
+        if path.stat().st_size != row['bytes'] or sha(path) != row['sha256']:
+            raise RuntimeError('Linker-setting evidence/source drift: ' + row['path'])
+    for name in ['configure.json', 'compile-link.json', 'build-attempt.json', 'build-result.json']:
+        if (LOGS / name).read_bytes() != (evidence / name).read_bytes():
+            raise RuntimeError('Unexpected predecessor build record: ' + name)
+    for name in ['configure', 'compile-link']:
+        record = json.loads((LOGS / (name + '.json')).read_text())
+        if sha(LOGS / (name + '.txt')) != record['logSha256']:
+            raise RuntimeError('Predecessor build log drift: ' + name)
+    previous = json.loads((evidence / 'pre-build-verification.json').read_text())
+    if sha(LOGS / 'prepared.json') != previous['preparedRecordSha256']:
+        raise RuntimeError('Successful private preparation drift')
+    for path, digest in [(CONFIG, previous['configSha256']), (DENY_WASM, previous['guardSha256'])] + [
+            (ROOT / row['path'], row['sha256']) for row in previous['files']]:
+        if sha(path) != digest:
+            raise RuntimeError('Private build input drift: ' + str(path))
+    expected_emulator = '#!/bin/sh\nprintf "%s\\n" "Blocked: this is a build-only checkpoint; runtime execution is not authorized." >&2\nexit 97\n'
+    if DENY_RUNTIME.read_text() != expected_emulator:
+        raise RuntimeError('Rejecting cross-emulator drift')
+    for name in ['adapter.cpp', 'myrelith-token-budget.h']:
+        if sha(RECIPE / name) != sha(ROOT / 'scripts/issue201/whispercpp' / name):
+            raise RuntimeError('Adapter or token helper drift: ' + name)
+    for pin_file in [evidence / 'source-pins.json',
+                     ROOT / 'docs/evidence/issue201/whispercpp-preparation/loader-source-pins.json']:
+        for row in json.loads(pin_file.read_text())['sources']:
+            path = BUILD / 'toolchain' / row['archiveMember']
+            if path.stat().st_size != row['decodedBytes'] or sha(path) != row['decodedSha256']:
+                raise RuntimeError('Pinned SDK source drift: ' + row['archiveMember'])
+    return dict(checkpointSha256=LINK_SETTINGS_CHECKPOINT_SHA256,
+                recipeSha256=sha(ROOT / 'scripts/issue201/whispercpp/CMakeLists.txt'),
+                adapterSha256=sha(RECIPE / 'adapter.cpp'), tokenHelperSha256=sha(RECIPE / 'myrelith-token-budget.h'),
+                configSha256=sha(CONFIG), guardSha256=sha(DENY_WASM))
+
+
+def resume_link_settings_build():
+    # Invocation itself requires a new compile-only grant. Preserve the first
+    # recipe, output tree, marker, logs and result; use separate paths throughout.
+    inputs = verify_link_settings_retry_inputs()
+    prefix = 'link-settings-'
+    recipe = BUILD / 'recipe-link-settings'
+    output_dir = BUILD / 'output-link-settings'
+    if recipe.exists() or output_dir.exists() or any(LOGS.glob(prefix + '*')):
+        raise RuntimeError('Linker-setting attempt already exists; no implicit retry')
+    marker = LOGS / (prefix + 'attempt.json')
+    with marker.open('x') as output:
+        json.dump(dict(status='started', jobs=2, driverSha256=sha(Path(__file__)), inputs=inputs,
+                       startedAt=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())), output, indent=2)
+    try:
+        recipe.mkdir()
+        for name in ['CMakeLists.txt', 'adapter.cpp', 'myrelith-token-budget.h']:
+            (recipe / name).write_bytes((ROOT / 'scripts/issue201/whispercpp' / name).read_bytes())
+            expected = inputs[{'CMakeLists.txt': 'recipeSha256', 'adapter.cpp': 'adapterSha256',
+                               'myrelith-token-budget.h': 'tokenHelperSha256'}[name]]
+            if sha(recipe / name) != expected:
+                raise RuntimeError('Build source changed during staging: ' + name)
+        env = environment()
+        command = [CMAKE, '-S', recipe, '-B', output_dir, '-G', 'Ninja',
+                   '-DCMAKE_MAKE_PROGRAM=' + str(NINJA),
+                   '-DCMAKE_TOOLCHAIN_FILE=' + str(EMSCRIPTEN / 'cmake/Modules/Platform/Emscripten.cmake'),
+                   '-DWHISPER_SOURCE_DIR=' + str(CORE),
+                   '-DCMAKE_CROSSCOMPILING_EMULATOR=' + str(DENY_RUNTIME),
+                   '-DFETCHCONTENT_FULLY_DISCONNECTED=ON', '-DFETCHCONTENT_UPDATES_DISCONNECTED=ON']
+        run(prefix + 'configure', command, 180, env)
+        run(prefix + 'compile-link', [CMAKE, '--build', output_dir, '--parallel', '2', '--verbose'], 600, env)
+    except BaseException as error:
+        (LOGS / (prefix + 'result.json')).write_text(json.dumps(dict(status='failed-closed-no-retry',
+            error=str(error), runtimeExecuted=False), indent=2) + '\n')
+        raise
+    (LOGS / (prefix + 'result.json')).write_text(json.dumps(dict(status='built-unexecuted',
+        runtimeExecuted=False, generatedArtifactQualified=False), indent=2) + '\n')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     actions = parser.add_mutually_exclusive_group(required=True)
@@ -215,6 +298,7 @@ if __name__ == '__main__':
     actions.add_argument('--build', action='store_true')
     actions.add_argument('--resume-version-checks', action='store_true')
     actions.add_argument('--resume-tagged-version-checks', action='store_true')
+    actions.add_argument('--resume-link-settings-build', action='store_true')
     args = parser.parse_args()
     if args.prepare:
         prepare()
@@ -222,5 +306,7 @@ if __name__ == '__main__':
         resume_version_checks()
     elif args.resume_tagged_version_checks:
         resume_tagged_version_checks()
+    elif args.resume_link_settings_build:
+        resume_link_settings_build()
     else:
         build()
