@@ -215,6 +215,7 @@ const manifest = {
   kind: 'issue201-speech-lab-assets-v1', preparedAt: new Date().toISOString(),
   qualification: 'Static package/import/notice/advisory/fixture preflight only; inference/offline/memory not yet qualified.',
   runtime: { transformerVersion, ortVersion, commonVersion, device: 'wasm', dtype: 'q8', threads: 1,
+    sessionOptions: { graphOptimizationLevel: 'all', extra: { session: { disable_quant_qdq: '1' } } },
     originalImportSpecifiers: parsedImports.static.map(({ specifier }) => specifier),
     embeddedTransformerDependencies: embeddedDependencies, ortWasmSources: ortMap.sources,
     ortWasmMapSha256: hash(member(ort.bytes, 'dist/ort.wasm.min.mjs.map')), artifacts,

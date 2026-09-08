@@ -31,8 +31,11 @@ run fails with `TransposeDQWeightsForMatMulNBits Missing required scale` during
 session preparation. [LAB_RUN_02.md](LAB_RUN_02.md) preserves the separate raw
 evidence: eight initial checks passed, the first model initialization failed,
 14 downstream cases are explicitly missing, and cleanup was verified. No model
-inference occurred. Source investigation and an explicitly frozen next candidate
-need review and a fresh exclusive slot; this error does not prove corrupt weights.
+inference occurred. This error does not prove corrupt weights.
+[INTEROP_CANDIDATE_03.md](INTEROP_CANDIDATE_03.md) proposes only the supported
+`session.disable_quant_qdq='1'` optimization setting with identical assets and
+thresholds. Exact source/manifest evidence and 16 deterministic regressions are
+ready for review; no third run or product enablement has occurred.
 
 The original 3.8.1 standalone candidate is **superseded for lab execution** after
 the advisory lookup in [candidate-advisories.json](candidate-advisories.json).

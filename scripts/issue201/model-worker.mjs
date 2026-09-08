@@ -69,10 +69,12 @@ async function initialize(message) {
   const started = performance.now()
   transcriber = await pipeline('automatic-speech-recognition', manifest.model.id, {
     revision: manifest.model.revision, device: 'wasm', dtype: 'q8', local_files_only: true,
+    session_options: structuredClone(manifest.runtime.sessionOptions),
     progress_callback: (progress) => post('progress', { status: progress.status, file: progress.file ?? null }),
   })
   ledger.modelOwners = 1
-  post('ready', { loadMs: performance.now() - started, ledger: { ...ledger }, version: env.version })
+  post('ready', { loadMs: performance.now() - started, ledger: { ...ledger }, version: env.version,
+    sessionOptions: manifest.runtime.sessionOptions })
 }
 
 /** Fixed-radius windowed sinc; a bounded window, no full-source PCM retention. */

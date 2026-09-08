@@ -8,7 +8,9 @@ const record = (event) => {
 const digest = async (bytes) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (b) => b.toString(16).padStart(2, '0')).join('')
 const modelIdentity = await digest(new TextEncoder().encode(JSON.stringify({ model: manifest.model.id,
   revision: manifest.model.revision, files: manifest.model.files.map(({ path, bytes, sha256 }) => ({ path, bytes, sha256 })),
-  runtime: manifest.runtime.transformerVersion, ort: manifest.runtime.ortVersion })))
+  runtime: manifest.runtime.transformerVersion, ort: manifest.runtime.ortVersion,
+  artifacts: manifest.runtime.artifacts?.map(({ name, sha256 }) => ({ name, sha256 })),
+  sessionOptions: manifest.runtime.sessionOptions })))
 const registryName = 'myrelith-issue201-lab-registry'
 const registryKey = `${location.origin}/model-registry`
 let generation = 1

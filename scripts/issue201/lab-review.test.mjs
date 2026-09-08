@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFile } from 'node:fs/promises'
 import { webcrypto, createHash } from 'node:crypto'
-import { createContext, SourceTextModule } from 'node:vm'
+import { createContext, SourceTextModule, SyntheticModule } from 'node:vm'
 import { assessLabRun, corruptAudioReachedDecode, createLabSampleQueue, declaredLabRequest,
   initializationFailure, LAB_CASE_NAMES, pinnedModelFileLookup, residentCeilingBreached, speechSegments, withinSourceCoverage } from './lab-contract.mjs'
 
@@ -13,12 +13,12 @@ async function until(condition) {
 }
 
 /** Evaluate the actual unmodified controller module with browser resource fakes. */
-async function controller(t, terminationFallbackMs = 10_000) {
+async function controller(t, terminationFallbackMs = 10_000, runtimeOverrides = {}) {
   const bytes = new Uint8Array([1, 2, 3, 4])
   const file = { path: 'config.json', url: 'https://test.invalid/model/config.json', bytes: bytes.length,
     sha256: createHash('sha256').update(bytes).digest('hex') }
   const manifest = { model: { id: 'test/model', revision: 'frozen', totalBytes: bytes.length, files: [file] },
-    runtime: { transformerVersion: 'fake', ortVersion: 'fake' },
+    runtime: { transformerVersion: 'fake', ortVersion: 'fake', ...runtimeOverrides },
     fixtures: [{ name: 'english', durationSeconds: 1 }],
     thresholds: { modelCacheByteLimit: 1_000, terminationFallbackMs, maxWindowWallMs: 10_000 } }
   const data = new Map()
@@ -272,4 +272,81 @@ test('overall acceptance cannot pass missing, aborted, failed or unexpected plan
   assert.equal(assessLabRun([{ ...complete[0], passed: false }, ...complete.slice(1)], [], null).automatedStatus, 'failed')
   assert.equal(assessLabRun([...complete, { name: 'unknown-case', passed: true }], [], null).automatedStatus, 'failed')
   assert.equal(assessLabRun(complete, [{ type: 'incomplete-memory-sampling' }], null).automatedStatus, 'failed')
+})
+
+test('model cache compatibility changes with session configuration or served runtime bytes', async (t) => {
+  const runtime = { artifacts: [{ name: 'runtime.mjs', sha256: 'first' }],
+    sessionOptions: { graphOptimizationLevel: 'all', extra: { session: { disable_quant_qdq: '1' } } } }
+  const identities = []
+  for (const variant of [runtime, { ...runtime, sessionOptions: {} },
+    { ...runtime, artifacts: [{ name: 'runtime.mjs', sha256: 'second' }] }, runtime]) {
+    const h = await controller(t, 10_000, variant)
+    identities.push((await h.lab.cacheFacts()).model.identity)
+  }
+  assert.equal(new Set(identities.slice(0, 3)).size, 3)
+  assert.equal(identities[0], identities[3])
+})
+
+test('actual worker forwards the frozen optimizer setting without mutating its manifest', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../../docs/evidence/issue201/replacement-manifest.json', import.meta.url)))
+  const expected = { graphOptimizationLevel: 'all', extra: { session: { disable_quant_qdq: '1' } } }
+  assert.deepEqual(manifest.runtime.sessionOptions, expected)
+  const events = []
+  const calls = []
+  const env = { backends: { onnx: { wasm: {} } }, version: 'source-only-fake' }
+  let disposals = 0
+  let closed = false
+  const self = { postMessage(event) { events.push(event) }, close() { closed = true } }
+  const context = createContext({ self, performance, structuredClone, URL, Response,
+    location: { origin: 'http://127.0.0.1:5201', href: 'http://127.0.0.1:5201/model-worker.mjs' },
+    caches: { async open() { return { async match() { throw new Error('This test must not load model bytes') } } } },
+    async fetch() { throw new Error('This test must not perform network requests') } })
+  const runtime = new SyntheticModule(['pipeline', 'env'], function () {
+    this.setExport('env', env)
+    this.setExport('pipeline', async (task, id, options) => {
+      calls.push({ task, id, options: structuredClone({ ...options, progress_callback: undefined }) })
+      // ORT appends defaults to nested session options; the evidence manifest stays fixed.
+      options.session_options.extra.session.simulated_runtime_default = '1'
+      return { async dispose() { disposals++ } }
+    })
+  }, { context })
+  await runtime.link(() => { throw new Error('Unexpected runtime fake import') })
+  await runtime.evaluate()
+  const contract = new SourceTextModule(await readFile(new URL('./lab-contract.mjs', import.meta.url), 'utf8'), { context })
+  await contract.link(() => { throw new Error('Unexpected contract import') })
+  await contract.evaluate()
+  const media = new SyntheticModule(['ALL_FORMATS', 'AudioSampleSink', 'BlobSource', 'Input'], function () {
+    this.setExport('ALL_FORMATS', [])
+    for (const name of ['AudioSampleSink', 'BlobSource', 'Input']) {
+      this.setExport(name, class { constructor() { throw new Error('Initialization must not decode audio') } })
+    }
+  }, { context })
+  const worker = new SourceTextModule(await readFile(new URL('./model-worker.mjs', import.meta.url), 'utf8'), {
+    context,
+    async importModuleDynamically(specifier) {
+      assert.equal(specifier, '/assets/transformers.local.mjs')
+      return runtime
+    },
+  })
+  await worker.link((specifier) => {
+    if (specifier === './lab-contract.mjs') return contract
+    assert.equal(specifier, '/assets/mediabunny.mjs')
+    return media
+  })
+  await worker.evaluate()
+  await self.onmessage({ data: { type: 'initialize', manifest, modelCache: 'source-test' } })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].task, 'automatic-speech-recognition')
+  assert.equal(calls[0].id, manifest.model.id)
+  assert.deepEqual(calls[0].options.session_options, expected)
+  assert.equal(calls[0].options.revision, manifest.model.revision)
+  assert.equal(calls[0].options.device, 'wasm')
+  assert.equal(calls[0].options.dtype, 'q8')
+  assert.deepEqual(manifest.runtime.sessionOptions, expected)
+  assert.deepEqual(events.find((event) => event.type === 'ready').sessionOptions, expected)
+  assert.equal(events.some((event) => event.type === 'error'), false)
+  await self.onmessage({ data: { type: 'dispose' } })
+  assert.equal(disposals, 1)
+  assert.equal(closed, true)
+  assert.equal(events.at(-1).ledger.modelOwners, 0)
 })

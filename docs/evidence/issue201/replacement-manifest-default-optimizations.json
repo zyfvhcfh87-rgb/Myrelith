@@ -203,15 +203,7 @@
         "1.50.9"
       ]
     },
-    "advisories": {},
-    "sessionOptions": {
-      "graphOptimizationLevel": "all",
-      "extra": {
-        "session": {
-          "disable_quant_qdq": "1"
-        }
-      }
-    }
+    "advisories": {}
   },
   "model": {
     "id": "Xenova/whisper-tiny",

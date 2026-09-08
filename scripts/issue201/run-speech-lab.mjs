@@ -99,7 +99,8 @@ try {
   observePage()
   let browserCdp = await context.browser().newBrowserCDPSession()
   runtime = { browserVersion: await browserCdp.send('Browser.getVersion'), platform: process.platform,
-    architecture: process.arch, nodeVersion: process.version, threads: manifest.runtime.threads, device: manifest.runtime.device }
+    architecture: process.arch, nodeVersion: process.version, threads: manifest.runtime.threads, device: manifest.runtime.device,
+    sessionOptions: manifest.runtime.sessionOptions }
   async function sampleMemory(label = 'periodic') {
     if (sampling) return
     sampling = true
