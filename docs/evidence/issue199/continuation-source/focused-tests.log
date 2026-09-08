@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --run src/ui/animation/AnimationWorkspace.test.tsx src/domain/animationLaneIndex.test.ts
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+
+ Test Files  2 passed (2)
+      Tests  27 passed (27)
+   Start at  16:31:28
+   Duration  1.80s (transform 447ms, setup 58ms, import 1.08s, tests 657ms, environment 401ms)
+
+✔ cold samples each use and close a fresh BrowserContext (0.626583ms)
+✔ source identity rejects end-of-run drift (0.160125ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (206.921167ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (124.193541ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.805584ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.790917ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.109333ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.299584ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.14375ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.114584ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.298875ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (3.699459ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.955833ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.099958ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.14925ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.161542ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.1185ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 515.308666

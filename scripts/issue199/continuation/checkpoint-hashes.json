@@ -1,0 +1,29 @@
+{
+  "productSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+  "acceptedEarlyEvidence": "095e6d9463580e3502ba7c210d3982bed548a52f",
+  "scope": "Unexecuted separately granted gestures, editing or large continuation; exact product files in observation-source-hashes.json.",
+  "sha256": {
+    "docs/evidence/issue199/continuation-source.md": "e8a5606711cd49e958342bc9d7d800d62a3e030e5f9b27013caa7e0bfd8e862d",
+    "docs/evidence/issue199/continuation-source/build.log": "13fb13c04756c898ae061e2ee0c99b89804704b409535a4a81172025a83be868",
+    "docs/evidence/issue199/continuation-source/fixture-generation.log": "9a9f6d1ed0a8378c68c41a2febdad521aebcf3c827faec4331688d51af99418e",
+    "docs/evidence/issue199/continuation-source/focused-tests.log": "9cbb483ddf3b7ba709b4aab46dc87600dbcca30c9b490df0007f7c45bb1875cf",
+    "docs/evidence/issue199/continuation-source/lint.log": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c",
+    "docs/evidence/issue199/continuation-source/process-tests.log": "05d1a3a91f8ba2e37dcf0391f4a36167cbead8c5114c32a0e3726c5b3ecb3fd9",
+    "docs/evidence/issue199/continuation-source/source-checks.log": "2cd81e9e347662508473a3e4e4559fe074cc067ebc3cebb5618681c71cf178c2",
+    "scripts/issue199/continuation/PROTOCOL.md": "55f79deb5f13332f517fe666f5b204f112aa7264d46446eea6095084a84e8b13",
+    "scripts/issue199/continuation/observations.mjs": "4bf345815870b495e90e648fc1d68df2bba2d7457e632eccead970f7102dc33e",
+    "scripts/issue199/continuation/portable.mjs": "a6b86530470c51fc9e84dda28470fad3219b46accad54fa5f9b7579a933d4ad0",
+    "scripts/issue199/continuation/process-identities.mjs": "271b6b40c64b702d3ba2f9223bdfe62a887a43739b5615cfabd5c8c6ae01fac4",
+    "scripts/issue199/continuation/process-identities.test.mjs": "cb3f584019943921ec95ba372f1953195deea8e7a03ad11ae8745f56619b0da8",
+    "scripts/issue199/fixtures/continuation/dense-scalar.myrelith": "2518406e6d2759bb7a8cdceb0d2d555ec460c0e34130325fa61f4b9b775dadbf",
+    "scripts/issue199/fixtures/continuation/supplemental-manifest.json": "9a9f6d1ed0a8378c68c41a2febdad521aebcf3c827faec4331688d51af99418e",
+    "scripts/issue199/fixtures/dense.myrelith": "26814d074c6e94230b1e3004c863d32490bd84cd266123c27720f228b851c574",
+    "scripts/issue199/fixtures/manifest.json": "6c8286b76e5a7741fd4acc0e49d78917b6f13192ebf961fb13e673b0b5807d65",
+    "scripts/issue199/fixtures/many-lanes.myrelith": "2461ff539f8db3515c5845dbdbe1d3427fbe792d8a852906c6504f74221fda4c",
+    "scripts/issue199/fixtures/mixed.myrelith": "e510cb67197ed771049dea65cfccf02820d4550841f6b32dde9ac6c0f4618ac0",
+    "scripts/issue199/observation-source-hashes.json": "370f9ec0b87ea3be22426ee56a775811ea3bda9796833fe398b87a8350b6bbc3",
+    "scripts/issue199/prepare-browser-fixtures.mjs": "1f6a4b43bacf20c8e896b29c23c31ee94c6202c7b46e8f118ff83551f4e1084c",
+    "scripts/issue199/prepare-continuation-fixtures.mjs": "4a8eae83bfcadec63ee382c38dfeefcbc9c4922eb5fd7f621cb10643248db765",
+    "scripts/issue199/run-animation-continuation.mjs": "75b69344976ee35e38db520da5d710f1f8b10cd2e510f0a70b7fcea97a9556b4"
+  }
+}
