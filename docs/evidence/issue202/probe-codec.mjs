@@ -6,10 +6,14 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'node:http';
+import {execFileSync} from 'node:child_process';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const output=process.argv[2];
 if(!output?.startsWith('/')||fs.existsSync(output))throw new Error('Fresh absolute output path required');
 if(process.env.ISSUE202_CODEC_SLOT!=='granted')throw new Error('Exclusive codec slot not asserted');
+const sourceHash=()=>crypto.createHash('sha256').update(fs.readFileSync(fileURLToPath(import.meta.url))).digest('hex');
+const startingScriptSha256=sourceHash();
+const startingCommit=execFileSync('git',['rev-parse','HEAD'],{cwd:path.resolve(root,'../../..'),encoding:'utf8'}).trim();
 const server=createServer((_req,res)=>res.end('<!doctype html><title>Isolated codec research</title>'));
 await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(5202,'127.0.0.1',resolve);});
 let browser;
@@ -49,7 +53,9 @@ try{
       if(marker!==2||sync!==0x498342)throw new Error('invalid-vp9-prefix');
       return {profile,depth,colorId,fullRange};
     }
+    let abortRemainingCells=false;
     for(const cell of cells){
+      if(abortRemainingCells)break;
       const ledger={framesOpened:0,framesClosed:0,encodersOpened:0,encodersClosed:0,decodersOpened:0,decodersClosed:0,
         sourcePlaneBytes:0,encodedPayloadBytes:0,decodedCopyBytes:0,retainedReadbackFrames:0,peakRetainedReadbackFrames:0};
       const row={id:cell.id,expected:{width,height,format:'I420P10',luma:'code(x,y)=x',chroma:512,uniqueLuma:1024,tags:cell.tags},ledger};
@@ -126,6 +132,11 @@ try{
         if(decoder){if(decoder.state!=='closed')decoder.close();ledger.decodersClosed++;}
         try{await bounded(Promise.all(pending),'terminal-copy-drain');}catch(error){row.cleanupError=String(error);}
         row.terminalOwnedResources=ledger.framesOpened-ledger.framesClosed+ledger.encodersOpened-ledger.encodersClosed+ledger.decodersOpened-ledger.decodersClosed;
+        if(row.cleanupError||row.terminalOwnedResources!==0){
+          row.outcome='failed-cleanup';row.browserTeardownRequired=true;
+          row.cleanupError??='terminal-owned-resources-remain';
+          abortRemainingCells=true;
+        }
         rows.push(row);
       }
     }
@@ -138,8 +149,8 @@ try{
     fs.writeFileSync(destination,Uint8Array.from(packet.data));delete packet.data;packet.filename=filename;
   }
   const evidence={kind:'issue202-three-frame-codec-diagnostic',collectedAt:new Date().toISOString(),browserVersion:browser.version(),
-    scriptSha256:crypto.createHash('sha256').update(fs.readFileSync(fileURLToPath(import.meta.url))).digest('hex'),commandLine,gpu,
+    startingCommit,startingScriptSha256,scriptSha256:sourceHash(),sourceIdentityUnchanged:startingScriptSha256===sourceHash(),commandLine,gpu,
     qualification:'Three synthetic 1024x16 frames only. Same-browser decode against an exact independently stated ramp. Prefix reader is not a full codec validator. No independent decoder, complete metadata, lossy quality threshold, performance, native-memory or physical HDR qualification.',rows,consoleErrors:errors};
   fs.writeFileSync(output,JSON.stringify(evidence,null,2)+'\n');
   process.stdout.write(JSON.stringify({rows:rows.map(r=>({id:r.id,outcome:r.outcome,error:r.error,terminalOwnedResources:r.terminalOwnedResources})),errors})+'\n');
-}finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}
+}finally{try{await browser?.close();}finally{await new Promise(resolve=>server.close(resolve));}}
