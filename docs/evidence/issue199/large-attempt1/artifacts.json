@@ -1,0 +1,67 @@
+{
+  "directory": "/private/tmp/issue199-continuation/2026-09-08T18-58-03.738Z-large",
+  "harnessHead": "4f825bd8eaeb3a0b83e6f0f2f6092872581afc5b",
+  "files": {
+    "build.log": {
+      "bytes": 3939,
+      "sha256": "a21ed25e2d9c21270d93a367f2c7eb4023322ff82816479cc794b84fe5ba4073"
+    },
+    "console.log": {
+      "bytes": 529,
+      "sha256": "eccd8b8ed68c0476a91d20105637a08975c8d5775c983acdd14084d448872238"
+    },
+    "failure-dom.txt": {
+      "bytes": 3368,
+      "sha256": "bf7b017ec96e8a13930354f350b44a6707e8f2b39130aa09cf92fc38f83375ed"
+    },
+    "failure-summary.json": {
+      "bytes": 8831,
+      "sha256": "2057afa10e9481c1d714820f899c8f395c5d0ea02bea2f41dd314b1235a296ed"
+    },
+    "failure.png": {
+      "bytes": 166720,
+      "sha256": "d49a1eddc1bf834b401e2b2139466b36a749bd996c57c6bb287ddac7b0fcde1a"
+    },
+    "independent-cleanup-source.json": {
+      "bytes": 7595,
+      "sha256": "c96904c1800c028af1d8b2172959a97d805936c335e31bcbdc285d795f8fc7c4"
+    },
+    "prelaunch-source.json": {
+      "bytes": 513,
+      "sha256": "4a73c034d00d0e0d6e1561cbbe6c8c148501dbdf03c97069f7b04513ad6b4237"
+    },
+    "result.json": {
+      "bytes": 33412146,
+      "sha256": "f6c5c978277183ce0b848dd1f27b27db9fa16f0835b00305f1e65ba915fb5954"
+    },
+    "server.log": {
+      "bytes": 39,
+      "sha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d"
+    },
+    "step-01-dom.txt": {
+      "bytes": 1050,
+      "sha256": "391e96e976bb2729c502f64bb5e09dc362aab8be1361f10d9a8d6d3ec49301a2"
+    },
+    "step-01.png": {
+      "bytes": 489352,
+      "sha256": "7c0f3ae0836c39aa2718bebfce416185636440abad2c8a9c1021aa468f404349"
+    },
+    "step-02-dom.txt": {
+      "bytes": 5385,
+      "sha256": "655b9124d5434492384ae4e521ff5a978d6e8236179fd3500e34958900860813"
+    },
+    "step-02.png": {
+      "bytes": 233708,
+      "sha256": "58dfd87e44674b6c67cc8609b689f97842c7bb91ab2242e973cc6bf9535873c1"
+    },
+    "trace.zip": {
+      "bytes": 10050922,
+      "sha256": "a1110dee79b5faad1a8297cd1fe2e20a5ec576781673deb92aa192398f72cf93"
+    },
+    "wrapper-identities.json": {
+      "bytes": 335,
+      "sha256": "e4bec76fd24dcb4f7a7ed9b3bcb1a81d2d5277bc5b7f30b1ae7532ffe21d6f9e"
+    }
+  },
+  "privateProfile": "Preserved at chromium-profile; not recursively hashed or copied into Git."
+}
