@@ -1,0 +1,70 @@
+{
+  "kind": "issue202-codec-run1-artifact-identity",
+  "createdAt": "2026-09-08T09:58:31.561Z",
+  "startingCommit": "a75cc864b0815d14a93c5e1d7f8d1c90dae2f6a1",
+  "runScriptSha256": "92c007d4797640f1737067fa495321c91d8cedb893d8696d220879c1053c99d8",
+  "runSlot": "released after awaited browser/server teardown",
+  "qualification": "Three encoded/decoded frames; all pixel comparisons failed the coded-size guard. Static header dimensions are1024x16; visible rectangle and decoded pixel quality remain unqualified.",
+  "nextRequestedExperiment": {
+    "script": "docs/evidence/issue202/probe-codec-readback.mjs",
+    "sha256": "32253befb82da5fe8803a446840ff22e2beeb9c6f84d381f1e64ed0a596d8b63",
+    "executed": false,
+    "slotGranted": false,
+    "decodeCalls": 3,
+    "encodeCalls": 0,
+    "sourcePackets": "three saved264-byte run1 packets",
+    "readbackCeilingBytes": 1048576
+  },
+  "files": [
+    {
+      "path": "docs/evidence/issue202/probe-codec.mjs",
+      "bytes": 11339,
+      "sha256": "92c007d4797640f1737067fa495321c91d8cedb893d8696d220879c1053c99d8"
+    },
+    {
+      "path": "docs/evidence/issue202/codec-probe-1.json",
+      "bytes": 11711,
+      "sha256": "2ebd1857328981b1ba0b5738a1911a947e66cba1db4ff3e6789939291a1a4a93"
+    },
+    {
+      "path": "docs/evidence/issue202/codec-probe-1-sdr709-0.vp9-packet.bin",
+      "bytes": 264,
+      "sha256": "f8b58aaf85300f45bfddb5ed2c4b2aa4936fd3f3cb2906e770ab9b16ee1280ea"
+    },
+    {
+      "path": "docs/evidence/issue202/codec-probe-1-pq2020-0.vp9-packet.bin",
+      "bytes": 264,
+      "sha256": "e73424f9a8fc69e54ae94d2b1a5a3151d54491cb8d8b490e2d5d2773790f3d64"
+    },
+    {
+      "path": "docs/evidence/issue202/codec-probe-1-hlg2020-0.vp9-packet.bin",
+      "bytes": 264,
+      "sha256": "e73424f9a8fc69e54ae94d2b1a5a3151d54491cb8d8b490e2d5d2773790f3d64"
+    },
+    {
+      "path": "docs/evidence/issue202/inspect-codec-packets.mjs",
+      "bytes": 2506,
+      "sha256": "069996d699432c37814ab3b9206c36eb72b4e4da20cafde123b229ed7ce4d551"
+    },
+    {
+      "path": "docs/evidence/issue202/codec-packet-inspection-1.json",
+      "bytes": 2025,
+      "sha256": "27e573e7739f0a80f92b88e93686e7ca5648fb026f05dcd8c768bd62cf0eb7e4"
+    },
+    {
+      "path": "docs/evidence/issue202/probe-codec-readback.mjs",
+      "bytes": 8457,
+      "sha256": "32253befb82da5fe8803a446840ff22e2beeb9c6f84d381f1e64ed0a596d8b63"
+    },
+    {
+      "path": "docs/evidence/issue202/codec-run-1-results.md",
+      "bytes": 5967,
+      "sha256": "9550be905eb6defa97f55413a2077544e7544902e004c48949681d0e487f63b5"
+    },
+    {
+      "path": "docs/evidence/issue202/r1-r2-manifest.json",
+      "bytes": 8237,
+      "sha256": "126c14529c08a03d8b67c797aab02318ed38093287eca9aaf98235d094f23be0"
+    }
+  ]
+}

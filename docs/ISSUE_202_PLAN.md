@@ -23,10 +23,19 @@ The [R1/R2 evidence](evidence/issue202/r1-r2-results.md) records 118/118 scalar
 comparisons and 68/68 final-view storage comparisons passing, with the exact
 scope-bin fixture failing after binary16 storage. The measured browser uses
 SwiftShader; P3 canvas drawing changes extended pixels, WebGPU has no adapter,
-and no codec has yet encoded or decoded a frame. Basic mux tags were inspected
+and the initial gate had not encoded or decoded a frame. Basic mux tags were inspected
 using synthetic header-only packets. These results do not promote the managed
 candidate or qualify a product HDR path. The next bounded codec script is
 prepared for an exclusive-slot decision; 1080p/4K timing remains unmeasured.
+
+The later [three-frame codec run](evidence/issue202/codec-run-1-results.md),
+explicitly granted after #198 released the slot, returned profile2 ten-bit
+packets and I420P10 frames. Its pixel comparisons stopped at an over-strict
+coded-size guard: saved VP9 headers say 1024×16, while VideoFrame coded width
+is 1088 and visibleRect was not captured. Raw pixels remain unqualified; this
+does not demonstrate a codec failure. All six frames and six codec instances
+closed; browser/server teardown completed and the slot was released. A separate
+decode-only follow-up is prepared but has no slot grant and has not run.
 
 ## Gates and deliverables
 

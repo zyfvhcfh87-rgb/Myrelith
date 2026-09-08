@@ -1,0 +1,396 @@
+{
+  "kind": "issue202-three-frame-codec-diagnostic",
+  "collectedAt": "2026-09-08T09:52:04.363Z",
+  "browserVersion": "151.0.7922.34",
+  "startingCommit": "a75cc864b0815d14a93c5e1d7f8d1c90dae2f6a1",
+  "startingScriptSha256": "92c007d4797640f1737067fa495321c91d8cedb893d8696d220879c1053c99d8",
+  "scriptSha256": "92c007d4797640f1737067fa495321c91d8cedb893d8696d220879c1053c99d8",
+  "sourceIdentityUnchanged": true,
+  "commandLine": {
+    "unavailable": "Error: cdpSession.send: Protocol error (Browser.getBrowserCommandLine): Command line not returned because --enable-automation not set.",
+    "requestedAdditionalFlags": [
+      "--mute-audio"
+    ]
+  },
+  "gpu": {
+    "devices": [
+      {
+        "vendorId": 65535,
+        "deviceId": 65535,
+        "vendorString": "Google Inc. (Google)",
+        "deviceString": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+        "driverVendor": "SwANGLE",
+        "driverVersion": "5.0.0"
+      }
+    ],
+    "featureStatus": {
+      "2d_canvas": "unavailable_software",
+      "direct_rendering_display_compositor": "disabled_off_ok",
+      "gpu_compositing": "disabled_software",
+      "multiple_raster_threads": "enabled_on",
+      "opengl": "disabled_off",
+      "rasterization": "disabled_software",
+      "raw_draw": "disabled_off_ok",
+      "skia_graphite": "disabled_off",
+      "trees_in_viz": "disabled_off",
+      "video_decode": "disabled_software",
+      "video_encode": "disabled_software",
+      "webgl": "unavailable_software",
+      "webgpu": "unavailable_software",
+      "webnn": "unavailable_software"
+    },
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0)"
+  },
+  "qualification": "Three synthetic 1024x16 frames only. Same-browser decode against an exact independently stated ramp. Prefix reader is not a full codec validator. No independent decoder, complete metadata, lossy quality threshold, performance, native-memory or physical HDR qualification.",
+  "rows": [
+    {
+      "id": "sdr709",
+      "expected": {
+        "width": 1024,
+        "height": 16,
+        "format": "I420P10",
+        "luma": "code(x,y)=x",
+        "chroma": 512,
+        "uniqueLuma": 1024,
+        "tags": {
+          "primaries": "bt709",
+          "transfer": "bt709",
+          "matrix": "bt709",
+          "fullRange": true
+        }
+      },
+      "ledger": {
+        "framesOpened": 2,
+        "framesClosed": 2,
+        "encodersOpened": 1,
+        "encodersClosed": 1,
+        "decodersOpened": 1,
+        "decodersClosed": 1,
+        "sourcePlaneBytes": 49152,
+        "encodedPayloadBytes": 264,
+        "decodedCopyBytes": 0,
+        "retainedReadbackFrames": 0,
+        "peakRetainedReadbackFrames": 1
+      },
+      "encoderConfig": {
+        "requested": {
+          "codec": "vp09.02.40.10.01.01.01.01.01",
+          "width": 1024,
+          "height": 16,
+          "framerate": 30,
+          "bitrate": 8000000,
+          "hardwareAcceleration": "prefer-software",
+          "latencyMode": "quality"
+        },
+        "returned": {
+          "alpha": "discard",
+          "bitrate": 8000000,
+          "bitrateMode": "variable",
+          "codec": "vp09.02.40.10.01.01.01.01.01",
+          "contentHint": "",
+          "framerate": 30,
+          "hardwareAcceleration": "prefer-software",
+          "height": 16,
+          "latencyMode": "quality",
+          "width": 1024
+        },
+        "supported": true
+      },
+      "sourceSha256": "6a8e967dc120d61086d48112333f8d4ff509f8b2222079b695bf3a977efa5f59",
+      "decoderConfig": {
+        "codec": "vp09.02.40.10.01.01.01.01.01",
+        "codedHeight": 16,
+        "codedWidth": 1024,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "bt709",
+          "primaries": "bt709",
+          "transfer": "bt709"
+        },
+        "flip": false,
+        "hardwareAcceleration": "no-preference",
+        "rotation": 0
+      },
+      "packets": [
+        {
+          "bytes": 264,
+          "sha256": "f8b58aaf85300f45bfddb5ed2c4b2aa4936fd3f3cb2906e770ab9b16ee1280ea",
+          "type": "key",
+          "header": {
+            "profile": 2,
+            "depth": 10,
+            "colorId": 2,
+            "fullRange": true
+          },
+          "filename": "codec-probe-1-sdr709-0.vp9-packet.bin"
+        }
+      ],
+      "decoderSupport": {
+        "config": {
+          "codec": "vp09.02.40.10.01.01.01.01.01",
+          "codedHeight": 16,
+          "codedWidth": 1024,
+          "colorSpace": {
+            "fullRange": true,
+            "matrix": "bt709",
+            "primaries": "bt709",
+            "transfer": "bt709"
+          },
+          "flip": false,
+          "hardwareAcceleration": "no-preference",
+          "rotation": 0
+        },
+        "supported": true
+      },
+      "decoded": [
+        {
+          "format": "I420P10",
+          "width": 1088,
+          "height": 16,
+          "tags": {
+            "fullRange": true,
+            "matrix": "bt709",
+            "primaries": "bt709",
+            "transfer": "bt709"
+          }
+        }
+      ],
+      "outcome": "failed",
+      "error": "Error: Error: unexpected-decoded-size",
+      "terminalOwnedResources": 0
+    },
+    {
+      "id": "pq2020",
+      "expected": {
+        "width": 1024,
+        "height": 16,
+        "format": "I420P10",
+        "luma": "code(x,y)=x",
+        "chroma": 512,
+        "uniqueLuma": 1024,
+        "tags": {
+          "primaries": "bt2020",
+          "transfer": "pq",
+          "matrix": "bt2020-ncl",
+          "fullRange": true
+        }
+      },
+      "ledger": {
+        "framesOpened": 2,
+        "framesClosed": 2,
+        "encodersOpened": 1,
+        "encodersClosed": 1,
+        "decodersOpened": 1,
+        "decodersClosed": 1,
+        "sourcePlaneBytes": 49152,
+        "encodedPayloadBytes": 264,
+        "decodedCopyBytes": 0,
+        "retainedReadbackFrames": 0,
+        "peakRetainedReadbackFrames": 1
+      },
+      "encoderConfig": {
+        "requested": {
+          "codec": "vp09.02.40.10.01.09.16.09.01",
+          "width": 1024,
+          "height": 16,
+          "framerate": 30,
+          "bitrate": 8000000,
+          "hardwareAcceleration": "prefer-software",
+          "latencyMode": "quality"
+        },
+        "returned": {
+          "alpha": "discard",
+          "bitrate": 8000000,
+          "bitrateMode": "variable",
+          "codec": "vp09.02.40.10.01.09.16.09.01",
+          "contentHint": "",
+          "framerate": 30,
+          "hardwareAcceleration": "prefer-software",
+          "height": 16,
+          "latencyMode": "quality",
+          "width": 1024
+        },
+        "supported": true
+      },
+      "sourceSha256": "6a8e967dc120d61086d48112333f8d4ff509f8b2222079b695bf3a977efa5f59",
+      "decoderConfig": {
+        "codec": "vp09.02.40.10.01.09.16.09.01",
+        "codedHeight": 16,
+        "codedWidth": 1024,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "bt2020-ncl",
+          "primaries": "bt2020",
+          "transfer": "pq"
+        },
+        "flip": false,
+        "hardwareAcceleration": "no-preference",
+        "rotation": 0
+      },
+      "packets": [
+        {
+          "bytes": 264,
+          "sha256": "e73424f9a8fc69e54ae94d2b1a5a3151d54491cb8d8b490e2d5d2773790f3d64",
+          "type": "key",
+          "header": {
+            "profile": 2,
+            "depth": 10,
+            "colorId": 5,
+            "fullRange": true
+          },
+          "filename": "codec-probe-1-pq2020-0.vp9-packet.bin"
+        }
+      ],
+      "decoderSupport": {
+        "config": {
+          "codec": "vp09.02.40.10.01.09.16.09.01",
+          "codedHeight": 16,
+          "codedWidth": 1024,
+          "colorSpace": {
+            "fullRange": true,
+            "matrix": "bt2020-ncl",
+            "primaries": "bt2020",
+            "transfer": "pq"
+          },
+          "flip": false,
+          "hardwareAcceleration": "no-preference",
+          "rotation": 0
+        },
+        "supported": true
+      },
+      "decoded": [
+        {
+          "format": "I420P10",
+          "width": 1088,
+          "height": 16,
+          "tags": {
+            "fullRange": true,
+            "matrix": "bt2020-ncl",
+            "primaries": "bt2020",
+            "transfer": "pq"
+          }
+        }
+      ],
+      "outcome": "failed",
+      "error": "Error: Error: unexpected-decoded-size",
+      "terminalOwnedResources": 0
+    },
+    {
+      "id": "hlg2020",
+      "expected": {
+        "width": 1024,
+        "height": 16,
+        "format": "I420P10",
+        "luma": "code(x,y)=x",
+        "chroma": 512,
+        "uniqueLuma": 1024,
+        "tags": {
+          "primaries": "bt2020",
+          "transfer": "hlg",
+          "matrix": "bt2020-ncl",
+          "fullRange": true
+        }
+      },
+      "ledger": {
+        "framesOpened": 2,
+        "framesClosed": 2,
+        "encodersOpened": 1,
+        "encodersClosed": 1,
+        "decodersOpened": 1,
+        "decodersClosed": 1,
+        "sourcePlaneBytes": 49152,
+        "encodedPayloadBytes": 264,
+        "decodedCopyBytes": 0,
+        "retainedReadbackFrames": 0,
+        "peakRetainedReadbackFrames": 1
+      },
+      "encoderConfig": {
+        "requested": {
+          "codec": "vp09.02.40.10.01.09.18.09.01",
+          "width": 1024,
+          "height": 16,
+          "framerate": 30,
+          "bitrate": 8000000,
+          "hardwareAcceleration": "prefer-software",
+          "latencyMode": "quality"
+        },
+        "returned": {
+          "alpha": "discard",
+          "bitrate": 8000000,
+          "bitrateMode": "variable",
+          "codec": "vp09.02.40.10.01.09.18.09.01",
+          "contentHint": "",
+          "framerate": 30,
+          "hardwareAcceleration": "prefer-software",
+          "height": 16,
+          "latencyMode": "quality",
+          "width": 1024
+        },
+        "supported": true
+      },
+      "sourceSha256": "6a8e967dc120d61086d48112333f8d4ff509f8b2222079b695bf3a977efa5f59",
+      "decoderConfig": {
+        "codec": "vp09.02.40.10.01.09.18.09.01",
+        "codedHeight": 16,
+        "codedWidth": 1024,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "bt2020-ncl",
+          "primaries": "bt2020",
+          "transfer": "hlg"
+        },
+        "flip": false,
+        "hardwareAcceleration": "no-preference",
+        "rotation": 0
+      },
+      "packets": [
+        {
+          "bytes": 264,
+          "sha256": "e73424f9a8fc69e54ae94d2b1a5a3151d54491cb8d8b490e2d5d2773790f3d64",
+          "type": "key",
+          "header": {
+            "profile": 2,
+            "depth": 10,
+            "colorId": 5,
+            "fullRange": true
+          },
+          "filename": "codec-probe-1-hlg2020-0.vp9-packet.bin"
+        }
+      ],
+      "decoderSupport": {
+        "config": {
+          "codec": "vp09.02.40.10.01.09.18.09.01",
+          "codedHeight": 16,
+          "codedWidth": 1024,
+          "colorSpace": {
+            "fullRange": true,
+            "matrix": "bt2020-ncl",
+            "primaries": "bt2020",
+            "transfer": "hlg"
+          },
+          "flip": false,
+          "hardwareAcceleration": "no-preference",
+          "rotation": 0
+        },
+        "supported": true
+      },
+      "decoded": [
+        {
+          "format": "I420P10",
+          "width": 1088,
+          "height": 16,
+          "tags": {
+            "fullRange": true,
+            "matrix": "bt2020-ncl",
+            "primaries": "bt2020",
+            "transfer": "hlg"
+          }
+        }
+      ],
+      "outcome": "failed",
+      "error": "Error: Error: unexpected-decoded-size",
+      "terminalOwnedResources": 0
+    }
+  ],
+  "consoleErrors": []
+}

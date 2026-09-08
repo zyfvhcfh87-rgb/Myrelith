@@ -1,5 +1,10 @@
 # R1 numerical and bounded R2 evidence
 
+Historical gate at `b9be925`. The subsequent approved three-frame encode/decode
+diagnostic and its retained size-guard failures are documented in
+[codec run 1](codec-run-1-results.md). The gate manifest is verified against
+its original Git snapshot; no original source/result identity was rewritten.
+
 Recorded 2026-09-08. **The managed candidate is not ready for promotion.**
 CPU scalar comparisons pass, but binary16 storage changes an exact scope
 histogram; the tested P3 canvas transfer changes extended pixels. Complete

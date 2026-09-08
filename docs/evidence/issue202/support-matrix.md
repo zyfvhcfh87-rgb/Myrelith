@@ -2,8 +2,9 @@
 
 Inspected 2026-09-08; baseline and package hashes are in `source-inventory.json`.
 The source inventory and documentary tables began at R0. Bounded R2 results
-are added below; each measured cell retains its narrow qualification. No codec
-has yet encoded or decoded a frame, and no physical HDR display is qualified.
+are added below; each measured cell retains its narrow qualification. The
+subsequent three-frame codec run is recorded in the final section. No physical
+HDR display is qualified.
 
 Labels: **S** = supported by the cited specification/source for the narrow
 operation; **P** = partial, conditional or unmeasured end-to-end path; **I** =
@@ -131,3 +132,24 @@ the separate profile, bit depth and color fields, and `SmDm`/`CoLL` mastering
 boxes checked by the independent parser. None of the eight synthetic outputs
 contains mastering/content-light elements. This does not establish that every
 possible library pass-through path lacks them.
+
+## Subsequent three-frame codec diagnostic
+
+The exclusive session at `a75cc86` used exactly three sequential 1024×16
+I420P10 synthetic ramps. It returned one 264-byte VP9 profile2/10-bit packet
+and one I420P10 decoded frame per SDR/PQ/HLG cell. Encoder/decoder metadata
+matched the supplied tags. PQ and HLG packets are byte-identical; matching
+returned transfer tags is therefore evidence about the supplied decoder config,
+not independent bitstream PQ/HLG identification.
+
+All three raw pixel comparisons stopped with `unexpected-decoded-size` because
+VideoFrame coded width was 1088. Subsequent static inspection of saved VP9
+headers finds encoded/render dimensions 1024×16. The API permits coded padding;
+visibleRect was not recorded. This is an over-strict harness prerequisite and
+unqualified pixel result, not proven output resizing or a codec no-go.
+
+Six frames / three encoders / three decoders closed; zero terminal owned
+resources and no console errors. Browser/server teardown completed and the
+exclusive slot was released. No second decode, encoding configuration, R3
+benchmark or full test suite ran. See [run details](codec-run-1-results.md),
+[raw result](codec-probe-1.json), and [static inspection](codec-packet-inspection-1.json).

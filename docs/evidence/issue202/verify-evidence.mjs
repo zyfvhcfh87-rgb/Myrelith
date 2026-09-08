@@ -63,7 +63,32 @@ assert.equal(git(['branch','--show-current'])[0],'codex/issue202');
 const changed=[...git(['diff','--name-only',inventory.baseCommit]),...git(['ls-files','--others','--exclude-standard'])];
 for(const file of changed)assert.ok(file==='docs/ISSUE_202_PLAN.md'||file.startsWith('docs/evidence/issue202/'),`Unowned change: ${file}`);
 if(fs.existsSync(path.join(root,'r1-r2-manifest.json'))){
-  for(const file of read('r1-r2-manifest.json').files)check(path.join(repository,file.path),file.sha256);
+  // This is an immutable historical gate; later protocol amendments must not
+  // rewrite its source identities. Verify the exact committed gate snapshot.
+  const gate='b9be925423684c6a836c1b3f5306bf49ceceb2b2';
+  for(const file of read('r1-r2-manifest.json').files){
+    const bytes=execFileSync('git',['show',`${gate}:${file.path}`],{cwd:repository,env,maxBuffer:8*1024*1024});
+    assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),file.sha256,file.path);
+  }
+}
+if(fs.existsSync(path.join(root,'codec-probe-1.json'))){
+  const codec=read('codec-probe-1.json');
+  assert.equal(codec.startingCommit,'a75cc864b0815d14a93c5e1d7f8d1c90dae2f6a1');
+  check(path.join(root,'probe-codec.mjs'),codec.startingScriptSha256);
+  assert.equal(codec.scriptSha256,codec.startingScriptSha256);assert.equal(codec.sourceIdentityUnchanged,true);
+  assert.equal(codec.rows.length,3);
+  for(const row of codec.rows){
+    assert.equal(row.outcome,'failed');assert.match(row.error,/unexpected-decoded-size/);
+    assert.equal(row.terminalOwnedResources,0);assert.equal(row.ledger.decodedCopyBytes,0);
+    for(const packet of row.packets)check(path.join(root,packet.filename),packet.sha256);
+  }
+  const inspection=read('codec-packet-inspection-1.json');
+  check(path.join(root,'inspect-codec-packets.mjs'),inspection.scriptSha256);
+  check(path.join(root,'codec-probe-1.json'),inspection.inputResultSha256);
+  for(const row of inspection.rows){assert.equal(row.width,1024);assert.equal(row.height,16);assert.equal(row.rawPixelComparisonPerformed,false);}
+}
+if(fs.existsSync(path.join(root,'codec-run-1-manifest.json'))){
+  for(const file of read('codec-run-1-manifest.json').files)check(path.join(repository,file.path),file.sha256);
 }
 process.stdout.write(JSON.stringify({frozenFiles:freeze.files.length,productionHashes:inventory.files.length,scalarPasses:118,viewPasses:68,
   retainedScopeFailures:1,browserRows:23,transferRows:8,structuralRows:8,productionImports:0,changedPathsWithinOwnership:true})+'\n');
