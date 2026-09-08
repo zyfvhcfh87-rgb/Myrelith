@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --config .tmp/root-title-authoring-integration/vitest.config.ts
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/milestone9-integration
+
+
+ Test Files  16 passed (16)
+      Tests  220 passed (220)
+   Start at  21:17:30
+   Duration  9.71s (transform 507ms, setup 224ms, import 1.74s, tests 4.38s, environment 2.63s)
+
+✔ cold samples each use and close a fresh BrowserContext (0.635958ms)
+✔ source identity rejects end-of-run drift (0.172583ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (201.8985ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (109.772583ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.733625ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.708292ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.152166ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.257542ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.1305ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.139292ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.23925ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (3.041333ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.886125ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.080583ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.125084ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.149083ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.100375ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 488.787459

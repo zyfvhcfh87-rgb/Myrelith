@@ -1,0 +1,123 @@
+{
+  "checkedAt": "2026-09-08T17:39:00.468Z",
+  "sourceHead": "34b55e0ce06af0b5b7ba8c5db23b7ce63fcf13cc",
+  "clean": true,
+  "sourceHashes": 242,
+  "checkpointHashes": 44,
+  "runnerCleanup": {
+    "contextClosed": true,
+    "signals": [],
+    "remainingOwned": [],
+    "port5199Listening": false,
+    "released": true,
+    "checkedAt": "2026-09-08T17:37:26.223Z",
+    "serverExitCode": 143,
+    "error": "Error: Owned cleanup or console/page acceptance failed"
+  },
+  "runnerConsoleProblems": [
+    {
+      "step": "native key cancellation: playback",
+      "type": "warning",
+      "text": "[transportController] audio clip \"ordinary-audio\" source open failed: Playback media asset \"audio-asset\" is missing from the media pool"
+    }
+  ],
+  "physicalCleanupReleased": true,
+  "observedOwnedIdentities": [
+    {
+      "pid": 92336,
+      "parentPid": 92254,
+      "started": "Tue Sep 8 19:37:19 2026",
+      "command": "/Users/razvan-constantinbotezatu/.hermes/node/bin/node /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5199 --strictPort"
+    },
+    {
+      "pid": 92338,
+      "parentPid": 92254,
+      "started": "Tue Sep 8 19:37:19 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --user-data-dir=/private/tmp/issue199-continuation/2026-09-08T17-37-13.437Z-gestures/chromium-profile --remote-debugging-pipe about:blank"
+    },
+    {
+      "pid": 92339,
+      "parentPid": 92338,
+      "started": "Tue Sep 8 19:37:19 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=gpu-process --no-sandbox --disable-breakpad --headless --use-angle=swiftshader-webgl --enable-unsafe-swiftshader --gpu-preferences=WAAAAAAAAAAgAAAEAAAAAAAAAAAAAGAAQAAAAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAKAAAAAAAAAAoAAAAAAAAAAgAAAAAAAAADAAAAAEAAAAAAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,13755623574079253028,11122151261064604813,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,489463274518358712,18313223586249771517,4 --trace-process-track-uuid=3190708988185955192"
+    },
+    {
+      "pid": 92340,
+      "parentPid": 92338,
+      "started": "Tue Sep 8 19:37:19 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-US --service-sandbox-type=none --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --headless=old --shared-files --field-trial-handle=1718379636,r,13755623574079253028,11122151261064604813,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,489463274518358712,18313223586249771517,4 --trace-process-track-uuid=3190708989122997041"
+    },
+    {
+      "pid": 92341,
+      "parentPid": 92338,
+      "started": "Tue Sep 8 19:37:19 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=renderer --headless=old --no-sandbox --disable-back-forward-cache --disable-background-timer-throttling --disable-breakpad --force-color-profile=srgb --remote-debugging-pipe --allow-pre-commit-input --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --disable-gpu-compositing --lang=en-US --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1788792754380485 --launch-time-ticks=96285432617 --shared-files --field-trial-handle=1718379636,r,13755623574079253028,11122151261064604813,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,489463274518358712,18313223586249771517,4 --trace-process-track-uuid=3190708990060038890"
+    },
+    {
+      "pid": 92381,
+      "parentPid": 92338,
+      "started": "Tue Sep 8 19:37:25 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=audio.mojom.AudioService --lang=en-US --service-sandbox-type=audio --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --message-loop-type-ui --headless=old --shared-files --field-trial-handle=1718379636,r,13755623574079253028,11122151261064604813,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,489463274518358712,18313223586249771517,4 --trace-process-track-uuid=3190708990997080739"
+    },
+    {
+      "pid": 92382,
+      "parentPid": 92338,
+      "started": "Tue Sep 8 19:37:25 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=video_capture.mojom.VideoCaptureService --lang=en-US --service-sandbox-type=none --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --message-loop-type-ui --headless=old --shared-files --field-trial-handle=1718379636,r,13755623574079253028,11122151261064604813,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,489463274518358712,18313223586249771517,4 --trace-process-track-uuid=3190708991934122588"
+    }
+  ],
+  "absentPids": [
+    92336,
+    92338,
+    92339,
+    92340,
+    92341,
+    92381,
+    92382
+  ],
+  "remainingOwned": [],
+  "port5199Listening": false,
+  "runnerPid": 92254,
+  "scopedAwakePids": [
+    92265
+  ],
+  "runnerAndAwakeAbsent": true,
+  "explicitSlotRelease": true,
+  "hostSleepCheck": {
+    "status": 0,
+    "runStart": "2026-09-08T17:37:13.438Z",
+    "runEnd": "2026-09-08T17:37:26.259Z",
+    "matchingSleepWakeLines": [
+      "2026-09-08 19:37:13 +0200 Assertions          \tPID 92265(caffeinate) Created PreventSystemSleep \"caffeinate command-line tool\" 00:00:00  id:0x0x700008d36 [System: PrevIdle PrevSleep kCPU]          ",
+      "2026-09-08 19:37:20 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d37 [System: PrevIdle PrevDisp PrevSleep kCPU kDisp]          ",
+      "2026-09-08 19:37:20 +0200 Assertions          \tPID 353(powerd) TurnedOn InternalPreventDisplaySleep \"com.apple.powermanagement.delayDisplayOff\" 00:00:00  id:0x0x10000083a3 [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:20 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d37 [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:21 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d38 [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:21 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d38 [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:22 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d39 [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:22 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d39 [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:22 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3a [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:22 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3a [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:22 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3b [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:22 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3b [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:23 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3c [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:23 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3c [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:23 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3d [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:23 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3d [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:24 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3e [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:24 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3e [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:24 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3f [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:24 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d3f [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:24 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d40 [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:24 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d40 [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:25 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d41 [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:25 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d41 [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:25 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d57 [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:25 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d57 [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:25 +0200 Assertions          \tPID 92338(chrome-headless-shell) Created NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d58 [System: PrevIdle PrevDisp PrevSleep IntPrevDisp kCPU kDisp]          ",
+      "2026-09-08 19:37:25 +0200 Assertions          \tPID 92338(chrome-headless-shell) Released NoDisplaySleepAssertion \"Capturing\" 00:00:00  id:0x0x500008d58 [System: PrevIdle PrevSleep IntPrevDisp kCPU kDisp]          "
+    ],
+    "actualSleepWakeTransitions": [],
+    "qualified": true
+  }
+}

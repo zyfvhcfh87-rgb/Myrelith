@@ -5,6 +5,9 @@ import { createMaskEffect } from '../domain/effectStack'
 import { createMotionTrackingSamplePlan, type MotionTrackingDirection, type MotionTrackingSelection } from '../domain/motionTracking'
 import { resolveClipAnimationAtFrame } from '../domain/clipAnimation'
 import { createProjectFileSnapshot, parseProjectFile, serializeProjectFile } from '../domain/projectFile'
+import { replaceProjectSequence } from '../domain/projectSequences'
+import { applyMaskTrackingWithResult } from '../domain/operations/maskTracking'
+import { exactLegacyTitleFile, titleProjectFromFile } from '../test/titleFileBoundaryFixtures'
 import type { MediaAsset, TimelineDoc } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -314,3 +317,87 @@ test.each(['inside', 'outside'] as const)('passive range reentry preserves a new
   useTransportStore.getState().setPlayheadFrame(1)
   expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
 })
+
+function currentPortableCharacters(): number {
+  return serializeProjectFile(createProjectFileSnapshot(useDocumentStore.getState().project, useMediaStore.getState().descriptors.values())).length
+}
+
+function padCurrentProjectTo(characters: number) {
+  const file = createProjectFileSnapshot(useDocumentStore.getState().project, useMediaStore.getState().descriptors.values())
+  let remaining = characters - serializeProjectFile(file).length
+  if (remaining < 0) throw new Error('Boundary padding cannot shrink the current fixture.')
+  for (const sequence of file.sequences) for (const track of sequence.tracks) for (const clip of track.clips) if (clip.text) {
+    const count = Math.min(20_000 - clip.text.content.length, remaining)
+    clip.text.content += 'A'.repeat(count); remaining -= count
+  }
+  expect(remaining).toBe(0)
+  const wire = serializeProjectFile(file)
+  expect(wire.length).toBe(characters)
+  useDocumentStore.getState().setProject(titleProjectFromFile(parseProjectFile(wire)))
+  expect(currentPortableCharacters()).toBe(characters)
+}
+
+function installNearFileProject(characters: number) {
+  const base = useDocumentStore.getState().project
+  // Shared fixture uses real bounded compact title fields; no serializer mock or
+  // artificially lowered file limit. Its sequences are dormant beside the media edit.
+  const padding = parseProjectFile(exactLegacyTitleFile(9_000_000, 22, false))
+  useDocumentStore.getState().setProject({ ...base, sequences: [...base.sequences, ...padding.sequences] })
+  padCurrentProjectTo(characters)
+}
+
+async function installExactFitTrackingProject(): Promise<MotionTrackingSession> {
+  installNearFileProject(9_100_000)
+  const analyzed = await session(), planned = planMotionTrackingAttachment(analyzed, target, false)
+  if (!planned.ok || planned.kind !== 'mask-effect') throw new Error('Missing mask plan')
+  const current = useDocumentStore.getState(), applied = applyMaskTrackingWithResult(current.doc, planned.plan, null)
+  if (!applied.ok || !applied.changed) throw new Error('Expected six new tracking keys')
+  const candidate = replaceProjectSequence(current.project, current.activeSequenceId, applied.doc)
+  const delta = serializeProjectFile(createProjectFileSnapshot(candidate, useMediaStore.getState().descriptors.values())).length - currentPortableCharacters()
+  expect(delta).toBeGreaterThan(0)
+  padCurrentProjectTo(10_000_000 - delta)
+  return session()
+}
+
+test.each([9_999_999, 10_000_000])('an actual %i-character portable file refuses tracking growth before preview and preserves redo', async (characters) => {
+  installNearFileProject(characters)
+  const analyzed = await session(), before = useDocumentStore.getState().project, future = [before]
+  useDocumentStore.setState({ future })
+  expect(() => reviewed(analyzed)).toThrow(/exceeds 10000000 characters/)
+  expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+  expect(useDocumentStore.getState().project).toBe(before)
+  expect(useDocumentStore.getState().past).toHaveLength(0)
+  expect(useDocumentStore.getState().future).toBe(future)
+  expect(currentPortableCharacters()).toBe(characters)
+}, 30_000)
+
+test('tracking can reach the actual 10M file edge, round-trip and undo; identical reviewed tracking remains a no-op', async () => {
+  const analyzed = await installExactFitTrackingProject(), before = useDocumentStore.getState().project, beforeCharacters = currentPortableCharacters()
+  const review = reviewed(analyzed)
+  expect(review.preview(true)).toBeNull()
+  expect(currentPortableCharacters()).toBe(beforeCharacters)
+  expect(review.apply(null)).toEqual({ ok: true, changed: true })
+  const applied = useDocumentStore.getState()
+  expect(applied.project).not.toBe(before); expect(applied.past).toEqual([before])
+  expect(currentPortableCharacters()).toBe(10_000_000)
+  const parsed = parseProjectFile(serializeProjectFile(createProjectFileSnapshot(applied.project, useMediaStore.getState().descriptors.values())))
+  expect(parsed.sequences[0]!.tracks.at(-1)!.clips[0]!.animation).toEqual(applied.doc.tracks.at(-1)!.clips[0]!.animation)
+  const repeated = reviewed(analyzed)
+  expect(repeated.apply(repeated.plan.reviewKey)).toEqual({ ok: true, changed: false })
+  expect(useDocumentStore.getState().project).toBe(applied.project); expect(useDocumentStore.getState().past).toBe(applied.past)
+  useDocumentStore.getState().undo(); expect(useDocumentStore.getState().project).toBe(before); expect(currentPortableCharacters()).toBe(beforeCharacters)
+  useDocumentStore.getState().redo(); expect(useDocumentStore.getState().project).toBe(applied.project); expect(currentPortableCharacters()).toBe(10_000_000)
+}, 30_000)
+
+test('fresh Apply refuses one extra portable character introduced after review while leaving current project and redo intact', async () => {
+  const analyzed = await installExactFitTrackingProject(), before = useDocumentStore.getState().project, beforeCharacters = currentPortableCharacters(), future = [before]
+  useDocumentStore.setState({ future })
+  const review = reviewed(analyzed); expect(review.preview(true)).toBeNull()
+  const descriptors = new Map(useMediaStore.getState().descriptors), descriptor = descriptors.get('target-asset')!
+  descriptors.set('target-asset', { ...descriptor, fileName: descriptor.fileName + 'x' })
+  useMediaStore.setState({ descriptors })
+  expect(currentPortableCharacters()).toBe(beforeCharacters + 1)
+  expect(review.apply(null)).toMatchObject({ ok: false, reason: expect.stringMatching(/exceeds 10000000 characters/) })
+  expect(useDocumentStore.getState().project).toBe(before); expect(useDocumentStore.getState().past).toHaveLength(0); expect(useDocumentStore.getState().future).toBe(future)
+  expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+}, 30_000)

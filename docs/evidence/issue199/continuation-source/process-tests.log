@@ -1,0 +1,11 @@
+✔ ownership includes exact private profile and descendants but excludes a prefix-matching unrelated profile (0.583417ms)
+✔ an observed orphan remains owned while a reused PID or changed command does not (0.100583ms)
+✔ macOS ps parser preserves exact identity fields and drops malformed data (0.217084ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 32.017041

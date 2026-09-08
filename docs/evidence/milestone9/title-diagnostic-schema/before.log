@@ -1,0 +1,90 @@
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/milestone9-integration
+
+ ❯ src/test/titleCanvasDiagnostic.test.ts (1 test | 1 failed) 9ms
+   × diagnostic fixture bytes stay pinned to all eight observed failure classes and a passing control 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/test/titleCanvasDiagnostic.test.ts > diagnostic fixture bytes stay pinned to all eight observed failure classes and a passing control
+AssertionError: expected [ …(9) ] to deeply equal [ …(9) ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "expanded": "adcecddc3a4cd464e741f3b5603b4e9cbfe567e8046f875f084de52f02cc0b37",
++     "expanded": "b81cbf8bfa130af23cccb4da586ec28cc941477e5ebfca7122721995e92a184f",
+      "id": "sans-serif-plain",
+-     "legacy": "3ed0fd5d41e111aa7e6b94a77a190f830b963812f4c885ce6c981f0962897411",
++     "legacy": "982736d819b385898383708a076a7f9ab0279c21842aec9b1f3f378101101c7e",
+    },
+    {
+-     "expanded": "928fd4fbe0d45f7ad60aecb19caa4c728f020e6691b11985671301d4d04e3a4f",
++     "expanded": "14ea250ea3ddc2fb77f03cb0c03ef51ab63c764058c4f0ea65aa935087ac5c6e",
+      "id": "sans-serif-combining-emoji",
+-     "legacy": "35f06d6e04a72f9b040ee68eff53afb101dad4c43609e2ac1ec6a614d7350c74",
++     "legacy": "20f3115f8b92c47f5b3b87d6b4796a1bcbb750e157e2c9a8c70f0df0c111d56c",
+    },
+    {
+-     "expanded": "608f4e064723979b552b394364ca246cb1102cc1d16a85d7aabc08fbe5ef2c5e",
++     "expanded": "d15872b61cec70862d7f4fd4247a83704cb5b8f7cb6bb95346c8f268c552b38e",
+      "id": "sans-serif-crop-flip",
+-     "legacy": "c3d49bdbd51e1637930321ff9fa6709efc7036b30741dc0bce09d515c35ef9e5",
++     "legacy": "d700ae53efd1d070080c79fca1fbde39e208f6f58ec7839d55610e7365985420",
+    },
+    {
+-     "expanded": "823ac2c68fc95f68c2d98ea1c95241467c722a7e9d8ac95035638c022be11e63",
++     "expanded": "25d057fa988918298ee7d374240772a6187fa876da6fe985d7b40132b58861dd",
+      "id": "sans-serif-background",
+-     "legacy": "72286d60a419c907ae299428b58f1893392acc23fbb27df8adf08cbbdde24c6b",
++     "legacy": "cbdf5489551c38d64569d17333665dd6bd31f9144c302fa0774bc6ad893d4018",
+    },
+    {
+-     "expanded": "7098f2456b57b6d060649340dd2932042d3818c9d3d2e9d24c05a26d35c8487b",
++     "expanded": "4b62dd3afdb06183811ddacea78b4fd6be738bd774f1e9dfa8574507e48e38ec",
+      "id": "sans-serif-outline-shadow",
+-     "legacy": "05c78322279245598b1a32f98901402dfb0e307d99826528d7a339e53b326e03",
++     "legacy": "4b41eadb5233926016b635e6e703ff72e6c7d78e71cff45b39824f5f03b20060",
+    },
+    {
+-     "expanded": "e09a19300745e5cb99ed9a8b4ee8d93726a7a84cfc9c066db96938dac9f88764",
++     "expanded": "278d188701fdec533498dbfe9b5e0fb9565f51cb71b57ac821fd0e8ad17e80de",
+      "id": "monospace-caption-canary",
+-     "legacy": "4db5e8adcb59426e57b75db92be333ea02e0418b5809f13b474e25ee86b9ca29",
++     "legacy": "2d6724d9b519a73827010b2a54f33ff25946010bac8a9a73253f4fb40ace2a9e",
+    },
+    {
+-     "expanded": "4ae31a26340e637bebbfdbc19bdf111aa1519358c3d1cef9531920b9656f3e4b",
++     "expanded": "3314f53c2496daeaf65f39993e61adfce3236400afb1f0f580c2094e5165e688",
+      "id": "fantasy-fractional",
+-     "legacy": "2b0859a55e23f104895989332f31be64df08ad5e4473ff7d04cdaccb508e7346",
++     "legacy": "98eca00220bcc45f5636bdc80b2246e80a7fa39e33b3d78be883dc8e2da88f9a",
+    },
+    {
+-     "expanded": "b34b4de28c41987d92f65cb37ebd1f5a4ecf2880aa70e0af4141326bf3ee03fa",
++     "expanded": "b248ef2e48b1f137cec26558a7aa48c81886b5a27f51cd144a6f27ef097a30bd",
+      "id": "fantasy-anchor-zero",
+-     "legacy": "502f105751ee100b8f145f027a12d07c7ad7b9d9071651d8dc3f4397e06e8fd8",
++     "legacy": "6f7e4cd5ff61f48e0440d770d8c1634e660ff8c52735ca75c1068bf80cf8bed4",
+    },
+    {
+-     "expanded": "c8e47ae9248865548d8f648d0640e187aaf189853011040c248c138570d4e115",
++     "expanded": "3b556556b7d7bf0e990baa27f2c6e275cf1306a0fcf5d93d2d2828e582f24b6e",
+      "id": "fantasy-anchor-one",
+-     "legacy": "1da274290b93547e099f52d69721802963ac5e935b13c5d1f5c011b317d8d885",
++     "legacy": "b17f0c6400abaccf239ae98ee85a40816db1785b7c8ce9e95f44f271c4e4b0fe",
+    },
+  ]
+
+ ❯ src/test/titleCanvasDiagnostic.test.ts:11:112
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  20:57:16
+   Duration  594ms (transform 189ms, setup 37ms, import 216ms, tests 9ms, environment 279ms)

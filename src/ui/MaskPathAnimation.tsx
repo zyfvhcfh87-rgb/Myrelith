@@ -4,6 +4,7 @@ import { commitMaskPathKey } from '../app/maskEditingController'
 import { maskEditingTarget, maskPathAnimationStatus } from '../state/maskEditor'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
+import AnimationEntry from './animation/AnimationEntry'
 
 export default function MaskPathAnimation({ clip, effect, playheadFrame, locked }: {
   clip: Clip; effect: EffectDescriptor; playheadFrame: number; locked: boolean
@@ -33,6 +34,7 @@ export default function MaskPathAnimation({ clip, effect, playheadFrame, locked 
       </>}
     </div>
     {status.track && <>
+      <AnimationEntry label="Open held path timing" lane={{ owner: { kind: 'clip', id: clip.id }, kind: 'path', effectId: effect.id, parameter: 'path', valueType: status.track.valueType, valueVersion: status.track.valueVersion }} />
       <div className="inspector-effect-actions">
         <button type="button" disabled={playing || !previous} onClick={() => { if (previous) useTransportStore.getState().setPlayheadFrame(clip.timelineRange.startFrame + previous.frame) }}>Previous path key</button>
         <button type="button" disabled={playing || !next} onClick={() => { if (next) useTransportStore.getState().setPlayheadFrame(clip.timelineRange.startFrame + next.frame) }}>Next path key</button>

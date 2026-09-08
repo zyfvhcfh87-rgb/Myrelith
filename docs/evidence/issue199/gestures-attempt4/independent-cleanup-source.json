@@ -1,0 +1,93 @@
+{
+  "checkedAt": "2026-09-08T18:32:38.946Z",
+  "harnessHead": "d16cca49617a8a32cc820d63345404133b70eb12",
+  "productSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "status": "segment-passed",
+  "stepsPassed": 34,
+  "consoleProblems": [],
+  "ownedNative": [
+    {
+      "pid": 98032,
+      "parentPid": 97958,
+      "started": "Tue Sep 8 20:30:55 2026",
+      "command": "/Users/razvan-constantinbotezatu/.hermes/node/bin/node /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5199 --strictPort"
+    },
+    {
+      "pid": 98034,
+      "parentPid": 97958,
+      "started": "Tue Sep 8 20:30:55 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --user-data-dir=/private/tmp/issue199-continuation/2026-09-08T18-30-49.647Z-gestures/chromium-profile --remote-debugging-pipe about:blank"
+    },
+    {
+      "pid": 98035,
+      "parentPid": 98034,
+      "started": "Tue Sep 8 20:30:55 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=gpu-process --no-sandbox --disable-breakpad --headless --use-angle=swiftshader-webgl --enable-unsafe-swiftshader --gpu-preferences=WAAAAAAAAAAgAAAEAAAAAAAAAAAAAGAAQAAAAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAKAAAAAAAAAAoAAAAAAAAAAgAAAAAAAAADAAAAAEAAAAAAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,1536200121645699538,12108539314677013508,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2498299573796300124,2459127163990873207,4 --trace-process-track-uuid=3190708988185955192"
+    },
+    {
+      "pid": 98036,
+      "parentPid": 98034,
+      "started": "Tue Sep 8 20:30:55 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-US --service-sandbox-type=none --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --headless=old --shared-files --field-trial-handle=1718379636,r,1536200121645699538,12108539314677013508,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2498299573796300124,2459127163990873207,4 --trace-process-track-uuid=3190708989122997041"
+    },
+    {
+      "pid": 98037,
+      "parentPid": 98034,
+      "started": "Tue Sep 8 20:30:55 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=renderer --headless=old --no-sandbox --disable-back-forward-cache --disable-background-timer-throttling --disable-breakpad --force-color-profile=srgb --remote-debugging-pipe --allow-pre-commit-input --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --disable-gpu-compositing --lang=en-US --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1788794155097675 --launch-time-ticks=98100856793 --shared-files --field-trial-handle=1718379636,r,1536200121645699538,12108539314677013508,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2498299573796300124,2459127163990873207,4 --trace-process-track-uuid=3190708990060038890"
+    },
+    {
+      "pid": 98076,
+      "parentPid": 98034,
+      "started": "Tue Sep 8 20:31:01 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=audio.mojom.AudioService --lang=en-US --service-sandbox-type=audio --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --message-loop-type-ui --headless=old --shared-files --field-trial-handle=1718379636,r,1536200121645699538,12108539314677013508,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2498299573796300124,2459127163990873207,4 --trace-process-track-uuid=3190708990997080739"
+    },
+    {
+      "pid": 98077,
+      "parentPid": 98034,
+      "started": "Tue Sep 8 20:31:01 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=video_capture.mojom.VideoCaptureService --lang=en-US --service-sandbox-type=none --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --message-loop-type-ui --headless=old --shared-files --field-trial-handle=1718379636,r,1536200121645699538,12108539314677013508,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,2498299573796300124,2459127163990873207,4 --trace-process-track-uuid=3190708991934122588"
+    }
+  ],
+  "wrapperOrRunnerPid": 97958,
+  "allObservedPidsAbsent": true,
+  "noPrivateProfileOrMatchingAwakeCommand": true,
+  "port5199Listening": false,
+  "sourceFiles": 242,
+  "checkpointFiles": 55,
+  "cleanSource": true,
+  "pmset": {
+    "actualSleepWakeTransitions": [],
+    "scopedAwakeRecords": [
+      "2026-09-08 20:30:49 +0200 Assertions          \tPID 97969(caffeinate) Created PreventSystemSleep \"caffeinate command-line tool\" 00:00:00  id:0x0x700009dd6 [System: PrevIdle PrevSleep IPushSrvc kCPU]          ",
+      "2026-09-08 20:31:11 +0200 Assertions          \tPID 422(coreaudiod) Released PreventUserIdleSystemSleep \"com.apple.audio.context2295.preventuseridlesleep\" 00:00:09  id:0x0x100009de3 [System: PrevIdle PrevSleep IntPrevDisp IPushSrvc kCPU kDisp]          ",
+      "2026-09-08 20:31:11 +0200 Assertions          \tPID 422(coreaudiod) Released PreventUserIdleSystemSleep \"com.apple.audio.context2296.preventuseridlesleep\" 00:00:09  id:0x0x100009de5 [System: PrevIdle PrevSleep IntPrevDisp IPushSrvc kCPU kDisp]          ",
+      "2026-09-08 20:31:11 +0200 Assertions          \tPID 422(coreaudiod) Released PreventUserIdleSystemSleep \"com.apple.audio.context2297.preventuseridlesleep\" 00:00:09  id:0x0x100009de7 [System: PrevIdle PrevSleep IntPrevDisp IPushSrvc kCPU kDisp]          ",
+      "2026-09-08 20:31:11 +0200 Assertions          \tPID 422(coreaudiod) Released PreventUserIdleSystemSleep \"com.apple.audio.context2298.preventuseridlesleep\" 00:00:09  id:0x0x100009de9 [System: PrevIdle PrevSleep IntPrevDisp IPushSrvc kCPU kDisp]          ",
+      "2026-09-08 20:31:11 +0200 Assertions          \tPID 422(coreaudiod) Released PreventUserIdleSystemSleep \"com.apple.audio.BuiltInSpeakerDevice.context.preventuseridlesleep\" 00:00:09  id:0x0x100009deb [System: PrevIdle PrevSleep IntPrevDisp IPushSrvc kCPU kDisp]          ",
+      "2026-09-08 20:31:11 +0200 Assertions          \tPID 422(coreaudiod) Released PreventUserIdleSystemSleep \"com.apple.audio.context2301.preventuseridlesleep\" 00:00:09  id:0x0x100009ded [System: PrevIdle PrevSleep IntPrevDisp IPushSrvc kCPU kDisp]          ",
+      "2026-09-08 20:31:11 +0200 Assertions          \tPID 422(coreaudiod) Released PreventUserIdleSystemSleep \"com.apple.audio.context2302.preventuseridlesleep\" 00:00:09  id:0x0x100009def [System: PrevIdle PrevSleep IntPrevDisp IPushSrvc kCPU kDisp]          ",
+      "2026-09-08 20:31:11 +0200 Assertions          \tPID 422(coreaudiod) Released PreventUserIdleSystemSleep \"com.apple.audio.context2303.preventuseridlesleep\" 00:00:09  id:0x0x100009df1 [System: PrevIdle PrevSleep IntPrevDisp IPushSrvc kCPU kDisp]          ",
+      "2026-09-08 20:31:11 +0200 Assertions          \tPID 422(coreaudiod) Released PreventUserIdleSystemSleep \"com.apple.audio.context2304.preventuseridlesleep\" 00:00:09  id:0x0x100009df3 [System: PrevIdle PrevSleep IntPrevDisp IPushSrvc kCPU kDisp]          ",
+      "2026-09-08 20:31:11 +0200 Assertions          \tPID 422(coreaudiod) Released PreventUserIdleSystemSleep \"com.apple.audio.context2305.preventuseridlesleep\" 00:00:09  id:0x0x100009df5 [System: PrevIdle PrevSleep IntPrevDisp IPushSrvc kCPU kDisp]          "
+    ]
+  },
+  "qualification": "Independent read-only post-run check. No process signals or persistent power/display settings.",
+  "finalPidCheck": {
+    "at": "2026-09-08T18:34:21.889Z",
+    "pids": [
+      98032,
+      98034,
+      98035,
+      98036,
+      98037,
+      98076,
+      98077,
+      97958,
+      97969
+    ],
+    "awakeHelperPid": 97969,
+    "previewServerPid": 98032,
+    "allAbsent": true
+  }
+}

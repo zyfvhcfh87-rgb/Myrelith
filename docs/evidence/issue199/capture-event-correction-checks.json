@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-09-08T16:47:55.379Z",
+  "parent": "379634405c15b1e553c1e36996aac6ac83e61d39",
+  "productSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+  "sourceHashesVerified": 242,
+  "unchangedPriorCheckpointFiles": 19,
+  "productConfigDiffEmpty": true,
+  "originalRawArtifactsVerified": 21,
+  "originalJsonCopiesExact": true,
+  "traceArchiveValid": true,
+  "syntaxChecked": [
+    "scripts/issue199/continuation/observations.mjs",
+    "scripts/issue199/run-animation-continuation.mjs"
+  ],
+  "changedSourceSha256": {
+    "scripts/issue199/continuation/observations.mjs": "63d66a456a329243e13495e17c955497aa3d201233ddb950c1bf2b6c0e6be41f",
+    "scripts/issue199/run-animation-continuation.mjs": "9f01d1d2d7c52fd14786d90deb3694f217230295bb983daa0c3a5582b99c651a",
+    "scripts/issue199/continuation/PROTOCOL.md": "2699757975844625c17068f4bec7a2c2129749379b102c398bdfbf525687e442"
+  },
+  "repositoryLint": "passed; capture-event-correction-lint.log",
+  "diffCheckPassed": true,
+  "correctedBrowserRun": false,
+  "buildOrFocusedTestsRepeated": false
+}

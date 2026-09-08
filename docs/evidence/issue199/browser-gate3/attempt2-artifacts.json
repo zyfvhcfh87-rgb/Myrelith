@@ -1,0 +1,12 @@
+{
+  "directory": "/private/tmp/issue199-gate3-browser/2026-09-08T13-08-14.291Z",
+  "sha256": {
+    "result.json": "b0d84d96375c2db7b2667381876de8ae5419edb37374ec16b7c5443bcd1b5bb1",
+    "failure-dom.txt": "767b16d35a76e52dd2e330718bfad90c7d508748882bd2513e86aecc726f96a6",
+    "trace.zip": "0969aab3bc3969b71ae3ecc2a721c5132c0283264a0f28fa218c4fdf2dfd8dea",
+    "failure.png": "eba22e707e56b2e07bf6b008b4ecce1a804276564e66a56a1824d0ab8347fe43",
+    "process-cleanup.json": "2c63d3792b36d9726188578eeb5497b44253117f280b2560f0b896cd0d5e6345",
+    "server.log": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d",
+    "build.log": "7715a6d567ed07dd2e04edf997faf1777bbf6f4ecf76bf724157703be6435002"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-08T18:57:47.747Z",
+  "head": "4f825bd8eaeb3a0b83e6f0f2f6092872581afc5b",
+  "clean": true,
+  "generationProductSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+  "executingProductSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "sourceFiles": 242,
+  "checkpointFiles": 58,
+  "observationsSha256": "68b2bba0f06f09e8377bd8953bcd7679767209246c448f7dfa4849497297f7c6",
+  "onlyReviewedTwoLineChange": true,
+  "allOtherActionsAssertionsLimitsFixturesUnchanged": true,
+  "segment": "large"
+}

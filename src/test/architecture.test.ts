@@ -429,7 +429,9 @@ describe('architecture guard', () => {
     expect(editorClosure).not.toContain('ui/ExportDialog.tsx')
     expect(editorClosure).not.toContain('ui/CaptionEditor.tsx')
     expect(editorClosure).not.toContain('ui/TextOverlayDialog.tsx')
-    expect(editorClosure).not.toContain('ui/AnimationCurveEditor.tsx')
+    expect(editorClosure).not.toContain('ui/animation/AnimationWorkspace.tsx')
+    expect(editorClosure).not.toContain('ui/animation/AnimationGrid.tsx')
+    expect(editorClosure).not.toContain('domain/animationLaneIndex.ts')
   })
 
   test('limits privileged composition imports to the documented dev files', () => {

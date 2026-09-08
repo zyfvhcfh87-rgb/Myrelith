@@ -1,0 +1,164 @@
+{
+  "status": "segment-passed",
+  "harnessHead": "4fd79339aa6913ae34e0bdbcffd767aa1fbe8243",
+  "productSource": "1537d5e23ebf223c51f269f1e1a5f6a902ecaa0e",
+  "largeFixtureSources": {
+    "generationProductSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+    "executingProductSource": "1537d5e23ebf223c51f269f1e1a5f6a902ecaa0e"
+  },
+  "startedAt": "2026-09-08T19:26:49.451Z",
+  "finishedAt": "2026-09-08T19:27:01.672Z",
+  "wallSeconds": 12.221,
+  "steps": [
+    {
+      "name": "production launcher identity",
+      "status": "passed",
+      "elapsedMs": 980.9679999999998
+    },
+    {
+      "name": "100000-key fixture: cold entry, exact1024-key navigation and selected/all limits",
+      "status": "passed",
+      "elapsedMs": 2381.737792000001
+    },
+    {
+      "name": "100000 keys: warm filter/scroll/curve and native preview/commit bounds",
+      "status": "passed",
+      "elapsedMs": 1349.7765
+    },
+    {
+      "name": "1280 dormant lanes plus1000 empty distant owners: far origins and pinned exact focus",
+      "status": "passed",
+      "elapsedMs": 650.2247499999994
+    }
+  ],
+  "problems": [],
+  "dialogs": [
+    {
+      "step": "1280 dormant lanes plus1000 empty distant owners: far origins and pinned exact focus",
+      "type": "confirm",
+      "message": "This project has unsaved changes. Leave them behind and return to Projects?"
+    }
+  ],
+  "structural": {
+    "count": 17,
+    "maxRows": 14,
+    "maxGlyphsIncludingGhosts": 504,
+    "maxSamples": 255,
+    "viewports": [
+      720,
+      1440
+    ],
+    "noHorizontalPageOverflow": true,
+    "densePreview": {
+      "rows": 1,
+      "glyphs": 259,
+      "ghosts": 131,
+      "samples": [],
+      "viewport": 1440,
+      "width": 1440,
+      "activeDescendant": "animation-focused-description",
+      "focusedDescription": "V1 / Dense exact navigation, Opacity, local frame 1022, scalar editing available"
+    }
+  },
+  "rawWallTimings": [
+    {
+      "name": "100000 keys portable open",
+      "milliseconds": 945.7453749999995,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "100000 keys first dock/index/render wall time",
+      "milliseconds": 375.6950420000012,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "warm changed filter lane-9",
+      "milliseconds": 57.50725000000057,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "warm changed filter lane-8",
+      "milliseconds": 55.75987499999974,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "warm changed filter lane-7",
+      "milliseconds": 55.29058299999997,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "warm native vertical wheel",
+      "milliseconds": 54.170083999999406,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "1024-selected native preview in100000-key project",
+      "milliseconds": 240.51795899999888,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "1024-selected native release commit",
+      "milliseconds": 160.46604099999968,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "1280 lanes and1000 empty owners portable open",
+      "milliseconds": 211.3351249999996,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "many-owner first dock/index/render wall time",
+      "milliseconds": 91.34658399999898,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    }
+  ],
+  "nativeChecks": {
+    "trustedDownAndCaptureAfterFourMoves": true,
+    "previewPreservedProjectHistoryClipboardReferences": true,
+    "previewActive": true,
+    "releaseAddedOneHistoryEntry": true,
+    "releaseSelectionCount": 1024,
+    "undoRestoredProjectReference": true,
+    "qualification": "Native release checks one history entry and 1024 selected keys, then undo checks project identity. It does not assert every native moved key frame or restore pre-drag selection after undo. Component regression covers all 1024 moved key frames. Step 03 screenshot is after undo and its footer shows 1014 selected keys."
+  },
+  "cleanup": {
+    "contextClosed": true,
+    "signals": [],
+    "remainingOwned": [],
+    "port5199Listening": false,
+    "released": true,
+    "checkedAt": "2026-09-08T19:27:01.634Z",
+    "serverExitCode": 143
+  },
+  "independentCleanup": {
+    "at": "2026-09-08T19:28:04.623Z",
+    "pids": [
+      10686,
+      10688,
+      10689,
+      10690,
+      10691,
+      10614,
+      10625
+    ],
+    "allAbsent": true,
+    "port5199Listening": false,
+    "sourceFiles": 242,
+    "checkpointFiles": 71,
+    "actualSleepWakeTransitions": [],
+    "qualification": "Independent read-only release verification; no signals or persistent power/display changes. Wrapper process snapshot occurred after completion and was empty. Scoped caffeinate PID 10625 is sourced from its pmset creation record in the run window; a live start-time identity was not captured."
+  },
+  "evidence": {
+    "rawDirectory": "/private/tmp/issue199-continuation/2026-09-08T19-26-49.451Z-large",
+    "screenshots": 5,
+    "stepDomSnapshots": 4,
+    "workerInspected": [
+      "step-03.png",
+      "many-lanes-far-owner.png"
+    ],
+    "traceIntegrity": "passed unzip -t",
+    "privateProfilePreserved": true,
+    "recursiveProfileHashClaim": false
+  },
+  "qualification": "Only this selected segment. No automatic whole Gate3, OS save-picker, instrumented index count, hardware GPU, media pixel/PCM or export acceptance. Gestures/editing acceptance remains on earlier product 75b89ef. Timings include automation and settling, with no performance threshold or cross-attempt speedup claim. Headless Chromium 151 uses SwiftShader. Only this one large segment was run."
+}

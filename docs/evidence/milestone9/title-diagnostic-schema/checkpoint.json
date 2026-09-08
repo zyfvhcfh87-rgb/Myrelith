@@ -1,0 +1,62 @@
+{
+  "base": "a072a731931f2f22bd8bbc2a3469ebf16b96da9a",
+  "historicalSchema": 23,
+  "currentSchema": 24,
+  "historicalPinsSha256": "4ec7ca03e8fafe28aee8a834c7f26de29a52c45d3e8166f0739b5bb63b616a3e",
+  "records": [
+    {
+      "path": "before.log",
+      "bytes": 4396,
+      "sha256": "3183dd71e86093faed6b38c550f76f348334cbd2bec203df19eede3596727d0b"
+    },
+    {
+      "path": "after.log",
+      "bytes": 1040,
+      "sha256": "548af28dcda6c04d063dda118591333efe2f598a77fad36b6b1c10b43011d358"
+    },
+    {
+      "path": "final.log",
+      "bytes": 279,
+      "sha256": "e426a35ed81f47ab31823d7e9f2e566cc7f91cca0743f1bd81ab1ab929f82b79"
+    },
+    {
+      "path": "build.log",
+      "bytes": 3853,
+      "sha256": "e269f982d79113a5e2cb27dde0d16bba41733ef5e5708270f8731ceaf739630c"
+    }
+  ],
+  "focusedTests": 18,
+  "focusedFiles": 2,
+  "productionBuild": "pass",
+  "lint": "pass",
+  "browserRequired": false,
+  "qualification": "Test-only distinction between historical byte identity and current portable admission; no new pixel/native acceptance.",
+  "rawArchive": {
+    "path": "raw-logs.tar.gz",
+    "bytes": 4032,
+    "sha256": "f2b312a3a5042191dd7d65adf1623bc950e2bbc61bae321ac28a14ef83c54353",
+    "members": "Original records above are unchanged and identify archive member bytes."
+  },
+  "readableCopies": [
+    {
+      "path": "before.log",
+      "bytes": 4395,
+      "sha256": "d0e00c51325626aa164aff146bd20406f4838f467844f2fe07b838e916ab0649"
+    },
+    {
+      "path": "after.log",
+      "bytes": 1039,
+      "sha256": "6d59ac3ec6584b3e20ebd5a246b111b63a8de509e9797e5b2912ae5c883c054e"
+    },
+    {
+      "path": "final.log",
+      "bytes": 278,
+      "sha256": "d2be917d30dd2bfd6405e8d93986140dc79e09b80763b13bf499e6930c76f940"
+    },
+    {
+      "path": "build.log",
+      "bytes": 3852,
+      "sha256": "a6e114ebabf157ef96c5b8e51fb4b9b22bced54891cc85a90893dc4a69f70e85"
+    }
+  ]
+}

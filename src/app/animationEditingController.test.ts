@@ -59,7 +59,7 @@ describe('animation gesture ownership', () => {
     expect(useTransportStore.getState().animationSelection).toEqual([])
   })
 
-  test.each(['project', 'generation', 'sequence', 'selection', 'playhead', 'source', 'catalog', 'reset', 'playback'] as const)('cancels stale %s and a late queued callback without history', (change) => {
+  test.each(['project', 'generation', 'sequence', 'selection', 'playhead', 'source', 'catalog', 'reset', 'playback', 'workspace', 'focused lane'] as const)('cancels stale %s and a late queued callback without history', (change) => {
     const gesture = controller.begin()
     gesture.preview({ kind: 'move', deltaFrames: 3 })
     const lateCallback = [...pending.values()][0]
@@ -72,6 +72,8 @@ describe('animation gesture ownership', () => {
     if (change === 'source') useMediaStore.setState({ descriptors: new Map(useMediaStore.getState().descriptors) })
     if (change === 'catalog') { plugins = animationCatalog(2); contextChanged() }
     if (change === 'reset') useTransportStore.getState().resetTransport()
+    if (change === 'workspace') useTransportStore.getState().setAnimationWorkspaceOpen(true)
+    if (change === 'focused lane') useTransportStore.getState().setAnimationFocusedLane({ ...key(0).lane, kind: 'scalar', property: 'volume', propertyVersion: 1 })
     if (change === 'playback') useTransportStore.setState({ isPlaying: true })
     const expected = useDocumentStore.getState()
     lateCallback()
@@ -89,6 +91,23 @@ describe('animation gesture ownership', () => {
     expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('animation-gesture')
     gesture.cancel()
     expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('mask-gesture')
+    expect(useDocumentStore.getState().past).toHaveLength(0)
+  })
+
+  test.each(['mask-gesture', 'mask-tracking', 'title-authoring', 'color-grading'] as const)('a replacement Animation frame stays below newer %s ownership', (owner) => {
+    const doc = useDocumentStore.getState().doc, transport = useTransportStore.getState()
+    const gesture = controller.begin()
+    gesture.preview({ kind: 'move', deltaFrames: 3 }); flush()
+    if (owner === 'mask-gesture') transport.setMaskPreview({ sequenceId: doc.id, effectId: 'mask', params: {}, document: doc })
+    if (owner === 'mask-tracking') transport.setMaskTrackingPreview({ sequenceId: doc.id, document: doc })
+    if (owner === 'title-authoring') transport.setTitleDocumentPreview({ sequenceId: doc.id, document: doc })
+    if (owner === 'color-grading') transport.setColorGradingPreview({ sequenceId: doc.id, effectId: 'grade', params: {}, document: doc })
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe(owner)
+    gesture.preview({ kind: 'move', deltaFrames: 4 }); flush()
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe(owner)
+    expect(useTransportStore.getState().animationPreview!.document.tracks[0].clips[0].animation!.tracks[0].keyframes[0].frame).toBe(4)
+    gesture.cancel()
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe(owner)
     expect(useDocumentStore.getState().past).toHaveLength(0)
   })
 

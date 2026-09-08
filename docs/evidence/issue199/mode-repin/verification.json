@@ -1,0 +1,16 @@
+{
+  "checkedAt": "2026-09-08T17:35:57.708Z",
+  "productSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "reviewedActionsSource": "7e7cfade097446c6f68219919fac838a8134f664",
+  "priorProductSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+  "sourceHashesVerified": 242,
+  "normalizedObservationByteEquality": true,
+  "runnerAndHelpersUnchanged": true,
+  "fixtureBytesAndGenerationManifestsUnchanged": true,
+  "unchangedPriorCheckpointFiles": 37,
+  "productConfigDiffEmpty": true,
+  "syntaxPassed": true,
+  "diffCheckPassed": true,
+  "authorizedSegment": "gestures",
+  "browserRunStarted": false
+}

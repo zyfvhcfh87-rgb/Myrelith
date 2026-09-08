@@ -1,0 +1,34 @@
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/milestone9-integration
+
+ ❯ src/test/architecture.test.ts (8 tests | 1 failed) 38ms
+     × keeps ordinary test documents on the current timeline schema 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/test/architecture.test.ts > architecture guard > keeps ordinary test documents on the current timeline schema
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "test/titleCanvasDiagnostic.test.ts:12 uses schema 23",
++ ]
+
+ ❯ src/test/architecture.test.ts:471:27
+    469|       }
+    470|     }
+    471|     expect(staleFixtures).toEqual([])
+       |                           ^
+    472|   })
+    473| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 17 passed (18)
+   Start at  20:58:01
+   Duration  1.24s (transform 426ms, setup 61ms, import 1.23s, tests 58ms, environment 432ms)

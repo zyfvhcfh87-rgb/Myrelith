@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --run src/app/EditorShell.test.tsx src/ui/animation/AnimationWorkspace.test.tsx src/ui/ToolButtons.test.tsx src/ui/timeline/TimelineZoomControls.test.tsx src/test/architecture.test.ts
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+
+ Test Files  5 passed (5)
+      Tests  71 passed (71)
+   Start at  15:43:46
+   Duration  3.67s (transform 1.79s, setup 160ms, import 5.92s, tests 2.50s, environment 1.13s)
+
+✔ cold samples each use and close a fresh BrowserContext (0.649458ms)
+✔ source identity rejects end-of-run drift (0.164459ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (209.6975ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (124.903458ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.292209ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.737333ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.112292ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.247084ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.129416ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.099291ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.26125ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.734041ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.951583ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.1175ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.15625ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.171667ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.124958ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 514.243834

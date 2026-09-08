@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/app/animationEditingController.test.ts src/app/animationTitleIntegration.test.ts src/app/animationPreviewIntegration.test.ts src/app/colorGradingController.test.ts src/app/maskEditingController.test.ts src/app/maskMotionTrackingController.test.ts src/app/titleEditingController.test.ts src/app/titlePreviewRetention.test.ts src/ui/animation/AnimationWorkspace.test.tsx src/test/architecture.test.ts
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+
+ Test Files  10 passed (10)
+      Tests  183 passed (183)
+   Start at  22:18:13
+   Duration  4.15s (transform 2.73s, setup 478ms, import 5.39s, tests 5.88s, environment 3.32s)
+
+✔ cold samples each use and close a fresh BrowserContext (0.631208ms)
+✔ source identity rejects end-of-run drift (0.152458ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (195.047667ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (111.511208ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.282958ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.693666ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.113625ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.23425ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.122416ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.089875ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.203375ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.542708ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.805625ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.094583ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.13775ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.160958ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.132292ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 480.561125

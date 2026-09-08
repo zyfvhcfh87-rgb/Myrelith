@@ -74,6 +74,7 @@ export function createAnimationEditingController(options: AnimationEditingOption
           && nextContext.plugins === context.plugins && nextContext.titles === context.titles
           && reset === getTransportResetRevision() && transport.playheadFrame === cursor.playheadFrame
           && transport.animationSelection === cursor.animationSelection && transport.animationFocus === cursor.animationFocus
+          && transport.animationFocusedLane === cursor.animationFocusedLane && transport.animationWorkspaceOpen === cursor.animationWorkspaceOpen
           && transport.selectedClipId === cursor.selectedClipId && transport.selectedAdjustmentId === cursor.selectedAdjustmentId
           && transport.selectedClipIds === cursor.selectedClipIds && transport.isPlaying === cursor.isPlaying && transport.isScrubbing === cursor.isScrubbing
           && nextMedia.descriptors === media.descriptors && nextMedia.collections === media.collections && nextMedia.assets === media.assets
@@ -147,14 +148,16 @@ export function createAnimationEditingController(options: AnimationEditingOption
           if (!valid()) { cancel(); report(stale); return }
           const command = queued; queued = null
           if (!command) return
-          // Release this owner's previous preview before admitting its replacement.
-          useTransportStore.getState().setAnimationPreview(null)
+          // Release the retained payload for admission without promoting an older
+          // gesture above siblings activated after it. Cancellation releases order.
+          useTransportStore.getState().setAnimationPreview(null, true)
           const result = plan(command)
           if (!result.ok) { report(result.reason); return }
           const error = clipboardError(result.project, null)
           if (error) { report(error); return }
           if (!valid()) { cancel(); report(stale); return }
-          useTransportStore.getState().setAnimationPreview({ sequenceId: pinned.document.activeSequenceId, document: result.project.sequences.find((item) => item.id === pinned.document.activeSequenceId)! })
+          useTransportStore.getState().setAnimationPreview({ sequenceId: pinned.document.activeSequenceId, selection: result.selection,
+            ...(command.kind === 'set-easing' ? { easing: command.easing } : {}), document: result.project.sequences.find((item) => item.id === pinned.document.activeSequenceId)! })
         })
       },
       commit(command) {
@@ -225,7 +228,7 @@ export function createAnimationEditingController(options: AnimationEditingOption
         if (state.projectGeneration !== previous.projectGeneration) resetClipboard()
         if (ownedCommit) return
         if (state.activeSequenceId !== previous.activeSequenceId || state.projectGeneration !== previous.projectGeneration) {
-          active?.cancel(); useTransportStore.getState().setAnimationSelection([]); return
+          active?.cancel(); useTransportStore.getState().setAnimationSelection([]); useTransportStore.getState().setAnimationFocusedLane(null); return
         }
         if (state.doc !== previous.doc) {
           const transport = useTransportStore.getState()

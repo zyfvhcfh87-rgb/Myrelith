@@ -19,6 +19,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useMotionTrackingSelectionStore } from '../state/motionTrackingSelectionStore'
 import { useTransportStore } from '../state/transportStore'
+import MaskTrackingAttachmentEditor from './MaskTrackingAttachmentEditor'
 
 type Phase = 'idle' | 'analyzing' | 'ready' | 'error'
 const PREVIEW_OWNER = 'motion-tracking' as const
@@ -67,6 +68,7 @@ export default function MotionTrackingEditor({
   const selection = useMotionTrackingSelectionStore((state) => state.selection)
   const selectionGlobalFrame = useMotionTrackingSelectionStore((state) => state.selectionGlobalFrame)
   const [kind, setKind] = useState<MotionTrackingKind>('point')
+  const [attachmentKind, setAttachmentKind] = useState<'clip-transform' | 'mask-effect'>('clip-transform')
   const [direction, setDirection] = useState<MotionTrackingDirection>('forward')
   const [targetClipId, setTargetClipId] = useState(clip.id)
   const [includeScale, setIncludeScale] = useState(true)
@@ -144,10 +146,10 @@ export default function MotionTrackingEditor({
 
   const planned = useMemo(() => {
     void doc
-    return session && targetClipId
+    return attachmentKind === 'clip-transform' && session && targetClipId
       ? planMotionTracking(session, targetClipId, session.analysis.kind === 'box' && includeScale)
       : null
-  }, [doc, includeScale, session, targetClipId])
+  }, [attachmentKind, doc, includeScale, session, targetClipId])
 
   useEffect(() => {
     if (!preview || !planned?.ok) {
@@ -335,7 +337,7 @@ export default function MotionTrackingEditor({
         <h3 id="motion-tracking-heading">Motion tracking</h3>
       </div>
       <p className="inspector-note">
-        Track locally from the selected frame, preview the accepted range, then apply ordinary Position and optional Scale keyframes.
+        Track locally from the selected frame, preview the accepted range, then attach ordinary keyframes to a clip transform or mask.
       </p>
       {selectionReady && selectionGlobalFrame !== null ? (
         <p className="inspector-note">Selection pinned to project frame {selectionGlobalFrame}.</p>
@@ -356,13 +358,20 @@ export default function MotionTrackingEditor({
         </select>
       </label>
       <label className="animation-number-field">
+        <span>Attach tracking to</span>
+        <select value={attachmentKind} disabled={phase === 'analyzing'} onChange={(event) => { setAttachmentKind(event.target.value as typeof attachmentKind); setPreview(false); setReplaceExisting(false) }}>
+          <option value="clip-transform">Clip transform</option>
+          <option value="mask-effect">Mask effect</option>
+        </select>
+      </label>
+      {attachmentKind === 'clip-transform' ? <label className="animation-number-field">
         <span>Target clip</span>
         <select aria-label="Motion tracking target clip" value={targetClipId} disabled={phase === 'analyzing'} onChange={(event) => changeTarget(event.target.value)}>
           {targets.length === 0 ? <option value="">No overlapping visual target</option> : null}
           {targets.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}
         </select>
-      </label>
-      {kind === 'box' ? (
+      </label> : null}
+      {attachmentKind === 'clip-transform' && kind === 'box' ? (
         <label className="stabilization-confirm">
           <input type="checkbox" checked={includeScale} disabled={phase === 'analyzing'} onChange={(event) => changeScaleMapping(event.target.checked)} />
           <span>Apply uniform box scale to Scale X/Y</span>
@@ -377,6 +386,10 @@ export default function MotionTrackingEditor({
       {phase === 'analyzing' ? (
         <progress className="stabilization-progress" aria-label="Motion tracking progress" max={1} value={progress} />
       ) : null}
+      {attachmentKind === 'mask-effect' ? <MaskTrackingAttachmentEditor source={clip} session={session} kind={kind} busy={phase === 'analyzing'} onApplied={(changed) => {
+        setSession(null); setPreview(false); setPhase('idle')
+        setMessage(changed ? 'Mask tracking applied as ordinary keyframes in one undo step.' : 'That exact mask tracking is already applied.')
+      }} /> : null}
       {planned?.ok ? (
         <dl className="stabilization-summary">
           <div><dt>Accepted samples</dt><dd>{planned.plan.sampleCount}</dd></div>
@@ -391,7 +404,7 @@ export default function MotionTrackingEditor({
           <span>Replace existing target Position/Scale animation</span>
         </label>
       ) : null}
-      <label className="stabilization-confirm">
+      {attachmentKind === 'clip-transform' ? <><label className="stabilization-confirm">
         <input type="checkbox" checked={preview} disabled={lensCorrectionBlocksTracking || !planned?.ok} onChange={(event) => setPreview(event.target.checked)} />
         <span>Preview accepted tracking at the playhead</span>
       </label>
@@ -403,7 +416,7 @@ export default function MotionTrackingEditor({
         <button type="button" disabled={phase === 'analyzing' || !targetClipId || !hasResettable} aria-describedby="motion-tracking-reset-warning motion-tracking-status" onClick={reset}>
           Remove target framing animation
         </button>
-      </div>
+      </div></> : null}
       <p id="motion-tracking-status" className="animation-status" role="status" aria-live="polite" aria-atomic="true">
         {planned && !planned.ok ? planned.reason : message}
       </p>

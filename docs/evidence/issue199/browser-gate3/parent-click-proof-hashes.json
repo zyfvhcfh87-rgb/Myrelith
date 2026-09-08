@@ -1,0 +1,10 @@
+{
+  "sourceReportedByParent": "87d8032f25ef469449d59741fba56d1b76eda6aa",
+  "origin": "Parent supplied ignored local reproducer and config; files left untouched. Our committed regression independently reproduced the behavior.",
+  "directory": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp",
+  "sha256": {
+    "root-animation-click-review.log": "2a66a6b0882bd64125b96a0d30368f3f1cce2cd76b07abe274f4fe35537620ab",
+    "root-animation-click-review.test.tsx": "f678052bfcb1ad307815356c02db28f7ebbf52c8d8866f154c11555ffd6dfe0d",
+    "root-animation-click-review.config.ts": "3be3c0e711806d378165af349275d5b4622800c38f97b34c099b9082fa4bbd63"
+  }
+}

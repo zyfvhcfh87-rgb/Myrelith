@@ -1,0 +1,23 @@
+{
+  "productSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+  "generatorSha256": "a6b86530470c51fc9e84dda28470fad3219b46accad54fa5f9b7579a933d4ad0",
+  "originalFixtureSha256": "26814d074c6e94230b1e3004c863d32490bd84cd266123c27720f228b851c574",
+  "scope": "100000 authored keys with one available1024-key opacity lane; other lanes remain unavailable and original committed fixture is unchanged.",
+  "domainValidation": {
+    "totalKeys": 100000,
+    "scalarStatus": "scalar",
+    "scalarKeys": 1024,
+    "first": 0,
+    "last": 1023,
+    "curvePoints": 255,
+    "glyphsAtBudget32": 32,
+    "canonicalRoundTripExact": true,
+    "browserRun": false
+  },
+  "files": {
+    "dense-scalar.myrelith": {
+      "bytes": 7892325,
+      "sha256": "2518406e6d2759bb7a8cdceb0d2d555ec460c0e34130325fa61f4b9b775dadbf"
+    }
+  }
+}

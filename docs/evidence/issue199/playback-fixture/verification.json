@@ -1,0 +1,61 @@
+{
+  "at": "2026-09-08T18:27:33.599Z",
+  "baseHead": "02130339af0d033761a3fd591a3cc19d7f609bdb",
+  "productSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "productSourceFilesVerified": 242,
+  "productConfigDiffEmpty": true,
+  "previousCheckpointFiles": 44,
+  "previousCheckpointChanges": [
+    "scripts/issue199/continuation/PROTOCOL.md",
+    "scripts/issue199/continuation/observations.mjs"
+  ],
+  "allOtherObservationActionsByteIdentical": true,
+  "runnerStrictConsoleAndPlayPauseUnchanged": true,
+  "earlyRunnerByteIdentical": true,
+  "deterministicRegeneration": true,
+  "regeneratedHashes": {
+    "scripts/issue199/fixtures/playback/silent-offline.wav": "f674326cc658930dc9eb01b1388aca7e7f9a0e7bedc3fb58b49803f01a133859",
+    "scripts/issue199/fixtures/playback/mixed-playback.myrelith": "8a067088cd5c007ea701d3af702626dc15aa880086e359a56c1629868dc8ae6b",
+    "scripts/issue199/fixtures/playback/manifest.json": "6507950a15b86ec748e5493ab045af4f5ec9e34ebae31db58379ba59852dd80f"
+  },
+  "generatorSha256": "071da8db34fd473c359855da525a15e2bec2346f81fd328907b72cc4f1cbbfde",
+  "portablePreserved": {
+    "mixed.myrelith": "e510cb67197ed771049dea65cfccf02820d4550841f6b32dde9ac6c0f4618ac0",
+    "dense.myrelith": "26814d074c6e94230b1e3004c863d32490bd84cd266123c27720f228b851c574",
+    "many-lanes.myrelith": "2461ff539f8db3515c5845dbdbe1d3427fbe792d8a852906c6504f74221fda4c",
+    "continuation/dense-scalar.myrelith": "2518406e6d2759bb7a8cdceb0d2d555ec460c0e34130325fa61f4b9b775dadbf"
+  },
+  "canonicalValidation": {
+    "audioDescriptorSize": {
+      "before": 1,
+      "after": 5760044
+    },
+    "allOtherPortableFieldsEqual": true,
+    "canonicalRoundTripExact": true,
+    "originalRelinkSizeRejected": true,
+    "supplementalMetadataMatchAccepted": true,
+    "audioDependencies": {
+      "root": [
+        {
+          "clipId": "ordinary-audio",
+          "assetId": "audio-asset",
+          "startFrame": 0,
+          "endFrame": 60
+        }
+      ],
+      "dormant": []
+    }
+  },
+  "checks": [
+    "node --check on generator, UI relink helper, observations",
+    "npm run lint",
+    "oxlint explicitly on all three changed/new scripts",
+    "Mediabunny host demux/metadata probe",
+    "Python wave/array full non-silent PCM structure check",
+    "canonical parse/serialize round trip and descriptorMatches size rejection/acceptance",
+    "canonical complete project audio dependency plans",
+    "all242 frozen product hashes;42 of44 previous checkpoint files unchanged;only protocol/setup changed",
+    "deterministic second regeneration; all three output hashes identical"
+  ],
+  "qualification": "Source/fixture preparation only. No browser launched, no native relink/compatibility/decoder/playback/PCM output oracle, no build/full suite/export/other segment."
+}

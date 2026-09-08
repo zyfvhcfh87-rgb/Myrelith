@@ -1,0 +1,57 @@
+
+> myrelith@0.2.0-alpha.1 build
+> tsc -b && vite build
+
+vite v8.1.2 building client environment for production...
+[2K
+transforming...✓ 5064 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/rolldown-runtime-BHe-jwch.js                  0.95 kB
+dist/index.html                                           1.34 kB │ gzip:   0.57 kB
+dist/assets/video-scopes.worker-qT4VxaOS.js               2.84 kB
+dist/assets/color-lut-import.worker-cpGuStVq.js           5.41 kB
+dist/assets/mediabunny-prores-Nwc6OEvs.js               206.10 kB
+dist/assets/mediabunny-prores-CUDWMC8E.js               206.11 kB
+dist/assets/mediabunny-prores-CqsZsYY4.js               206.11 kB
+dist/assets/multicam-monitor.worker-CgdQdvN3.js         306.39 kB
+dist/assets/audio-alignment.worker-CE13GrYs.js          364.83 kB
+dist/assets/motion-analysis.worker-CB6JgBPu.js          379.43 kB
+dist/assets/render.worker-CQC4JRrC.js                   516.66 kB
+dist/assets/mediabunny-ac3-CxSh-ONi.js                1,144.16 kB
+dist/assets/mediabunny-ac3-Bab0yg6L.js                1,144.18 kB
+dist/assets/mediabunny-ac3-QsdFtuRy.js                1,144.18 kB
+dist/assets/index-DsADjVaB.css                           36.31 kB │ gzip:   7.93 kB
+dist/assets/EditorShell-gRQl285x.css                    142.50 kB │ gzip:  27.46 kB
+dist/assets/editorUi-S8QtyAZG.js                          0.06 kB │ gzip:   0.07 kB
+dist/assets/portableProjectEdit-Qt2MXBVL.js               0.56 kB │ gzip:   0.36 kB
+dist/assets/PluginDialogFrame-BO-y07vG.js                 2.09 kB │ gzip:   0.88 kB
+dist/assets/AdjustmentDialog-De59Cf63.js                  3.70 kB │ gzip:   1.49 kB
+dist/assets/TextOverlayDialog-DDWfxs7n.js                 3.75 kB │ gzip:   1.50 kB
+dist/assets/maskGeometry-BWJUpk8q.js                      6.23 kB │ gzip:   2.56 kB
+dist/assets/pluginPreparedExportOwner-BzCL85oP.js         6.44 kB │ gzip:   2.23 kB
+dist/assets/DynamicZoomEditor-Ggkd4wg2.js                 6.61 kB │ gzip:   2.44 kB
+dist/assets/exportCapabilitiesController-DTFVslm6.js      7.01 kB │ gzip:   2.59 kB
+dist/assets/AnimationCurveEditor-DjzEldzu.js              7.35 kB │ gzip:   2.70 kB
+dist/assets/export-mediabunny-profile-Bz3dM5Cr.js        12.81 kB │ gzip:   4.36 kB
+dist/assets/StabilizationEditor-4cg47Rzy.js              16.18 kB │ gzip:   5.59 kB
+dist/assets/motionAnalysisRuntime-CdyHgsuF.js            17.53 kB │ gzip:   5.47 kB
+dist/assets/exportController-koJfUYUJ.js                 23.93 kB │ gzip:   7.82 kB
+dist/assets/PluginAppRoot-CoSb17s1.js                    24.18 kB │ gzip:   6.36 kB
+dist/assets/export-mediabunny-ChahlKQM.js                30.90 kB │ gzip:  10.11 kB
+dist/assets/ExportDialog-00bok3wJ.js                     36.91 kB │ gzip:  10.74 kB
+dist/assets/CaptionEditor-C5dLGw88.js                    41.15 kB │ gzip:  13.84 kB
+dist/assets/MotionTrackingEditor-Dg84j2aj.js             41.41 kB │ gzip:  12.27 kB
+dist/assets/pluginAppController-GsiW1E5E.js             177.20 kB │ gzip:  49.06 kB
+dist/assets/mediabunny-prores-C-tC0E88.js               205.86 kB │ gzip:  49.07 kB
+dist/assets/documentStore-ka2qXqjr.js                   436.82 kB │ gzip: 123.49 kB
+dist/assets/EditorShell-CJ-_l9jG.js                     579.15 kB │ gzip: 152.78 kB
+dist/assets/mediabunny-ac3-SXo27NEx.js                1,144.14 kB │ gzip: 303.58 kB
+dist/assets/index-DVKAzjYe.js                         1,238.43 kB │ gzip: 337.05 kB
+
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 346ms

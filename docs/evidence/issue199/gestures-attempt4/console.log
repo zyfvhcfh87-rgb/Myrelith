@@ -1,0 +1,69 @@
+START production launcher identity
+PASS production launcher identity
+START canonical mixed fixture and native selection
+PASS canonical mixed fixture and native selection
+START native key drag: exact movement, admitted preview, one release commit, undo/redo
+PASS native key drag: exact movement, admitted preview, one release commit, undo/redo
+START native Bézier handle 1: preview, one commit and exact undo
+PASS native Bézier handle 1: preview, one commit and exact undo
+START native Bézier handle 2: preview, one commit and exact undo
+PASS native Bézier handle 2: preview, one commit and exact undo
+START native key cancellation: escape
+PASS native key cancellation: escape
+START native key cancellation: capture
+PASS native key cancellation: capture
+START native key cancellation: close
+PASS native key cancellation: close
+START native key cancellation: mode
+PASS native key cancellation: mode
+START native key cancellation: selection
+PASS native key cancellation: selection
+START native key cancellation: viewport
+PASS native key cancellation: viewport
+START native key cancellation: playback
+PASS native key cancellation: playback
+START native key cancellation: document
+PASS native key cancellation: document
+START native key cancellation: sequence
+PASS native key cancellation: sequence
+START native handle-1 cancellation: escape
+PASS native handle-1 cancellation: escape
+START native handle-1 cancellation: capture
+PASS native handle-1 cancellation: capture
+START native handle-1 cancellation: close
+PASS native handle-1 cancellation: close
+START native handle-1 cancellation: mode
+PASS native handle-1 cancellation: mode
+START native handle-1 cancellation: selection
+PASS native handle-1 cancellation: selection
+START native handle-1 cancellation: viewport
+PASS native handle-1 cancellation: viewport
+START native handle-1 cancellation: playback
+PASS native handle-1 cancellation: playback
+START native handle-1 cancellation: document
+PASS native handle-1 cancellation: document
+START native handle-1 cancellation: sequence
+PASS native handle-1 cancellation: sequence
+START native handle-2 cancellation: escape
+PASS native handle-2 cancellation: escape
+START native handle-2 cancellation: capture
+PASS native handle-2 cancellation: capture
+START native handle-2 cancellation: close
+PASS native handle-2 cancellation: close
+START native handle-2 cancellation: mode
+PASS native handle-2 cancellation: mode
+START native handle-2 cancellation: selection
+PASS native handle-2 cancellation: selection
+START native handle-2 cancellation: viewport
+PASS native handle-2 cancellation: viewport
+START native handle-2 cancellation: playback
+PASS native handle-2 cancellation: playback
+START native handle-2 cancellation: document
+PASS native handle-2 cancellation: document
+START native handle-2 cancellation: sequence
+PASS native handle-2 cancellation: sequence
+START named sibling previews restore after a captured native animation cancellation
+PASS named sibling previews restore after a captured native animation cancellation
+START deliberate project departure cancels captured keys before replacing the portable project
+PASS deliberate project departure cancels captured keys before replacing the portable project
+Evidence: /private/tmp/issue199-continuation/2026-09-08T18-30-49.647Z-gestures
