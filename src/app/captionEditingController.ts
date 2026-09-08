@@ -32,19 +32,44 @@ export class CaptionEditSession {
   private review: CaptionEditReview | null = null
   private readonly ownerId = `caption-review-${++ownerSerial}`
   private revision = 0
+  private admittingOwners = false
   private readonly reserved: Set<string>
 
   constructor() {
     const state = useDocumentStore.getState()
     this.expected = { project: state.project, generation: state.projectGeneration, sequenceId: state.activeSequenceId }
     this.reserved = new Set(sequenceProjectReservedIds(state.project))
-    const error = state.retainCaptionOwners(this.ownerId, captionIntentOwners(state.project))
-    if (error) { this.expected = null; throw new RangeError(error) }
+    const error = this.installOwners(captionIntentOwners(state.project))
+    if (error) { this.dispose(); throw new RangeError(error) }
   }
   private pin() {
     const expected = this.expected, state = useDocumentStore.getState()
     if (!expected || state.project !== expected.project || state.projectGeneration !== expected.generation || state.activeSequenceId !== expected.sequenceId) throw new Error(stale)
     return expected
+  }
+  private assertNotAdmitting(): void {
+    if (this.admittingOwners) throw new Error('A caption owner admission is already in progress')
+  }
+  private installOwners(owners: readonly CaptionIntentOwner[], releasePrior = false): string | null {
+    this.assertNotAdmitting()
+    this.admittingOwners = true
+    try {
+      if (releasePrior) {
+        useDocumentStore.getState().releaseCaptionOwners(this.ownerId)
+        this.pin()
+      }
+      const error = useDocumentStore.getState().retainCaptionOwners(this.ownerId, owners)
+      // A returned budget rejection publishes nothing, so keep the old review.
+      if (error) return error
+      // Store notification is synchronous: replacement, navigation or disposal
+      // may have happened after the new ledger was installed. Never retain the
+      // old candidate under that new ledger, or publish a disposed session.
+      this.pin()
+      return null
+    } catch (cause) {
+      this.dispose()
+      throw cause
+    } finally { this.admittingOwners = false }
   }
   document(): TimelineDoc {
     const expected = this.pin()
@@ -65,6 +90,7 @@ export class CaptionEditSession {
     changedCueCount?: number; replacementCount?: number; preview?: readonly CaptionBatchPreviewRow[];
     omittedPreviewRows?: number; requiresLossAcceptance?: boolean;
   } = {}): CaptionEditReview {
+    this.assertNotAdmitting()
     const expected = this.pin()
     const current = this.document()
     if (Object.keys(next).some((key) => key !== 'captionTracks' && Reflect.get(next, key) !== Reflect.get(current, key))
@@ -83,9 +109,8 @@ export class CaptionEditSession {
     })))
     const owners: readonly CaptionIntentOwner[] = [...captionIntentOwners(expected.project), ...captionIntentOwners(candidate),
       ...preview.flatMap((row) => [...row.before, ...row.after])]
-    const retentionError = useDocumentStore.getState().retainCaptionOwners(this.ownerId, owners)
+    const retentionError = this.installOwners(owners)
     if (retentionError) throw new RangeError(retentionError)
-    this.pin()
     this.candidate = candidate
     this.review = Object.freeze({ token: ++this.revision, changedCueCount: detail.changedCueCount ?? 0,
       replacementCount: detail.replacementCount ?? 0, preview, omittedPreviewRows: detail.omittedPreviewRows ?? 0,
@@ -93,6 +118,7 @@ export class CaptionEditSession {
     return this.review
   }
   prepareBatch(trackId: string, scope: CaptionBatchScope, operation: CaptionBatchOperation): CaptionEditReview | null {
+    this.assertNotAdmitting()
     const expected = this.pin()
     const result = planCaptionBatch(this.document(), trackId, scope, operation, sequenceProjectReservedIds(expected.project))
     if (result.kind === 'rejected') throw new RangeError(result.reason)
@@ -100,6 +126,7 @@ export class CaptionEditSession {
     return this.prepareDocument(result.document, result)
   }
   prepareStyle(trackId: string, cueIds: readonly string[] | null, style: CaptionStyleDescriptor | null): CaptionEditReview {
+    this.assertNotAdmitting()
     const doc = this.document(), track = findCaptionTrack(doc, trackId)
     if (!track) throw new RangeError('The caption track no longer exists')
     const ids = cueIds === null ? null : new Set(cueIds)
@@ -113,6 +140,7 @@ export class CaptionEditSession {
   }
   apply(review: CaptionEditReview, acceptLoss = false): string | null {
     try {
+      this.assertNotAdmitting()
       const expected = this.pin()
       if (!this.candidate || review !== this.review) return 'The caption review was replaced. Review the current proposal.'
       if (review.requiresLossAcceptance && !acceptLoss) return 'Accept the disclosed caption losses before applying this review.'
@@ -126,8 +154,7 @@ export class CaptionEditSession {
     const expected = this.pin()
     this.candidate = null; this.review = null
     // This strictly reduces owned payload; no new copy is admitted here.
-    useDocumentStore.getState().releaseCaptionOwners(this.ownerId)
-    const error = useDocumentStore.getState().retainCaptionOwners(this.ownerId, captionIntentOwners(expected.project))
+    const error = this.installOwners(captionIntentOwners(expected.project), true)
     if (error) { this.dispose(); throw new RangeError(error) }
   }
   dispose(): void {
