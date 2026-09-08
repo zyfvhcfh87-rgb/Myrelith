@@ -414,7 +414,7 @@ describe('architecture guard', () => {
   })
 
   test('keeps the title pixel proof and archived baseline outside production imports', () => {
-    expect(edges.filter((edge) => /titleRenderProof|issue200-baseline/.test(edge.specifier)).map(edgeLabel)).toEqual([])
+    expect(edges.filter((edge) => /titleRenderProof|issue200-baseline|diagnostics\/issue200/.test(edge.specifier)).map(edgeLabel)).toEqual([])
   })
 
   test('keeps editor and secondary surfaces outside their eager entry graphs', () => {

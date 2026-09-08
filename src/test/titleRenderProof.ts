@@ -125,7 +125,9 @@ export function upgradeProofProject(project: SequenceProject): SequenceProject {
 }
 type Canvas = HTMLCanvasElement | OffscreenCanvas
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+export type TitleProofCanvasPolicy = 'proof' | 'production'
 export interface TitleProofPixels {
+  contexts: { kind: string; role: string; requested: CanvasRenderingContext2DSettings; actual: CanvasRenderingContext2DSettings | null; width: number; height: number }[]
   rgba: Uint8ClampedArray
   lines: { text: string; font: string; x: number; y: number; stroke: boolean }[]
   width: number
@@ -136,13 +138,19 @@ export interface TitleProofPixels {
   liveCanvases: number
 }
 
-function surfaces(width: number, height: number, offscreen: boolean) {
+function surfaces(width: number, height: number, offscreen: boolean, policy: TitleProofCanvasPolicy) {
+  const records: TitleProofPixels['contexts'] = []
   const owned: Canvas[] = [], contexts: Context[] = []
   const lines: TitleProofPixels['lines'] = []
   const create = () => {
     const canvas = offscreen ? new OffscreenCanvas(width, height) : Object.assign(document.createElement('canvas'), { width, height })
-    const ctx = canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true }) as Context | null
+    const requested: CanvasRenderingContext2DSettings = policy === 'production' && owned.length === 0
+      ? { colorSpace: 'srgb' } : { colorSpace: 'srgb', willReadFrequently: true }
+    const ctx = canvas.getContext('2d', requested) as Context | null
     if (!ctx) throw new Error('Canvas2D unavailable in title proof')
+    const attributes = (ctx as Context & { getContextAttributes?: () => CanvasRenderingContext2DSettings }).getContextAttributes
+    records.push({ kind: offscreen ? 'OffscreenCanvas' : 'HTMLCanvasElement', role: ['destination', 'leg', 'group'][owned.length],
+      requested, actual: attributes?.call(ctx) ?? null, width, height })
     for (const stroke of [false, true]) {
       const name = stroke ? 'strokeText' : 'fillText', original = ctx[name].bind(ctx)
       ctx[name] = (text, x, y, maxWidth) => {
@@ -164,7 +172,7 @@ function surfaces(width: number, height: number, offscreen: boolean) {
     destination, provider, lines,
     capture(requests: number): TitleProofPixels {
       const scratchCleared = contexts.slice(1).every((ctx) => ctx.getImageData(0, 0, width, height).data.every((value) => value === 0))
-      return { rgba: destination.ctx.getImageData(0, 0, width, height).data, lines: [...lines], width, height, scratchCleared,
+      return { contexts: records, rgba: destination.ctx.getImageData(0, 0, width, height).data, lines: [...lines], width, height, scratchCleared,
         requests, peakCanvases: owned.length, liveCanvases: owned.length }
     },
     close() {
@@ -177,11 +185,11 @@ function surfaces(width: number, height: number, offscreen: boolean) {
 
 export async function renderTitleProof(
   project: SequenceProject, frame: number, quality: PresentationResolvedQuality,
-  options: { offscreen?: boolean; compositor?: typeof compositeFrame; plan?: VideoCompositionPlan } = {},
+  options: { offscreen?: boolean; canvasPolicy?: TitleProofCanvasPolicy; compositor?: typeof compositeFrame; plan?: VideoCompositionPlan } = {},
 ): Promise<TitleProofPixels> {
   const doc = project.sequences.find((sequence) => sequence.id === project.rootSequenceId)!
   const profile = resolvePresentationProfile(doc, { qualityMode: quality, reason: 'paused', viewport: null })
-  const owner = surfaces(profile.outputWidth, profile.outputHeight, options.offscreen ?? typeof document === 'undefined')
+  const owner = surfaces(profile.outputWidth, profile.outputHeight, options.offscreen ?? typeof document === 'undefined', options.canvasPolicy ?? 'proof')
   let requests = 0
   try {
     const plan = options.plan ?? createProjectVideoCompositionPlanner(project, doc.id, new Map()).planFrame(frame)
@@ -195,9 +203,9 @@ export async function renderTitleProof(
 /** Actual finite export controller, with raw pre-encoder frames captured by an
  * injected sink. It makes no codec/encoded-file equivalence claim.
  */
-export async function exportTitleProof(project: SequenceProject): Promise<{ frames: TitleProofPixels[]; leases: number; closed: number; finalized: boolean }> {
+export async function exportTitleProof(project: SequenceProject, canvasPolicy: TitleProofCanvasPolicy = 'proof'): Promise<{ frames: TitleProofPixels[]; leases: number; closed: number; finalized: boolean }> {
   const doc = project.sequences.find((sequence) => sequence.id === project.rootSequenceId)!
-  const planner = createProjectVideoCompositionPlanner(project, doc.id, new Map()), owner = surfaces(doc.width, doc.height, true)
+  const planner = createProjectVideoCompositionPlanner(project, doc.id, new Map()), owner = surfaces(doc.width, doc.height, true, canvasPolicy)
   const frames: TitleProofPixels[] = []
   let leases = 0, closed = 0, finalized = false
   try {
