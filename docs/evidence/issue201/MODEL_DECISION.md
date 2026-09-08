@@ -1,6 +1,6 @@
 # Local speech model decision — replacement lab preflight
 
-Date: 2026-09-08. Status: second frozen attempt failed during ONNX session preparation.
+Date: 2026-09-08. Status: third frozen attempt exceeded the fixed resident-memory ceiling.
 **Product enablement remains NO-GO pending runtime/offline/lifecycle evidence.**
 This status preserves the separate decision required by issue #201. The
 orchestrator may approve the independent caption implementation after reviewing
@@ -35,7 +35,14 @@ inference occurred. This error does not prove corrupt weights.
 [INTEROP_CANDIDATE_03.md](INTEROP_CANDIDATE_03.md) proposes only the supported
 `session.disable_quant_qdq='1'` optimization setting with identical assets and
 thresholds. Exact source/manifest evidence and 16 deterministic regressions are
-ready for review; no third run or product enablement has occurred.
+were reviewed for run 03. [LAB_RUN_03.md](LAB_RUN_03.md) records successful model
+initialization and first-window preparation, followed by 1,117,814,784 bytes
+incremental Chromium RSS against the unchanged 1,073,741,824-byte ceiling.
+The guard terminated the worker and closed the browser before any transcript
+completed. Candidate 03 is NO-GO under that gate; later cases remain incomplete.
+Forced shutdown and separate removal of only its private browser profile are
+recorded honestly; cooperative cache removal was unavailable. No product speech
+enablement or replacement run has occurred.
 
 The original 3.8.1 standalone candidate is **superseded for lab execution** after
 the advisory lookup in [candidate-advisories.json](candidate-advisories.json).
