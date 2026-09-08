@@ -511,7 +511,8 @@ export async function runAnimationPortableRoundTrip(h, serializeCanonical) {
 
 export async function runAnimationLargeDocuments(h, supplemental) {
   const q = helpers(h), { page, step, report, settled, fixtureRoot } = q
-  assert.equal(supplemental.productSource, continuationProductSource)
+  assert.equal(supplemental.productSource, 'b33b7531027979b8886f5db979d57cd96b96175d')
+  report.largeFixtureSources = { generationProductSource: supplemental.productSource, executingProductSource: report.productSource }
   for (const [name, facts] of Object.entries(supplemental.files)) assert.equal(digest(readFileSync(join(supplemental.directory, name))), facts.sha256, name)
   await step('100000-key fixture: cold entry, exact1024-key navigation and selected/all limits', async () => {
     await q.measured('100000 keys portable open', () => q.openFixture(join(supplemental.directory, 'dense-scalar.myrelith'), 1))

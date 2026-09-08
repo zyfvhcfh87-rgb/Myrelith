@@ -1,6 +1,6 @@
 # Issue 199 — bounded Animation continuation
 
-Status: **source-only playback fixture correction; root review and a new explicit native grant are required.**
+Status: **source-only large-fixture provenance correction; root review and an explicit native handoff are required.**
 The supervisor accepted `095e6d9463580e3502ba7c210d3982bed548a52f` as the
 six-checkpoint early pass, not all of Gate 3. The early runner and its attempt
 evidence remain unchanged. This protocol implements the remaining scope in
@@ -34,6 +34,15 @@ retaining exactly 100,000 authored keys and the other unavailable lanes. Generat
 verified 1,024 exact scalar keys from 0 through 1,023, 255 canonical curve points,
 32 glyphs under a budget of 32, and an exact canonical parse/serialize round trip.
 These are fixture/domain checks, not browser or performance observations.
+
+The large segment pins the supplemental generation identity explicitly to
+`b33b7531027979b8886f5db979d57cd96b96175d`. Its independent runtime checks still
+require executing product `75b89ef6b70460a03ea99ca44d888b5ec06373ec` and all frozen
+source/checkpoint hashes. `report.largeFixtureSources` records both identities;
+they describe different stages and are not compared for equality. The intervening
+product diff contains only the accepted AnimationWorkspace cancellation fix and
+its test; fixture generators and domain code did not change. No fixture or
+generation manifest is regenerated or rewritten for this correction.
 
 The mixed fixture includes video opacity, clip audio Volume/Balance, adjustment
 scalar/effect keys, expanded-title element opacity, held mask paths, future

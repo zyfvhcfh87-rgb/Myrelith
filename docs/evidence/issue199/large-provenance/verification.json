@@ -1,0 +1,44 @@
+{
+  "at": "2026-09-08T18:55:56.442Z",
+  "baseHead": "20db715f7b38186b264a6ffd1acfdf9e2fdd3514",
+  "generationProductSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+  "executingProductSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "exactTwoLineGuardAndReportChange": true,
+  "allOtherActionsAssertionsAndLimitsByteIdentical": true,
+  "existingRuntimeSourceAndManifestChecksUnchanged": true,
+  "allProductFilesVerified": 242,
+  "previousCheckpointFiles": 55,
+  "previousCheckpointChanges": [
+    "scripts/issue199/continuation/PROTOCOL.md",
+    "scripts/issue199/continuation/observations.mjs"
+  ],
+  "interveningProductFiles": [
+    "src/ui/animation/AnimationWorkspace.test.tsx",
+    "src/ui/animation/AnimationWorkspace.tsx"
+  ],
+  "domainAndGeneratorsUnchanged": true,
+  "preservedFixtureAndGeneratorHashes": {
+    "scripts/issue199/continuation/portable.mjs": "a6b86530470c51fc9e84dda28470fad3219b46accad54fa5f9b7579a933d4ad0",
+    "scripts/issue199/fixtures/continuation/dense-scalar.myrelith": "2518406e6d2759bb7a8cdceb0d2d555ec460c0e34130325fa61f4b9b775dadbf",
+    "scripts/issue199/fixtures/continuation/supplemental-manifest.json": "9a9f6d1ed0a8378c68c41a2febdad521aebcf3c827faec4331688d51af99418e",
+    "scripts/issue199/fixtures/dense.myrelith": "26814d074c6e94230b1e3004c863d32490bd84cd266123c27720f228b851c574",
+    "scripts/issue199/fixtures/manifest.json": "6c8286b76e5a7741fd4acc0e49d78917b6f13192ebf961fb13e673b0b5807d65",
+    "scripts/issue199/fixtures/many-lanes.myrelith": "2461ff539f8db3515c5845dbdbe1d3427fbe792d8a852906c6504f74221fda4c",
+    "scripts/issue199/fixtures/mixed.myrelith": "e510cb67197ed771049dea65cfccf02820d4550841f6b32dde9ac6c0f4618ac0",
+    "scripts/issue199/fixtures/playback/manifest.json": "6507950a15b86ec748e5493ab045af4f5ec9e34ebae31db58379ba59852dd80f",
+    "scripts/issue199/fixtures/playback/mixed-playback.myrelith": "8a067088cd5c007ea701d3af702626dc15aa880086e359a56c1629868dc8ae6b",
+    "scripts/issue199/fixtures/playback/silent-offline.wav": "f674326cc658930dc9eb01b1388aca7e7f9a0e7bedc3fb58b49803f01a133859",
+    "scripts/issue199/prepare-browser-fixtures.mjs": "1f6a4b43bacf20c8e896b29c23c31ee94c6202c7b46e8f118ff83551f4e1084c",
+    "scripts/issue199/prepare-continuation-fixtures.mjs": "4a8eae83bfcadec63ee382c38dfeefcbc9c4922eb5fd7f621cb10643248db765",
+    "scripts/issue199/prepare-playback-fixture.mjs": "071da8db34fd473c359855da525a15e2bec2346f81fd328907b72cc4f1cbbfde"
+  },
+  "observationsSha256": "68b2bba0f06f09e8377bd8953bcd7679767209246c448f7dfa4849497297f7c6",
+  "supplementalManifestSha256": "9a9f6d1ed0a8378c68c41a2febdad521aebcf3c827faec4331688d51af99418e",
+  "checks": [
+    "node --check observations.mjs passed",
+    "explicit oxlint observations.mjs passed",
+    "git diff --check passed",
+    "exact authorized source replacement and all frozen hashes verified"
+  ],
+  "qualification": "Source-only provenance correction. No fixture regeneration, browser, native segment, production build, full suite, export, performance run, or integration sync."
+}
