@@ -69,7 +69,7 @@ test('Program rectangle drag updates real pixels temporarily and commits once, w
 
 test('Bezier points offer pointer, numeric and keyboard edits plus bounded insertion/deletion', async ({ page }) => {
   const problems = errors(page); await setup(page, 'bezier')
-  const select = page.getByLabel('Mask point', { exact: true })
+  const select = page.getByRole('combobox', { name: 'Mask point', exact: true })
   await select.selectOption('control:0:1')
   await page.getByLabel('Point X (%)', { exact: true }).fill('25')
   await page.getByLabel('Point Y (%)', { exact: true }).fill('30')
@@ -79,6 +79,13 @@ test('Bezier points offer pointer, numeric and keyboard edits plus bounded inser
   const control = page.getByRole('button', { name: 'Mask control 1.1', exact: true })
   await control.focus(); await control.press('ArrowDown')
   await expect(page.getByLabel('Point Y (%)', { exact: true })).not.toHaveValue('30')
+  const fractionalY = await page.getByLabel('Point Y (%)', { exact: true }).inputValue()
+  expect(Number(fractionalY) * 1000 % 1).not.toBe(0)
+  const beforeNumeric = await snapshot(page)
+  await page.getByLabel('Point X (%)', { exact: true }).fill('26')
+  await page.getByRole('button', { name: 'Set point', exact: true }).click()
+  expect((await snapshot(page)).past).toBe(beforeNumeric.past + 1)
+  await expect(page.getByLabel('Point Y (%)', { exact: true })).toHaveValue(fractionalY)
   const box = (await control.boundingBox())!, preDrag = await snapshot(page)
   await page.mouse.move(box.x + 12, box.y + 12); await page.mouse.down(); await page.mouse.move(box.x + 22, box.y + 20); await page.mouse.up()
   expect((await snapshot(page)).past).toBe(preDrag.past + 1)

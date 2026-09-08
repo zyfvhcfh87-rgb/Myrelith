@@ -53,7 +53,7 @@ The first development pass caught an incorrect import/test helper name and
 overly exact floating-point test assertions; these were corrected before the
 green run. No broader suite or baseline failure classification is claimed.
 
-## Browser gate: pending exclusive slot
+## Browser gate: initial run and correction
 
 Browser plugin not available. The repository's Playwright runner is prepared for
 quiet headless Chromium, one worker, muted audio, silent local 720p PNG fixtures,
@@ -68,5 +68,24 @@ rectangle drag, one undoable commit/redo/Escape; Bezier pointer/keyboard/numeric
 and topology edits with feather/inversion; and ellipse cancellation/responsive
 CSS geometry at 1440, 1280 and 768 widths. They check URL/title/nonblank controls,
 framework errors, console/page errors, screenshots and focus restoration.
-Expected duration is under five minutes. These tests have not yet run, so the
-observable UI gate remains unaccepted.
+The orchestrator granted an exclusive slot for clean `f6b705399b6fc30b3907279cef1cac6f71fca87d`.
+The sandbox first rejected localhost port binding (`EPERM`); the approved
+escalated invocation then ran all three checks: **2 passed, 1 failed in 37.6s**.
+The rectangle pixel/history/Escape and ellipse responsive checks passed.
+Bezier timed out on an exact label locator; its screenshot/accessibility snapshot
+shows a correctly named combobox, now selected by role in the test.
+
+Initial logs are `.tmp/issue198-browser-f6b7053.log` and
+`.tmp/issue198-browser-f6b7053-authorized.log`. The initial screenshot, error
+context and trace are preserved in `.tmp/playwright-issue198-f6b7053/`.
+Screenshot inspection also exposed competing clip-transform handles; Program
+now unmounts other manipulation overlays while a mask editor is active, using
+their existing owned cleanup. Closing restores those controls.
+
+Review caught native numeric step validation rejecting supported fractional point
+percentages after a pixel move. Point inputs now use `step="any"` while retaining
+domain bounds; no point quantization. The browser regression changes only X after
+a keyboard-generated fractional Y and asserts unchanged Y and one history entry.
+Correction checks: 52 tests in four files (mask controller, mask UI, Preview UI,
+architecture) plus 17 runner checks; build/typecheck, lint and diff check passed.
+The observable gate still awaits the corrected committed rerun.

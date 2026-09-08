@@ -208,8 +208,8 @@ export default function MaskOverlayControls({ canvasRef, panelRef }: { canvasRef
       {path && <>
         <label>Mask point<select value={partKey(part)} onChange={(event) => { const next = parts.find((part) => partKey(part) === event.target.value); if (next) setPart(next) }}>{parts.map((part) => <option key={partKey(part)} value={partKey(part)}>{partLabel(part)}</option>)}</select></label>
         <form onSubmit={(event) => { event.preventDefault(); changePath({ kind: 'set-point', part, point: { x: pointX.trim() ? Number(pointX) / 100 : NaN, y: pointY.trim() ? Number(pointY) / 100 : NaN } }) }}>
-          <label>Point X (%)<input type="number" min="0" max="100" step="0.001" value={pointX} onChange={(event) => setPointX(event.target.value)} /></label>
-          <label>Point Y (%)<input type="number" min="0" max="100" step="0.001" value={pointY} onChange={(event) => setPointY(event.target.value)} /></label>
+          <label>Point X (%)<input type="number" min="0" max="100" step="any" value={pointX} onChange={(event) => setPointX(event.target.value)} /></label>
+          <label>Point Y (%)<input type="number" min="0" max="100" step="any" value={pointY} onChange={(event) => setPointY(event.target.value)} /></label>
           <button type="submit">Set point</button>
         </form>
         <button type="button" disabled={path.segments.length >= 8} onClick={() => changePath({ kind: 'split-segment', segment: part.kind === 'anchor' ? part.index : part.segment })}>Add point</button>

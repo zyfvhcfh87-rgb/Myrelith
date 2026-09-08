@@ -22,6 +22,7 @@ import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useProxyStore } from '../state/proxyStore'
 import { useVideoScopesStore } from '../state/videoScopesStore'
+import { useTransportStore } from '../state/transportStore'
 import TextOverlayControls from './TextOverlayControls'
 import VideoScopesPanel from './VideoScopesPanel'
 import VisualOverlayControls from './VisualOverlayControls'
@@ -34,6 +35,7 @@ export default function Preview() {
   const panelRef = useRef<HTMLDivElement>(null)
   const docWidth = useDocumentStore((state) => state.doc.width)
   const docHeight = useDocumentStore((state) => state.doc.height)
+  const editingMask = useTransportStore((state) => state.maskEditorTarget !== null)
   const qualityMode = usePreviewQualityStore((state) => state.qualityMode)
   const setQualityMode = usePreviewQualityStore((state) => state.setQualityMode)
   const scopesEnabled = useVideoScopesStore((state) => state.enabled)
@@ -161,9 +163,11 @@ export default function Preview() {
         className="preview-canvas"
         data-testid="preview-canvas"
       />
-      <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
-      <MotionTrackingOverlay canvasRef={canvasRef} panelRef={panelRef} />
-      <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+      {!editingMask && <>
+        <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+        <MotionTrackingOverlay canvasRef={canvasRef} panelRef={panelRef} />
+        <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+      </>}
       <MaskOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
       {scopesEnabled ? <VideoScopesPanel /> : null}
       {offlineVisualAssetIds.length > 0 ? (
