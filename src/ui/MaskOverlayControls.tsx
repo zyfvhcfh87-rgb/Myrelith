@@ -4,12 +4,12 @@ import { beginMaskEdit, commitMaskParams, type MaskEditSession } from '../app/ma
 import { focusProgramMonitor } from '../app/sequenceEditController'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
-import { editMaskBezierPath, maskEditingTarget, maskPathPartPoint, maskPointToProject, monitorPointToProject, moveMaskBox, parseMaskBezierPath, projectPointToMonitor, resizeMaskBox, type MaskBoxCorner, type MaskEditPatch, type MaskMonitorViewport, type MaskPathPart } from '../state/maskEditor'
+import { editMaskBezierPath, maskEditingTarget, maskPathPartPoint, maskPointToProject, monitorPointToProject, moveMaskBox, parseMaskBezierPath, projectPointToMonitor, resizeMaskBox, type MaskBoxCorner, type MaskEditPatch, type MaskPathPart } from '../state/maskEditor'
 import type { MaskParams } from '../domain/effectStack'
 import MaskPathAuthoring from './MaskPathAuthoring'
+import { readMaskEditorViewport, sameMaskEditorViewport, type MaskEditorViewport as Viewport } from './maskMonitorViewport'
 
 type Handle = { kind: 'move' } | { kind: 'resize'; corner: MaskBoxCorner } | { kind: 'point'; part: MaskPathPart }
-interface Viewport { canvas: MaskMonitorViewport; panelLeft: number; panelTop: number }
 interface Gesture {
   pointerId: number
   session: MaskEditSession
@@ -41,6 +41,7 @@ export default function MaskOverlayControls({ canvasRef, panelRef, toolbarHost }
   const raf = useRef<number | null>(null)
   const [authoring, setAuthoring] = useState(false)
   const wasAuthoring = useRef(false)
+  const readViewport = useCallback(() => readMaskEditorViewport(canvasRef.current, panelRef.current), [canvasRef, panelRef])
   const finishAuthoring = useCallback((failure: string | null) => {
     setAuthoring(false); setError(failure ?? ''); setPart({ kind: 'anchor', index: 0 })
   }, [])
@@ -69,10 +70,8 @@ export default function MaskOverlayControls({ canvasRef, panelRef, toolbarHost }
   useEffect(() => {
     if (!target) return
     const measure = () => {
-      const canvas = canvasRef.current?.getBoundingClientRect(), panel = panelRef.current?.getBoundingClientRect()
-      const next = canvas && panel && canvas.width > 0 && canvas.height > 0
-        ? { canvas: { left: canvas.left, top: canvas.top, width: canvas.width, height: canvas.height }, panelLeft: panel.left, panelTop: panel.top } : null
-      if (JSON.stringify(next) !== JSON.stringify(viewportRef.current)) { cancel(); viewportRef.current = next; setViewport(next) }
+      const next = readViewport()
+      if (!sameMaskEditorViewport(next, viewportRef.current)) { cancel(); viewportRef.current = next; setViewport(next) }
     }
     measure()
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
@@ -81,7 +80,7 @@ export default function MaskOverlayControls({ canvasRef, panelRef, toolbarHost }
     window.addEventListener('resize', measure)
     window.addEventListener('scroll', measure, true)
     return () => { observer?.disconnect(); window.removeEventListener('resize', measure); window.removeEventListener('scroll', measure, true); cancel() }
-  }, [cancel, canvasRef, panelRef, target])
+  }, [cancel, canvasRef, panelRef, readViewport, target])
 
   let params: MaskParams | null = null, unavailable = ''
   if (target) {
@@ -119,6 +118,8 @@ export default function MaskOverlayControls({ canvasRef, panelRef, toolbarHost }
     event.currentTarget.focus(); focusProgramMonitor()
     if (handle.kind === 'point') setPart(handle.part)
     try {
+      const currentViewport = readViewport()
+      if (!currentViewport) return
       const session = beginMaskEdit(target)
       const interrupted = (event: globalThis.PointerEvent) => { if (gesture.current?.pointerId === event.pointerId) cancel() }
       const disposeEvents = () => {
@@ -127,7 +128,7 @@ export default function MaskOverlayControls({ canvasRef, panelRef, toolbarHost }
         window.removeEventListener('pointercancel', interrupted)
         window.removeEventListener('blur', cancel)
       }
-      gesture.current = { pointerId: event.pointerId, session, element: event.currentTarget, handle, base: shown, start: monitorPointToProject({ x: event.clientX, y: event.clientY }, viewport.canvas, doc), viewport, latest: {}, disposeEvents }
+      gesture.current = { pointerId: event.pointerId, session, element: event.currentTarget, handle, base: shown, start: monitorPointToProject({ x: event.clientX, y: event.clientY }, currentViewport.canvas, doc), viewport: currentViewport, latest: {}, disposeEvents }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', finish)
       window.addEventListener('pointercancel', interrupted)
@@ -139,6 +140,7 @@ export default function MaskOverlayControls({ canvasRef, panelRef, toolbarHost }
   function update(event: globalThis.PointerEvent): Gesture | null {
     const active = gesture.current
     if (!active || active.pointerId !== event.pointerId) return null
+    if (!sameMaskEditorViewport(active.viewport, readViewport())) { cancel(); return null }
     try {
       const point = monitorPointToProject({ x: event.clientX, y: event.clientY }, active.viewport.canvas, doc)
       active.latest = patchFor(active.handle, active.base, { x: point.x - active.start.x, y: point.y - active.start.y })
@@ -152,6 +154,7 @@ export default function MaskOverlayControls({ canvasRef, panelRef, toolbarHost }
       raf.current = null
       const active = gesture.current
       if (!active) return
+      if (!sameMaskEditorViewport(active.viewport, readViewport())) { cancel(); return }
       const failure = active.session.preview(active.latest)
       if (failure) { setError(failure); cancel() }
       else setDraft({ ...active.base, ...active.latest } as MaskParams)
@@ -197,7 +200,7 @@ export default function MaskOverlayControls({ canvasRef, panelRef, toolbarHost }
   if (!target) return null
   const dock = (toolbar: ReactNode) => toolbarHost ? createPortal(toolbar, toolbarHost) : toolbar
   if (!shown || !viewport || unavailable) return dock(<div className="mask-editor-toolbar" role="status">{unavailable || 'The Program canvas is not visible.'}<button onClick={stop}>Close mask editor</button></div>)
-  if (authoring) return <MaskPathAuthoring doc={doc} target={target} mask={shown} viewport={viewport} toolbarHost={toolbarHost} onFinish={finishAuthoring} />
+  if (authoring) return <MaskPathAuthoring doc={doc} target={target} mask={shown} viewport={viewport} readViewport={readViewport} toolbarHost={toolbarHost} onFinish={finishAuthoring} />
   const displayPosition = (point: { x: number; y: number }) => {
     const client = projectPointToMonitor(maskPointToProject(point, shown, doc), viewport.canvas, doc)
     return { left: client.x - viewport.panelLeft, top: client.y - viewport.panelTop }

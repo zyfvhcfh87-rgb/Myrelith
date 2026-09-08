@@ -14,6 +14,7 @@ import { useMediaStore } from '../state/mediaStore'
 
 const target = { sequenceId: 'mask-ui', clipId: 'clip', effectId: 'mask' }
 let canvasWidth = 960
+let canvasLeft = 100, panelTop = 0
 let nextFrame = 1
 const frames = new Map<number, FrameRequestCallback>()
 function flush() { act(() => { const queued = [...frames.values()]; frames.clear(); queued.forEach((callback) => callback(0)) }) }
@@ -38,9 +39,9 @@ beforeEach(() => {
   useDocumentStore.getState().setDoc(doc)
   useTransportStore.getState().setSelectedClip('clip')
   useTransportStore.getState().setMaskEditorTarget(target)
-  canvasWidth = 960; frames.clear(); nextFrame = 1
+  canvasWidth = 960; canvasLeft = 100; panelTop = 0; frames.clear(); nextFrame = 1
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-    return DOMRect.fromRect(this instanceof HTMLCanvasElement ? { x: 100, y: 50, width: canvasWidth, height: 540 } : { x: 0, y: 0, width: 1200, height: 700 })
+    return DOMRect.fromRect(this instanceof HTMLCanvasElement ? { x: canvasLeft, y: 50, width: canvasWidth, height: 540 } : { x: 0, y: panelTop, width: 1200, height: 700 })
   })
   vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => { const id = nextFrame++; frames.set(id, callback); return id }))
   vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => frames.delete(id)))
@@ -102,6 +103,38 @@ test('capture failure still finishes outside the handle, and unrelated pointers 
   fireEvent.pointerUp(window, pointer(388, 185))
   expect(params().x).toBeCloseTo(0.15)
   expect(useDocumentStore.getState().past).toHaveLength(1)
+})
+
+test.each(['size', 'position', 'panel', 'hidden'] as const)('live %s change before observer delivery cancels pointer-up and preserves redo', (change) => {
+  render(<Harness />)
+  const before = useDocumentStore.getState().project, future = [before]
+  useDocumentStore.setState({ future })
+  start(); fireEvent.pointerMove(window, pointer(400, 210)); flush()
+  expect(useTransportStore.getState().maskPreview).not.toBeNull()
+  fireEvent.pointerMove(window, pointer(420, 220)) // Still queued when geometry changes.
+  if (change === 'size') canvasWidth = 800
+  if (change === 'position') canvasLeft = 120
+  if (change === 'panel') panelTop = 20
+  if (change === 'hidden') canvasWidth = 0
+  // No resize, scroll or ResizeObserver callback is delivered before pointer-up.
+  fireEvent.pointerUp(window, pointer(430, 230)); flush()
+  expect(useTransportStore.getState().maskPreview).toBeNull()
+  expect(useDocumentStore.getState()).toMatchObject({ project: before, past: [], future })
+  expect(useDocumentStore.getState().future).toBe(future)
+  fireEvent.pointerUp(window, pointer(450, 250))
+  expect(useDocumentStore.getState().project).toBe(before)
+})
+
+test.each(['queued-preview', 'move'] as const)('live geometry change cancels at %s before observer delivery', (delivery) => {
+  render(<Harness />)
+  const before = useDocumentStore.getState().project
+  start(); fireEvent.pointerMove(window, pointer(400, 210))
+  canvasWidth = 800
+  if (delivery === 'move') fireEvent.pointerMove(window, pointer(420, 220))
+  flush()
+  expect(useTransportStore.getState().maskPreview).toBeNull()
+  fireEvent.pointerUp(window, pointer(430, 230))
+  expect(useDocumentStore.getState()).toMatchObject({ project: before, past: [] })
 })
 
 test('Bezier controls share point commands with numeric and keyboard input, and support topology edits', () => {
@@ -198,6 +231,30 @@ test('opening layout may settle before the first point; later resizing cancels t
   canvasWidth = 900; fireEvent.resize(window)
   expect(screen.queryByRole('button', { name: 'Close path' })).toBeNull()
   expect(useDocumentStore.getState().past).toEqual([])
+})
+
+test.each(['close', 'add'] as const)('open draft rechecks live geometry before %s without a resize notification', (action) => {
+  render(<Harness />)
+  const before = useDocumentStore.getState().project, future = [before]
+  useDocumentStore.setState({ future })
+  beginDrawing(); drawPoint(0.2, 0.2); drawPoint(0.8, 0.2); drawPoint(0.8, 0.8)
+  canvasWidth = 800
+  if (action === 'close') fireEvent.click(screen.getByRole('button', { name: 'Close path' }))
+  else fireEvent.click(screen.getByRole('button', { name: 'Add draft point' }))
+  expect(screen.queryByRole('button', { name: 'Close path' })).toBeNull()
+  expect(useDocumentStore.getState()).toMatchObject({ project: before, past: [], future })
+  expect(useDocumentStore.getState().future).toBe(future)
+  expect(useTransportStore.getState().maskPreview).toBeNull()
+})
+
+test('the first draft point reads layout that settled before observer delivery', () => {
+  render(<Harness />); beginDrawing()
+  canvasWidth = 800 // No notification; pointer normalization must use live width.
+  drawPoint(0.2, 0.2); drawPoint(0.8, 0.2); drawPoint(0.8, 0.8)
+  expect(screen.getByRole('status')).toHaveTextContent('3/8 points')
+  fireEvent.click(screen.getByRole('button', { name: 'Close path' }))
+  expect(parseMaskBezierPath(params().path as string)!.start).toEqual({ x: 0.2, y: 0.2 })
+  expect(useDocumentStore.getState().past).toHaveLength(1)
 })
 
 test('open authoring bounds points and exposes validation without changing saved state', () => {

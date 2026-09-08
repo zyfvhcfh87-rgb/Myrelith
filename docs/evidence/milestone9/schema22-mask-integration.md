@@ -50,3 +50,26 @@ The 12.8-second run log remains at /private/tmp/schema22-mask-integration-browse
 the failed screenshot, trace and context are retained under the integration
 worktree's .tmp/playwright-issue198 directory. Scoped process/listener inspection
 confirmed no Chromium/Playwright/Vite process or 5198 listener after the run.
+
+## Resize correction integrated
+
+Source e6b8b71f8d99fb70e0f2d3caabb72cc76fe58b25 and evidence-only child
+08fe58cddd64df76280144406f1ca599b9dfed55 were independently reviewed. Drag,
+queued preview and open-path actions now compare live canvas and panel geometry
+with their captured viewport before proceeding, including before pointer-up.
+Nine deterministic regressions cover geometry changes without a delivered resize
+notification. Parent source checks passed four files / 78 tests and 17 runner
+checks; the same affected checks pass after the merge, with build/typecheck,
+lint and diff hygiene. Logs: /private/tmp/milestone9-resize-integration-*.log.
+
+The worker's unchanged four-flow muted Chromium suite passed on clean e6b8b71
+in 11.4 seconds, including the exact previously failing resize/release assertion.
+The orchestrator inspected the exact log and all five retained screenshots.
+Desktop and 768px editing controls remain separate from the canvas handles;
+open drafts stay temporary. Browser/server teardown and slot release were
+confirmed. This merge has identical product source to that tested commit; the
+additional integration document retains the earlier failure above.
+
+This resolves that specific integration finding. Full suite, animated path,
+tracking, broader browser flows, export parity and measured resource gates
+remain pending. No issue is declared complete by this correction.
