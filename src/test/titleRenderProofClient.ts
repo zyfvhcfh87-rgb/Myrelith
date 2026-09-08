@@ -38,7 +38,22 @@ function proofWorker() {
   }
 }
 const qualityModes: readonly PresentationResolvedQuality[] = ['full', 'half', 'quarter']
+// Match the actual compositor host: Offscreen destination sRGB/default readback
+// policy, reusable leg/group sRGB + willReadFrequently. HTML controls stay below.
+const productionCanvas = { offscreen: true, canvasPolicy: 'production' } as const
 const clean = (result: TitleProofPixels) => result.scratchCleared && result.requests === 0 && result.liveCanvases === 0 && result.peakCanvases <= 3
+function matchesContexts(result: TitleProofPixels, production: boolean) {
+  return result.contexts.length === result.peakCanvases && result.contexts.every((context, index) => {
+    const frequent = !production || index > 0
+    return context.kind === (production ? 'OffscreenCanvas' : 'HTMLCanvasElement')
+      && context.role === ['destination', 'leg', 'group'][index]
+      && context.width === result.width && context.height === result.height
+      && context.requested.colorSpace === 'srgb'
+      && context.requested.willReadFrequently === (frequent ? true : undefined)
+      && context.actual?.colorSpace === 'srgb' && context.actual.willReadFrequently === frequent
+  })
+}
+
 
 export async function proveTitleLegacyMatrix(baseline: { compositeFrame: typeof compositeFrame; createVideoCompositionPlanner: typeof createVideoCompositionPlanner }) {
   const worker = proofWorker(), rows = []
@@ -49,11 +64,17 @@ export async function proveTitleLegacyMatrix(baseline: { compositeFrame: typeof 
       for (const quality of qualityModes) {
         const original = await renderTitleProof(legacy, 0, quality, { compositor: baseline.compositeFrame, plan: baselinePlan })
         const current = await renderTitleProof(legacy, 0, quality), expanded = await renderTitleProof(upgraded, 0, quality)
+        const productionOriginal = await renderTitleProof(legacy, 0, quality, { ...productionCanvas, compositor: baseline.compositeFrame, plan: baselinePlan })
+        const productionCurrent = await renderTitleProof(legacy, 0, quality, productionCanvas)
+        const productionExpanded = await renderTitleProof(upgraded, 0, quality, productionCanvas)
         const background = await worker.render(upgraded, 0, quality)
-        const exported = quality === 'full' ? await exportTitleProof(upgraded) : null
+        const exported = quality === 'full' ? await exportTitleProof(upgraded, 'production') : null
         rows.push({ family, case: proof.name, quality, baseline: compareTitleProof(original, current), upgrade: compareTitleProof(current, expanded),
-          worker: compareTitleProof(expanded, background), export: exported ? compareTitleProof(expanded, exported.frames[0]) : null,
-          clean: [original, current, expanded, background, ...(exported?.frames ?? [])].every(clean),
+          productionBaseline: compareTitleProof(productionOriginal, productionCurrent), productionUpgrade: compareTitleProof(productionCurrent, productionExpanded),
+          contextsMatch: [original, current, expanded].every((result) => matchesContexts(result, false))
+            && [productionOriginal, productionCurrent, productionExpanded, background, ...(exported?.frames ?? [])].every((result) => matchesContexts(result, true)),
+          worker: compareTitleProof(productionExpanded, background), export: exported ? compareTitleProof(productionExpanded, exported.frames[0]) : null,
+          clean: [original, current, expanded, productionOriginal, productionCurrent, productionExpanded, background, ...(exported?.frames ?? [])].every(clean),
           exportClosed: exported ? exported.finalized && exported.leases === exported.closed : true })
       }
     }
@@ -65,14 +86,15 @@ export async function proveTitleAnimationFrames() {
   const worker = proofWorker(), rows = []
   try {
     for (const easing of ['linear', 'hold', 'cubic-bezier'] as const) for (const nested of [false, true]) {
-      const project = animatedTitleProofProject(easing, nested), exported = await exportTitleProof(project)
+      const project = animatedTitleProofProject(easing, nested), exported = await exportTitleProof(project, 'production')
       for (const quality of qualityModes) {
         const sequential = []
-        for (let frame = 0; frame < 13; frame++) sequential.push(await renderTitleProof(project, frame, quality))
+        for (let frame = 0; frame < 13; frame++) sequential.push(await renderTitleProof(project, frame, quality, productionCanvas))
         for (const frame of [12, 0, 6, 2, 11, 1, 10, 5, 3, 9, 4, 8, 7]) {
-          const seek = await renderTitleProof(project, frame, quality), background = await worker.render(project, frame, quality)
+          const seek = await renderTitleProof(project, frame, quality, productionCanvas), background = await worker.render(project, frame, quality)
           rows.push({ easing, nested, frame, quality, seek: compareTitleProof(sequential[frame], seek), worker: compareTitleProof(seek, background),
             export: quality === 'full' ? compareTitleProof(seek, exported.frames[frame]) : null,
+            contextsMatch: [seek, background, exported.frames[frame]].every((result) => matchesContexts(result, true)),
             clean: [seek, background, exported.frames[frame]].every(clean), exportClosed: exported.finalized && exported.leases === 13 && exported.closed === 13 })
         }
       }
@@ -110,10 +132,11 @@ export async function proveTitleFallbackParity() {
       clip.title = { version: 1, elements: parsed.title.elements.map((element) => ({ ...element, font: { family: 'Missing Title Font', fallbackFamily: family } })) }
       const wire = serializeProjectFile(createProjectFileSnapshot(project, [], [])), reopened = titleProjectFromFile(parseProjectFile(wire))
       for (const quality of qualityModes) {
-        const original = await renderTitleProof(legacy, 0, quality), restored = await renderTitleProof(reopened, 0, quality), background = await worker.render(reopened, 0, quality)
-        const exported = quality === 'full' ? await exportTitleProof(reopened) : null
+        const original = await renderTitleProof(legacy, 0, quality, productionCanvas), restored = await renderTitleProof(reopened, 0, quality, productionCanvas), background = await worker.render(reopened, 0, quality)
+        const exported = quality === 'full' ? await exportTitleProof(reopened, 'production') : null
         rows.push({ family, quality, retainedIntent: wire.includes('Missing Title Font'), fallback: compareTitleProof(original, restored), worker: compareTitleProof(restored, background),
-          export: exported ? compareTitleProof(restored, exported.frames[0]) : null, clean: [original, restored, background, ...(exported?.frames ?? [])].every(clean) })
+          export: exported ? compareTitleProof(restored, exported.frames[0]) : null,
+          contextsMatch: [original, restored, background, ...(exported?.frames ?? [])].every((result) => matchesContexts(result, true)), clean: [original, restored, background, ...(exported?.frames ?? [])].every(clean) })
       }
     }
     return rows
@@ -146,9 +169,9 @@ export async function proveProductionTitleWorker() {
           const capture = new OffscreenCanvas(profile.outputWidth, profile.outputHeight), ctx = capture.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true })!
           try {
             ctx.drawImage(canvas, 0, 0)
-            const expected = await renderTitleProof(project, frame, quality, { offscreen: true })
+            const expected = await renderTitleProof(project, frame, quality, productionCanvas)
             const { differingBytes, maximumDelta } = compareTitleProof(expected, { ...expected, rgba: ctx.getImageData(0, 0, capture.width, capture.height).data })
-            rows.push({ nested, frame, quality, differingBytes, maximumDelta })
+            rows.push({ nested, frame, quality, differingBytes, maximumDelta, referenceContextsMatch: matchesContexts(expected, true) })
           } finally { capture.width = capture.height = 0 }
         }
       }

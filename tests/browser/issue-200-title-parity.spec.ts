@@ -23,8 +23,8 @@ test('unchanged baseline, compact text, actual Upgrade, worker and finite export
   await writeFile(info.outputPath('legacy-pixel-matrix.json'), JSON.stringify({ baseline: 'ce91074c276ca6892a74addb7dd673b9a19c7eeb', browser: browser.version(), platform: process.platform, arch: process.arch, rows, errors }, null, 2))
   for (const row of rows) {
     const label = `${row.family}/${row.case}/${row.quality}`
-    for (const field of ['baseline', 'upgrade', 'worker', 'export'] as const) exact(row[field], `${label}/${field}`)
-    expect(row.clean, label).toBe(true); expect(row.exportClosed, label).toBe(true)
+    for (const field of ['baseline', 'upgrade', 'productionBaseline', 'productionUpgrade', 'worker', 'export'] as const) exact(row[field], `${label}/${field}`)
+    expect(row.contextsMatch, label).toBe(true); expect(row.clean, label).toBe(true); expect(row.exportClosed, label).toBe(true)
   }
   expect(rows).toHaveLength(6 * 22 * 3)
   expect(errors).toEqual([])
@@ -37,7 +37,7 @@ test('all thirteen scalar properties share exact seek, worker and raw export out
   await writeFile(info.outputPath('animated-pixel-matrix.json'), JSON.stringify({ browser: browser.version(), rows, errors }, null, 2))
   for (const row of rows) {
     for (const field of ['seek', 'worker', 'export'] as const) exact(row[field], `${row.easing}/${row.nested}/${row.frame}/${row.quality}/${field}`)
-    expect(row.clean).toBe(true); expect(row.exportClosed).toBe(true)
+    expect(row.contextsMatch).toBe(true); expect(row.clean).toBe(true); expect(row.exportClosed).toBe(true)
   }
   expect(rows).toHaveLength(3 * 2 * 3 * 13)
   expect(errors).toEqual([])
@@ -47,7 +47,7 @@ test('production render bridge presents title pixels through replacement, resize
   const errors = problems(page); await page.goto('/')
   const result = await page.evaluate(async () => { const path = '/src/test/titleRenderProofClient.ts'; return (await import(path)).proveProductionTitleWorker() })
   await writeFile(info.outputPath('production-worker-pixels.json'), JSON.stringify({ browser: browser.version(), ...result, errors }, null, 2))
-  for (const row of result.rows) { expect(row.differingBytes, JSON.stringify(row)).toBe(0); expect(row.maximumDelta).toBe(0) }
+  for (const row of result.rows) { expect(row.differingBytes, JSON.stringify(row)).toBe(0); expect(row.maximumDelta).toBe(0); expect(row.referenceContextsMatch).toBe(true) }
   expect(result.rows).toHaveLength(18)
   expect(result.failures).toEqual([]); expect(errors).toEqual([])
 })
@@ -69,7 +69,7 @@ test('explicit generic fallback retains named intent and reproduces actual main,
   await writeFile(info.outputPath('fallback-pixel-matrix.json'), JSON.stringify({ rows, errors }, null, 2))
   for (const row of rows) {
     for (const field of ['fallback', 'worker', 'export'] as const) exact(row[field], `${row.family}/${row.quality}/${field}`)
-    expect(row.retainedIntent).toBe(true); expect(row.clean).toBe(true)
+    expect(row.contextsMatch).toBe(true); expect(row.retainedIntent).toBe(true); expect(row.clean).toBe(true)
   }
   expect(rows).toHaveLength(18); expect(errors).toEqual([])
 })

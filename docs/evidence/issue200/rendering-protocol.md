@@ -1,10 +1,21 @@
 # G2 shared title rendering and parity protocol
 
-Status: source checkpoint prepared for committed review before a browser-slot
-grant; no browser run or G2 acceptance claimed. G3 authoring/templates remain
-gated. The supervisor accepted
-G1b `ecc9db1` and released G2 after the exact shared integration
-`4340f9675ad56aa320f2498cf107fd55f8819568` was fast-forwarded into this branch.
+Status: corrected test/evidence checkpoint prepared for supervisor review before
+a fresh six-flow browser-slot grant. Product code remains unchanged from
+`54581222b3c46208efea47f71a0d865f52778bc9`; G3 remains gated. The first observable
+run failed, and the accepted `17d396f` diagnostic completed all1008 samples but
+failed exact0. Both failures remain preserved. Independent supervisor and worker
+raw audits support a canvas-reference mismatch for the sampled failures, not a
+production rendering regression. No blanket G2 acceptance follows.
+
+See [audited diagnostic evidence](canvas-diagnostic-results.md) and its complete
+lossless archive. This correction retains the original HTML baseline/Upgrade
+controls and adds production Offscreen baseline/Upgrade controls. Worker, finite
+export, animation, fallback and actual bridge references now use the same
+Offscreen canvas kind and production context settings: destination sRGB with
+willReadFrequently omitted; reusable leg/group sRGB with it true. Requested AND
+actual context attributes are checked in the new comparisons. The pixel and line
+threshold is still exactly zero; product canvases and rendering code are unchanged.
 
 ## Reviewed behavior
 
@@ -70,16 +81,22 @@ production imports and is not committed.
 
 ```sh
 export DEVELOPER_DIR=/Library/Developer/CommandLineTools
-node docs/evidence/issue200/verify-g2-source.mjs capture .tmp/issue200-g2-browser-source.json
-npx --no-install playwright test --config playwright.issue200.config.ts
-node docs/evidence/issue200/verify-g2-source.mjs verify .tmp/issue200-g2-browser-source.json
+export NODE_OPTIONS=--no-experimental-webstorage
+node docs/evidence/issue200/verify-canvas-diagnostic.mjs capture .tmp/issue200-g2-corrected-source.json
+export ISSUE200_G2_MANIFEST="$PWD/.tmp/issue200-g2-corrected-source.json"
+export ISSUE200_G2_ARTIFACTS=/private/tmp/issue200-g2-corrected-UNIQUE
+python3 docs/evidence/issue200/run-g2-browser.py
 ```
 
 The prepared acceptance is six tests:
 
 1. 396 rows: six generic families × 22 text/style/caption cases × Full/Half/Quarter.
-   Compare unchanged baseline with current compact text, then actual Upgrade,
-   real worker shared planner/compositor, and full-size finite export frames.
+   Keep original proof-policy HTML baseline/current compact and compact/Upgrade
+   exact controls. Add baseline/current compact and compact/Upgrade exact controls
+   on production-policy main Offscreen canvases. Compare that expanded Offscreen
+   reference with the production-policy real worker and full-size finite export.
+   These are2112 exact pixel/line comparisons, including132 full-size exports.
+   All original and added owners must pass cleanup and observed context checks.
    Cases include empty/whitespace/CRLF, long words, combining marks, emoji, bidi,
    Japanese/Chinese/Korean/Devanagari/Thai, all weight/italic combinations,
    alignment, fractional geometry, anchors, zero scale, crop/flip/rotation,
@@ -87,16 +104,20 @@ The prepared acceptance is six tests:
 2. 234 rows: all 13 scalar properties in coordinated three-element titles with
    hold/linear/cubic easing, ordinary/nested repeated owners and all three
    scales. Compare sequential and arbitrary seeks, a real worker realm and
-   every full-resolution raw finite-export frame. Clip effects, element/clip
+   every full-resolution raw finite-export frame, all with matching production
+   canvas settings. Clip effects, element/clip
    opacity, track/master buses and adjustments share the same completed layer.
 3. 18 production `RenderWorkerBridge` rows: actual transferred presentation
    pixels across owner replacement, Full/Half/Quarter resize and nonsequential
-   seeks. Await actual worker completion and acknowledged disposal.
+   seeks. Its expected pixels use matching production Offscreen settings; the
+   readback-only capture stays sRGB/willReadFrequently=true. Await actual worker
+   completion and acknowledged disposal. No production bridge code is changed.
 4. 54 compact animated-mask rows against the unchanged renderer, preserving
    pixels and refusing Upgrade. This is a renderer canary for currently portable
    retained keys; it does not assert the old baseline file parser admitted them.
 5. 18 explicit-fallback rows: retain a missing family name, serialize/reopen its
-   chosen generic fallback, and compare main/worker/export pixels and line breaks.
+   chosen generic fallback, and compare main/worker/export pixels and line breaks
+   under matching production Offscreen settings.
 6. Real app preview at 1280×720 and 720×800: unavailable reason, explicit fallback
    through one portable history transaction, reopen, visible status and screenshots.
    This exercises rendering/status seams; G3 controls are not implemented.
@@ -108,7 +129,15 @@ The production-worker rows observe pixels only; worker line facts come from a
 separate real worker running the shared production modules. Each scratch owner
 must return to zero canvases, keep at most three canvases live, and make zero
 procedural source requests; finite frame leases must all close. Console errors
-fail the run. Output JSON and screenshots go to `.tmp/issue200-browser`.
+fail the run. The committed observation wrapper records warnings separately,
+page identity/nonblank/overlays and screenshots at both actual UI viewports. The
+fresh artifact directory must not yet exist. One worker, no retries and
+maxFailures=1 stop the gate on its first failed flow; original artifacts persist.
+The native runner verifies the clean source/fixture/baseline guard before and
+after execution and records only owned process identities. Its outer stdout/stderr
+must also be preserved: observer-thread errors make the ledger unqualified.
+Fresh complete native ps/PID coverage and listener verification precede explicit
+slot release. No automatic correction, rerun or integration sync follows failure.
 
 The finite raw-frame sink drives the real `exportTimeline` lifecycle and captures
 pixels before an encoder. It does **not** prove encoded-file/codec or native media
@@ -117,7 +146,7 @@ full-suite acceptance and final integration performance remain later criteria.
 
 ## Current checks
 
-The prepared source passed **18 focused files / 390 Vitest tests plus 17 runner
+The original5458122 product checkpoint passed **18 focused files / 390 Vitest tests plus 17 runner
 checks**, build/typecheck, lint and diff hygiene. This includes portable
 validation of every browser fixture, actual worker lifecycle, export/preview
 wiring, animation facade, render ordering/cleanup, title capacity/cache and the
@@ -129,3 +158,19 @@ Published logs normalize trailing whitespace only; raw logs remain in `.tmp`.
 These are focused checks, not a full-suite, dependency-audit, browser or
 G2-completion claim. The owned worker report records the exact review commit;
 the source guard must be recaptured against that commit before any browser run.
+
+## Corrected checkpoint checks
+
+The current follow-up changes only test/evidence files. The strict source guard
+extends its explicit allowlist to the named correction, observer, evidence archive
+and runner files; all product files still match5458122. All778 baseline source
+blobs and18 diagnostic fixture payload hashes remain guarded. The original
+17d396f implementation, captured contexts and exact failed diagnostic are included
+in the archive and are not replaced by the corrected acceptance harness.
+
+Three focused fixture/isolation files passed11 tests plus17 runner checks.
+Production build/typecheck, lint, diagnostic/G2 observer typecheck, native runner
+syntax, six-flow test discovery, archive SHA/all2057 member hashes, source guards,
+production-output isolation and diff hygiene passed. The existing Vite chunk
+advisory remains. No corrected browser acceptance has run yet. Exact validation
+is recorded in corrected-g2-source-checks.log.
