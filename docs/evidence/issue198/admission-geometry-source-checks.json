@@ -1,0 +1,41 @@
+{
+  "scope": "Source-only fixture preparation; no native allocation, browser, encoding, production build or broad suite qualification.",
+  "parentCheckpoint": "45118dfaa1b3d9be9ee7886d21849ff939fc4ec5",
+  "frozenProduction": "d9759917d202c39b1faa0df91ea90adad3603218",
+  "sourceFiles": [
+    {
+      "path": "scripts/issue198/resourceAdmissionFixtures.ts",
+      "sha256": "ffbb9522370a96670220d1fbd87703e60981b551d0f103a55935e14aa7b42045"
+    },
+    {
+      "path": "scripts/issue198/resourceAdmissionFixtures.test.ts",
+      "sha256": "0f7405d30332da5de3adaec974cea9b7c2a08597f1f36470a08062ed95e16cf8"
+    }
+  ],
+  "checks": [
+    {
+      "name": "focused geometry Vitest",
+      "result": "17 passed in 1 file; 451 ms; direct Vitest, no Node runner implied",
+      "originalLog": ".tmp/issue198-admission-geometry-fixtures.log",
+      "bytes": 265,
+      "sha256": "0242ddd0e65659b9e0edf0a528929d14895fe6c46de5cfa5dcb9a0f4e5d5abca",
+      "stdoutAndStderr": "\n RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198\n\n\n Test Files  1 passed (1)\n      Tests  17 passed (17)\n   Start at  23:16:55\n   Duration  451ms (transform 142ms, setup 25ms, import 163ms, tests 27ms, environment 182ms)\n\n"
+    },
+    {
+      "name": "isolated TypeScript",
+      "result": "passed, exit 0",
+      "originalLog": ".tmp/issue198-admission-geometry-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutAndStderr": ""
+    },
+    {
+      "name": "scoped oxlint",
+      "result": "passed, exit 0",
+      "originalLog": ".tmp/issue198-admission-geometry-lint.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdoutAndStderr": ""
+    }
+  ]
+}
