@@ -335,7 +335,7 @@ describe('unified animation workspace', () => {
     act(() => transport().setAnimationFocusedLane({ owner: { kind: 'clip', id: 'root-text' }, kind: 'effect', effectId: 'unknown', parameter: 'strength' }))
     render(<AnimationWorkspace />)
     expect(screen.getByRole('button', { name: 'Set key at playhead' })).toBeDisabled()
-    expect(screen.getByText('This title effect does not support animation.')).toBeInTheDocument()
+    expect(screen.getByText('The effect owner or stage is unavailable.')).toBeInTheDocument()
     const before = store(); keyDown('k'); expect(store()).toBe(before)
     const project = legacyTitleProject()
     project.sequences[0].tracks[0].clips[0].animation = { tracks: [{ property: 'opacity', propertyVersion: 9, keyframes: [scalarKey(0, .4)] }] }

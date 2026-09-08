@@ -94,6 +94,23 @@ describe('animation gesture ownership', () => {
     expect(useDocumentStore.getState().past).toHaveLength(0)
   })
 
+  test.each(['mask-gesture', 'mask-tracking', 'title-authoring', 'color-grading'] as const)('a replacement Animation frame stays below newer %s ownership', (owner) => {
+    const doc = useDocumentStore.getState().doc, transport = useTransportStore.getState()
+    const gesture = controller.begin()
+    gesture.preview({ kind: 'move', deltaFrames: 3 }); flush()
+    if (owner === 'mask-gesture') transport.setMaskPreview({ sequenceId: doc.id, effectId: 'mask', params: {}, document: doc })
+    if (owner === 'mask-tracking') transport.setMaskTrackingPreview({ sequenceId: doc.id, document: doc })
+    if (owner === 'title-authoring') transport.setTitleDocumentPreview({ sequenceId: doc.id, document: doc })
+    if (owner === 'color-grading') transport.setColorGradingPreview({ sequenceId: doc.id, effectId: 'grade', params: {}, document: doc })
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe(owner)
+    gesture.preview({ kind: 'move', deltaFrames: 4 }); flush()
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe(owner)
+    expect(useTransportStore.getState().animationPreview!.document.tracks[0].clips[0].animation!.tracks[0].keyframes[0].frame).toBe(4)
+    gesture.cancel()
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe(owner)
+    expect(useDocumentStore.getState().past).toHaveLength(0)
+  })
+
   test('Escape cancels queued work without writing history', () => {
     const before = useDocumentStore.getState(), gesture = controller.begin()
     gesture.preview({ kind: 'move', deltaFrames: 4 })

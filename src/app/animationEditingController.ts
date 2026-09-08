@@ -148,8 +148,9 @@ export function createAnimationEditingController(options: AnimationEditingOption
           if (!valid()) { cancel(); report(stale); return }
           const command = queued; queued = null
           if (!command) return
-          // Release this owner's previous preview before admitting its replacement.
-          useTransportStore.getState().setAnimationPreview(null)
+          // Release the retained payload for admission without promoting an older
+          // gesture above siblings activated after it. Cancellation releases order.
+          useTransportStore.getState().setAnimationPreview(null, true)
           const result = plan(command)
           if (!result.ok) { report(result.reason); return }
           const error = clipboardError(result.project, null)

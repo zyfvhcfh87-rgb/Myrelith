@@ -1,0 +1,68 @@
+{
+  "baseMerge": "dae89eda7d2926fee09700dc311c324f2e7d204f",
+  "sha256": {
+    "src/app/animationEditingController.ts": "8022b8b022702508bef9ce11b80b5b49f07d12bfbfdae5b154f94021f86605ca",
+    "src/app/animationEditingController.test.ts": "6c24cac53f1bc89b9dcef8eeffa7184a98d68980d51e5eb10fa1abe8c1f5f167",
+    "src/app/colorGradingController.ts": "161ce1d8edfc992d8b978fd6f1092cadfd92493d8599e6bb5413442598680bbc",
+    "src/app/colorGradingController.test.ts": "b0b2105a6504f87c6e1cf637a2465cd46ead5ae31f081ef9be99b19c9716f64f",
+    "src/state/transportStore.ts": "a311640f618d3885270f42bb8daf0099edc05c0bda81ed858de1c29524886907",
+    "src/ui/animation/AnimationWorkspace.test.tsx": "1e02dfd4b58ba76468d9d8dc81d0cc3f4c848169bca47f659c4d369814c650b2",
+    "src/app/animationPreviewIntegration.test.ts": "542284163bd9d2956525788d09bb86f3436a122d9a7fdc8be11aba13925d780a",
+    "src/app/animationTitleIntegration.test.ts": "3dc0697c2ded06ba9bfba2a28bfa70f1fd5267de390f98e18f1815eb7daa01c5",
+    "src/domain/animationOwners.ts": "3eec219178083588ba78f8b9299642171c09aac9c403521cce9b52adcfbc9fa3",
+    "src/domain/titleEffectAnimation.ts": "cc5e98ce2e22e5f95621fb5e77932840d08e11454a9b79cbac8dde6d1859cd50"
+  },
+  "logs": [
+    {
+      "copy": "red.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/preview-coordination-red.log",
+      "rawSha256": "f6faba11d7bc3f670b3f9ff5e6bd1006d306c3eb598f0edc3de4659f7516dca7",
+      "copySha256": "c465ca17ab431d3e43ec41a65fa627bfdff0a3df9d506693ccd8187321ffe2b4",
+      "mode": "normalized text; raw preserved"
+    },
+    {
+      "copy": "green.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/preview-coordination-green.log",
+      "rawSha256": "670802c02b52bdb1b75a6f62ce6458446d762c1512b984c8f5636ebe8f7a300c",
+      "copySha256": "670802c02b52bdb1b75a6f62ce6458446d762c1512b984c8f5636ebe8f7a300c",
+      "mode": "normalized text; raw preserved"
+    },
+    {
+      "copy": "focused.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/five-owner-product-focused.log",
+      "rawSha256": "6167835621a3026ac39dc10b4168b1f38cce1340501bb862a4501e708465b2cd",
+      "copySha256": "6167835621a3026ac39dc10b4168b1f38cce1340501bb862a4501e708465b2cd",
+      "mode": "normalized text; raw preserved"
+    },
+    {
+      "copy": "typecheck.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/integrated-five-owner-typecheck-final.log",
+      "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "copySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": "normalized text; raw preserved"
+    },
+    {
+      "copy": "lint.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/integrated-five-owner-lint-final.log",
+      "rawSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "copySha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c",
+      "mode": "normalized text; raw preserved"
+    },
+    {
+      "copy": "merged-message-failure.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/integrated-five-owner-focused.log",
+      "rawSha256": "5221e458d440b739ea39c4ed96b998da5a5c420a9785e29d507a5930a52a5162",
+      "copySha256": "d4fd837e031b3cf7621cb2a514d85f5b332ecbae74e92e0e87619a1c1eaded38",
+      "mode": "normalized text; raw preserved"
+    }
+  ],
+  "focusedTests": 183,
+  "focusedFiles": 10,
+  "runnerChecks": 17,
+  "redThenGreenCases": 9,
+  "typecheck": "passed",
+  "lint": "passed without warnings",
+  "originalTitleFacadeSuite": "unchanged byte for byte",
+  "productionBuild": "deferred to parent integration build by explicit instruction",
+  "qualification": "Source correction only. Separate uncommitted G4 draft excluded from this commit. Typecheck/lint ran in the workspace including that draft; focused test command excludes its fixture/oracle suites."
+}

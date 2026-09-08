@@ -176,7 +176,8 @@ export interface TransportState {
   setAnimationSelection(keys: readonly AnimationKeyAddress[], focus?: AnimationKeyAddress | null): void
   setAnimationFilter(filter: string): void
   setAnimationVisibleRange(range: { readonly startFrame: number; readonly endFrame: number } | null): void
-  setAnimationPreview(preview: AnimationDocumentPreview | null): void
+  /** Replacement releases retained payload while preserving this gesture's activation order. */
+  setAnimationPreview(preview: AnimationDocumentPreview | null, retainOrder?: boolean): void
   maskEditorTarget: import('../domain/maskEditing').MaskEditTarget | null
   setMaskEditorTarget(target: import('../domain/maskEditing').MaskEditTarget | null): void
   maskPreview: ColorGradingPreview | null
@@ -880,7 +881,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
     set({ animationVisibleRange: animationVisibleRange ? { ...animationVisibleRange } : null })
   },
   setTitleDocumentPreview: (preview, retainOrder = false) => set({ effectDocumentPreview: updateEffectPreview('title-authoring', preview, true, retainOrder) }),
-  setAnimationPreview: (animationPreview) => set({ animationPreview, effectDocumentPreview: updateEffectPreview('animation-gesture', animationPreview) }),
+  setAnimationPreview: (animationPreview, retainOrder = false) => set({ animationPreview, effectDocumentPreview: updateEffectPreview('animation-gesture', animationPreview, true, retainOrder) }),
   setMaskEditorTarget: (maskEditorTarget) => set({ maskEditorTarget }),
   setMaskPreview: (maskPreview) => set({ maskPreview, effectDocumentPreview: updateEffectPreview('mask-gesture', maskPreview) }),
   setMaskTrackingPreview: (preview, visible = true) => set({ effectDocumentPreview: updateEffectPreview('mask-tracking', preview, visible) }),
