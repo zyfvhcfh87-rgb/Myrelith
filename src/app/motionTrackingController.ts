@@ -28,7 +28,12 @@ import {
   type MotionTrackingPointSample,
   type MotionTrackingSelection,
   type MotionTrackingSource,
+  type MotionTrackingSamplePlan,
 } from '../domain/motionTracking'
+import { animationRetentionError } from '../domain/animationProjectBudget'
+import { createMaskTrackingPlan, type MaskTrackingPlan, type MaskTrackingTarget } from '../domain/maskTracking'
+import { applyMaskTrackingWithResult } from '../domain/operations/maskTracking'
+import { replaceProjectSequence, sequenceProjectWithinEditBudget } from '../domain/projectSequences'
 import {
   trackBoxSequence,
   trackPointSequence,
@@ -43,6 +48,9 @@ import { motionAnalysisDisplaySize } from '../pipeline/motionAnalysisDecode'
 import type { MotionAnalysisWorkerWindowReply } from '../pipeline/motionAnalysisProtocol'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { useMotionTrackingSelectionStore } from '../state/motionTrackingSelectionStore'
+import { getTransportResetRevision, useTransportStore } from '../state/transportStore'
+import { commitPortableProjectEdit, portableProjectEditError } from './portableProjectEdit'
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
 import {
   MotionAnalysisError,
@@ -223,6 +231,17 @@ export function motionTrackingAnalysisMatchesSource(
 ): boolean {
   const expected = motionAnalysisDisplaySize(source.width, source.height)
   return analysis.width === expected.width && analysis.height === expected.height
+}
+
+/** Reused at analysis admission and fresh mask attachment planning. */
+function analysisMatchesRequestedPlan(analysis: MotionTrackingAnalysis, source: MotionTrackingSource, request: Pick<MotionTrackingAnalysisRequest, 'direction' | 'selection'>, samplePlan: MotionTrackingSamplePlan): boolean {
+  return motionTrackingAnalysisMatchesSource(analysis, source)
+    && analysis.direction === request.direction
+    && analysis.kind === request.selection.kind
+    && analysis.selectionLocalFrame === samplePlan.selectionLocalFrame
+    && (analysis.failure === null ? analysis.samples.length === samplePlan.sampleLocalFrames.length
+      : analysis.samples.length < samplePlan.sampleLocalFrames.length && analysis.failure.localFrame === samplePlan.sampleLocalFrames[analysis.samples.length])
+    && analysis.samples.every((sample, index) => sample.sourceTimeTicks === samplePlan.sampleSourceTimeTicks[index] && sample.localFrame === samplePlan.sampleLocalFrames[index])
 }
 
 function ownedGrayFrame(frame: MotionAnalysisWorkerWindowReply['frames'][number]): GrayFrame {
@@ -613,22 +632,7 @@ export async function analyzeMotionTracking(
   })
   try {
     const analysis = parseMotionTrackingAnalysis(run.bytes)
-    if (
-      !motionTrackingAnalysisMatchesSource(analysis, source)
-      || analysis.direction !== request.direction
-      || analysis.kind !== request.selection.kind
-      || analysis.selectionLocalFrame !== samplePlan.selectionLocalFrame
-      || (analysis.failure === null
-        && analysis.samples.length !== samplePlan.sampleLocalFrames.length)
-      || (analysis.failure !== null && (
-        analysis.samples.length >= samplePlan.sampleLocalFrames.length
-        || analysis.failure.localFrame !== samplePlan.sampleLocalFrames[analysis.samples.length]
-      ))
-      || analysis.samples.some((sample, index) => (
-        sample.sourceTimeTicks !== samplePlan.sampleSourceTimeTicks[index]
-        || sample.localFrame !== samplePlan.sampleLocalFrames[index]
-      ))
-    ) throw new MotionAnalysisError(
+    if (!analysisMatchesRequestedPlan(analysis, source, request, samplePlan)) throw new MotionAnalysisError(
       run.fromCache ? 'storage-corrupt' : 'decode-readback',
       'Tracking result does not match the exact source geometry and rendered-frame schedule',
     )
@@ -699,10 +703,156 @@ export function applyMotionTracking(
     : { ok: false as const, reason: result.reason }
 }
 
+export type MotionTrackingAttachmentTarget =
+  | { readonly kind: 'clip-transform'; readonly clipId: ClipId }
+  | MaskTrackingTarget
+
+export type MotionTrackingAttachmentPlanResult =
+  | { readonly ok: false; readonly reason: string }
+  | { readonly ok: true; readonly kind: 'clip-transform'; readonly plan: Extract<MotionTrackingPlanResult, { ok: true }>['plan'] }
+  | { readonly ok: true; readonly kind: 'mask-effect'; readonly plan: MaskTrackingPlan }
+
+function maskSelectionCurrent(session: MotionTrackingSession): boolean {
+  const selection = useMotionTrackingSelectionStore.getState()
+  return selection.sourceClipId === session.sourceClipId && selection.pickingKind === null
+    && selection.selectionGlobalFrame === session.selectionGlobalFrame
+    && JSON.stringify(selection.selection) === JSON.stringify(session.selection)
+}
+
+function connectedMaskTargetAsset(target: MaskTrackingTarget): MediaAsset | null {
+  const clip = findClip(useDocumentStore.getState().doc, target.clipId)
+  const asset = clip ? useMediaStore.getState().assets.get(clip.assetId) : undefined
+  return asset && asset.objectUrl.length > 0 && (asset.kind === 'video' || asset.kind === 'image')
+    && Number.isSafeInteger(asset.width) && asset.width! > 0 && Number.isSafeInteger(asset.height) && asset.height! > 0 ? asset : null
+}
+
+function maskAssetSnapshot(asset: MediaAsset | null): string {
+  return JSON.stringify(asset && { id: asset.id, objectUrl: asset.objectUrl, kind: asset.kind, size: asset.size, lastModified: asset.lastModified, width: asset.width, height: asset.height, sourceBounds: asset.sourceBounds, frameRate: asset.frameRate })
+}
+
+/** Separate dispatch preserves the self-transform restriction and admits same-clip masks. */
+export function planMotionTrackingAttachment(session: MotionTrackingSession, target: MotionTrackingAttachmentTarget, includeSize: boolean): MotionTrackingAttachmentPlanResult {
+  if (target.kind === 'clip-transform') {
+    const result = planMotionTracking(session, target.clipId, includeSize)
+    return result.ok ? { ...result, kind: 'clip-transform' } : result
+  }
+  try {
+    const reason = motionTrackingSessionCurrentReason(session)
+    if (reason) throw new Error(reason)
+    if (!maskSelectionCurrent(session)) throw new Error('The tracking selection changed; analyze again.')
+    const doc = useDocumentStore.getState().doc, sourceClip = findClip(doc, session.sourceClipId)
+    const asset = useMediaStore.getState().assets.get(session.assetId), liveSource = asset ? sourceFor(asset) : null
+    if (!sourceClip || !asset || !liveSource || JSON.stringify(liveSource) !== JSON.stringify(session.source)) throw new Error('The analyzed source geometry changed; analyze again.')
+    if (!connectedMaskTargetAsset(target)) throw new Error('The target mask needs connected visual media with exact dimensions.')
+    const bounds = asset.sourceBounds.video!
+    if (bounds.status !== 'exact' || !analysisMatchesRequestedPlan(session.analysis, liveSource, session,
+      createMotionTrackingSamplePlan(doc, sourceClip, liveSource, bounds, session.selectionGlobalFrame, session.direction))) throw new Error('The tracking result no longer matches the exact admitted source dimensions and requested schedule.')
+    const result = createMaskTrackingPlan(doc, { sourceClipId: session.sourceClipId, source: liveSource, analysis: session.analysis, selectionGlobalFrame: session.selectionGlobalFrame, target, includeSize })
+    return result.ok ? { ...result, kind: 'mask-effect' } : result
+  } catch (cause) { return { ok: false, reason: cause instanceof Error ? cause.message : 'This mask attachment is unavailable.' } }
+}
+
+export interface MaskMotionTrackingReview {
+  readonly plan: MaskTrackingPlan
+  preview(enabled: boolean): string | null
+  apply(replacementConsent: string | null): { readonly ok: true; readonly changed: boolean } | { readonly ok: false; readonly reason: string }
+  cancel(): void
+}
+let activeMaskTrackingReview: MaskMotionTrackingReview | null = null
+
+/** One disposable review owns its subscriptions and one named effect-document preview. */
+export function beginMaskMotionTrackingReview(session: MotionTrackingSession, target: MaskTrackingTarget, includeSize: boolean, expectedReviewKey: string, onEnd?: () => void): MaskMotionTrackingReview {
+  activeMaskTrackingReview?.cancel()
+  if (activeMaskTrackingReview !== null) throw new Error('Another tracking review started during cleanup. Finish that review first.')
+  const document = useDocumentStore.getState(), transport = useTransportStore.getState(), reset = getTransportResetRevision()
+  if (transport.selectedClipId !== session.sourceClipId) throw new Error('Select the tracked source clip before reviewing this attachment.')
+  const planned = planMotionTrackingAttachment(session, target, includeSize)
+  if (!planned.ok) throw new Error(planned.reason)
+  if (planned.kind !== 'mask-effect' || planned.plan.reviewKey !== expectedReviewKey) throw new Error('The mask attachment changed. Review the current candidate.')
+  const plan = planned.plan
+  const targetAsset = maskAssetSnapshot(connectedMaskTargetAsset(target))
+  const sourceAsset = maskAssetSnapshot(useMediaStore.getState().assets.get(session.assetId) ?? null)
+  const proposed = applyMaskTrackingWithResult(document.doc, plan, plan.reviewKey)
+  if (!proposed.ok) throw new Error(proposed.reason)
+  const candidate = replaceProjectSequence(document.project, document.activeSequenceId, proposed.doc)
+  if (proposed.changed && candidate === document.project) throw new Error('The mask attachment could not replace its sequence within the complete project limits.')
+  const admissionError = () => !sequenceProjectWithinEditBudget(candidate) ? 'The mask attachment exceeds project limits.'
+    : animationRetentionError(useDocumentStore.getState(), candidate) ?? portableProjectEditError(document.project, document.projectGeneration, candidate)
+  const error = admissionError()
+  if (error) throw new Error(error)
+  let enabled = false, published: boolean | null = null
+  let unsubscribeDocument = () => {}, unsubscribeTransport = () => {}, unsubscribeMedia = () => {}, unsubscribeSelection = () => {}
+  const contextCurrent = () => {
+    const next = useDocumentStore.getState(), cursor = useTransportStore.getState()
+    return next.project === document.project && next.projectGeneration === document.projectGeneration && next.activeSequenceId === document.activeSequenceId
+      && reset === getTransportResetRevision() && cursor.selectedClipId === transport.selectedClipId && cursor.selectedAdjustmentId === transport.selectedAdjustmentId
+      && cursor.selectedClipIds.length === transport.selectedClipIds.length && cursor.selectedClipIds.every((id, index) => id === transport.selectedClipIds[index])
+      && maskSelectionCurrent(session) && motionTrackingSessionCurrentReason(session) === null
+      && targetAsset === maskAssetSnapshot(connectedMaskTargetAsset(target))
+      && sourceAsset === maskAssetSnapshot(useMediaStore.getState().assets.get(session.assetId) ?? null)
+  }
+  const current = () => activeMaskTrackingReview === review && contextCurrent()
+  function cancel() {
+    unsubscribeDocument(); unsubscribeTransport(); unsubscribeMedia(); unsubscribeSelection()
+    if (activeMaskTrackingReview !== review) return
+    activeMaskTrackingReview = null
+    published = null
+    useTransportStore.getState().setMaskTrackingPreview(null)
+    onEnd?.()
+  }
+  function updatePreview() {
+    const frame = useTransportStore.getState().playheadFrame
+    const visible = enabled ? frame >= plan.firstAcceptedGlobalFrame && frame <= plan.lastAcceptedGlobalFrame : null
+    if (published === visible) return
+    published = visible
+    // A range exit hides this owner's pixels but retains the review's activation.
+    // Only explicit disable/cancel releases it; passive reentry cannot steal focus.
+    useTransportStore.getState().setMaskTrackingPreview(visible === null ? null : { sequenceId: plan.sequenceId, document: proposed.doc }, visible ?? false)
+  }
+  const review: MaskMotionTrackingReview = {
+    plan, cancel,
+    preview: (next) => {
+      if (!current()) { cancel(); return 'The tracking review changed. Review the attachment again.' }
+      const error = admissionError()
+      if (error) { cancel(); return error }
+      enabled = next; updatePreview(); return null
+    },
+    apply: (replacementConsent) => {
+      const fail = (reason: string) => { cancel(); return { ok: false as const, reason } }
+      if (!current()) return fail('The tracking review changed. Review the attachment again.')
+      const cursor = useTransportStore.getState()
+      if (cursor.isPlaying || cursor.isScrubbing) return fail('Pause playback before applying mask tracking.')
+      const fresh = planMotionTrackingAttachment(session, target, includeSize)
+      if (!fresh.ok) return fail(fresh.reason)
+      if (fresh.kind !== 'mask-effect' || fresh.plan.reviewKey !== plan.reviewKey) return fail('The mask attachment changed. Review the current candidate.')
+      const applied = applyMaskTrackingWithResult(document.doc, fresh.plan, replacementConsent)
+      if (!applied.ok) return fail(applied.reason)
+      const candidate = replaceProjectSequence(document.project, document.activeSequenceId, applied.doc)
+      if (applied.changed && candidate === document.project) return fail('The mask attachment could not replace its sequence within the complete project limits.')
+      const error = animationRetentionError(useDocumentStore.getState(), candidate) ?? portableProjectEditError(document.project, document.projectGeneration, candidate)
+      if (error) return fail(error)
+      cancel()
+      const afterCleanup = useTransportStore.getState()
+      if (activeMaskTrackingReview !== null || !contextCurrent() || afterCleanup.isPlaying || afterCleanup.isScrubbing) return { ok: false, reason: 'The tracking review or playback changed during cleanup. Pause and review the attachment again.' }
+      const commitError = commitPortableProjectEdit(document.project, document.projectGeneration, candidate)
+      return commitError ? { ok: false, reason: commitError } : { ok: true, changed: applied.changed }
+    },
+  }
+  activeMaskTrackingReview = review
+  const check = () => { if (!current()) cancel(); else updatePreview() }
+  unsubscribeDocument = useDocumentStore.subscribe(check)
+  unsubscribeTransport = useTransportStore.subscribe(check)
+  unsubscribeMedia = useMediaStore.subscribe(check)
+  unsubscribeSelection = useMotionTrackingSelectionStore.subscribe(check)
+  return review
+}
+
 export function cancelMotionTracking(sourceClipId: ClipId): boolean {
+  const reviewCancelled = activeMaskTrackingReview?.plan.sourceClipId === sourceClipId
+  if (reviewCancelled) activeMaskTrackingReview?.cancel()
   const controller = getMotionAnalysisController()
-  if (!controller) return false
+  if (!controller) return reviewCancelled
   const pointCancelled = controller.cancelClipKind(sourceClipId, 'point-tracking')
   const boxCancelled = controller.cancelClipKind(sourceClipId, 'box-tracking')
-  return pointCancelled || boxCancelled
+  return pointCancelled || boxCancelled || reviewCancelled
 }

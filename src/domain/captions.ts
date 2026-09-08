@@ -1,3 +1,6 @@
+import { inspectCaptionStyle } from './captionStyle'
+import { captionOriginRelationshipError, inspectCaptionCueOrigin, inspectCaptionTrackOrigin } from './captionOrigin'
+import { mergedCaptionIntent } from './captionMerge'
 /**
  * Pure semantic caption contracts and edit operations.
  *
@@ -71,6 +74,10 @@ export function normalizeCaptionText(value: string): string {
 }
 
 export function captionItemValidationError(item: CaptionItem): string | null {
+  const style = item.style === undefined ? null : inspectCaptionStyle(item.style)
+  if (style?.kind === 'invalid') return style.reason
+  const origin = item.origin === undefined ? null : inspectCaptionCueOrigin(item.origin)
+  if (origin?.kind === 'invalid') return origin.reason
   const idError = errorForPortableId(item.id, 'Caption item id')
   if (idError) return idError
   if (!isSafeFrame(item.range.startFrame)) {
@@ -101,6 +108,10 @@ export function compareCaptionItems(left: CaptionItem, right: CaptionItem): numb
 }
 
 export function captionTrackValidationError(track: CaptionTrack): string | null {
+  const style = track.style === undefined ? null : inspectCaptionStyle(track.style)
+  if (style?.kind === 'invalid') return style.reason
+  const origin = track.origin === undefined ? null : inspectCaptionTrackOrigin(track.origin)
+  if (origin?.kind === 'invalid') return origin.reason
   const idError = errorForPortableId(track.id, 'Caption track id')
   if (idError) return idError
   if (track.name !== track.name.trim() || track.name.length === 0) {
@@ -130,6 +141,8 @@ export function captionTrackValidationError(track: CaptionTrack): string | null 
   for (const item of track.items) {
     const itemError = captionItemValidationError(item)
     if (itemError) return itemError
+    const originError = captionOriginRelationshipError(track.origin, item.origin)
+    if (originError) return originError
     if (ids.has(item.id)) return `Duplicate caption item id: ${item.id}`
     ids.add(item.id)
     if (previous && compareCaptionItems(previous, item) > 0) {
@@ -142,7 +155,11 @@ export function captionTrackValidationError(track: CaptionTrack): string | null 
 
 /** Validate global ids, resource limits, and the bounded overlap contract. */
 export function captionDocumentValidationError(doc: TimelineDoc): string | null {
-  const tracks = doc.captionTracks ?? []
+  return captionTracksValidationError(doc.captionTracks ?? [])
+}
+
+/** Shared caption-only admission for file proposals and complete documents. */
+export function captionTracksValidationError(tracks: readonly CaptionTrack[]): string | null {
   if (tracks.length > CAPTION_LIMITS.maxTracks) {
     return `Project exceeds ${CAPTION_LIMITS.maxTracks} caption tracks`
   }
@@ -359,6 +376,7 @@ export function mergeCaptionWithNext(
     }
     const merged: CaptionItem = {
       ...current,
+      ...mergedCaptionIntent(track, current, next),
       range: {
         startFrame: current.range.startFrame,
         durationFrames: rangeEnd(next.range) - current.range.startFrame,

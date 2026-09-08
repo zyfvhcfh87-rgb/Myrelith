@@ -1,3 +1,5 @@
+import { captionProjectIntentError, captionRetentionError, type CaptionIntentOwner } from '../domain/captionIntentBudget'
+import { captionDocumentValidationError } from '../domain/captions'
 import type { TitleBudgetOwner } from '../domain/titleBudgets'
 import type { TitleElementIntent } from '../domain/titleElements'
 import { animationRetentionError } from '../domain/animationProjectBudget'
@@ -5,7 +7,7 @@ import type { EffectPathAnimationTrack } from '../domain/maskPathAnimation'
 import { COLOR_LUT_LIMITS } from '../domain/colorLut'
 import { createTitleElementIdAllocator } from '../domain/titleOwnership'
 import { newColorLutReferenceError, retainedColorLutBytes, type PortableColorLut } from '../domain/colorLutCatalog'
-import { sequenceProjectWithinEditBudget } from '../domain/projectSequences'
+import { sequenceProjectWithinEditBudget, sequenceProjectReservedIds } from '../domain/projectSequences'
 import { editVideoBus, type VideoBusEdit, type VideoBusTarget } from '../domain/videoBusEffects'
 /**
  * state/documentStore.ts — Zustand store owning the complete sequence project,
@@ -236,6 +238,9 @@ export interface DocumentState {
   retainedTitleClipboardOwners: readonly TitleBudgetOwner[]
   retainedTitleClipboardElements: readonly TitleElementIntent[]
   retainedTitleClipboardKeys: readonly object[]
+  retainedCaptionOwners: Readonly<Record<string, readonly CaptionIntentOwner[]>>
+  retainCaptionOwners: (ownerId: string, owners: readonly CaptionIntentOwner[]) => string | null
+  releaseCaptionOwners: (ownerId: string) => void
   commitAnimationEdit: (expectedProject: SequenceProject, generation: number, sequenceId: string, next: SequenceProject) => string | null
   commitProjectEdit: (expectedProject: SequenceProject, generation: number, next: SequenceProject) => string | null
 
@@ -735,6 +740,8 @@ function commit(
 }
 
 function projectCommitError(state: DocumentState, project: SequenceProject): string | null {
+  const captionError = captionRetentionError(state, project)
+  if (captionError) return captionError
   const animationError = animationRetentionError(state, project)
   if (animationError) return animationError
   if (!state.project.colorLuts?.length && !project.colorLuts?.length && !state.retainedClipboardColorLuts.length) {
@@ -787,6 +794,21 @@ const INITIAL_DOCUMENT = createTimelineDoc(
 const INITIAL_PROJECT = sequenceProjectFromTimeline(INITIAL_DOCUMENT)
 
 export const useDocumentStore = create<DocumentState>()((set) => ({
+  retainedCaptionOwners: {},
+  retainCaptionOwners: (ownerId, owners) => {
+    let error: string | null = null
+    set((state) => {
+      // Old owner copies remain charged until replacement is admitted.
+      error = captionRetentionError(state, undefined, owners)
+      return error ? state : { retainedCaptionOwners: { ...state.retainedCaptionOwners, [ownerId]: owners } }
+    })
+    return error
+  },
+  releaseCaptionOwners: (ownerId) => set((state) => {
+    if (!Object.hasOwn(state.retainedCaptionOwners, ownerId)) return state
+    const { [ownerId]: _released, ...remaining } = state.retainedCaptionOwners
+    return { retainedCaptionOwners: remaining }
+  }),
   retainedClipboardColorLuts: [],
   retainedAttributePathTracks: [],
   retainedKeyPathTracks: [],
@@ -822,36 +844,48 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   past: [],
   future: [],
 
-  setProject: (project, activeSequenceId = project.rootSequenceId) => set((state) => ({
-    project,
-    projectGeneration: state.projectGeneration + 1,
-    retainedClipboardColorLuts: [],
-    retainedAttributePathTracks: [],
-    retainedKeyPathTracks: [],
-    retainedTitleClipboardOwners: [],
-    retainedTitleClipboardElements: [],
-    retainedTitleClipboardKeys: [],
-    ...activeSequenceFor(project, activeSequenceId),
-    sequenceNavigation: [],
-    past: [],
-    future: [],
-  })),
+  setProject: (project, activeSequenceId = project.rootSequenceId) => set((state) => {
+    const error = captionProjectIntentError(project) ?? project.sequences.map(captionDocumentValidationError).find(Boolean)
+      ?? captionRetentionError({ ...state, project, past: [], future: [] })
+    if (error) throw new RangeError(error)
+    return {
+      project,
+      projectGeneration: state.projectGeneration + 1,
+      retainedClipboardColorLuts: [],
+      retainedAttributePathTracks: [],
+      retainedKeyPathTracks: [],
+      retainedTitleClipboardOwners: [],
+      retainedTitleClipboardElements: [],
+      retainedTitleClipboardKeys: [],
+      ...activeSequenceFor(project, activeSequenceId),
+      sequenceNavigation: [],
+      past: [],
+      future: [],
+    }
+  }),
 
-  setDoc: (doc) => set((state) => ({
-    project: sequenceProjectFromTimeline(doc),
-    projectGeneration: state.projectGeneration + 1,
-    retainedClipboardColorLuts: [],
-    retainedAttributePathTracks: [],
-    retainedKeyPathTracks: [],
-    retainedTitleClipboardOwners: [],
-    retainedTitleClipboardElements: [],
-    retainedTitleClipboardKeys: [],
-    activeSequenceId: doc.id,
-    sequenceNavigation: [],
-    doc,
-    past: [],
-    future: [],
-  })),
+  setDoc: (doc) => set((state) => {
+    const project = sequenceProjectFromTimeline(doc)
+    const error = captionDocumentValidationError(doc) ?? captionProjectIntentError(project)
+      ?? captionRetentionError({ ...state, project, past: [], future: [] })
+    if (error) throw new RangeError(error)
+    return {
+      project,
+      projectGeneration: state.projectGeneration + 1,
+      retainedClipboardColorLuts: [],
+      retainedAttributePathTracks: [],
+      retainedKeyPathTracks: [],
+      retainedTitleClipboardOwners: [],
+      retainedTitleClipboardElements: [],
+      retainedTitleClipboardKeys: [],
+      activeSequenceId: doc.id,
+      sequenceNavigation: [],
+      doc,
+      past: [],
+      future: [],
+    }
+  }),
+
 
   setDocWithHistory: (doc) =>
     set((state) => commit(state, doc)),
@@ -1616,10 +1650,10 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     set((state) => commit(state, replaceCaptionItems(state.doc, trackId, items))),
 
   splitCaptionItem: (trackId, itemId, frame, rightItemId) =>
-    set((state) => commit(
-      state,
-      splitCaptionItem(state.doc, trackId, itemId, frame, rightItemId),
-    )),
+    set((state) => {
+      if (sequenceProjectReservedIds(state.project).has(rightItemId)) throw new RangeError('The split caption identity is already reserved in the project')
+      return commit(state, splitCaptionItem(state.doc, trackId, itemId, frame, rightItemId))
+    }),
 
   mergeCaptionWithNext: (trackId, itemId) =>
     set((state) => commit(
@@ -1739,7 +1773,8 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   undo: () =>
     set((state) => {
       const previous = state.past[state.past.length - 1]
-      if (!previous) return state
+      if (!previous || captionRetentionError(state)
+        || previous.sequences.some((sequence) => captionDocumentValidationError(sequence))) return state
       return {
         project: previous,
         ...activeSequenceFor(previous, state.activeSequenceId),
@@ -1751,7 +1786,8 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   redo: () =>
     set((state) => {
       const next = state.future[0]
-      if (!next) return state
+      if (!next || captionRetentionError(state)
+        || next.sequences.some((sequence) => captionDocumentValidationError(sequence))) return state
       return {
         project: next,
         ...activeSequenceFor(next, state.activeSequenceId),

@@ -1,0 +1,36 @@
+{
+  "kind": "issue202-final-research-decision-evidence",
+  "baseCommit": "ce91074c276ca6892a74addb7dd673b9a19c7eeb",
+  "originalR3RunCommit": "d7b900a396c5a5cf004e1ddc7cc9fe5aeaae424f",
+  "correctedR3RunCommit": "cd47ab73b2027a5f59be062dae2f1efb26fd22e0",
+  "status": "ready-for-orchestrator-review",
+  "researchDecision": "no-go-product-promotion",
+  "sourceChanges": "research-documents-and-evidence-only",
+  "slots": "all-released-no-further-execution-pending",
+  "files": [
+    {
+      "path": "final-decision.md",
+      "sha256": "1173b07cb09d7f5b453cfb213f860467e6b5f7e1a551f044e38934218a6c79d8"
+    },
+    {
+      "path": "../../ISSUE_202_PLAN.md",
+      "sha256": "075c425ff98487da43ec034cd60ff69c531832bbb916d4af15841017814ff221"
+    },
+    {
+      "path": "verify-r4.mjs",
+      "sha256": "f86cb222952b19ad8252dc509f807429163e8591120cd90747582d91fbe7b40a"
+    },
+    {
+      "path": "r3-completed-run-1-manifest.json",
+      "sha256": "987477ed557e92f28687ab5040bdff0d81fae441b1535128534f809f731c2022"
+    },
+    {
+      "path": "r3-run-1-manifest.json",
+      "sha256": "1105551803585aaf1bd8ed49882ff3201edb534cd1345406c8524ad28c49323c"
+    },
+    {
+      "path": "r3-completed-manifest.json",
+      "sha256": "b87ec3752567299eaca0e05a819169fa406b667b5f8d348c9f587955ae524b5a"
+    }
+  ]
+}

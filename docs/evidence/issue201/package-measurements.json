@@ -1,0 +1,299 @@
+{
+  "measuredAt": "2026-09-08T08:34:46.305Z",
+  "scope": "Downloaded bytes and npm archive members; no inference, runtime-memory, or application-bundle claim.",
+  "host": {
+    "node": "v26.8.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "packages": [
+    {
+      "name": "@huggingface/transformers",
+      "version": "3.8.1",
+      "metadataUrl": "https://registry.npmjs.org/@huggingface/transformers/3.8.1",
+      "license": "Apache-2.0",
+      "dependencies": {
+        "sharp": "^0.34.1",
+        "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
+        "onnxruntime-node": "1.21.0",
+        "@huggingface/jinja": "^0.5.3"
+      },
+      "tarballUrl": "https://registry.npmjs.org/@huggingface/transformers/-/transformers-3.8.1.tgz",
+      "integrity": "sha512-tsTk4zVjImqdqjS8/AOZg2yNLd1z9S5v+7oUPpXaasDRwEDhB+xnglK1k5cad26lL5/ZIaeREgWWy0bs9y9pPA==",
+      "downloadedBytes": 10482401,
+      "unpackedBytes": 48306100,
+      "members": [
+        {
+          "path": "package/LICENSE",
+          "bytes": 11358,
+          "gzipBytes": 3928,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "package/dist/transformers.min.js",
+          "bytes": 888173,
+          "gzipBytes": 222400,
+          "sha256": "aa5002b70e789798da263f5f99c62bd3e8fcd0c119258a493c40c180648365fa"
+        },
+        {
+          "path": "package/dist/transformers.web.min.js",
+          "bytes": 469931,
+          "gzipBytes": 114947,
+          "sha256": "a8413eff44e055305b2028885b94caf591ce961b421e83b6d9f39fe8f29bda67"
+        },
+        {
+          "path": "package/dist/ort-wasm-simd-threaded.jsep.mjs",
+          "bytes": 44484,
+          "gzipBytes": 15390,
+          "sha256": "08fb86ec433c78bfb032c5d84a68b8e8e5a8d81268fa39e24314179a5767a5b9"
+        },
+        {
+          "path": "package/dist/transformers.node.min.mjs",
+          "bytes": 470288,
+          "gzipBytes": 114994,
+          "sha256": "a552da06ff78d0599297dab896e8cc108e469f5dbb9ad6bf7633d7bb46c80287"
+        },
+        {
+          "path": "package/dist/transformers.node.mjs",
+          "bytes": 1777746,
+          "gzipBytes": 299230,
+          "sha256": "ee3b84624fee88b9db4b85be1fbfde1e2637957ee92eaaaaa720edbca5448e6c"
+        },
+        {
+          "path": "package/dist/ort-wasm-simd-threaded.jsep.wasm",
+          "bytes": 21596019,
+          "gzipBytes": 5046898,
+          "sha256": "c46655e8a94afc45338d4cb2b840475f88e5012d524509916e505079c00bfa39"
+        }
+      ]
+    },
+    {
+      "name": "onnxruntime-web",
+      "version": "1.22.0-dev.20250409-89f8206ba4",
+      "metadataUrl": "https://registry.npmjs.org/onnxruntime-web/1.22.0-dev.20250409-89f8206ba4",
+      "license": "MIT",
+      "dependencies": {
+        "long": "^5.2.3",
+        "platform": "^1.3.6",
+        "protobufjs": "^7.2.4",
+        "flatbuffers": "^25.1.24",
+        "guid-typescript": "^1.0.9",
+        "onnxruntime-common": "1.22.0-dev.20250409-89f8206ba4"
+      },
+      "tarballUrl": "https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-1.22.0-dev.20250409-89f8206ba4.tgz",
+      "integrity": "sha512-0uS76OPgH0hWCPrFKlL8kYVV7ckM7t/36HfbgoFw6Nd0CZVVbQC4PkrR8mBX8LtNUFZO25IQBqV2Hx2ho3FlbQ==",
+      "downloadedBytes": 20239097,
+      "unpackedBytes": 93349344,
+      "members": [
+        {
+          "path": "package/dist/ort.all.min.js",
+          "bytes": 789395,
+          "gzipBytes": 184998,
+          "sha256": "40a95fcff8ca3055c77dbdca1f3666cc8f8a54de4083c1059fbcf0151514884a"
+        },
+        {
+          "path": "package/dist/ort.min.js",
+          "bytes": 355131,
+          "gzipBytes": 94271,
+          "sha256": "b1a4d2033d4413a7396c5f694ff01c277900d61b2cfab01599ac4d1c35b30858"
+        },
+        {
+          "path": "package/dist/ort.node.min.js",
+          "bytes": 25274,
+          "gzipBytes": 8884,
+          "sha256": "5256136b4a227ebe365291918f1676a0e1e1ab5468dd610b5eda6be025d0bd9a"
+        },
+        {
+          "path": "package/dist/ort.wasm.min.js",
+          "bytes": 48076,
+          "gzipBytes": 15544,
+          "sha256": "d046bf60ea32a4d929c6087f6863d82821c3bb4dbc078ec9a5833fd684b9a6b6"
+        },
+        {
+          "path": "package/dist/ort.webgl.min.js",
+          "bytes": 454171,
+          "gzipBytes": 97459,
+          "sha256": "95bc28dacdb9801d8f3d6b7887bc11ecb752e42b4b0c3f35e759e4d713a91468"
+        },
+        {
+          "path": "package/dist/ort.webgpu.min.js",
+          "bytes": 355138,
+          "gzipBytes": 94274,
+          "sha256": "ec3dd11b0a8027253d83427ce688117d35458465c2d014571d4765e1e2bb6a16"
+        },
+        {
+          "path": "package/dist/ort-wasm-simd-threaded.jsep.mjs",
+          "bytes": 44484,
+          "gzipBytes": 15390,
+          "sha256": "08fb86ec433c78bfb032c5d84a68b8e8e5a8d81268fa39e24314179a5767a5b9"
+        },
+        {
+          "path": "package/dist/ort-wasm-simd-threaded.mjs",
+          "bytes": 20856,
+          "gzipBytes": 8427,
+          "sha256": "43c25054b6b9ac000f786c65545ff83a45f871e0e310e8c2f4d48a363bb66db4"
+        },
+        {
+          "path": "package/dist/ort.all.bundle.min.mjs",
+          "bytes": 832611,
+          "gzipBytes": 199652,
+          "sha256": "beeb67c01ba936aadd43250df2457a89ba2500ad0dbdbfa09f9ddcfc33439697"
+        },
+        {
+          "path": "package/dist/ort.all.min.mjs",
+          "bytes": 789326,
+          "gzipBytes": 185001,
+          "sha256": "66a5c63b53b8f5a31702076983c682604dfef7ddabbb6b928337e29850854ba9"
+        },
+        {
+          "path": "package/dist/ort.all.mjs",
+          "bytes": 5655719,
+          "gzipBytes": 1101857,
+          "sha256": "d80a4e7c14bb7afcb7788bed499f5cef13dc0b335d49462e1b0616e503092a3a"
+        },
+        {
+          "path": "package/dist/ort.bundle.min.mjs",
+          "bytes": 398170,
+          "gzipBytes": 108890,
+          "sha256": "96e80b413dda387fbcefbd2bb0015f6708323767cc0dd5383260106582e77781"
+        },
+        {
+          "path": "package/dist/ort.min.mjs",
+          "bytes": 355057,
+          "gzipBytes": 94254,
+          "sha256": "70869c209b39097fe577ac4c1ae60cbfdf1574747b2d644423c16ffd9af7f2b5"
+        },
+        {
+          "path": "package/dist/ort.mjs",
+          "bytes": 2528294,
+          "gzipBytes": 546351,
+          "sha256": "9127f0db451488f1adec5d66be7b269befe68808d2a071b7ec9bd00b78b7d800"
+        },
+        {
+          "path": "package/dist/ort.node.min.mjs",
+          "bytes": 25219,
+          "gzipBytes": 8916,
+          "sha256": "59cc79101d678aaf085d52f97d37195b1ed7a4d3bb6177d53038c5be12251a83"
+        },
+        {
+          "path": "package/dist/ort.wasm.bundle.min.mjs",
+          "bytes": 48022,
+          "gzipBytes": 15580,
+          "sha256": "ce886d4ba4d4612eb288715bc23794dd3fadbc9c83e27d2d984df4d1ba149524"
+        },
+        {
+          "path": "package/dist/ort.wasm.min.mjs",
+          "bytes": 48008,
+          "gzipBytes": 15575,
+          "sha256": "0cb5ac5be2c414d5b9e361f857108630c6d6e24a5ab9be3cf5f761de55289e94"
+        },
+        {
+          "path": "package/dist/ort.wasm.mjs",
+          "bytes": 545806,
+          "gzipBytes": 129328,
+          "sha256": "98fe788f08034b3417c1fa94493a9dd0089485e53fa7010b13f7a137977549fa"
+        },
+        {
+          "path": "package/dist/ort.webgl.min.mjs",
+          "bytes": 454034,
+          "gzipBytes": 97390,
+          "sha256": "04a111069b2b60a74d4eb87cf21a2744ac1cb41c14bc9bec0e5966244cd84f6c"
+        },
+        {
+          "path": "package/dist/ort.webgl.mjs",
+          "bytes": 3362598,
+          "gzipBytes": 611071,
+          "sha256": "abe1638a6953967c85a9ddcfc3449fab483ed3c3cff6c82e0f5c400387a07a2b"
+        },
+        {
+          "path": "package/dist/ort.webgpu.bundle.min.mjs",
+          "bytes": 398191,
+          "gzipBytes": 108893,
+          "sha256": "315910a5b1c94f1394d7d7d12f753c16085428b636bb6c8d0e3867c66a5acdf0"
+        },
+        {
+          "path": "package/dist/ort.webgpu.min.mjs",
+          "bytes": 355071,
+          "gzipBytes": 94262,
+          "sha256": "0e8b345c2fa92adac1a309e0d01fb8ba3aaf1e42140734bbed6f4ffad0bfcfd6"
+        },
+        {
+          "path": "package/dist/ort.webgpu.mjs",
+          "bytes": 2528301,
+          "gzipBytes": 546184,
+          "sha256": "5164df5b085eb55c77dcf8feba8f6c66e823c3cd693fc66e0f2bb2386b69a705"
+        },
+        {
+          "path": "package/dist/ort-wasm-simd-threaded.jsep.wasm",
+          "bytes": 21596019,
+          "gzipBytes": 5046898,
+          "sha256": "c46655e8a94afc45338d4cb2b840475f88e5012d524509916e505079c00bfa39"
+        },
+        {
+          "path": "package/dist/ort-wasm-simd-threaded.wasm",
+          "bytes": 11133407,
+          "gzipBytes": 2863736,
+          "sha256": "f061472c6e77d6d50d079aacdc0ff9b63fee287ddd2cbf46cf62438d3891de2b"
+        }
+      ]
+    }
+  ],
+  "model": {
+    "id": "Xenova/whisper-tiny",
+    "revision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+    "metadataUrl": "https://huggingface.co/api/models/Xenova/whisper-tiny/revision/5332fcc35e32a33b86612b9a57a89be7906102b1?blobs=true",
+    "declaredLicense": "apache-2.0",
+    "files": [
+      {
+        "path": "config.json",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/config.json",
+        "bytes": 2248,
+        "sha256": "2b2e4e519084e0ea028b19b153f95202735a971870d6844aa26e559edd292e94",
+        "upstreamBlobId": "dea913aa8ec7d53db029e97c97a766d534c8da04"
+      },
+      {
+        "path": "generation_config.json",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/generation_config.json",
+        "bytes": 3716,
+        "sha256": "68ac791fcb4999461a313472125042934656240ba1cba7d1c2627fcbb19ac24c",
+        "upstreamBlobId": "72e54ad7340e05287aa731f9d8556b5368be3fe0"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/preprocessor_config.json",
+        "bytes": 339,
+        "sha256": "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d",
+        "upstreamBlobId": "91876762a536a746d268353c5cba57286e76b058"
+      },
+      {
+        "path": "tokenizer.json",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/tokenizer.json",
+        "bytes": 2480466,
+        "sha256": "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566",
+        "upstreamBlobId": "1e95340ff836fad1b5932e800fb7b8c5e6d78a74"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/tokenizer_config.json",
+        "bytes": 282683,
+        "sha256": "2a4c4281cf9f51ac6ccc406fdc711a087afe6530f671fa7b80953edc498275ce",
+        "upstreamBlobId": "d13b786c04765fb1a06492b53587752cd67665ea"
+      },
+      {
+        "path": "onnx/encoder_model_quantized.onnx",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/onnx/encoder_model_quantized.onnx",
+        "bytes": 10124910,
+        "sha256": "fd9d995b9dcb0520f0dbf6cf68651af639fc385f594d9d876e69ca2802dc438e",
+        "upstreamBlobId": "bc85a2a21d7fd466db9ac0de3a4cde551f893511"
+      },
+      {
+        "path": "onnx/decoder_model_merged_quantized.onnx",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/onnx/decoder_model_merged_quantized.onnx",
+        "bytes": 30727765,
+        "sha256": "6c0c125986b007d2e3734bec84c18bda0152071b90b87fadac6d7764499927a0",
+        "upstreamBlobId": "821b00e81a7e5525da5cadaf0d40b0efd2bb5f9f"
+      }
+    ],
+    "totalBytes": 43622127
+  }
+}

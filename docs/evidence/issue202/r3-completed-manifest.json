@@ -1,0 +1,49 @@
+{
+  "kind": "issue202-r3-completion-correction-preparation",
+  "rawEvidenceCommit": "dbd7b70c8cd5fdaf3e67a3862f2a93cc4d7acda3",
+  "executionStatus": "not-run-awaiting-fresh-reviewed-slot",
+  "maximumJobs": 20,
+  "productionChanges": 0,
+  "files": [
+    {
+      "path": "r3-gpu-completed.mjs",
+      "sha256": "f2725e477afa7e8b0469e73edc8962e8eb50bf1a6c6e3cd8d9fa459bcfbdd9a1"
+    },
+    {
+      "path": "r3-completion.test.mjs",
+      "sha256": "7b2b4a3eb651175bd849136bee6838d47180de9e3981a55f628f7d48bcbc20d5"
+    },
+    {
+      "path": "r3-worker-completed.mjs",
+      "sha256": "e908993cec827357d9523af81275ab9d3feeeb551bd14e5a24d3b6487411731a"
+    },
+    {
+      "path": "r3-controller-completed.mjs",
+      "sha256": "9b02d99fc890f58694b8d809f6c46fe370ab274aac600c29ad3a5cd9a0f8ebe2"
+    },
+    {
+      "path": "run-r3-completed.mjs",
+      "sha256": "561a0621ca819a6f84750435c37691fa66df675ef79ee883ab1c85524939cf9c"
+    },
+    {
+      "path": "r3-check-completed.mjs",
+      "sha256": "0a575cbde252265eeef7d0596fda39dce8a6ab321e314b85005338e11b2c9458"
+    },
+    {
+      "path": "r3-completed-preparation-1.json",
+      "sha256": "da7a82af52c5c8bb43dd946602feca02c3e1ac0afbee09ce04e42a014d6b206b"
+    },
+    {
+      "path": "r3-completed-protocol.md",
+      "sha256": "11e58abb09c332c74c4eb469f08fed520cbd2651bf3d9e3ddbdd542fa9286e59"
+    },
+    {
+      "path": "r3-completion-source-audit.json",
+      "sha256": "1229c99918acbbc69198a103d58fe3ca92608fc46dd544f44de71b52a3cd36d7"
+    },
+    {
+      "path": "r3-harness-manifest.json",
+      "sha256": "076df31c4d0f376c1c37a18f86a025eddf4b3f31bf1eff65feafc26ab205faea"
+    }
+  ]
+}

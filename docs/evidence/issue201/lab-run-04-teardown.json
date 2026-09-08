@@ -1,0 +1,12 @@
+{
+  "recordedAt": "2026-09-08T11:23:10.829933+00:00",
+  "sourceCommit": "d1ea1245075c7ac1bbaedaba8f7368989021d742",
+  "profile": "profile-1788866529270",
+  "filesBeforeRemoval": 109,
+  "regularFileBytesBeforeRemoval": 138077022,
+  "browserAlreadyClosed": true,
+  "ownedProcessesAbsent": true,
+  "port5201ListenerAbsent": true,
+  "cleanupMode": "Delete only the runner-created private browser profile after forced browser shutdown. This is filesystem teardown, not cooperative application model-cache removal.",
+  "profileAbsent": true
+}
