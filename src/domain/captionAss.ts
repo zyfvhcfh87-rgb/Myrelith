@@ -1,5 +1,5 @@
-/** Bounded ASS v4+ semantic import; unsupported appearance always needs review. */
-import { captionAssRangeToFrames } from './captionAssTime'
+/** Bounded ASS v4+ semantic interchange; unsupported appearance always needs review. */
+import { captionAssRangeToFrames, planCaptionAssTimeExport } from './captionAssTime'
 import { CaptionFileError, MAX_CAPTION_FILE_CHARACTERS } from './captionFiles'
 import { CAPTION_LIMITS, captionTracksValidationError, compareCaptionItems, normalizeCaptionText } from './captions'
 import { CAPTION_STYLE_LIMITS, inspectCaptionStyle, type CaptionStyleDescriptor, type CaptionStyleV1 } from './captionStyle'
@@ -335,4 +335,146 @@ function applyPrefixTag(token: string, params: CaptionStyleV1, base: CaptionStyl
       params[key] = rgb.slice(0, 7) + params[key].slice(7)
     }
   } else report.add('loss', 'unsupported-override', line, `${token} is omitted`)
+}
+
+export type CaptionAssExport =
+  | { readonly kind: 'ready' | 'review'; readonly text: string; readonly report: CaptionAssReport }
+  | { readonly kind: 'rejected'; readonly report: CaptionAssReport }
+
+const FULL_STYLE_FIELDS = { fontFamily: true, fontSizePermille: true, color: true,
+  outlineColor: true, backgroundColor: true, bold: true, italic: true,
+  backgroundEnabled: true, outlineEnabled: true, outlinePermille: true,
+  align: true, position: true, marginXPermille: true, marginYPermille: true,
+} satisfies Record<keyof CaptionStyleV1, true>
+const STYLE_KEYS = Object.keys(FULL_STYLE_FIELDS) as (keyof CaptionStyleV1)[]
+
+function exportStyle(value: CaptionStyleDescriptor): Readonly<Partial<CaptionStyleV1>> {
+  const inspected = inspectCaptionStyle(value)
+  if (inspected.kind !== 'supported') reject(inspected.reason, null, 'unsupported-feature')
+  return inspected.params
+}
+function fullExportStyle(value: Readonly<Partial<CaptionStyleV1>>): CaptionStyleV1 {
+  if (STYLE_KEYS.some((key) => value[key] === undefined)) reject('ASS export requires a fully resolved style; resolve the preset first', null, 'unsupported-feature')
+  return value as CaptionStyleV1
+}
+function assColor(value: string): string {
+  const alpha = (255 - Number.parseInt(value.slice(7, 9), 16)).toString(16).padStart(2, '0')
+  return `&H${alpha}${value.slice(5, 7)}${value.slice(3, 5)}${value.slice(1, 3)}`.toUpperCase()
+}
+function trimDecimal(value: string): string {
+  return value.includes('.') ? value.replace(/0+$/u, '').replace(/\.$/u, '') : value
+}
+/** Prefer a short decimal which survives the importer's exact normalization. */
+function assPixels(value: number, resolution: number): string {
+  const pixels = value * resolution / 1_000
+  for (let precision = 0; precision <= 15; precision++) {
+    const candidate = pixels.toFixed(precision)
+    if (Number(candidate) * 1_000 / resolution === value) return trimDecimal(candidate)
+  }
+  // Any unavoidable change is detected by the full semantic reimport below.
+  return trimDecimal(pixels.toFixed(15))
+}
+function assMargin(value: number, resolution: number): number {
+  return Math.min(Math.floor(resolution / 4), Math.round(value * resolution / 1_000))
+}
+function escapableAssText(text: string): boolean {
+  if (/[{}\\\uD800-\uDFFF]/u.test(text)) return false
+  for (const character of text) {
+    const code = character.codePointAt(0)!
+    if ((code < 32 && code !== 10) || code === 127) return false
+  }
+  return true
+}
+function exportStyleFields(style: CaptionStyleV1, width: number, height: number): string {
+  const align = ['left', 'center', 'right'].indexOf(style.align) + 1
+    + 3 * ['bottom', 'middle', 'top'].indexOf(style.position)
+  const marginX = assMargin(style.marginXPermille, width)
+  return [style.fontFamily, assPixels(style.fontSizePermille, height), assColor(style.color),
+    assColor(style.color), assColor(style.outlineColor), '&HFF000000',
+    style.bold ? -1 : 0, style.italic ? -1 : 0, 0, 0, 100, 100, 0, 0, 1,
+    style.outlineEnabled ? assPixels(style.outlinePermille, height) : '0', 0, align,
+    marginX, marginX, assMargin(style.marginYPermille, height), 1].join(',')
+}
+
+/**
+ * Propose a bounded file for the supported no-shadow profile. `review` contains
+ * losses and is never authorization to download. App preset/provenance policy
+ * remains the caller's responsibility; this pure function owns no document.
+ */
+export function planCaptionAssExport(proposal: CaptionAssProposal, rate: FrameRate): CaptionAssExport {
+  const report = new Report()
+  try {
+    if (proposal.stylePreset !== 'minimal') reject('Resolve legacy shadow/box preset appearance before exporting the supported ASS profile', null, 'unsupported-feature')
+    const width = positiveResolution(String(proposal.scriptWidth), null)
+    const height = positiveResolution(String(proposal.scriptHeight), null)
+    if (proposal.items.length > CAPTION_LIMITS.maxItemsPerTrack) reject('ASS export exceeds its cue count budget', null, 'resource-limit')
+    const items = [...proposal.items].sort(compareCaptionItems)
+    if (!items.length) reject('ASS export requires at least one cue', null)
+    // Temporary validation identity must not collide with an authored cue id.
+    const ids = new Set(items.map((item) => item.id))
+    let validationId = 'ass-export-validation'
+    for (let index = 0; ids.has(validationId); index++) validationId = `ass-export-validation-${index}`
+    const validation = captionTracksValidationError([{ id: validationId, name: 'ASS captions',
+      language: 'und', role: 'captions', stylePreset: 'minimal', hidden: false, items }])
+    if (validation) reject(validation, null)
+    const base = fullExportStyle(exportStyle(proposal.style))
+    let intentBytes = utf8ByteLength(JSON.stringify(proposal.style))
+    const baseFields = exportStyleFields(base, width, height)
+    const styleRows = new Set([baseFields])
+    const originalStyles: CaptionStyleV1[] = []
+    const events = items.map((item) => {
+      const override = item.style ? exportStyle(item.style) : {}
+      if (item.style) intentBytes += utf8ByteLength(JSON.stringify(item.style))
+      if (intentBytes > CAPTION_STYLE_LIMITS.maxProjectIntentBytes) reject('ASS style intent exceeds the project payload budget', null, 'resource-limit')
+      const style = { ...base, ...override }
+      originalStyles.push(style)
+      const fields = exportStyleFields(style, width, height)
+      styleRows.add(fields)
+      if (styleRows.size > CAPTION_ASS_LIMITS.maxStyles) reject('ASS export exceeds 256 deduplicated styles', null, 'resource-limit')
+      if (!escapableAssText(item.text)) reject(`Unescapable braces, backslash, control text or invalid Unicode in cue ${item.id}`, null, 'unsupported-feature')
+      const timing = planCaptionAssTimeExport(item.range, rate)
+      if (timing.kind === 'unrepresentable') reject(`Cue ${item.id}: ${timing.reason}`, null)
+      if (timing.kind === 'coverage-expansion') report.add('loss', 'timing-coverage', null,
+        `frames ${item.range.startFrame}+${item.range.durationFrames} become ${timing.importedRange.startFrame}+${timing.importedRange.durationFrames} (Cue ${item.id})`)
+      return { fields, timing, text: item.text.replaceAll('\n', '\\N') }
+    })
+    const names = new Map([[baseFields, 'Default']])
+    const sortedStyles = [...styleRows].filter((row) => row !== baseFields).sort()
+    sortedStyles.forEach((row, index) => names.set(row, `Style${String(index + 1).padStart(3, '0')}`))
+    const lines: string[] = []
+    let characters = 0; let bytes = 0
+    const append = (line: string): void => {
+      characters += line.length + 1; bytes += utf8ByteLength(line) + 1
+      if (characters > MAX_CAPTION_FILE_CHARACTERS || bytes > CAPTION_ASS_LIMITS.maxFileBytes) reject('ASS export exceeds the caption file budget', null, 'resource-limit')
+      lines.push(line)
+    }
+    for (const line of ['[Script Info]', 'ScriptType: v4.00+', `PlayResX: ${width}`, `PlayResY: ${height}`,
+      'WrapStyle: 1', 'ScaledBorderAndShadow: yes', 'YCbCr Matrix: None', '[V4+ Styles]',
+      `Format: ${STYLE_COLUMNS.join(',')}`, `Style: Default,${baseFields}`]) append(line)
+    for (const fields of sortedStyles) append(`Style: ${names.get(fields)!},${fields}`)
+    append('[Events]'); append(`Format: ${EVENT_COLUMNS.join(',')}`)
+    for (const event of events) append(`Dialogue: 0,${event.timing.start},${event.timing.end},${names.get(event.fields)!},,0,0,0,,${event.text}`)
+    const text = lines.join('\n') + '\n'
+    // Synthetic ids preserve sorted event order; ASS has no authored cue ids.
+    const imported = parseCaptionAss(text, rate, (index) => `ass-cue-${String(index).padStart(8, '0')}`)
+    if (imported.kind !== 'ready') reject(`Exported ASS failed supported-profile reimport: ${imported.report.details[0]?.detail ?? imported.kind}`, null, 'unsupported-feature')
+    const importedBase = fullExportStyle(exportStyle(imported.proposal.style))
+    const checkStyle = (expected: CaptionStyleV1, actual: CaptionStyleV1, label: string): void => {
+      for (const key of STYLE_KEYS) if (expected[key] !== actual[key]) report.add('loss', 'style-representation', null,
+        `${key}: ${expected[key]} becomes ${actual[key]} (${label})`)
+    }
+    checkStyle(base, importedBase, 'Track')
+    for (let index = 0; index < items.length; index++) {
+      const item = imported.proposal.items[index]!
+      const event = events[index]!
+      if (item.text !== items[index]!.text || item.range.startFrame !== event.timing.importedRange.startFrame
+        || item.range.durationFrames !== event.timing.importedRange.durationFrames) reject('ASS export did not preserve the proposed text and frame order on reimport', null)
+      checkStyle(originalStyles[index]!, { ...importedBase, ...(item.style ? exportStyle(item.style) : {}) }, `Cue ${items[index]!.id}`)
+    }
+    return { kind: report.counts.loss ? 'review' : 'ready', text, report: report.finish() }
+  } catch (error) {
+    if (!(error instanceof CaptionFileError)) throw error
+    report.add('error', error.code, error.line, error.message)
+    return { kind: 'rejected', report: report.finish() }
+  }
 }
