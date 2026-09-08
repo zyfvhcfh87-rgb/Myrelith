@@ -1,6 +1,6 @@
 .title-inspector { padding: 12px; border-top: 1px solid var(--border, #353943); font-size: 12px; }
-/* Native focus scrolling must leave room for the label and outline around a checkbox. */
-.area-inspector:has(.title-inspector) { scroll-padding-block: 0.5rem; }
+/* Native focus scrolling must expose labels above fields and outlines below checkboxes. */
+.area-inspector:has(.title-inspector) { scroll-padding-block: 2rem 0.5rem; }
 .title-inspector h3, .title-dialog h3 { margin: 8px 0; }
 .title-inspector p, .title-dialog p { line-height: 1.45; overflow-wrap: anywhere; }
 .title-inspector fieldset { border: 0; padding: 0; min-width: 0; display: grid; gap: 10px; }
