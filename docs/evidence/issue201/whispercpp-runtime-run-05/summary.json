@@ -1,0 +1,141 @@
+{
+  "release": {
+    "checkedAt": "2026-09-08T22:18:02.233859+00:00",
+    "pids": [
+      62449,
+      62478,
+      62479,
+      62480,
+      62481
+    ],
+    "remaining": [],
+    "port5201ConnectResult": 61,
+    "profileAbsent": true,
+    "ownedAwakeHelper": null
+  },
+  "acceptance": {
+    "automatedStatus": "failed-incomplete",
+    "expectedCases": 23,
+    "completedCases": 13,
+    "missing": [
+      "corrupt-audio-rejection",
+      "cancel-model-load",
+      "cancel-prepare",
+      "cancel-infer",
+      "project-replacement",
+      "300-second-bounded-workload",
+      "offline-loaded-app-and-fresh-worker",
+      "offline-page-reload",
+      "offline-persistent-browser-reopen",
+      "remove-model-and-offline-no-model"
+    ],
+    "failed": [
+      "one-second-speech-window"
+    ],
+    "unexpected": [],
+    "duplicateNames": false,
+    "qualification": "Automatic laboratory checks only; no production/model enablement verdict."
+  },
+  "memory": {
+    "baseline": 272564224,
+    "peak": 1003798528,
+    "delta": 731234304,
+    "samples": 127,
+    "maxGap": 110,
+    "failures": [],
+    "maximumActiveEpochGapMs": 145
+  },
+  "cases": [
+    {
+      "name": "no-model-and-lazy-runtime",
+      "passed": true,
+      "elapsedMs": 37,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-acquisition",
+      "passed": true,
+      "elapsedMs": 110,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "verified-model-install",
+      "passed": true,
+      "elapsedMs": 66,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-cache-write-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 388,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-cache-commit-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 389,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "corrupt-cache-rejected-before-inference",
+      "passed": true,
+      "elapsedMs": 121,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "selected-local-files-install",
+      "passed": true,
+      "elapsedMs": 89,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "capacity-rejection-preserves-model",
+      "passed": true,
+      "elapsedMs": 67,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "transcribe-english-8",
+      "passed": true,
+      "elapsedMs": 2781,
+      "wordErrorRate": 0.058823529411764705,
+      "error": null
+    },
+    {
+      "name": "transcribe-english-9",
+      "passed": true,
+      "elapsedMs": 2786,
+      "wordErrorRate": 0.058823529411764705,
+      "error": null
+    },
+    {
+      "name": "transcribe-french-10",
+      "passed": true,
+      "elapsedMs": 2698,
+      "wordErrorRate": 0.4,
+      "error": null
+    },
+    {
+      "name": "transcribe-silence-11",
+      "passed": true,
+      "elapsedMs": 125,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "one-second-speech-window",
+      "passed": false,
+      "elapsedMs": 2648,
+      "wordErrorRate": null,
+      "error": "page.evaluate: Error: Core inference--944; cooperativeZero=true\n    at worker.onmessage (http://127.0.0.1:5201/lab-client.mjs:236:23)"
+    }
+  ]
+}
