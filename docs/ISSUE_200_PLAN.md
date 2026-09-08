@@ -1,6 +1,7 @@
 # Issue #200 — reusable titles and animated text
 
-Status: **Amended G0 approved; G1a pure foundation complete and awaiting review**.
+Status: **G1a approved; pure budget review corrections awaiting review;
+G1b waits for the approved schema22 foundation**.
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
 issue last updated 2026-08-25T21:36:47Z. [Issue #200](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/200).
@@ -11,9 +12,11 @@ animation foundation as timeline schema 22, then this title-owner change as 23.
 Baseline is timeline schema 21 / project format 8. The assignments are reviewed
 coordination decisions. G1a adds the independent pure title module and tests;
 Clip, animation ownership, migrations, store, renderer and UI remain unchanged.
-See [G1a API and validation evidence](evidence/issue200/pure-foundation.md).
-Product acceptance remains open; stop before G1b until the shared foundation
-and this API are approved.
+See [G1a API and validation evidence](evidence/issue200/pure-foundation.md) and
+[pure budget completion](evidence/issue200/pure-budgets.md). The accepted combined
+foundation `b0e43ed449719fe3e424a46cd97d384b6a11cf1a` was fast-forwarded into this
+branch under the orchestrator's instruction. Product acceptance remains open;
+stop before G1b until the shared schema22 foundation is approved.
 
 ## Proposed outcome and boundaries
 
@@ -430,7 +433,7 @@ changes instances. Library mutations are independent of project history.
 | 4,096 expanded visible title elements/frame | Pure composition-cost preflight includes nested instance multiplicity before layout; this accommodates the existing 4,096-leaf legacy ceiling. No per-frame graph expansion stored in history. |
 | Text geometry/style ranges in the property table; static padding 0…1,024, positive inner box; static anchor/crop/flip unchanged | Checked before layout, including all key envelopes. Hex colors only; shapes are bounded primitives. No canvas sized from an element box. |
 | 512 rendered lines/element; 64 layout entries/context and at most 8 MiB conservative retained string storage/context | Bounded derived cache, clear on owner/font replacement. Reuse the existing project-sized leg/group surfaces; zero per-element canvases. |
-| 64 MiB conservative retained expanded-title payload/track data | Count new title data in current project, past/future snapshots and app element/title/key clipboards by immutable owned references, including dormant sequences. Validate before clearing redo. Reject growth with a reason; never prune history silently. Compact legacy text retains its existing file/text/history bounds rather than acquiring a new upgrade-only quota. Existing 100-history-entry cap remains. |
+| 64 MiB conservative retained expanded-title payload/track data | Count new title data in current project, past/future snapshots and app element/title/key clipboards by immutable owned references, including dormant sequences. Validate before clearing redo. Reject growth with a reason; never prune history silently. Compact legacy text retains its existing file/text/history bounds rather than acquiring a new upgrade-only quota. Existing cap of 100 snapshots in each history branch remains. |
 | 100 local user templates; 1 MiB/template; 8 MiB/library | Includes raw unsupported siblings. Capture and use apply both library and destination bounds; maximum additional retained library allowance is separate and explicit. |
 | Opaque future title: depth 8, 4,096 entries, same aggregate string/byte caps | Bounded non-executing JSON only; supported versions validate exact keys. No getter/prototype traversal of untrusted runtime objects. |
 
@@ -441,7 +444,7 @@ unchanged elements/tracks are shared; gestures keep one disposable draft and one
 commit. The supported compact legacy representation avoids mandatory envelope
 overhead; only an explicit upgrade can introduce it, after the exact size
 preflight above. Existing legacy history remains governed by the unchanged
-100-snapshot/file/text bounds. Do not present the expanded-title quota as a total
+100 snapshots per history branch and existing file/text bounds. Do not present the expanded-title quota as a total
 browser-memory bound, or use it to force an old clip into the new representation.
 
 ## Implementation gates and ownership
@@ -460,9 +463,14 @@ integration, remote publication and issue closure.
    adapters with focused tests. No Clip, store, migration, renderer or UI edits.
    Commit this module for orchestrator review and sharing with #199. Its shared
    animation foundation then lands as timeline 22.
-   **Implemented for review:** bounded title/element readers, explicit font
+   **Approved at `381836f`:** bounded title/element readers, explicit font
    resolution and the 13 scalar spec/read/atomic-apply adapters. Focused tests,
    architecture checks, build and lint pass; see the linked G1a evidence.
+   Authorized independent completion adds title-plus-track payload sizing and
+   reference-aware retained-data admission, with exact 1 MiB/64 MiB fixtures.
+   Review corrections preserve 100 snapshots in each history branch and reuse
+   nested immutable subtree summaries, with deterministic traversal-count proof.
+   This is pure foundation work, not approval to enter a new product phase.
 3. **G1b — title ownership, compatibility and upgrade.** After the shared
    foundation is approved, add title-owner schema 23 with retained `Clip.text`,
    explicit upgrade, serialization/clone/source/media-owner checks, identity

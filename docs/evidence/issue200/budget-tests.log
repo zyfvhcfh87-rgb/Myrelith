@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/domain/titleBudgets.test.ts src/domain/titleElements.test.ts src/domain/documentMemory.test.ts src/test/architecture.test.ts --maxWorkers=2
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue200
+
+
+ Test Files  4 passed (4)
+      Tests  39 passed (39)
+   Start at  11:36:24
+   Duration  1.08s (transform 188ms, setup 89ms, import 829ms, tests 192ms, environment 799ms)
+
+✔ cold samples each use and close a fresh BrowserContext (0.664583ms)
+✔ source identity rejects end-of-run drift (0.169083ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (218.757375ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (137.734917ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.329041ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.775541ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.119584ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.265417ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.228458ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.167166ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.337125ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.693334ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.973083ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.111083ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.149208ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.182291ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.122083ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 543.732709
