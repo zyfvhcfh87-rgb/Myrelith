@@ -14,10 +14,10 @@ export const TITLE_BUDGET_LIMITS = Object.freeze({
 
 /** Structural projection only. The shared animation authority validates track semantics. */
 export interface TitleTrackBudgetData { readonly keyframes: readonly unknown[] }
-export interface TitleBudgetOwner {
-  readonly title: TitleDefinition
-  readonly titleTracks?: readonly TitleTrackBudgetData[]
-}
+export type TitleBudgetOwner =
+  | { readonly title: TitleDefinition; readonly titleTracks?: readonly TitleTrackBudgetData[] }
+  // Schema 22 can preserve element lanes before schema 23 supplies their owner.
+  | { readonly title?: undefined; readonly titleTracks: readonly TitleTrackBudgetData[] }
 export interface TitlePayloadBudgetUsage {
   readonly serializedUtf8Bytes: number
   readonly tracks: number
@@ -159,7 +159,7 @@ function payloadUsage(owner: TitleBudgetOwner, accounting: Accounting = { subtre
     if (!Array.isArray(keys) || keys.length > MAX_KEYFRAMES_PER_TRACK) fail('Title animation track exceeds 1,024 keys or has no key array.')
     keyframes += keys.length
   }
-  const titleBytes = jsonBytes(owner.title, accounting)
+  const titleBytes = owner.title === undefined ? 0 : jsonBytes(owner.title, accounting)
   // Absent and empty collections both cost zero; this helper does not add wire fields.
   const trackBytes = tracks.length === 0 ? 0 : jsonBytes(tracks, accounting)
   const serializedUtf8Bytes = titleBytes + trackBytes

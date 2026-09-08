@@ -128,7 +128,7 @@ export function applyVideoStabilizationWithResult(
     || VIDEO_STABILIZATION_PROPERTIES.some((property) => (
       plan.tracks.filter((track) => track.property === property).length !== 1
     ))
-    || plan.tracks.some((track) => !owned.has(track.property))
+    || plan.tracks.some((track) => !owned.has(track.property) || (track.propertyVersion ?? 1) !== 1)
   ) {
     return rejectClipFramingOperation(doc, op, 'stabilization plan has an invalid track set')
   }
@@ -184,7 +184,7 @@ export function applyMotionTrackingWithResult(
   if (
     plan.tracks.length !== expected.length
     || expected.some((property) => plan.tracks.filter((track) => track.property === property).length !== 1)
-    || plan.tracks.some((track) => !owned.has(track.property))
+    || plan.tracks.some((track) => !owned.has(track.property) || (track.propertyVersion ?? 1) !== 1)
   ) return rejectClipFramingOperation(doc, op, 'motion-tracking plan has an invalid track set')
   const current = clipAnimation(location.loc.clip)
   if (current.tracks.some((track) => owned.has(track.property)) && !replaceExisting) {

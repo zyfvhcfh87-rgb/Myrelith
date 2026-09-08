@@ -79,7 +79,7 @@ describe('nested sequence project-file seam', () => {
 
     const parsed = parseProjectFile(JSON.stringify(value))
 
-    expect(parsed.sequences[0].schemaVersion).toBe(21)
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(parsed.sequences[0].tracks[0].sequenceInstances).toEqual([])
     expect(parsed.sequences[0].tracks[0].multicamInstances).toEqual([])
   })

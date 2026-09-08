@@ -1,3 +1,4 @@
+import { projectTitleAnimationError } from './animationProjectBudget'
 import { projectCropAnimationError } from './projectCropAnimation'
 import { clipAnimation, clipAnimationKeyframeCount } from './clipAnimation'
 import { MASK_PATH_ANIMATION_LIMITS } from './maskPathAnimation'
@@ -447,6 +448,7 @@ export function sequenceProjectWithinEditBudget(
     && counts.pathValueCharacters <= MASK_PATH_ANIMATION_LIMITS.projectValueCharacters
     && counts.keyframes <= SEQUENCE_PROJECT_LIMITS.maxTotalKeyframes
     && projectCropAnimationError(project) === null
+    && projectTitleAnimationError(project) === null
     && counts.speedPoints <= SEQUENCE_PROJECT_LIMITS.maxTotalSpeedPoints
     && counts.textCharacters <= SEQUENCE_PROJECT_LIMITS.maxTotalTextCharacters
 }

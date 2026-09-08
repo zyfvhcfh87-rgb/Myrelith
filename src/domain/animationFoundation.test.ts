@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { foundationProject, pathTrack, scalarKey, ATTRIBUTE_ASSET_DESCRIPTOR, animationCatalog, PLUGIN_ANIMATION_EFFECT_TYPE } from '../test/animationFoundationFixtures'
-import { clipAnimationKeyframeCount, clipAnimationValidationError, cloneClipAnimation, remapEffectAnimationIds, resolveClipAnimationAtFrame, shiftClipAnimation, upsertAnimationKeyframe } from './clipAnimation'
+import { clipAnimationKeyframeCount, clipAnimationKindError, clipAnimationValidationError, cloneClipAnimation, remapEffectAnimationIds, resolveClipAnimationAtFrame, shiftClipAnimation, upsertAnimationKeyframe } from './clipAnimation'
 import { animationWithSourceTimeIntent, defaultSourceTimeMap, reanchorProceduralAnimation, retimeClipAnimation } from './sourceTimeMap'
 import { createProjectFileSnapshot, parseProjectFile, serializeProjectFile } from './projectFile'
 import { createMaskEffect } from './effectStack'
@@ -63,6 +63,10 @@ describe('schema22 canonical animation foundation', () => {
     expect(upsertAnimationKeyframe(clip.animation, 'opacity', scalarKey(0, 0.4))).toBeNull()
     expect(clipAnimationValidationError({ ...clip.animation, tracks: [...clip.animation.tracks, { property: 'opacity', keyframes: [scalarKey(0, 0.5)] }] })).toMatch(/duplicate/)
     expect(resolveScalarAnimationProperty({ kind: 'clip', clip, trackKind: 'video', property: 'opacity', propertyVersion: 2 }).status).toBe('unavailable')
+    const futureGeometry = { tracks: [{ property: 'position-x', propertyVersion: 2, keyframes: [scalarKey(0, 25)] }] }
+    expect(clipAnimationKindError('audio', false, futureGeometry)).toBeNull()
+    expect(clipAnimationKindError('video', true, futureGeometry)).toBeNull()
+    expect(clipAnimationKindError('audio', false, { tracks: [{ ...futureGeometry.tracks[0], propertyVersion: 1 }] })).toMatch(/volume and balance/)
   })
 
   test('uses semantic target tuples even when ids contain separators, and rejects scalar/path competition', () => {

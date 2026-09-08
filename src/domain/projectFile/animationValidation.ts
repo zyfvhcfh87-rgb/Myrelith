@@ -1,4 +1,5 @@
 /** One portable animation boundary for clips and item-local adjustments. */
+import { titlePayloadBudget } from '../titleBudgets'
 import type { ClipAnimation, ClipAnimationEasing } from '../schema'
 import { clipAnimationValidationError, MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP } from '../clipAnimation'
 import { MAX_ANIMATION_PROPERTY_CHARACTERS, MAX_CLIP_SCALAR_ANIMATION_TRACKS, MAX_TITLE_ANIMATION_TRACKS } from '../animationCollections'
@@ -101,4 +102,9 @@ export function validatePortableAnimation(
   }
   const error = clipAnimationValidationError(animation as unknown as ClipAnimation)
   if (error) fail(path, error)
+  const titleTracks = (animation as unknown as ClipAnimation).titleTracks
+  if (titleTracks !== undefined) {
+    const budget = titlePayloadBudget({ titleTracks })
+    if (!budget.ok) fail(`${path}.titleTracks`, budget.reason)
+  }
 }

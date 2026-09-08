@@ -593,6 +593,12 @@ describe('video composition plan', () => {
         ],
       }],
     }
+    const declaration = pluginSnapshot().declarations[0]
+    for (const owner of [from, to]) owner.animation!.effectTracks![0].parameterIdentity = {
+      version: 1, effectType: declaration.effectType, descriptorVersion: declaration.descriptorVersion,
+      contributionId: declaration.contributionId, contributionVersion: declaration.contributionVersion,
+      packageDigest: declaration.packageDigest,
+    }
     const document = doc([track('V1', [from, to], [crossfade(from.id, to.id)])])
     const sources = catalog([['from-asset', exact()], ['to-asset', exact()]])
     const baselineRequests = videoCompositionRequests(

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { COLOR_LUT_LIMITS, COLOR_LUT_TYPE, parseCube, portableColorLut } from './colorLut'
 import { colorLutCatalogError, immutableColorLuts, mergeColorLuts, newColorLutReferenceError, projectVideoEffects, retainedColorLutBytes } from './colorLutCatalog'
 import { applyColorLutToProject, removeUnusedColorLuts, type ColorGradingTarget } from './colorGradingEdits'
-import { createProjectFileSnapshot, parseProjectFile, serializeProjectFile } from './projectFile'
+import { CURRENT_TIMELINE_SCHEMA_VERSION, createProjectFileSnapshot, parseProjectFile, serializeProjectFile } from './projectFile'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from './projectSettings'
 import { duplicateProjectSequence, sequenceProjectFromTimeline } from './projectSequences'
 import { captureClipAttributes, pasteClipAttributes } from './clipAttributes'
@@ -15,13 +15,13 @@ let id = 0
 const fresh = () => `fresh-${++id}`
 
 describe('portable LUT ownership', () => {
-  test('format 8 roundtrips embedded data and schema 21; format 7 migrates with an empty catalog', () => {
+  test('format 8 roundtrips embedded data and the current schema; format 7 migrates with an empty catalog', () => {
     const original = fixture()
     original.colorLuts = immutableColorLuts([table()])
     const snapshot = createProjectFileSnapshot(original, [])
     const loaded = parseProjectFile(serializeProjectFile(snapshot))
     expect(loaded.formatVersion).toBe(8)
-    expect(loaded.sequences[0].schemaVersion).toBe(21)
+    expect(loaded.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(loaded.colorLuts).toEqual(original.colorLuts)
     expect(Object.isFrozen(loaded.colorLuts[0])).toBe(true)
     const legacy = { ...snapshot, formatVersion: 7 } as Record<string, unknown>

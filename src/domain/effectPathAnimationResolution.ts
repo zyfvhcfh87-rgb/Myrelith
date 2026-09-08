@@ -4,7 +4,7 @@ import {
   type EffectPathAnimationTrack, type PreparedEffectPathAnimationTrack,
 } from './maskPathAnimation'
 import type { Clip, EffectDescriptor } from './schema'
-import { effectParamsValidationError } from './effectStack'
+import { maskNonPathParamsValidationError } from './effectStack'
 
 interface PreparedEntry {
   readonly effectType: string
@@ -44,10 +44,12 @@ export function resolveEffectPathAnimation(clip: Clip, tracks: readonly EffectPa
       if (track.effectId !== effect.id) continue
       const fallback = effect.params[track.parameter]
       if (typeof fallback !== 'string') continue
-      const value = evaluatePreparedEffectPathAnimationTrack(preparedPath(track, effect), localFrame, fallback)
+      const prepared = preparedPath(track, effect)
+      if (!prepared.ok) continue
+      const value = evaluatePreparedEffectPathAnimationTrack(prepared, localFrame, fallback)
       if (value === fallback) continue
       const replacement = { ...effect, params: { ...effect.params, [track.parameter]: value } }
-      if (effectParamsValidationError(replacement)) continue
+      if (maskNonPathParamsValidationError(replacement.params)) continue
       effects ??= clip.effects.slice()
       effects[index] = replacement
     }

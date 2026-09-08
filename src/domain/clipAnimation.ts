@@ -246,7 +246,7 @@ export function clipAnimationKindError(
     || effectPathAnimationTracks(animation).length > 0
   if (!hasTracks) return null
   if (isText) {
-    if (animation.tracks.some((track) => isKnownClipAnimationProperty(track.property)
+    if (animation.tracks.some((track) => (track.propertyVersion ?? 1) === 1 && isKnownClipAnimationProperty(track.property)
       && track.property !== 'opacity')) return 'title clips support only outer opacity animation'
     return null
   }
@@ -256,7 +256,7 @@ export function clipAnimationKindError(
     return 'effect keyframes are supported only on visual media clips'
   }
   for (const track of animation.tracks) {
-    if (isKnownClipAnimationProperty(track.property) && !isAudioAnimationProperty(track.property)) {
+    if ((track.propertyVersion ?? 1) === 1 && isKnownClipAnimationProperty(track.property) && !isAudioAnimationProperty(track.property)) {
       return 'audio clips support only volume and balance keyframes'
     }
   }
@@ -430,7 +430,8 @@ export function resolveClipAnimationAtFrame(clip: Clip, timelineFrame: number): 
   if (!Number.isSafeInteger(localFrame)) return clip
   const values = new Map<ClipAnimationProperty, number>()
   for (const track of animation.tracks) {
-    if (!isKnownClipAnimationProperty(track.property) || (track.propertyVersion ?? 1) !== 1) continue
+    if (!isKnownClipAnimationProperty(track.property) || (track.propertyVersion ?? 1) !== 1
+      || (clip.text !== undefined && track.property !== 'opacity')) continue
     const fallback = readClipAnimationProperty(clip, track.property)
     values.set(
       track.property,
@@ -442,7 +443,8 @@ export function resolveClipAnimationAtFrame(clip: Clip, timelineFrame: number): 
     effectAnimationTracks(animation),
     localFrame,
   )
-  return resolveEffectPathAnimation(resolved, effectPathAnimationTracks(animation), localFrame)
+  // Title-path geometry remains unavailable until the title/path owners agree it.
+  return clip.text !== undefined ? resolved : resolveEffectPathAnimation(resolved, effectPathAnimationTracks(animation), localFrame)
 }
 
 function replaceTrack(

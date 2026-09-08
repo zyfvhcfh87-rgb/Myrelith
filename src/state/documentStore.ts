@@ -1,3 +1,5 @@
+import type { TitleBudgetOwner } from '../domain/titleBudgets'
+import type { TitleElementIntent } from '../domain/titleElements'
 import { animationRetentionError } from '../domain/animationProjectBudget'
 import type { EffectPathAnimationTrack } from '../domain/maskPathAnimation'
 import { COLOR_LUT_LIMITS } from '../domain/colorLut'
@@ -230,6 +232,9 @@ export interface DocumentState {
   retainedClipboardColorLuts: readonly PortableColorLut[]
   retainedAttributePathTracks: readonly EffectPathAnimationTrack[]
   retainedKeyPathTracks: readonly EffectPathAnimationTrack[]
+  retainedTitleClipboardOwners: readonly TitleBudgetOwner[]
+  retainedTitleClipboardElements: readonly TitleElementIntent[]
+  retainedTitleClipboardKeys: readonly object[]
   commitProjectEdit: (expectedProject: SequenceProject, generation: number, next: SequenceProject) => string | null
 
   /** Complete portable edit snapshot. Browser resources remain elsewhere. */
@@ -781,6 +786,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   retainedClipboardColorLuts: [],
   retainedAttributePathTracks: [],
   retainedKeyPathTracks: [],
+  retainedTitleClipboardOwners: [],
+  retainedTitleClipboardElements: [],
+  retainedTitleClipboardKeys: [],
   commitProjectEdit: (expectedProject, generation, next) => {
     let error: string | null = null
     set((state) => {
@@ -805,6 +813,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     retainedClipboardColorLuts: [],
     retainedAttributePathTracks: [],
     retainedKeyPathTracks: [],
+    retainedTitleClipboardOwners: [],
+    retainedTitleClipboardElements: [],
+    retainedTitleClipboardKeys: [],
     ...activeSequenceFor(project, activeSequenceId),
     sequenceNavigation: [],
     past: [],
@@ -817,6 +828,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     retainedClipboardColorLuts: [],
     retainedAttributePathTracks: [],
     retainedKeyPathTracks: [],
+    retainedTitleClipboardOwners: [],
+    retainedTitleClipboardElements: [],
+    retainedTitleClipboardKeys: [],
     activeSequenceId: doc.id,
     sequenceNavigation: [],
     doc,

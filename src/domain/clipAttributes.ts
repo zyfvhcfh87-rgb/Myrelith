@@ -5,7 +5,7 @@ import type {
   ClipVisualSettings, EffectDescriptor, TimelineDoc, TrackKind, Transform,
 } from './schema'
 import {
-  clipAnimation, clipAnimationKindError, clipAnimationValidationError,
+  clipAnimation, clipAnimationKindError, clipAnimationValidationError, clipAnimationKeyframeCount,
   cloneClipAnimation, effectAnimationTracks, isKnownClipAnimationProperty,
 } from './clipAnimation'
 import { effectPathAnimationTracks, titleAnimationTracks } from './animationCollections'
@@ -274,6 +274,7 @@ export function pasteClipAttributes(
     const allocate = createProjectEffectIdAllocator(project, factory, [
       ...sourceEffects.map((effect) => effect.id),
       ...effectAnimationTracks(template.animation).map((track) => track.effectId),
+      ...effectPathAnimationTracks(template.animation).map((track) => track.effectId),
     ])
     return editTargets(project, sequenceId, targetIds, options.groups, (clip) => {
       const next: Clip = { ...clip }
@@ -328,7 +329,7 @@ export function pasteClipAttributes(
           if (copiedPaths.length) animation.effectPathTracks = [...effectPathAnimationTracks(animation), ...copiedPaths]
         }
       }
-      if (clip.animation || animation.tracks.length || effectAnimationTracks(animation).length) next.animation = animation
+      if (clip.animation || clipAnimationKeyframeCount(animation) > 0) next.animation = animation
       return next
     })
   } catch (cause) {
