@@ -1,0 +1,10 @@
+{
+  "path": "src/whisper.cpp",
+  "patchPath": "docs/evidence/issue201/whispercpp-deferred-logits-source/defer-output-logits.patch",
+  "beforeBytes": 339145,
+  "beforeSha256": "85617366fdfce12ea3d56ebb36d1267d2e70618b0151b17e6d84f4736ba9c2ad",
+  "afterBytes": 339149,
+  "afterSha256": "f5e8c9d6f812002db32c5527d0792277837fb1d0499255f3a22ef0433b877341",
+  "initialFloatElements": 23235520,
+  "initialPayloadBytes": 92942080
+}
