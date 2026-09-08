@@ -148,7 +148,7 @@ export interface ColorGradingPreview {
 }
 
 export interface EffectDocumentPreview {
-  readonly owner: 'color-grading' | 'mask-gesture'
+  readonly owner: 'color-grading' | 'mask-gesture' | 'mask-tracking'
   readonly sequenceId: string
   readonly document: TimelineDoc
 }
@@ -158,6 +158,7 @@ export interface TransportState {
   setMaskEditorTarget(target: import('../domain/maskEditing').MaskEditTarget | null): void
   maskPreview: ColorGradingPreview | null
   setMaskPreview(preview: ColorGradingPreview | null): void
+  setMaskTrackingPreview(preview: Omit<EffectDocumentPreview, 'owner'> | null): void
   effectDocumentPreview: EffectDocumentPreview | null
   colorGradingPreview: ColorGradingPreview | null
   setColorGradingPreview(preview: ColorGradingPreview | null): void
@@ -389,7 +390,7 @@ let transportResetRevision = 0
 
 const effectPreviewOwners = new Map<EffectDocumentPreview['owner'], { sequence: number; preview: EffectDocumentPreview }>()
 let effectPreviewSequence = 0
-function updateEffectPreview(owner: EffectDocumentPreview['owner'], preview: ColorGradingPreview | null): EffectDocumentPreview | null {
+function updateEffectPreview(owner: EffectDocumentPreview['owner'], preview: Omit<EffectDocumentPreview, 'owner'> | null): EffectDocumentPreview | null {
   if (preview) effectPreviewOwners.set(owner, {
     sequence: effectPreviewOwners.get(owner)?.sequence ?? ++effectPreviewSequence,
     preview: { owner, sequenceId: preview.sequenceId, document: preview.document },
@@ -816,6 +817,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
     }),
   setMaskEditorTarget: (maskEditorTarget) => set({ maskEditorTarget }),
   setMaskPreview: (maskPreview) => set({ maskPreview, effectDocumentPreview: updateEffectPreview('mask-gesture', maskPreview) }),
+  setMaskTrackingPreview: (preview) => set({ effectDocumentPreview: updateEffectPreview('mask-tracking', preview) }),
   setColorGradingPreview: (colorGradingPreview) => set({ colorGradingPreview, effectDocumentPreview: updateEffectPreview('color-grading', colorGradingPreview) }),
   setClipVisualPreview: (clipVisualPreview) => {
     clearOwnedClipVisualPreviews()

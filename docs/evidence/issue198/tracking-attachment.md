@@ -63,14 +63,65 @@ equal-valued samples versus 1,025, and the actual 100,000-key document edge incl
 budget growth after planning. These are domain checks; they do not qualify app
 session freshness, portable file/history admission or real-browser tracking.
 
+## App review and preview slice
+
+The next source slice adds dispatch and a disposable review to the existing
+`app/motionTrackingController.ts`. Transform dispatch retains its existing API
+and restrictions. Mask dispatch reuses the exact analysis admission predicate
+for decoded dimensions, direction, selection reference, requested frame/tick
+schedule and first-loss position. The original analysis/cache admission condition
+was extracted unchanged; no tracker, decoder, estimator or source snapshot was
+replaced.
+
+The review binds the immutable project, generation, active sequence, complete
+timeline selection, tracker selection, transport reset and both connected source
+and target media facts. It owns subscriptions and the named `mask-tracking`
+effect-document preview. The ordinary renderer resolves that candidate document.
+The preview clears outside both accepted endpoints, reappears on range reentry,
+and disposes on staleness/cancel. Preview arbitration preserves older sibling
+owners and does not let background frame updates take over a newer gesture.
+
+Before preview, the app checks the complete project, shared retained animation
+budget and actual portable media/file envelope. Apply requires pause, one fresh
+plan and exact candidate/consent, repeats the independent operation and admission,
+cleans up, checks for reentrant project/selection/review changes, then commits
+through the existing portable project/history boundary. Same-source mask Apply
+invalidates the old full-animation analysis snapshot as required.
+
+This slice passed **203 tests in 12 focused files plus 17 runner checks**,
+build/typecheck, lint and diff hygiene. The new 23 app tests use actual stores,
+portable serialization and the production analysis admission/controller; only
+the bounded analysis service result is supplied as a cache fixture. They cover
+temporary preview, ordinary values, one-entry Apply/undo/redo, same-clip session
+invalidation, backward range cleanup, 14 stale-context routes, reentrant cleanup,
+preview arbitration, scoped cancellation, fresh schedule/dimension checks,
+content-bound replacement and missing portable media envelopes. Existing real
+10-million-character file/history tests were also included, but a dedicated
+mask-tracking near-cap fixture and browser flow remain open.
+
+Command:
+
+```sh
+DEVELOPER_DIR=/Library/Developer/CommandLineTools NODE_OPTIONS=--no-experimental-webstorage npm test -- src/app/maskMotionTrackingController.test.ts src/app/motionTrackingController.test.ts src/domain/maskTracking.test.ts src/domain/motionTracking.test.ts src/domain/motionTrackingOperations.test.ts src/state/transportStore.test.ts src/state/motionTrackingDocumentStore.test.ts src/app/maskEditingController.test.ts src/app/previewController.test.ts src/app/animationAdmission.test.ts src/app/animationFileBoundary.test.ts src/test/architecture.test.ts --maxWorkers=2
+```
+
+Logs: `.tmp/issue198-tracking-app-final-{tests,build,lint}.log`. Initial runs
+failed only because two new tests called nonexistent store setters; they now
+exercise the actual `setClipSelection` and `setIsPlaying` APIs. Both failed logs
+and the corrected narrow run remain separate. No production check was weakened.
+
+The Inspector does not yet expose these commands. Before UI integration, the
+parent directed merging exact shared title/animation checkpoint
+`4340f9675ad56aa320f2498cf107fd55f8819568` after committing the current edits.
+Its integration evidence has been read; the canonical title guard will be adopted
+by the new mask planner at that seam.
+
 ## Remaining gates
 
-- App dispatch must reuse existing analysis/cache/decode provenance, exact admitted
-  dimensions/schedule and conservative whole-animation source snapshots.
-- App lifecycle must bind target connection/selection/project/generation, own a
-  named effect-document preview, clear outside the accepted range and on staleness,
-  preflight full project/file/history/clipboard admission, then freshly plan and
-  commit once. Same-clip Apply invalidates the old analysis session.
+- Merge and verify the accepted schema 23 title/animation checkpoint; adopt its
+  canonical supported/future title applicability guard.
+- Add dedicated tracking near-cap portable admission and remaining source/loss
+  cases alongside the final Inspector slice.
 - Inspector must expose separate transform/mask targets and exact owned-lane
   replacement consent, preserve the self-transform prohibition, and disclose
   ordinary post-Apply interpolation/endpoint hold and box extents without rotation.

@@ -366,7 +366,9 @@ correction `13f0cfe` and evidence `1254007` passed all five browser flows and
 were accepted through integration `f091560`; see
 [held-path evidence](evidence/issue198/held-path-authoring.md).
 The narrow [tracking contract](evidence/issue198/tracking-attachment-contract.md)
-is accepted and its separate pure planning/operation slice is in progress; see
+is accepted and its separate pure planning/operation slice is committed as
+`9c3cb54`; app review/preview implementation is now tested, with no Inspector
+activation yet. See
 [tracking implementation evidence](evidence/issue198/tracking-attachment.md).
-App dispatch, preview/currentness, Inspector authoring and tracking browser
-acceptance remain open. No tracking code was included in the held-path gate.
+The shared schema 23 checkpoint must be merged before Inspector authoring and
+tracking browser acceptance. No tracking code was included in the held-path gate.
