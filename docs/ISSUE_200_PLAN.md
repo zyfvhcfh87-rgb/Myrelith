@@ -1,6 +1,7 @@
 # Issue #200 — reusable titles and animated text
 
-Status: **Amended G0 approved; G1a pure foundation complete and awaiting review**.
+Status: **G1a approved; independent pure budget completion awaiting review;
+G1b waits for the approved schema22 foundation**.
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
 issue last updated 2026-08-25T21:36:47Z. [Issue #200](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/200).
@@ -11,9 +12,11 @@ animation foundation as timeline schema 22, then this title-owner change as 23.
 Baseline is timeline schema 21 / project format 8. The assignments are reviewed
 coordination decisions. G1a adds the independent pure title module and tests;
 Clip, animation ownership, migrations, store, renderer and UI remain unchanged.
-See [G1a API and validation evidence](evidence/issue200/pure-foundation.md).
-Product acceptance remains open; stop before G1b until the shared foundation
-and this API are approved.
+See [G1a API and validation evidence](evidence/issue200/pure-foundation.md) and
+[pure budget completion](evidence/issue200/pure-budgets.md). The accepted combined
+foundation `b0e43ed449719fe3e424a46cd97d384b6a11cf1a` was fast-forwarded into this
+branch under the orchestrator's instruction. Product acceptance remains open;
+stop before G1b until the shared schema22 foundation is approved.
 
 ## Proposed outcome and boundaries
 
@@ -460,9 +463,12 @@ integration, remote publication and issue closure.
    adapters with focused tests. No Clip, store, migration, renderer or UI edits.
    Commit this module for orchestrator review and sharing with #199. Its shared
    animation foundation then lands as timeline 22.
-   **Implemented for review:** bounded title/element readers, explicit font
+   **Approved at `381836f`:** bounded title/element readers, explicit font
    resolution and the 13 scalar spec/read/atomic-apply adapters. Focused tests,
    architecture checks, build and lint pass; see the linked G1a evidence.
+   Authorized independent completion adds title-plus-track payload sizing and
+   reference-aware retained-data admission, with exact 1 MiB/64 MiB fixtures.
+   This is pure foundation work, not approval to enter a new product phase.
 3. **G1b — title ownership, compatibility and upgrade.** After the shared
    foundation is approved, add title-owner schema 23 with retained `Clip.text`,
    explicit upgrade, serialization/clone/source/media-owner checks, identity

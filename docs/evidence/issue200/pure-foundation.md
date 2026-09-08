@@ -5,7 +5,11 @@ Branch: `codex/issue200`; original baseline: `ce91074c276ca6892a74addb7dd673b9a1
 Scope approved by the orchestrator after review of the amended G0 commit:
 independent pure title types, static validation and scalar adapters with tests.
 The implementation is in `src/domain/titleElements.ts`; its focused test file
-is `src/domain/titleElements.test.ts`. This gate awaits review before G1b.
+is `src/domain/titleElements.test.ts`. The orchestrator accepted its exact commit
+`381836fa3b45d83f7b7c1f932413b6ac067a154a` after independent checks. Combined
+foundation `b0e43ed449719fe3e424a46cd97d384b6a11cf1a` was then fast-forwarded into
+this branch. See [independent budget completion](pure-budgets.md); G1b still
+depends on the separately reviewed shared schema22 implementation.
 
 ## Concrete API for #199
 
