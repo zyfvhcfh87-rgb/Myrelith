@@ -33,11 +33,14 @@ failed raw evidence remain preserved. Product speech stays NO-GO.
 
 Parent-requested research now compares a materially different single-thread
 whisper.cpp WASM route in [WHISPER_CPP_ROUTE_PROPOSAL.md](WHISPER_CPP_ROUTE_PROPOSAL.md).
-Its pinned source/metadata comparison favors multilingual tiny-q8_0 for a future
-source-preparation decision. No alternate weights, build/runtime or native run
-was produced. The448-token whole-window adapter proof, exact toolchain/bundle
-provenance and every measured acceptance gate remain unresolved. The existing
-raw RSS record cannot identify an exact native allocation site as the cause.
+The accepted source-preparation grant has now produced exact verified multilingual
+tiny-q8_0/source/toolchain assets, explicit build/token patches and an owned C/JS
+protocol in [WHISPER_CPP_SOURCE_PREPARATION.md](WHISPER_CPP_SOURCE_PREPARATION.md).
+No toolchain was installed/activated or compiler/runtime/inference executed.
+The448-token source guard has deterministic arithmetic/placement checks; compiled
+behavior, built artifact identity, all measured acceptance and production speech
+remain unresolved. The existing raw RSS record cannot identify an exact native
+allocation site as the cause. All failed ORT evidence is preserved.
 
 ## Measured replacement history through run04
 

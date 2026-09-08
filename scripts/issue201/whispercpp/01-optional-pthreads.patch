@@ -1,0 +1,62 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -59,8 +59,11 @@
+ 
+     # TODO: without these, we get the following error:
+     #       wasm-ld: error: --shared-memory is disallowed by whisper.cpp.o because it was not compiled with 'atomics' or 'bulk-memory' features.
+-    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -pthread")
+-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
++    option(WHISPER_WASM_PTHREADS "whisper: compile the Emscripten pthread variant" ON)
++    if (WHISPER_WASM_PTHREADS)
++        set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -pthread")
++        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
++    endif()
+ 
+     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s TOTAL_STACK=5242880")
+     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -s TOTAL_STACK=5242880")
+--- a/ggml/CMakeLists.txt
++++ b/ggml/CMakeLists.txt
+@@ -11,7 +11,7 @@
+ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
+ 
+ find_program(GIT_EXE NAMES git git.exe NO_CMAKE_FIND_ROOT_PATH)
+-if(GIT_EXE)
++if(GIT_EXE AND NOT DEFINED GGML_BUILD_COMMIT)
+     # Get current git commit hash
+     execute_process(COMMAND ${GIT_EXE} rev-parse --short HEAD
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+@@ -67,6 +67,7 @@
+     set(BUILD_SHARED_LIBS_DEFAULT OFF)
+ 
+     option(GGML_WASM_SINGLE_FILE "ggml: embed WASM inside the generated ggml.js" ON)
++    option(GGML_WASM_SINGLE_THREAD "ggml: omit pthread discovery/link for Emscripten" OFF)
+ else()
+     if (MINGW)
+         set(BUILD_SHARED_LIBS_DEFAULT OFF)
+@@ -288,9 +289,10 @@
+ set(CMAKE_CXX_STANDARD 17)
+ set(CMAKE_CXX_STANDARD_REQUIRED true)
+ 
+-set(THREADS_PREFER_PTHREAD_FLAG ON)
+-
+-find_package(Threads REQUIRED)
++if (NOT EMSCRIPTEN OR NOT GGML_WASM_SINGLE_THREAD)
++    set(THREADS_PREFER_PTHREAD_FLAG ON)
++    find_package(Threads REQUIRED)
++endif()
+ 
+ include(GNUInstallDirs)
+ 
+--- a/ggml/src/CMakeLists.txt
++++ b/ggml/src/CMakeLists.txt
+@@ -493,7 +493,9 @@
+     target_compile_features   (${target} PRIVATE c_std_11 cxx_std_17) # don't bump
+ endforeach()
+ 
+-target_link_libraries(ggml-base PRIVATE Threads::Threads)
++if (NOT EMSCRIPTEN OR NOT GGML_WASM_SINGLE_THREAD)
++    target_link_libraries(ggml-base PRIVATE Threads::Threads)
++endif()
+ 
+ if (DEFINED MATH_LIBRARY)
+     target_link_libraries(ggml-base PRIVATE ${MATH_LIBRARY})

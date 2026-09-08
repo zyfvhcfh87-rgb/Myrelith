@@ -1,0 +1,75 @@
+{
+  "status": "source-only-review-pending",
+  "parentCommit": "002194dd97d207789e395c27cf1045132ecf8c8d",
+  "sourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp/01-optional-pthreads.patch",
+      "bytes": 2313,
+      "sha256": "7ea2f544fd4168e0ae3d3f86d1c2a50345da475707df39a91a8b4eaf567e6805"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/02-whole-call-token-budget.patch",
+      "bytes": 3471,
+      "sha256": "4d3e0d398bfbe5cb61a814b1ac94555efd11abeeed37ec4a50b3b4e2677937f3"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/CMakeLists.txt",
+      "bytes": 3058,
+      "sha256": "210c6dffdb7647dcf02c2363e6f0a204b0e4eba2f849774d544d2c9d0cd0bfa8"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/adapter.cpp",
+      "bytes": 6827,
+      "sha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/model-format.mjs",
+      "bytes": 4193,
+      "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/myrelith-token-budget.h",
+      "bytes": 403,
+      "sha256": "e0dc2d7ec04a52e47214de3536ca479f710b6957d422260eb5bc87b7bfe9ff9b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/patch-identities.json",
+      "bytes": 1172,
+      "sha256": "74a2fb69113d229b172d073cebe6b37087bcf49999945bd3be28783922952a7b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/preparation.test.mjs",
+      "bytes": 17697,
+      "sha256": "be7f0572c5ded3918988025e1706696060dea5b8b64c9511ff747d7c71dd8924"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/resident-coverage.mjs",
+      "bytes": 2809,
+      "sha256": "96114f08b414309ae94b76777327257b75d96bfa6555da96ec189d3c4a1cd7bf"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/verify-assets.mjs",
+      "bytes": 3718,
+      "sha256": "a71f77722ac54528b21fa221784ad4daf226b2bcf1d8136a85ccbd74a718efc2"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/worker-owner.mjs",
+      "bytes": 3602,
+      "sha256": "f9ae85d3fb3593ccbf219a058218ad672133b5bd3af56f75683c2a976dfe32f5"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/worker-protocol.mjs",
+      "bytes": 7300,
+      "sha256": "0775458449662c040abeb303dbd6fbd0cbe57384b0e33dc847c729facc291a0c"
+    }
+  ],
+  "checks": {
+    "sourceVmPassed": 48,
+    "newChecks": 23,
+    "previousChecks": 25,
+    "skipped": 0,
+    "focusedLintWarnings": 0
+  },
+  "nativeExecution": false,
+  "builtRuntime": null
+}
