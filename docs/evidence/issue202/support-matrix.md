@@ -153,3 +153,25 @@ resources and no console errors. Browser/server teardown completed and the
 exclusive slot was released. No second decode, encoding configuration, R3
 benchmark or full test suite ran. See [run details](codec-run-1-results.md),
 [raw result](codec-probe-1.json), and [static inspection](codec-packet-inspection-1.json).
+
+## Granted saved-packet readback
+
+A second explicit exclusive slot at `ea530ec` decoded only the three saved
+264-byte packets, with no new encoding. All three return I420P10 with coded
+1088×16, visible rectangle `(0,0,1024,16)` and display 1024×16. Explicitly copying
+the visible rectangle yields 49,152 bytes per frame. This confirms the measured
+padding/visible-size distinction that the first harness failed to record.
+
+Each luma plane has 896 distinct values, 4,496 of 16,384 samples differing from
+the exact ramp, maximum absolute error 1 and mean signed error -0.2509765625.
+Both neutral chroma planes have zero mismatches. No lossy acceptance threshold
+was established, and the three decoded payload hashes are identical. Matching
+returned tags remain observations of supplied decoder configurations.
+
+This qualifies only the measured same-browser saved-packet transport and raw
+visible-plane readback. Independent decoding, mastering metadata, physical
+HDR, native GPU/memory behavior, other media and 1080p/4K performance remain open.
+Three frames/decoders close, terminal ownership is zero, no console error, and
+browser/server teardown completes before releasing the slot. Both scripts keep
+their exact pre/post-run source hashes. [Readback details](codec-readback-1-results.md)
+and [raw rows](codec-readback-1.json) retain every plane metric.

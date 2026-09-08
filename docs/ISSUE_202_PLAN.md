@@ -16,26 +16,34 @@ On 2026-09-08 the orchestrator approved R0 commit `8ce3742` for the R1
 independent numerical oracle/candidate and bounded R2 capability/metadata
 experiments. The color model remains a research candidate. The original limits
 stand; substantial decode/encode, timings and full suites require an exclusive
-slot, which has not been granted. Host identity supplied by the orchestrator is
+slot. Two bounded codec sessions have completed and released their slots;
+no R3 slot has been granted. Host identity supplied by the orchestrator is
 recorded in the evidence inventory and does not qualify HDR presentation.
 
 The [R1/R2 evidence](evidence/issue202/r1-r2-results.md) records 118/118 scalar
 comparisons and 68/68 final-view storage comparisons passing, with the exact
 scope-bin fixture failing after binary16 storage. The measured browser uses
-SwiftShader; P3 canvas drawing changes extended pixels, WebGPU has no adapter,
-and the initial gate had not encoded or decoded a frame. Basic mux tags were inspected
-using synthetic header-only packets. These results do not promote the managed
-candidate or qualify a product HDR path. The next bounded codec script is
-prepared for an exclusive-slot decision; 1080p/4K timing remains unmeasured.
+SwiftShader; P3 canvas drawing changes extended pixels and WebGPU has no adapter.
+The initial basic mux-tag inspection used synthetic header-only packets.
+These results do not promote the managed candidate or qualify a product HDR
+path. 1080p/4K timing remains unmeasured.
 
 The later [three-frame codec run](evidence/issue202/codec-run-1-results.md),
-explicitly granted after #198 released the slot, returned profile2 ten-bit
+explicitly granted after #198 released the slot, returned profile 2 ten-bit
 packets and I420P10 frames. Its pixel comparisons stopped at an over-strict
 coded-size guard: saved VP9 headers say 1024×16, while VideoFrame coded width
-is 1088 and visibleRect was not captured. Raw pixels remain unqualified; this
-does not demonstrate a codec failure. All six frames and six codec instances
-closed; browser/server teardown completed and the slot was released. A separate
-decode-only follow-up is prepared but has no slot grant and has not run.
+is 1088 and visibleRect was not captured. Its original failed rows remain
+unchanged. All six frames and six codec instances closed before slot release.
+
+That separate slot was subsequently granted at `ea530ec`. The
+[saved-packet readback](evidence/issue202/codec-readback-1-results.md) confirms
+visible/display size 1024×16 inside coded 1088×16 for all three frames. Each
+copied luma ramp has 896 distinct values, 4,496/16,384 mismatches, maximum
+absolute error 1 and mean error -0.2509765625 code; neutral chroma is exact.
+All three diagnostics completed and all frames/decoders closed. This resolves
+the tested size-guard limitation; it is not a lossy-quality GO or independent
+codec/display/performance qualification. The second slot is released; no R3
+or further heavy extension has run.
 
 ## Gates and deliverables
 

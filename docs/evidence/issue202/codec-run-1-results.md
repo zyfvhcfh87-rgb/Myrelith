@@ -1,5 +1,10 @@
 # Three-frame codec diagnostic and retained failures
 
+Historical snapshot through `ea530ec`. The separately granted decode-only
+follow-up is now documented in [readback 1](codec-readback-1-results.md).
+Original run1 failures and its manifest remain unchanged; the manifest is
+verified against its original committed snapshot.
+
 The orchestrator granted only three sequential 1024×16 synthetic VP9
 diagnostics after #198 released the slot. Before running, the required cleanup
 amendment was committed: a terminal copy-drain failure or nonzero owned-resource

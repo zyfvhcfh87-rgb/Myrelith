@@ -88,7 +88,38 @@ if(fs.existsSync(path.join(root,'codec-probe-1.json'))){
   for(const row of inspection.rows){assert.equal(row.width,1024);assert.equal(row.height,16);assert.equal(row.rawPixelComparisonPerformed,false);}
 }
 if(fs.existsSync(path.join(root,'codec-run-1-manifest.json'))){
-  for(const file of read('codec-run-1-manifest.json').files)check(path.join(repository,file.path),file.sha256);
+  const gate='ea530ecc9b88d5f36fa44cced849d9056a0166ba';
+  for(const file of read('codec-run-1-manifest.json').files){
+    const bytes=execFileSync('git',['show',`${gate}:${file.path}`],{cwd:repository,env,maxBuffer:8*1024*1024});
+    assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),file.sha256,file.path);
+  }
+}
+if(fs.existsSync(path.join(root,'codec-readback-1.json'))){
+  const result=read('codec-readback-1.json'),previous=read('codec-probe-1.json');
+  assert.equal(result.startingCommit,'ea530ecc9b88d5f36fa44cced849d9056a0166ba');
+  check(path.join(root,'probe-codec-readback.mjs'),result.startingScriptSha256);
+  assert.equal(result.startingScriptSha256,result.scriptSha256);assert.equal(result.sourceIdentityUnchanged,true);
+  check(path.join(root,'codec-probe-1.json'),result.inputResultSha256);
+  assert.equal(result.rows.length,3);assert.deepEqual(result.consoleErrors,[]);
+  for(const row of result.rows){
+    assert.equal(row.packetSha256,previous.rows.find(r=>r.id===row.id).packets[0].sha256);
+    assert.equal(row.outcome,'completed-diagnostic');assert.equal(row.terminalOwnedResources,0);
+    assert.equal(row.ledger.framesOpened,1);assert.equal(row.ledger.framesClosed,1);
+    assert.equal(row.ledger.decodersOpened,1);assert.equal(row.ledger.decodersClosed,1);
+    assert.equal(row.ledger.decodedCopyBytes,49152);assert.equal(row.ledger.retainedFrames,0);
+    const frame=row.decoded[0];assert.equal(row.decoded.length,1);assert.equal(frame.format,'I420P10');
+    assert.deepEqual(frame.visibleRect,{x:0,y:0,width:1024,height:16});
+    assert.equal(frame.codedWidth,1088);assert.equal(frame.codedHeight,16);
+    assert.equal(frame.displayWidth,1024);assert.equal(frame.displayHeight,16);
+    assert.deepEqual(frame.tags,row.expected.tags);
+    assert.deepEqual(frame.planes[0],{plane:0,width:1024,height:16,samples:16384,unique:896,mismatches:4496,maximumAbsoluteError:1,meanSignedError:-0.2509765625});
+    for(const plane of frame.planes.slice(1)){assert.equal(plane.mismatches,0);assert.equal(plane.maximumAbsoluteError,0);assert.equal(plane.unique,1);}
+  }
+}
+if(fs.existsSync(path.join(root,'codec-readback-1-manifest.json'))){
+  for(const file of read('codec-readback-1-manifest.json').files)check(path.join(repository,file.path),file.sha256);
 }
 process.stdout.write(JSON.stringify({frozenFiles:freeze.files.length,productionHashes:inventory.files.length,scalarPasses:118,viewPasses:68,
-  retainedScopeFailures:1,browserRows:23,transferRows:8,structuralRows:8,productionImports:0,changedPathsWithinOwnership:true})+'\n');
+  retainedScopeFailures:1,browserRows:23,transferRows:8,structuralRows:8,
+  codecReadbackRows:fs.existsSync(path.join(root,'codec-readback-1.json'))?read('codec-readback-1.json').rows.length:0,
+  codecQualityDecision:'not-qualified',productionImports:0,changedPathsWithinOwnership:true})+'\n');
