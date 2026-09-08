@@ -1,6 +1,6 @@
 # Issue #200 — reusable titles and animated text
 
-Status: **Gate 0 amended after internal review; stop before product implementation**.
+Status: **Amended G0 approved; G1a pure foundation complete and awaiting review**.
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
 issue last updated 2026-08-25T21:36:47Z. [Issue #200](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/200).
@@ -9,8 +9,11 @@ The orchestrator assigned this order on 2026-09-08: pure title element types and
 property adapters first (no Clip or migration changes), then #199's shared
 animation foundation as timeline schema 22, then this title-owner change as 23.
 Baseline is timeline schema 21 / project format 8. The assignments are reviewed
-coordination decisions; no schema implementation exists in this plan commit.
-Product acceptance remains open.
+coordination decisions. G1a adds the independent pure title module and tests;
+Clip, animation ownership, migrations, store, renderer and UI remain unchanged.
+See [G1a API and validation evidence](evidence/issue200/pure-foundation.md).
+Product acceptance remains open; stop before G1b until the shared foundation
+and this API are approved.
 
 ## Proposed outcome and boundaries
 
@@ -457,6 +460,9 @@ integration, remote publication and issue closure.
    adapters with focused tests. No Clip, store, migration, renderer or UI edits.
    Commit this module for orchestrator review and sharing with #199. Its shared
    animation foundation then lands as timeline 22.
+   **Implemented for review:** bounded title/element readers, explicit font
+   resolution and the 13 scalar spec/read/atomic-apply adapters. Focused tests,
+   architecture checks, build and lint pass; see the linked G1a evidence.
 3. **G1b — title ownership, compatibility and upgrade.** After the shared
    foundation is approved, add title-owner schema 23 with retained `Clip.text`,
    explicit upgrade, serialization/clone/source/media-owner checks, identity
@@ -503,5 +509,5 @@ Any new architecture exception requires explicit review, not an implicit import.
 | Real Chromium flow and cleanup | Legacy title, multiple coordinated elements, user template create/use, roll/crawl, #199 keys, missing-font explicit fallback, save/reopen, export raw pixels/reopen, cancel/dispose/retry and clean console. |
 | Full engineering gates | Exact commit provenance, focused/full result separation, build/typecheck, lint, audit, diff and production graph exclusion of any evidence-only harness. |
 
-G0 completion means the proposal is ready to review. It does not complete any
-unchecked product acceptance criterion in issue #200.
+G1a completion supplies the pure contract for shared-foundation review. It does
+not complete any unchecked product acceptance criterion in issue #200.
