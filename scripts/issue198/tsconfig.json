@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.app.json",
+  "compilerOptions": { "tsBuildInfoFile": "../../node_modules/.tmp/issue198-harness.tsbuildinfo" },
+  "include": ["./*.ts", "../../src/vite-env.d.ts"]
+}
