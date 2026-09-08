@@ -14,6 +14,8 @@
  * source below while their timeline duration is independently editable.
  */
 
+import type { CaptionStyleDescriptor } from './captionStyle'
+import type { CaptionOriginDescriptor } from './captionOrigin'
 import type { LensCorrectionIntent } from './lensCorrection'
 import type { EffectPathAnimationTrack } from './maskPathAnimation'
 import type { AnimationParameterIdentity } from './animationParameterIdentity'
@@ -819,6 +821,10 @@ export interface CaptionItem {
   range: TimeRange
   /** Plain text. Newlines are preserved; markup and empty text are rejected. */
   text: string
+  /** Optional static override; bounded unknown intent is preserved whole. */
+  style?: CaptionStyleDescriptor
+  /** Historical generated origin, retained through manual text/timing edits. */
+  origin?: CaptionOriginDescriptor
 }
 
 /** A language/role-ready caption lane, independent from media/text clips. */
@@ -833,6 +839,9 @@ export interface CaptionTrack {
   role: CaptionTrackRole
   /** Portable visual treatment used by every composition surface. */
   stylePreset: CaptionStylePreset
+  style?: CaptionStyleDescriptor
+  /** One historical generation run, independent of current asset availability. */
+  origin?: CaptionOriginDescriptor
   /** Hidden tracks are retained but excluded from preview/export. */
   hidden: boolean
   /** Cues sorted by (startFrame, endFrame, id); bounded overlap is allowed. */

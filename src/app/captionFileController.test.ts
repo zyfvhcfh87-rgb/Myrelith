@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { CaptionFileController } from './captionFileController'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
 import { createCaptionTrack } from '../domain/captions'
+import { useDocumentStore } from '../state/documentStore'
+import { useMediaStore } from '../state/mediaStore'
 import type { TimelineDoc } from '../domain/schema'
 
 function textFile(name: string, source: string): File {
@@ -17,15 +19,8 @@ function harness() {
   doc = { ...doc, captionTracks: [createCaptionTrack('track-1', 'English', 'en')] }
   let nextId = 0
   const downloads: Array<{ fileName: string; mimeType: string; content: string }> = []
+  useDocumentStore.getState().setDoc(doc)
   const controller = new CaptionFileController(
-    {
-      getDoc: () => doc,
-      commitDoc: (expected, next) => {
-        if (doc !== expected) return false
-        doc = next
-        return true
-      },
-    },
     {
       createId: (prefix) => `${prefix}-${++nextId}`,
       download: (fileName, mimeType, content) => downloads.push({ fileName, mimeType, content }),
@@ -34,12 +29,16 @@ function harness() {
   return {
     controller,
     downloads,
-    getDoc: () => doc,
-    replaceDoc: (next: TimelineDoc) => { doc = next },
+    getDoc: () => useDocumentStore.getState().doc,
+    replaceDoc: (next: TimelineDoc) => useDocumentStore.getState().setDoc(next),
   }
 }
 
 describe('CaptionFileController', () => {
+  beforeEach(() => {
+    useDocumentStore.setState({ retainedCaptionOwners: {} })
+    useMediaStore.setState({ descriptors: new Map(), collections: [] })
+  })
   it('commits a fully parsed SRT as one document replacement', async () => {
     const test = harness()
     const before = test.getDoc()

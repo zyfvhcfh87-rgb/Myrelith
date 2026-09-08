@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { CAPTION_BATCH_LIMITS, captionReadingSpeed, planCaptionBatch as planBatch, type CaptionBatchOperation, type CaptionBatchScope } from './captionBatch'
 import { CAPTION_LIMITS, createCaptionTrack } from './captions'
-import type { CaptionStyleDescriptor } from './captionStyle'
 import type { CaptionItem, TimelineDoc } from './schema'
 
 const cue = (id: string, startFrame = 0, durationFrames = 10, text = id): CaptionItem => ({ id, range: { startFrame, durationFrames }, text })
-function doc(items: (CaptionItem & { style?: CaptionStyleDescriptor; origin?: { run: string } })[] = [cue('a', 0, 10, 'first'), cue('b', 10, 10, 'second'), cue('c', 20, 10, 'third')]): TimelineDoc {
+function doc(items: CaptionItem[] = [cue('a', 0, 10, 'first'), cue('b', 10, 10, 'second'), cue('c', 20, 10, 'third')]): TimelineDoc {
   return { schemaVersion: 21, id: 'doc', name: 'Batch', frameRate: { num: 25, den: 1 }, width: 1920, height: 1080,
     audioSampleRate: 48000, tracks: [], markers: [], captionTracks: [{ ...createCaptionTrack('captions', 'Captions'), items }] }
 }
@@ -88,7 +87,7 @@ describe('atomic caption batch proposals', () => {
   })
 
   it('splits at explicit frame/text boundaries, retains left ID and immutable extended intent', () => {
-    const extended = { ...cue('a', 0, 10, 'hello world'), style: { version: 7, params: { future: 'keep' } }, origin: { run: 'same' } }
+    const extended = { ...cue('a', 0, 10, 'hello world'), style: { version: 7, params: { future: 'keep' } }, origin: { version: 9, params: { run: 'same' } } }
     const source = freeze(doc([extended]))
     const result = ready(source, { kind: 'split', plans: [{ itemId: 'a', frame: 4, textOffset: 5, rightId: 'right' }] })
     const items = result.document.captionTracks![0]!.items
@@ -119,7 +118,7 @@ describe('atomic caption batch proposals', () => {
     expect(planCaptionBatch(source, 'captions', { kind: 'selected', ids: ['a', 'c'] }, { kind: 'merge' }).kind).toBe('rejected')
     const differentStyle = doc([{ ...cue('a'), style: { version: 1, params: { bold: true } } }, cue('b', 10)])
     expect(planCaptionBatch(differentStyle, 'captions', all, { kind: 'merge' }).kind).toBe('rejected')
-    const differentOrigin = doc([{ ...cue('a'), origin: { run: 'one' } }, { ...cue('b', 10), origin: { run: 'two' } }])
+    const differentOrigin = doc([{ ...cue('a'), origin: { version: 9, params: { run: 'one' } } }, { ...cue('b', 10), origin: { version: 9, params: { run: 'two' } } }])
     expect(planCaptionBatch(differentOrigin, 'captions', all, { kind: 'merge' }).kind).toBe('rejected')
   })
 
@@ -129,7 +128,9 @@ describe('atomic caption batch proposals', () => {
     Object.assign(source.captionTracks![0]!, { style })
     expect(planCaptionBatch(freeze(source), 'captions', all, { kind: 'merge' }).kind).toBe('ready')
     const unknown = { version: 4, params: { bold: true } }
-    const incompatible = doc([{ ...cue('a'), style: unknown }, { ...cue('b', 10), style: { ...unknown } }])
+    const identicalOpaque = doc([{ ...cue('a'), style: unknown }, { ...cue('b', 10), style: { ...unknown } }])
+    expect(planCaptionBatch(freeze(identicalOpaque), 'captions', all, { kind: 'merge' }).kind).toBe('ready')
+    const incompatible = doc([{ ...cue('a'), style: unknown }, { ...cue('b', 10), style: { ...unknown, params: { bold: false } } }])
     expect(planCaptionBatch(freeze(incompatible), 'captions', all, { kind: 'merge' }).kind).toBe('rejected')
   })
 

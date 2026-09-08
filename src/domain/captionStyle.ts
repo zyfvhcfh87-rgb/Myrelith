@@ -1,22 +1,11 @@
-/** Bounded portable static caption overrides; no schema or painter wiring yet. */
-import { utf8ByteLength } from './documentMemory'
+/** Bounded portable static caption overrides. */
+import { CAPTION_INTENT_LIMITS, inspectCaptionIntent, type CaptionIntentDescriptor, type CaptionIntentValue } from './captionIntent'
 import type { TextFontFamily } from './schema'
 import { isSupportedTextFontFamily } from './textOverlay'
 
-export const CAPTION_STYLE_LIMITS = Object.freeze({
-  maxKeys: 24,
-  maxKeyCharacters: 128,
-  maxStringCharacters: 128,
-  maxDescriptorBytes: 4_096,
-  maxProjectIntentBytes: 2_097_152,
-  maxRetainedIntentBytes: 33_554_432,
-})
-
-export type CaptionStyleValue = string | number | boolean
-export interface CaptionStyleDescriptor {
-  readonly version: number
-  readonly params: Readonly<Record<string, CaptionStyleValue>>
-}
+export const CAPTION_STYLE_LIMITS = CAPTION_INTENT_LIMITS
+export type CaptionStyleValue = CaptionIntentValue
+export type CaptionStyleDescriptor = CaptionIntentDescriptor
 
 export interface CaptionStyleV1 {
   fontFamily: TextFontFamily
@@ -45,24 +34,6 @@ export type CaptionStyleInspection =
   | { readonly kind: 'invalid'; readonly reason: string }
   | ({ readonly kind: 'unavailable'; readonly reason: string } & BoundedStyle)
   | ({ readonly kind: 'supported'; readonly params: Readonly<Partial<CaptionStyleV1>> } & BoundedStyle)
-
-type DataEntry = readonly [string, unknown]
-/** Read ordinary enumerable data properties only; never invoke accessors/toJSON. */
-function dataEntries(value: unknown, maxKeys: number): readonly DataEntry[] | null {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
-  const prototype = Object.getPrototypeOf(value)
-  if (prototype !== Object.prototype && prototype !== null) return null
-  const keys = Reflect.ownKeys(value)
-  if (keys.length > maxKeys) return null
-  const result: DataEntry[] = []
-  for (const key of keys) {
-    if (typeof key !== 'string') return null
-    const property = Object.getOwnPropertyDescriptor(value, key)
-    if (!property || !property.enumerable || !Object.hasOwn(property, 'value')) return null
-    result.push([key, property.value])
-  }
-  return result
-}
 
 const finiteRange = (minimum: number, maximum: number) => (value: CaptionStyleValue): boolean =>
   typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
@@ -95,34 +66,11 @@ function knownKey(value: string): value is keyof CaptionStyleV1 {
  * unknown override is unavailable; none of its apparently known fields apply.
  */
 export function inspectCaptionStyle(value: unknown): CaptionStyleInspection {
-  const envelope = dataEntries(value, 2)
-  if (!envelope || envelope.length !== 2 || envelope.some(([key]) => key !== 'version' && key !== 'params')) {
-    return { kind: 'invalid', reason: 'Caption style must contain only version and params data properties' }
-  }
-  const version = envelope.find(([key]) => key === 'version')?.[1]
-  if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) {
-    return { kind: 'invalid', reason: 'Caption style version must be a positive safe integer' }
-  }
-  const entries = dataEntries(envelope.find(([key]) => key === 'params')?.[1], CAPTION_STYLE_LIMITS.maxKeys)
-  if (!entries) return { kind: 'invalid', reason: 'Caption style params must be a bounded plain data record' }
-  const checked: [string, CaptionStyleValue][] = []
-  for (const [key, parameter] of entries) {
-    if (key.length === 0 || key.length > CAPTION_STYLE_LIMITS.maxKeyCharacters) {
-      return { kind: 'invalid', reason: 'Caption style parameter key exceeds its character bound' }
-    }
-    if (!(typeof parameter === 'boolean'
-      || (typeof parameter === 'number' && Number.isFinite(parameter))
-      || (typeof parameter === 'string' && parameter.length <= CAPTION_STYLE_LIMITS.maxStringCharacters))) {
-      return { kind: 'invalid', reason: `Caption style parameter ${key} must be a bounded finite primitive` }
-    }
-    checked.push([key, parameter])
-  }
-  const params = Object.freeze(Object.fromEntries(checked))
-  const descriptor = Object.freeze({ version, params })
-  const serializedUtf8Bytes = utf8ByteLength(JSON.stringify(descriptor))
-  if (serializedUtf8Bytes > CAPTION_STYLE_LIMITS.maxDescriptorBytes) {
-    return { kind: 'invalid', reason: 'Caption style exceeds its 4 KiB serialized UTF-8 bound' }
-  }
+  const inspected = inspectCaptionIntent(value)
+  if (inspected.kind === 'invalid') return { kind: 'invalid', reason: inspected.reason.replace('Caption intent', 'Caption style') }
+  const { descriptor, serializedUtf8Bytes } = inspected
+  const { version, params } = descriptor
+  const checked = Object.entries(params)
   const bounded = { descriptor, serializedUtf8Bytes }
   if (version !== 1) return { kind: 'unavailable', reason: `Caption style version ${version} is unavailable`, ...bounded }
   const unknown = checked.filter(([key]) => !knownKey(key)).map(([key]) => key).sort()

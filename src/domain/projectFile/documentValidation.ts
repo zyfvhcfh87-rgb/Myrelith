@@ -1,3 +1,4 @@
+import { captionProjectIntentError } from '../captionIntentBudget'
 import { projectCropAnimationError } from '../projectCropAnimation'
 import { projectTitleAnimationError } from '../animationProjectBudget'
 import { projectTitleOwnershipError } from '../titleOwnership'
@@ -251,7 +252,7 @@ function validateCaptionItem(
   previous: CaptionItem | null,
 ): CaptionItem {
   const item = record(value, path)
-  exactKeys(item, ['id', 'range', 'text'], [], path)
+  exactKeys(item, ['id', 'range', 'text'], ['style', 'origin'], path)
   stringValue(item.id, `${path}.id`, CAPTION_LIMITS.maxIdCharacters)
   if (itemIds.has(item.id)) fail(`${path}.id`, 'duplicate caption item id')
   itemIds.add(item.id)
@@ -277,7 +278,7 @@ function validateCaptionTrack(
   exactKeys(
     track,
     ['id', 'name', 'language', 'role', 'stylePreset', 'hidden', 'items'],
-    [],
+    ['style', 'origin'],
     path,
   )
   stringValue(track.id, `${path}.id`, CAPTION_LIMITS.maxIdCharacters)
@@ -811,5 +812,7 @@ export function validateProjectFile(value: unknown): ProjectFile {
   const titleError = projectTitleOwnershipError(project as unknown as ProjectFile)
     ?? projectTitleAnimationError(project as unknown as ProjectFile)
   if (titleError) fail('$.sequences', titleError)
+  const captionError = captionProjectIntentError(project as unknown as ProjectFile)
+  if (captionError) fail('$.sequences', captionError)
   return project as unknown as ProjectFile
 }

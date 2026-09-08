@@ -1,6 +1,6 @@
 /** Pure, atomic caption batch proposals. The app owns currentness and history. */
 import { CAPTION_LIMITS, captionDocumentValidationError, compareCaptionItems, findCaptionTrack, normalizeCaptionText } from './captions'
-import { combineCaptionStyleOverrides, type CaptionStyleDescriptor } from './captionStyle'
+import { mergedCaptionIntent } from './captionMerge'
 import type { CaptionItem, CaptionTrack, FrameRate, TimelineDoc } from './schema'
 import { rangeEnd } from './time'
 
@@ -62,28 +62,6 @@ function literalReplace(text: string, find: string, replacement: string): { text
   return { text: normalizeCaptionText(result), count }
 }
 
-/** New schema fields are preserved by spread. Unknown merge intent is conservative. */
-function compatibleMerge(track: CaptionTrack, left: CaptionItem, right: CaptionItem): boolean {
-  const styledTrack = track as CaptionTrack & { style?: CaptionStyleDescriptor }
-  const a = left as CaptionItem & { style?: CaptionStyleDescriptor }
-  const b = right as CaptionItem & { style?: CaptionStyleDescriptor }
-  const one = combineCaptionStyleOverrides(styledTrack.style, a.style)
-  const two = combineCaptionStyleOverrides(styledTrack.style, b.style)
-  if (one.unavailable.length || two.unavailable.length) {
-    // Equal immutable unknown descriptors may survive; never partly interpret them.
-    if (a.style !== b.style) return false
-  } else {
-    const keys = new Set([...Object.keys(one.params), ...Object.keys(two.params)])
-    if ([...keys].some((key) => one.params[key as keyof typeof one.params] !== two.params[key as keyof typeof two.params])) return false
-  }
-  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
-  for (const key of keys) {
-    if (['id', 'range', 'text', 'style'].includes(key)) continue
-    if (Reflect.get(left, key) !== Reflect.get(right, key)) return false
-  }
-  return true
-}
-
 /**
  * Whole-project reservedIds must be supplied by the app before split planning.
  * Current-document caption identities are also reserved locally. No store mutation
@@ -118,15 +96,16 @@ export function planCaptionBatch(document: TimelineDoc, trackId: string, scope: 
       const first = track.items.indexOf(selectedItems[0]!)
       if (track.items.slice(first, first + selectedItems.length).some((item) => !selected.has(item.id))) fail('Merge selection must be adjacent in the track')
       let text = selectedItems[0]!.text
+      let intent = mergedCaptionIntent(track, selectedItems[0]!, selectedItems[0]!)
       for (let index = 1; index < selectedItems.length; index++) {
         const previous = selectedItems[index - 1]!; const item = selectedItems[index]!
         if (rangeEnd(previous.range) !== item.range.startFrame) fail('Merged caption ranges must touch exactly')
-        if (!compatibleMerge(track, selectedItems[0]!, item)) fail('Merged captions must have equal style and compatible provenance')
+        intent = mergedCaptionIntent(track, { ...selectedItems[0]!, ...intent }, item)
         text += '\n' + item.text
         if (text.length > CAPTION_LIMITS.maxItemCharacters) fail('Merged text exceeds the per-cue budget')
       }
       const start = selectedItems[0]!
-      const merged = { ...start, text, range: { startFrame: start.range.startFrame,
+      const merged = { ...start, ...intent, text, range: { startFrame: start.range.startFrame,
         durationFrames: rangeEnd(selectedItems.at(-1)!.range) - start.range.startFrame } }
       items = track.items.filter((item) => !selected.has(item.id)).concat(merged)
       note(selectedItems, [merged])

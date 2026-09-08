@@ -1,3 +1,4 @@
+import { copyCaptionIntent } from '../captionIntent'
 import { immutableColorLuts } from '../colorLutCatalog'
 import { copyTitleDefinition } from '../titleOwnership'
 import type { Effect, TimelineDoc } from '../schema';
@@ -189,11 +190,15 @@ function portableTimelineSnapshot(document: TimelineDoc): TimelineDoc {
         language: track.language,
         role: track.role,
         stylePreset: track.stylePreset,
+        ...(track.style === undefined ? {} : { style: copyCaptionIntent(track.style) }),
+        ...(track.origin === undefined ? {} : { origin: copyCaptionIntent(track.origin) }),
         hidden: track.hidden,
         items: track.items.map((item) => ({
           id: item.id,
           range: { ...item.range },
           text: item.text,
+          ...(item.style === undefined ? {} : { style: copyCaptionIntent(item.style) }),
+          ...(item.origin === undefined ? {} : { origin: copyCaptionIntent(item.origin) }),
         })),
       })),
       masterAudio: (() => {
