@@ -12,6 +12,7 @@ let active: MaskEditSession | null = null
 /** The gesture owns subscriptions; onEnd runs once after cleanup, including commit. */
 export function beginMaskEdit(target: MaskEditTarget, onEnd?: () => void): MaskEditSession {
   active?.cancel()
+  if (active !== null) throw new Error('Another mask edit started during cleanup. Finish that edit first.')
   const document = useDocumentStore.getState(), transport = useTransportStore.getState()
   if (document.activeSequenceId !== target.sequenceId || transport.selectedClipId !== target.clipId) throw new Error('Select this mask clip before editing it.')
   if (transport.isPlaying || transport.isScrubbing) throw new Error('Pause playback before editing a mask.')

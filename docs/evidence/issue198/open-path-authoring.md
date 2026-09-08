@@ -58,10 +58,21 @@ undo/redo, no render preview while open, all cancellation routes, layout settlin
 before the first point, late Close, fractional numeric coordinates, and the
 existing static/grading/preview ownership regressions.
 
-Final focused result: **186 tests in eight files and 17 runner checks passed**.
+Initial `031b59d` focused result: **186 tests in eight files and 17 runner checks passed**.
 Build/typecheck passed (5,023 modules, existing large-chunk advisory only);
 lint and diff hygiene passed. A prior smaller development focus passed 83 tests;
 the later reentrant-owner and hidden-canvas cases are included in the final count.
+
+Parent review found a distinct reentrant-startup race: canceling the previous
+owner can invoke its end callback, which creates a replacement owner and preview.
+The outer startup previously displaced that replacement without cleanup. Startup
+now refuses to continue if cancellation installed another live owner. The new
+regression verifies the replacement preview remains authoritative and usable,
+only its document/transport subscriptions remain, the refused outer callback
+never runs, no history changes on refusal, and final replacement commit clears
+all subscriptions once. Correction validation: **187 tests in eight files plus
+17 runner checks passed**, with build/typecheck, lint and diff checks green.
+No browser run preceded this correction.
 
 Browser plugin not available. The existing quiet Playwright configuration on
 strict port 5198 now has four tests: the three accepted static flows plus a new
