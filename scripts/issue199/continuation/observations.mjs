@@ -8,7 +8,7 @@ import { performance } from 'node:perf_hooks'
 import { expect } from '@playwright/test'
 import { relinkGestureAudio } from './playback-setup.mjs'
 
-export const continuationProductSource = '75b89ef6b70460a03ea99ca44d888b5ec06373ec'
+export const continuationProductSource = '1537d5e23ebf223c51f269f1e1a5f6a902ecaa0e'
 const digest = (value) => createHash('sha256').update(value).digest('hex')
 const TITLE = { text: 'Native curve title', kind: 'scalar', label: 'Opacity', owner: 'root-text' }
 const VIDEO = { text: 'Offline video with held mask', kind: 'scalar', label: 'Opacity', owner: 'ordinary-video' }
@@ -297,7 +297,7 @@ export async function runAnimationGestures(h) {
     assert.equal((await q.peek()).effectOwner, 'color-grading')
     await page.evaluate(() => window.__animationQA.transport.getState().setColorGradingPreview(null))
     assert.equal((await q.peek()).effectOwner, null); await q.unchanged('siblings')
-    return { setup: 'Canonical named transient preview APIs; three owners at frozen75b89ef' }
+    return { setup: 'Canonical named transient preview APIs; three owners at frozen1537d5e' }
   })
   await step('deliberate project departure cancels captured keys before replacing the portable project', async () => {
     await q.focusLane(TITLE); await q.grid().press('ArrowRight'); await settled()
@@ -406,7 +406,7 @@ export async function runAnimationEditing(h) {
       await q.button('Curve').click(); await settled(); await expect(page.locator('[data-curve-samples]')).toHaveAttribute('data-curve-samples', '0')
       await q.unchanged(`unavailable-${lane.label}`)
     }
-    return { titleEffectGuard: 'Unavailable on frozen75b89ef; no later helper parity claim' }
+    return { titleEffectGuard: 'Unavailable on frozen1537d5e; no later helper parity claim' }
   })
   await step('complete cross-owner mapping, incompatible mapping refusal, collision refusal and undo', async () => {
     await q.focusLane(TITLE); await q.grid().press('ArrowRight'); await settled()

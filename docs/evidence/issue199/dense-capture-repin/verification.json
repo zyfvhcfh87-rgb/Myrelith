@@ -1,0 +1,16 @@
+{
+  "at": "2026-09-08T19:20:33.802Z",
+  "productSource": "1537d5e23ebf223c51f269f1e1a5f6a902ecaa0e",
+  "previousProductSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "observationsIdentityOnly": true,
+  "observationsSha256": "8abd3fe730f00431c85bc6c63bb980489c09cfd6f6e3aa03894f201cc64e8cb4",
+  "changedProductFiles": [
+    "src/ui/animation/AnimationGrid.tsx",
+    "src/ui/animation/AnimationWorkspace.test.tsx",
+    "src/ui/animation/useAnimationPointer.ts"
+  ],
+  "sourceFiles": 242,
+  "unchangedProductFiles": 239,
+  "fixtureGenerationIdentity": "b33b7531027979b8886f5db979d57cd96b96175d",
+  "nativeRun": "not launched; conditional freeze being prepared"
+}

@@ -1,6 +1,6 @@
 # Issue 199 — bounded Animation continuation
 
-Status: **source-only large-fixture provenance correction; root review and an explicit native handoff are required.**
+Status: **dense-capture fix accepted; ONE unchanged large run conditionally granted after clean source-identity freeze.**
 The supervisor accepted `095e6d9463580e3502ba7c210d3982bed548a52f` as the
 six-checkpoint early pass, not all of Gate 3. The early runner and its attempt
 evidence remain unchanged. This protocol implements the remaining scope in
@@ -9,7 +9,7 @@ Each selected segment needs source/protocol review and a separate explicit slot.
 
 ## Exact source and fixtures
 
-Product source: `75b89ef6b70460a03ea99ca44d888b5ec06373ec`, on the frozen
+Product source: `1537d5e23ebf223c51f269f1e1a5f6a902ecaa0e`, on the frozen
 `4340f9675ad56aa320f2498cf107fd55f8819568` integration lineage. There is no
 midpoint integration or product/configuration edit in this checkpoint.
 `../observation-source-hashes.json` pins all 242 source/test/configuration files.
@@ -37,11 +37,11 @@ These are fixture/domain checks, not browser or performance observations.
 
 The large segment pins the supplemental generation identity explicitly to
 `b33b7531027979b8886f5db979d57cd96b96175d`. Its independent runtime checks still
-require executing product `75b89ef6b70460a03ea99ca44d888b5ec06373ec` and all frozen
+require executing product `1537d5e23ebf223c51f269f1e1a5f6a902ecaa0e` and all frozen
 source/checkpoint hashes. `report.largeFixtureSources` records both identities;
 they describe different stages and are not compared for equality. The intervening
-product diff contains only the accepted AnimationWorkspace cancellation fix and
-its test; fixture generators and domain code did not change. No fixture or
+product changes are the accepted UI mode-cancellation and dense-capture fixes
+and their tests; fixture generators and domain code did not change. No fixture or
 generation manifest is regenerated or rewritten for this correction.
 
 The mixed fixture includes video opacity, clip audio Volume/Balance, adjustment
@@ -122,7 +122,7 @@ identity. It does not use a saved user browser profile or create a visible windo
 | Locator click/fill/selectOption/setChecked/focus/scrollIntoView and setInputFiles | Actual application DOM controls and portable-open flow. These are browser automation operations; they do not qualify an OS file picker, screen-reader speech, or a physical keyboard/IME. Accepted early evidence separately used Chromium `Input.imeSetComposition` and `Input.dispatchKeyEvent` for IME containment. |
 | Actual captured element `releasePointerCapture`, then one native pointer move while held | The release request clears pending capture. The following real move processes pending capture; require trusted capture/loss on the same pointer and element, no mouseup, then a cleared preview and unchanged document/history/clipboard before release. This trigger combines a browser API call with native input. |
 | Production `setPlayheadFrame` | Explicit transient scenario positioning and ten playhead updates. Native transport-button playback/pause is separate. This does not claim native Timeline seeking or continuous playback index measurement. |
-| Production `setColorGradingPreview` / `setMaskPreview` | Explicit sibling-preview setup/restoration around a native Animation drag. It checks the three owners present at 75b89ef. It does not qualify native grading/mask authoring, the later fourth tracking owner, or later title-effect helper parity. |
+| Production `setColorGradingPreview` / `setMaskPreview` | Explicit sibling-preview setup/restoration around a native Animation drag. It checks the three owners present at 1537d5e. It does not qualify native grading/mask authoring, the later fourth tracking owner, or later title-effect helper parity. |
 | Already-requested production module exports | Read-only store/history/clipboard observations plus the explicitly named transient setup above. No dev module, product test route, bundled-code replacement, or document edit API is injected into the page. Diagnostic project/history references retain at most four checkpoints and are cleared on portable project replacement. |
 | Canonical host snapshot/serializer/parser followed by UI reopen | Portable-file round trip of the actual mixed edits, with exact full project payload equality and explicit negative source-time intent. No native Save/Save As picker or downloaded-media claim. |
 | Component spy and pure indexed-read tests | Exact index-build reuse across playhead updates and bounded indexed reads. The unmodified browser bundle exposes no public build counter, so browser checks establish stable document/history and DOM bounds, not a separately measured browser rebuild count. |
@@ -196,11 +196,23 @@ This correction requires separate source review and a new native execution grant
 
 ## Mode-fix source repin
 
-Current product source is accepted `75b89ef6b70460a03ea99ca44d888b5ec06373ec`. The continuation
+At the mode-fix checkpoint, accepted product source was `75b89ef6b70460a03ea99ca44d888b5ec06373ec`. The continuation
 actions/assertions remain identical to reviewed `7e7cfade097446c6f68219919fac838a8134f664`;
 only source identity and diagnostic provenance labels change. Prior source and
 checkpoint manifests are preserved under `docs/evidence/issue199/mode-repin/`.
 All earlier attempt evidence and all four fixture bytes are unchanged. Fixture
 generation remains recorded at its original source, including the supplemental
-b33b753 provenance. Only gestures is granted now; editing/large fixtures and
-qualification are subject to their later separate review/slot.
+b33b753 provenance. At that checkpoint only gestures was granted; editing/large
+fixtures and qualification remained subject to later separate review/slot.
+
+## Dense-capture source repin
+
+Current accepted product is `1537d5e23ebf223c51f269f1e1a5f6a902ecaa0e`. Only its source identity and
+diagnostic labels are repinned; all native actions/assertions/limits are unchanged
+from the reviewed large runner at `4f825bd8eaeb3a0b83e6f0f2f6092872581afc5b`.
+Prior 242-source and 58-checkpoint manifests are preserved under
+`docs/evidence/issue199/dense-capture-repin/`. The supplemental generation identity
+remains b33b753 and every fixture/generator byte is unchanged. The parent accepted
+the exact three-file patch and passing build, then conditionally granted one
+large segment after clean commit/hash verification and SHA recording before launch.
+No other segment, full suite, export, performance run or integration sync is granted.
