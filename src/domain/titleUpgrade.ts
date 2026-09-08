@@ -1,5 +1,7 @@
 /** Explicit compact-text upgrade builds one candidate; callers own file/history admission. */
-import { clipAnimation } from './clipAnimation'
+import { clipAnimation, resolveClipAnimationAtFrame } from './clipAnimation'
+import { animationParameterIdentityError } from './animationParameterIdentity'
+import { effectAnimationParameterSpec, effectSupportsSurface } from './effectStack'
 import { clipVisualSettings, defaultClipTransform, defaultClipVisualSettings } from './clipInspector'
 import { projectTitleAnimationError } from './animationProjectBudget'
 import { replaceProjectSequence, sequenceById, type SequenceProject } from './projectSequences'
@@ -25,6 +27,27 @@ export function upgradeLegacyTextTitle(
     if (clip.text === undefined || clip.title !== undefined || track.kind !== 'video') return { ok: false, reason: 'Choose one compact text clip on a video track.' }
     const textError = textPropsValidationError(clip.text)
     if (textError) return { ok: false, reason: textError }
+    const pluginAnimation = clip.effects.some((effect) => effect.enabled && effect.type.startsWith('plugin:')
+      && clip.animation?.effectTracks?.some((lane) => {
+        const identity = lane.parameterIdentity
+        return lane.effectId === effect.id && lane.keyframes.length > 0
+          && identity?.version === 1 && animationParameterIdentityError(identity) === null
+          && identity.effectType === effect.type && identity.descriptorVersion === effect.version
+      }))
+    if (pluginAnimation) return { ok: false, reason: 'Upgrading could change stored plugin animation. Keep this compact text clip to preserve its animation.' }
+    const sourceEffectAnimation = clip.effects.some((effect, effectIndex) => effect.enabled
+      && effectSupportsSurface(effect, 'source-layer') && !effectSupportsSurface(effect, 'post-composite')
+      && clip.animation?.effectTracks?.some((lane) => {
+        if (lane.effectId !== effect.id || lane.parameterIdentity !== undefined
+          || !effectAnimationParameterSpec(effect, lane.parameter)) return false
+        const key = lane.keyframes.find((key) => key.value !== effect.params[lane.parameter])
+        if (!key) return false
+        // The existing evaluator is the authority for track/value/descriptor
+        // validity. Inactive malformed/future keys cannot trigger this refusal.
+        const resolved = resolveClipAnimationAtFrame(clip, clip.timelineRange.startFrame + key.frame)
+        return resolved.effects[effectIndex].params[lane.parameter] !== effect.params[lane.parameter]
+      }))
+    if (sourceEffectAnimation) return { ok: false, reason: 'Upgrading could change stored source-effect animation. Keep this compact text clip to preserve its animation.' }
     const allocate = createTitleElementIdAllocator(project, factory)
     const { fontFamily, ...text } = clip.text
     const visual = clipVisualSettings(clip)

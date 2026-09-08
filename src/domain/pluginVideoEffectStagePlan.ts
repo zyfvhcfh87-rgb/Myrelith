@@ -544,7 +544,9 @@ function pluginStage(
   }
   let animationDetail: string | null = null
   const animation = clipAnimation(clip)
-  if (!clipAnimationValidationError(animation)) {
+  if (clip.title !== undefined && effectAnimationTracks(animation).some((track) => track.effectId === effect.id)) {
+    animationDetail = 'Plugin animation is unavailable on titles; stored keys are preserved and static parameters are used.'
+  } else if (!clipAnimationValidationError(animation)) {
     const localFrame = timelineFrame - clip.timelineRange.startFrame
     if (Number.isSafeInteger(localFrame)) {
       for (const parameter of declaration.parameters) {

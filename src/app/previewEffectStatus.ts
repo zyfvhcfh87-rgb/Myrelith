@@ -144,7 +144,7 @@ export function projectPlannedPreviewEffectStatuses(
   const planned = new Map<EffectId, PreviewEffectStatus>()
   for (const item of plan.items) {
     const clips = item.kind === 'clip' ? [item.request.clip]
-      : item.kind === 'text' ? [item.clip]
+      : (item.kind === 'text' || item.kind === 'title') ? [item.clip]
         : item.kind === 'crossfade' ? item.requests.map((request) => request.clip)
           : []
     const stacks = clips.map((clip) => resolveEffectStack(clip.effects, available, context))

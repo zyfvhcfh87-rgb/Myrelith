@@ -1,4 +1,5 @@
 import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
+import { expandedTitleProject, replaceFirstTitleClip } from '../test/titleOwnerFixtures'
 /**
  * app/exportController.test.ts — Phase 5.2a composition-root wiring.
  *
@@ -323,6 +324,13 @@ afterEach(async () => {
 })
 
 describe('exportController wiring and completion', () => {
+  test('unavailable titles fail before playback drain, media, codec and pipeline allocation', async () => {
+    const project = replaceFirstTitleClip(expandedTitleProject(), (clip) => ({ ...clip, title: { version: 99 } }))
+    useDocumentStore.getState().setProject(project)
+    const h = makeHarness()
+    await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow(/Title|title/)
+    for (const call of [h.preparePlaybackForExport, h.fetchBlob, h.preflightProfile, h.createMediaSource, h.createPipelineDeps, h.runExport]) expect(call).not.toHaveBeenCalled()
+  })
   test('does not retain an offline multicam angle that cannot contribute output', async () => {
     const unusedAsset: MediaAsset = {
       ...ASSET,

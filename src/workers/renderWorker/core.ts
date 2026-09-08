@@ -18,7 +18,7 @@ import { supportsCanvasEffectFilter, supportsCanvasEffectPixels } from '../../do
 import { analyzeVideoScopes, VIDEO_SCOPE_SAMPLE_HEIGHT, VIDEO_SCOPE_SAMPLE_WIDTH } from '../../domain/videoScopes';
 import { assertRenderSurfaceBudget } from '../../domain/renderSurfaceBudget';
 import type { Composite2D, FrameSource, RenderFrameSource, TransitionSurfaceProvider, TransitionSurfaces, VideoEffectStageExecutor } from '../../pipeline/render';
-import { compositeFrame } from '../../pipeline/render';
+import { clearTextLayoutCaches, compositeFrame } from '../../pipeline/render';
 import { LensRemapUnavailableError, LENS_REMAP_BACKEND_VERSION, type LensRemapAvailability, type LensRemapProvider } from '../../pipeline/lensRemap';
 import { createDocumentLensRemapProvider, documentHasLensCorrection, documentHasSupportedLensCorrection, WebGl2LensRemapBackend } from '../../pipeline/lensRemapWebgl';
 import { staticImageDecodedByteLength, STATIC_IMAGE_RESIDENT_BUDGET_BYTES, StaticImageDecodeError, type DecodedStaticImage, type StaticImageDecodedByteReservation, type StaticImageDecodedByteReserver, type StaticImageRenderSource } from '../../pipeline/static-image';
@@ -2007,6 +2007,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       }
       case 'setColorLuts': { supersede(); colorLuts = msg.catalog; break }
       case 'setDoc': {
+        clearTextLayoutCaches([visibleCtx, scratchCtx, transitionLegCtx, transitionGroupCtx])
         const previousDoc = doc
         invalidatePlaybackPolicyForDoc(previousDoc, msg.doc)
         supersede() // an in-flight composite is rendering a stale doc
@@ -2017,6 +2018,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         break
       }
       case 'setPresentationProfile': {
+        clearTextLayoutCaches([visibleCtx, scratchCtx, transitionLegCtx, transitionGroupCtx])
         supersede()
         presentationProfile = msg.profile
         syncCanvases()
@@ -2093,6 +2095,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
             ...pendingImageOpens.map((pending) => pending.done),
           ],
         )
+        clearTextLayoutCaches([visibleCtx, scratchCtx, transitionLegCtx, transitionGroupCtx])
         gradingRuntime?.dispose(); gradingRuntime = null; colorLuts = []
         const errors = results
           .filter((result): result is PromiseRejectedResult => result.status === 'rejected')

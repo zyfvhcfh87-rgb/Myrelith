@@ -1,5 +1,6 @@
 /** Shared immutable visual plan for one project sequence, including nesting. */
 import { snapshotVideoBusStack } from './videoBusStage'
+import { titleCompositionBudgetError } from './titleComposition'
 
 import type {
   Clip,
@@ -274,6 +275,8 @@ export function createProjectVideoCompositionPlanner(
           `nested frame exceeds ${MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME} leaf requests`,
         )
       }
+      const titleError = titleCompositionBudgetError(plan)
+      if (titleError) throw new RangeError(titleError)
       return plan
     },
   })
