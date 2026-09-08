@@ -1,6 +1,6 @@
 # Local speech model decision — replacement lab preflight
 
-Date: 2026-09-08. Status: replacement prepared for review before exclusive Gate 1.
+Date: 2026-09-08. Status: first frozen lab attempt failed at a cache-key prerequisite.
 **Product enablement remains NO-GO pending runtime/offline/lifecycle evidence.**
 This status preserves the separate decision required by issue #201. The
 orchestrator may approve the independent caption implementation after reviewing
@@ -22,7 +22,11 @@ license and notice inventory, fixture provenance, frozen thresholds, executable
 harness and remaining qualifications. [replacement-manifest.json](replacement-manifest.json)
 binds every selected asset and measurement. The inspected executable JavaScript
 package advisory query returned no entries; this does not establish complete
-native-WASM advisory coverage or approve production use. Inference has not run.
+native-WASM advisory coverage or approve production use. The first frozen run
+failed before model initialization because the cache adapter omitted the SDK's
+leading-slash local lookup key. [LAB_RUN_01.md](LAB_RUN_01.md) preserves the raw
+evidence, invalid/aborted downstream classifications and released-slot cleanup.
+No model inference occurred; corrections need a new review and exclusive slot.
 
 The original 3.8.1 standalone candidate is **superseded for lab execution** after
 the advisory lookup in [candidate-advisories.json](candidate-advisories.json).
