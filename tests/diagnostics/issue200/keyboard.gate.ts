@@ -320,7 +320,7 @@ async function dialogs(page: Page) {
   await type(page, 'Cancelled keyboard title'); await page.keyboard.press('Escape'); await expect(save).toBeFocused()
   const saveCancelled = await state(page, 'save-cancelled'); unchanged(before, saveCancelled); expect(saveCancelled.library.entries).toEqual(library)
   const templates = button(page, 'Title templates')
-  await activate(page, 'Title templates', true); await expect(page.getByRole('dialog', { name: 'Title templates', exact: true })).toBeVisible()
+  await activate(page, 'Title templates'); await expect(page.getByRole('dialog', { name: 'Title templates', exact: true })).toBeVisible()
   await dialogCycle(page, 'template-library')
   const builtins = page.getByRole('dialog').locator('.title-actions button')
   expect(await builtins.count()).toBe(3)
