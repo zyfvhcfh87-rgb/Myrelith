@@ -1,0 +1,3 @@
+Listing tests:
+  [chromium] › first-paint.gate.ts:103:1 › fallback reopen records the original boundary and six actual canvas checkpoints
+Total: 1 test in 1 file

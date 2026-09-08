@@ -1,0 +1,24 @@
+{
+  "tests": {
+    "rawBytes": 2149,
+    "rawSha256": "f3c6052577a34af5f5a092a1072fec06e398675e61368093f0efb0b94424fb28",
+    "readableBytes": 2148,
+    "readableSha256": "befa53dcbbcf8d551f15e237113f8c7ec383159fc87c8986c4f8aef92b923ea1"
+  },
+  "build": {
+    "rawBytes": 4369,
+    "rawSha256": "0b18d9e25f1c5064bbab3bdd6574dbb452baa987ee9eefb8f0add11779e5a1b5",
+    "readableBytes": 4367,
+    "readableSha256": "058f823047df80741f5e9e11265a43f5d6e694dded10d3543f75198bc722a7bb"
+  },
+  "lint": {
+    "rawBytes": 41,
+    "rawSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+    "readableBytes": 39,
+    "readableSha256": "c69d64bb2173ebe42cc6fa332d8185c77f18c853a6f2b16dd7a8adb7ba833fbc"
+  },
+  "archive": {
+    "bytes": 2913,
+    "sha256": "57c1e574aef976d5233f79196d0de7565fb1d6e18f7b36a9fac8d41063045213"
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "nativeExecuted": false,
+  "productionBuildExecuted": false,
+  "checks": {
+    "vitestSuites": 3,
+    "vitestTests": 24,
+    "canonicalRunnerChecks": 17,
+    "inertNativeRunnerTests": 12,
+    "appTypecheck": "pass",
+    "diagnosticTypecheck": "pass",
+    "lint": "pass",
+    "discoveredTests": 1,
+    "syntax": "Node and Python pass",
+    "reviewedRunnerCore": "exact after four diagnostic-name substitutions"
+  },
+  "changedSinceParentRead": [
+    "src/test/titleFirstPaintObserver.test.ts"
+  ],
+  "parentDeltaExplanation": "Five lines add an injected-clock 10-second deadline check; executable native diagnostic source unchanged.",
+  "rawMembers": [
+    {
+      "path": "focused-tests.log",
+      "bytes": 2131,
+      "sha256": "006fc1c3bddc014142a99f15c71f46f9a715c9743995af2657813c3959e75753"
+    },
+    {
+      "path": "app-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "diagnostic-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "lint.log",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "runner-tests.log",
+      "bytes": 111,
+      "sha256": "7c4ce78e536c0c2cdb85730c9c8381839f365b3a2b9d77c5cc9eaede9427b0df"
+    },
+    {
+      "path": "discovery.log",
+      "bytes": 166,
+      "sha256": "298d0ab512edac0496314e42ed982b1ebbcaf5de09959b3782ae5d1857e4377a"
+    },
+    {
+      "path": "initial-fixture-test-failure.log",
+      "bytes": 9158,
+      "sha256": "8248d1822ca4ea83243b7b3a6ab25253cbbead05d2f028e4ddfc5a20f264fab4"
+    },
+    {
+      "path": "parent-tests.log",
+      "bytes": 265,
+      "sha256": "0bb09788e20063b1dd6a6d4251b287c73e1d70a0a2d9de6ab7158a313f685231"
+    },
+    {
+      "path": "parent-runner.log",
+      "bytes": 111,
+      "sha256": "8d792d81c28f14e81434cb2a175feb8a800363e60faf05e9aa008104cb37a9c2"
+    },
+    {
+      "path": "parent-read-hashes.json",
+      "bytes": 1230,
+      "sha256": "7a5e4b58f11e49623aa55eceb3bfca019c1a655389c6c9db2bfc5475542cd859"
+    },
+    {
+      "path": "parent-delta.json",
+      "bytes": 110,
+      "sha256": "7fff32efcd34af10231b7f79c20c6ec2aa178a8a148715b37d93e3545f1487e2"
+    }
+  ],
+  "files": [
+    {
+      "path": "app-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "diagnostic-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "discovery.log",
+      "bytes": 166,
+      "sha256": "298d0ab512edac0496314e42ed982b1ebbcaf5de09959b3782ae5d1857e4377a"
+    },
+    {
+      "path": "focused-tests.log",
+      "bytes": 2131,
+      "sha256": "006fc1c3bddc014142a99f15c71f46f9a715c9743995af2657813c3959e75753"
+    },
+    {
+      "path": "initial-fixture-test-failure.log",
+      "bytes": 9157,
+      "sha256": "f14576f18545b178dbaa54a0951fd1e6ded83000515fec4deef7c1373e703879"
+    },
+    {
+      "path": "lint.log",
+      "bytes": 40,
+      "sha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c"
+    },
+    {
+      "path": "parent-delta.json",
+      "bytes": 110,
+      "sha256": "7fff32efcd34af10231b7f79c20c6ec2aa178a8a148715b37d93e3545f1487e2"
+    },
+    {
+      "path": "parent-read-hashes.json",
+      "bytes": 1230,
+      "sha256": "7a5e4b58f11e49623aa55eceb3bfca019c1a655389c6c9db2bfc5475542cd859"
+    },
+    {
+      "path": "parent-runner.log",
+      "bytes": 111,
+      "sha256": "8d792d81c28f14e81434cb2a175feb8a800363e60faf05e9aa008104cb37a9c2"
+    },
+    {
+      "path": "parent-tests.log",
+      "bytes": 264,
+      "sha256": "8b1a9f05e5498bdfe6b02c571e7beb9da6e4a525d2e29d99addb7f976c5e00d5"
+    },
+    {
+      "path": "raw-logs.tar.gz",
+      "bytes": 4107,
+      "sha256": "70f13fbf8ceea9b9f608d43a49b5d492cba21f42aa3d5949bb73cee96435dcd8"
+    },
+    {
+      "path": "runner-tests.log",
+      "bytes": 111,
+      "sha256": "7c4ce78e536c0c2cdb85730c9c8381839f365b3a2b9d77c5cc9eaede9427b0df"
+    }
+  ]
+}
