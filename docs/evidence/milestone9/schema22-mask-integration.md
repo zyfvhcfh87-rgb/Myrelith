@@ -35,3 +35,18 @@ Exact logs are retained locally in /private/tmp/schema22-mask-integration-*.
 The earlier four-flow mask browser result qualifies ef5c191, before this merge.
 Combined browser revalidation, full suite, export parity and measured performance
 remain separate gates. No issue is complete and no publication is included.
+
+## Combined browser attempt on f9945c4
+
+The four quiet Chromium checks ran on clean f9945c44f75a4818bc939d8b6e63c09db353e669.
+Rectangle, Bezier and open-authoring passed; ellipse resize cancellation failed
+at tests/browser/issue-198-static-mask.spec.ts:113. A viewport resize followed
+immediately by pointer release committed x=0.26034482758620686 instead of
+preserving x=0.2. This is an actionable integration finding, not a qualified
+baseline failure or a passing gate. The mask owner is fixing the ordering so
+commit cannot precede cancellation merely because resize delivery is delayed.
+
+The 12.8-second run log remains at /private/tmp/schema22-mask-integration-browser.log;
+the failed screenshot, trace and context are retained under the integration
+worktree's .tmp/playwright-issue198 directory. Scoped process/listener inspection
+confirmed no Chromium/Playwright/Vite process or 5198 listener after the run.
