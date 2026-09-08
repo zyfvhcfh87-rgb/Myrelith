@@ -21,7 +21,25 @@ const track = (id: string, sequenceInstances: SequenceInstance[], more: Partial<
 const project = (root: TimelineDoc, ...children: TimelineDoc[]) => ({
   ...sequenceProjectFromTimeline(root), sequences: [root, ...children] })
 
-describe('staged caption export availability', () => {
+describe('caption export availability', () => {
+  it('checks known styles against the actual canvas pixel limits', () => {
+    const root = { ...doc('root', [captions('cc', [{ ...cue('too-small', 0, 5),
+      style: { version: 1, params: { fontSizePermille: 8 } } }])]), width: 64, height: 64 }
+    expect(firstCaptionExportBlocker(project(root), root.id)).toMatchObject({
+      cueId: 'too-small', frame: 0, reason: expect.stringMatching(/Font size/) })
+    const hidden = { ...root, captionTracks: root.captionTracks!.map((track) => ({ ...track, hidden: true })) }
+    expect(firstCaptionExportBlocker(project(hidden), hidden.id)).toBeNull()
+  })
+
+  it('checks real margin fit when another track enters the visible stack', () => {
+    const root = { ...doc('root', [captions('first', [cue('a', 0, 10)], {
+      style: { version: 1, params: { position: 'top', marginYPermille: 250 } } }),
+      ...Array.from({ length: 7 }, (_, index) => captions(`track-${index}`, [cue(`cue-${index}`, 5, 5)]))]),
+      width: 320, height: 180 }
+    expect(firstCaptionExportBlocker(project(root), root.id)).toMatchObject({
+      cueId: 'a', frame: 5, reason: expect.stringMatching(/cannot fit/) })
+  })
+
   it('blocks visible unavailable cue intent with exact identity/frame', () => {
     const root = doc('root', [captions('cc', [cue('future', 8, 2, true)])])
     expect(firstCaptionExportBlocker(project(root), root.id)).toMatchObject({

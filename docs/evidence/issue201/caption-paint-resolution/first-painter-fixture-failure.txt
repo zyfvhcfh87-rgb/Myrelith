@@ -1,0 +1,33 @@
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201
+
+ ❯ src/domain/captionPaint.test.ts (14 tests | 1 failed) 25ms
+     × reports unsupported pixel metrics without clamping authored values: { marginXPermille: 250, …(1) } 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/domain/captionPaint.test.ts > caption paint compatibility and style resolution > reports unsupported pixel metrics without clamping authored values: { marginXPermille: 250, …(1) }
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/domain/captionPaint.test.ts:86:77
+     84|     const doc = document(width, height), track = { ...createCaptionTra…
+     85|     const result = resolveCaptionPaint(doc, track, cue, 0, 1)
+     86|     expect(result.unavailable.some((entry) => entry.level === 'renderi…
+       |                                                                             ^
+     87|     expect(result.paint).toEqual(captionPaintFor(doc, track, cue, 0, 1…
+     88|     expect(track.style.params).toEqual(params)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  19:46:09
+   Duration  359ms (transform 84ms, setup 21ms, import 94ms, tests 25ms, environment 168ms)
+

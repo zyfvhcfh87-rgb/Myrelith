@@ -1,5 +1,6 @@
 /** Exact reachable caption intervals for burned-in export availability. */
 import { combineCaptionStyleOverrides } from './captionStyle'
+import { resolveCaptionPaint } from './captionPaint'
 import type { SequenceProject } from './projectSequences'
 import type { CaptionItem, CaptionTrack, TimelineDoc } from './schema'
 import { docDurationFrames } from './selectors'
@@ -53,7 +54,8 @@ function stackChanges(sequence: TimelineDoc, range: FrameInterval): Map<number, 
  * geometry can become unavailable when another caption starts or ends.
  */
 export function firstCaptionExportBlocker(project: SequenceProject, sequenceId: string,
-  paintError?: CaptionPaintError): CaptionExportBlocker | null {
+  paintError: CaptionPaintError = (doc, track, cue, index, size) =>
+    resolveCaptionPaint(doc, track, cue, index, size).unavailable[0]?.reason ?? null): CaptionExportBlocker | null {
   const sequences = new Map(project.sequences.map((sequence) => [sequence.id, sequence]))
   const root = sequences.get(sequenceId)
   if (!root) throw new RangeError('The caption export sequence is unavailable.')

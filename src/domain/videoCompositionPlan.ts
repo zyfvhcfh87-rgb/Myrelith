@@ -15,9 +15,9 @@ import type {
 } from './schema'
 import {
   activeCaptionItemsAtFrame,
-  captionPaintFor,
   type CaptionPaint,
 } from './captions'
+import { resolveCaptionPaint } from './captionPaint'
 import {
   crossfadeFrameGroupAt,
   resolveCrossfadePlan,
@@ -356,7 +356,7 @@ export function createVideoCompositionPlanner(
           kind: 'caption',
           trackId: caption.track.id,
           frame,
-          paint: captionPaintFor(doc, caption.track, caption.item, index, captions.length),
+          paint: resolveCaptionPaint(doc, caption.track, caption.item, index, captions.length).paint,
         })
       }
       if (master.length) items.push({ kind: 'video-bus', target: 'master', trackId: '', sequenceId: doc.id, frame, instancePath: [], effects: master })

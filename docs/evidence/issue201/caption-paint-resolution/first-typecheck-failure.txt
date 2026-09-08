@@ -1,0 +1,21 @@
+
+> myrelith@0.2.0-alpha.1 build
+> tsc -b && vite build
+
+src/domain/captionExport.test.ts(30,46): error TS18048: 'root.captionTracks' is possibly 'undefined'.
+src/domain/captionPaint.test.ts(27,84): error TS2322: Type '{ position?: undefined; marginXPermille?: undefined; marginYPermille?: undefined; fontFamily?: undefined; fontSizePermille?: undefined; color?: undefined; outlineColor?: undefined; backgroundColor?: undefined; ... 6 more ...; shadowEnabled?: undefined; } | { ...; } | { ...; }' is not assignable to type 'Readonly<Record<string, CaptionIntentValue>>'.
+  Type '{ position?: undefined; marginXPermille?: undefined; marginYPermille?: undefined; fontFamily?: undefined; fontSizePermille?: undefined; color?: undefined; outlineColor?: undefined; backgroundColor?: undefined; ... 6 more ...; shadowEnabled?: undefined; }' is not assignable to type 'Readonly<Record<string, CaptionIntentValue>>'.
+    Property 'position' is incompatible with index signature.
+      Type 'undefined' is not assignable to type 'CaptionIntentValue'.
+src/domain/captionPaint.test.ts(85,45): error TS2345: Argument of type '{ style: { version: number; params: { fontSizePermille: number; outlinePermille?: undefined; marginXPermille?: undefined; } | { outlinePermille: number; fontSizePermille?: undefined; marginXPermille?: undefined; } | { ...; }; }; ... 7 more ...; items: CaptionItem[]; }' is not assignable to parameter of type 'CaptionTrack'.
+  The types of 'style.params' are incompatible between these types.
+    Type '{ fontSizePermille: number; outlinePermille?: undefined; marginXPermille?: undefined; } | { outlinePermille: number; fontSizePermille?: undefined; marginXPermille?: undefined; } | { marginXPermille: number; fontSizePermille: number; outlinePermille?: undefined; }' is not assignable to type 'Readonly<Record<string, CaptionIntentValue>>'.
+      Type '{ fontSizePermille: number; outlinePermille?: undefined; marginXPermille?: undefined; }' is not assignable to type 'Readonly<Record<string, CaptionIntentValue>>'.
+        Property 'outlinePermille' is incompatible with index signature.
+          Type 'undefined' is not assignable to type 'CaptionIntentValue'.
+src/domain/captionPaint.test.ts(87,55): error TS2345: Argument of type '{ style: { version: number; params: { fontSizePermille: number; outlinePermille?: undefined; marginXPermille?: undefined; } | { outlinePermille: number; fontSizePermille?: undefined; marginXPermille?: undefined; } | { ...; }; }; ... 7 more ...; items: CaptionItem[]; }' is not assignable to parameter of type 'CaptionTrack'.
+  The types of 'style.params' are incompatible between these types.
+    Type '{ fontSizePermille: number; outlinePermille?: undefined; marginXPermille?: undefined; } | { outlinePermille: number; fontSizePermille?: undefined; marginXPermille?: undefined; } | { marginXPermille: number; fontSizePermille: number; outlinePermille?: undefined; }' is not assignable to type 'Readonly<Record<string, CaptionIntentValue>>'.
+      Type '{ fontSizePermille: number; outlinePermille?: undefined; marginXPermille?: undefined; }' is not assignable to type 'Readonly<Record<string, CaptionIntentValue>>'.
+        Property 'outlinePermille' is incompatible with index signature.
+          Type 'undefined' is not assignable to type 'CaptionIntentValue'.
