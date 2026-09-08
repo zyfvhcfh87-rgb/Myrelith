@@ -32,8 +32,8 @@ all product code matches tested `4727236`.
 - `verify-keyboard-source.mjs`: requires the exact worker directory/branch and a
   clean tree; freezes all tracked file hashes and HEAD. Production, dependencies,
   other tests and accepted G3/first-paint harness files must match the assigned
-  tested `4727236` checkpoint; only `keyboard.gate.ts` may differ under source/test
-  paths. Earlier CSS and pure regression are now frozen with all product code.
+  tested `a7207ca` checkpoint; only `keyboard-client.ts` may differ under source/test
+  paths. Product code, case assertions, qualification and pure tests are frozen.
 
 The later grant uses a new external `/private/tmp/issue200-*` artifact directory,
 `ISSUE200_KEYBOARD_ARTIFACTS` and `ISSUE200_KEYBOARD_MANIFEST`. The committed
@@ -115,6 +115,9 @@ fully inside its visible ancestor clipping region and viewport, with visible
 keyboard focus and readable labels. Title field/action/list containers cannot
 have horizontal overflow. Modal outer bounds remain inside 16 px viewport margins;
 native focus-induced internal vertical scrolling is recorded and allowed.
+For an actual `dialog:modal`, ancestor clipping and paint walks stop at that
+top-layer dialog. Its own scrollport/internal ancestors and viewport still apply;
+Inspector DOM ancestors behind the top layer do not clip or paint the modal.
 Exact forward/reverse order prevents a repeated focus target from faking traversal.
 
 Computed color/background/opacity evidence resolves observed leaf-to-root layers,

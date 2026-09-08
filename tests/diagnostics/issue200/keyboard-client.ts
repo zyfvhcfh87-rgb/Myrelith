@@ -41,8 +41,9 @@ function id(node: Element) { let value = ids.get(node); if (!value) { value = ++
 function rect(node: Element): Rect { const b = node.getBoundingClientRect(); return { x: b.x, y: b.y, width: b.width, height: b.height } }
 function viewport(): Rect { return { x: 0, y: 0, width: innerWidth, height: innerHeight } }
 function styleLayers(node: Element | null): PaintLayer[] {
-  const layers: PaintLayer[] = []
-  for (let current = node; current; current = current.parentElement) {
+  const layers: PaintLayer[] = [], modal = node?.closest('dialog:modal')
+  // Top-layer dialogs are painted outside their ordinary DOM ancestors.
+  for (let current = node; current && current !== modal?.parentElement; current = current.parentElement) {
     const style = getComputedStyle(current)
     if (style.filter !== 'none' || style.mixBlendMode !== 'normal') throw new Error('Unresolved CSS filter/blend in contrast evidence')
     layers.push({ background: style.backgroundColor, opacity: Number(style.opacity), image: style.backgroundImage })
@@ -55,8 +56,9 @@ function paintedText(node: Element) {
 }
 function bounds(node: Element) {
   let region = viewport()
+  const modal = node.closest('dialog:modal')
   const ancestors: Array<{ id: number; tag: string; bounds: Rect; overflowX: string; overflowY: string; scrollTop: number; scrollLeft: number }> = []
-  for (let current = node.parentElement; current; current = current.parentElement) {
+  for (let current = node.parentElement; current && current !== modal?.parentElement; current = current.parentElement) {
     const style = getComputedStyle(current)
     const x = /auto|scroll|hidden|clip/.test(style.overflowX), y = /auto|scroll|hidden|clip/.test(style.overflowY)
     if (!x && !y) continue
@@ -65,7 +67,7 @@ function bounds(node: Element) {
     region = clippedRegion(region, clipping)
     ancestors.push({ id: id(current), tag: current.tagName, bounds: client, overflowX: style.overflowX, overflowY: style.overflowY, scrollTop: current.scrollTop, scrollLeft: current.scrollLeft })
   }
-  return { rect: rect(node), region, ancestors, fullyVisible: inside(rect(node), region) }
+  return { rect: rect(node), region, ancestors, topLayerRootId: modal ? id(modal) : null, fullyVisible: inside(rect(node), region) }
 }
 function focusables(root: ParentNode = document) {
   return [...root.querySelectorAll<HTMLElement>('button,input,select,textarea,a[href],[tabindex]')]
