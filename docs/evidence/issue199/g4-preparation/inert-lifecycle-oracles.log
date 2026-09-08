@@ -1,0 +1,24 @@
+✔ stalled trace and context close cannot skip subsequent release (22.81775ms)
+✔ independent supervisor terminates an inert child whose event loop is blocked (102.36575ms)
+✔ final drain accepts zero reservations and blockers (0.778166ms)
+✔ final drain rejects retained essentialOwners (0.353459ms)
+✔ final drain rejects retained monitorOwners (0.069167ms)
+✔ final drain rejects retained decoderSlots (0.051833ms)
+✔ final drain rejects retained surfaceBytes (0.050375ms)
+✔ final drain rejects retained blockers (0.172375ms)
+✔ mixed oracle accepts its declared lossy envelope (0.165959ms)
+✔ mixed oracle rejects missing glyph (0.094916ms)
+✔ mixed oracle rejects stationary crawl (0.07425ms)
+✔ mixed oracle rejects wrong gain (0.083167ms)
+✔ mixed oracle rejects wrong pan (0.053667ms)
+✔ mixed oracle rejects missing PCM (0.054334ms)
+✔ mixed oracle rejects wrong fps (1.608875ms)
+✔ mixed oracle rejects RGB mismatch (0.066833ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 156.055833

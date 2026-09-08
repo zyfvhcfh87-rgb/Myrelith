@@ -1,0 +1,174 @@
+{
+  "head": "cbb9ad83676a5b90805fedd85e0cd70ca850652f",
+  "status": "failed",
+  "passedRuntimeCheckpoints": 2,
+  "steps": [
+    {
+      "name": "bounded encoded fixture, canonical retime/split and undo",
+      "status": "passed"
+    },
+    {
+      "name": "native shared title Set key, numeric value, copy and paste",
+      "status": "passed"
+    }
+  ],
+  "firstFailure": "Third step: exact Play button locator timeout before native playback.",
+  "startedAt": "2026-09-08T20:45:38.105Z",
+  "driverFinishedAt": "2026-09-08T20:45:57.329Z",
+  "supervisorFinishedAt": "2026-09-08T20:46:00.259Z",
+  "driverSeconds": 19.224,
+  "consolePageProblems": [],
+  "visibleRecoveryWarning": {
+    "text": "Recovery copy failed",
+    "inStep01": false,
+    "inStep02": true,
+    "inFailure": true,
+    "classification": "Not assessed; separate from empty console/page problem collection. No recovery acceptance claim."
+  },
+  "transportButtonInTrace": [
+    {
+      "class": "transport-button transport-play",
+      "aria-label": "play",
+      "title": "play"
+    }
+  ],
+  "sourceHashesVerified": 939,
+  "sourceClean": true,
+  "copies": [
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z/result.json",
+      "copy": "result.json",
+      "mode": "exact bytes",
+      "rawSha256": "d2ae72b3196f5335d8ad73f3985a235c433f0c97b44a947a8720fa755ecb67fc",
+      "copySha256": "d2ae72b3196f5335d8ad73f3985a235c433f0c97b44a947a8720fa755ecb67fc"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z/supervisor.json",
+      "copy": "supervisor.json",
+      "mode": "exact bytes",
+      "rawSha256": "90fa40e20b2530ef2faecf9ac6b58e9660b61da1833f77875b199f28ce84e87a",
+      "copySha256": "90fa40e20b2530ef2faecf9ac6b58e9660b61da1833f77875b199f28ce84e87a"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z/artifacts.json",
+      "copy": "artifacts.json",
+      "mode": "exact bytes",
+      "rawSha256": "0fc359cf3d44607888fc1e8d96431c37c21493d87e21da8b7212d46e2412ee4d",
+      "copySha256": "0fc359cf3d44607888fc1e8d96431c37c21493d87e21da8b7212d46e2412ee4d"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z/step-01-dom.txt",
+      "copy": "step-01-dom.txt",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "e447c0e6d673c7099c021d3342f9965eedf32aed894b804f775ccced17248a2b",
+      "copySha256": "250a4744c28a419ddc21e307caf6523eca37e7c92274e6b51e6a29f7c6eb4855"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z/step-02-dom.txt",
+      "copy": "step-02-dom.txt",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "0c8f7e9a9277bc11fe3062de15021dfd6f2dc5d6357dfaea3119544f62a14df5",
+      "copySha256": "5095beb93906a0a2fa2d89b8d48671fd69e6ade189029d21a119fc2056cc8a12"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z/failure-dom.txt",
+      "copy": "failure-dom.txt",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "0c8f7e9a9277bc11fe3062de15021dfd6f2dc5d6357dfaea3119544f62a14df5",
+      "copySha256": "5095beb93906a0a2fa2d89b8d48671fd69e6ade189029d21a119fc2056cc8a12"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z/server.log",
+      "copy": "server.log",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "d875390d276443e4a02975e90cbad2d12741db01948f8904c02ff466a0aa301b",
+      "copySha256": "69f4c0c1bbfb1e8c1f36fdab4fb17f52e7f2c59b44410bb8af6c14563faceba8"
+    },
+    {
+      "source": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-attempt2-prelaunch.json",
+      "copy": "prelaunch.json",
+      "mode": "exact bytes",
+      "rawSha256": "11fbfd2b75408f508e7b4f9234f45763158651edc1be3295253cf5b7d35baeae",
+      "copySha256": "11fbfd2b75408f508e7b4f9234f45763158651edc1be3295253cf5b7d35baeae"
+    },
+    {
+      "source": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-attempt2-live-owned.json",
+      "copy": "live-observer.json",
+      "mode": "exact bytes",
+      "rawSha256": "4ceeb48a6fe9e5ad1dbb1e5476fe15b125dddbd181b9a9bb83f61060c0b9b4d2",
+      "copySha256": "4ceeb48a6fe9e5ad1dbb1e5476fe15b125dddbd181b9a9bb83f61060c0b9b4d2"
+    },
+    {
+      "source": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-attempt2-independent-cleanup.json",
+      "copy": "independent-cleanup.json",
+      "mode": "exact bytes",
+      "rawSha256": "1ee35ec3a36dda5c8b3424735b116a20c8042a0ec21e8bcace5ce49939aff7bb",
+      "copySha256": "1ee35ec3a36dda5c8b3424735b116a20c8042a0ec21e8bcace5ce49939aff7bb"
+    }
+  ],
+  "trace": {
+    "integrity": "passed",
+    "entries": 152,
+    "visualReview": "Worker viewed failure.png and step-02.png; both show Timeline after title-step return and Recovery copy failed."
+  },
+  "cleanup": {
+    "driverReleasedAt": "2026-09-08T20:45:57.289Z",
+    "supervisorFinishedAt": "2026-09-08T20:46:00.259Z",
+    "independentAt": "2026-09-08T20:47:10.804Z",
+    "pidPresence": [
+      {
+        "pid": 33144,
+        "present": false
+      },
+      {
+        "pid": 33158,
+        "present": false
+      },
+      {
+        "pid": 33190,
+        "present": false
+      },
+      {
+        "pid": 33191,
+        "present": false
+      },
+      {
+        "pid": 33196,
+        "present": false
+      },
+      {
+        "pid": 33197,
+        "present": false
+      },
+      {
+        "pid": 33198,
+        "present": false
+      },
+      {
+        "pid": 33199,
+        "present": false
+      }
+    ],
+    "port5199": false,
+    "fallbackSignals": [],
+    "sleepWakeTransitions": 0,
+    "supervisorIdentityQualification": {
+      "pid": 33144,
+      "liveIdentityCaptured": false,
+      "qualification": "Independent observer ran after completion; parent PID recorded by supervisor, absence verified now."
+    }
+  },
+  "notReached": [
+    "native Play/Pause",
+    "oracle audio installation and portable save",
+    "portable UI reopen",
+    "layout/focus",
+    "strict missing-font export refusal",
+    "current Program reference captures",
+    "mixed encoded export",
+    "decoded pixels/PCM",
+    "final application admission assertion"
+  ],
+  "sourceBytesQualification": "prepare generated/imported VP9 source video and silent WAV, but the later installOracleAndSave step that persists source bytes was not reached; no raw source/export artifact is claimed.",
+  "correctionOrRetry": "none; source/protocol/tolerances unchanged"
+}

@@ -1,0 +1,124 @@
+{
+  "at": "2026-09-08T21:20:06.663Z",
+  "out": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z",
+  "head": "be8d2592384b75225be64e80779cbe0ebb1ee753",
+  "sourceHashes": 941,
+  "clean": true,
+  "knownIdentities": [
+    {
+      "pid": 42541,
+      "parentPid": 42521,
+      "started": "Tue Sep 8 23:18:48 2026",
+      "command": "/Users/razvan-constantinbotezatu/.hermes/node/bin/node /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/g4/execute.mjs --expected-head be8d2592384b75225be64e80779cbe0ebb1ee753"
+    },
+    {
+      "pid": 42573,
+      "parentPid": 42541,
+      "started": "Tue Sep 8 23:18:48 2026",
+      "command": "/usr/bin/caffeinate -is -w 42541"
+    },
+    {
+      "pid": 42574,
+      "parentPid": 42541,
+      "started": "Tue Sep 8 23:18:48 2026",
+      "command": "/Users/razvan-constantinbotezatu/.hermes/node/bin/node /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5199 --strictPort"
+    },
+    {
+      "pid": 42579,
+      "parentPid": 42541,
+      "started": "Tue Sep 8 23:18:48 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --user-data-dir=/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/chromium-profile --remote-debugging-pipe about:blank"
+    },
+    {
+      "pid": 42580,
+      "parentPid": 42579,
+      "started": "Tue Sep 8 23:18:48 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=gpu-process --no-sandbox --disable-breakpad --headless --use-angle=swiftshader-webgl --enable-unsafe-swiftshader --gpu-preferences=WAAAAAAAAAAgAAAEAAAAAAAAAAAAAGAAQAAAAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAKAAAAAAAAAAoAAAAAAAAAAgAAAAAAAAADAAAAAEAAAAAAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,15376424828885904265,588228755876999527,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6483171696078146534,11364484290587152035,4 --trace-process-track-uuid=3190708988185955192"
+    },
+    {
+      "pid": 42581,
+      "parentPid": 42579,
+      "started": "Tue Sep 8 23:18:48 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-US --service-sandbox-type=none --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --headless=old --shared-files --field-trial-handle=1718379636,r,15376424828885904265,588228755876999527,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6483171696078146534,11364484290587152035,4 --trace-process-track-uuid=3190708989122997041"
+    },
+    {
+      "pid": 42582,
+      "parentPid": 42579,
+      "started": "Tue Sep 8 23:18:48 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=renderer --headless=old --no-sandbox --disable-back-forward-cache --disable-background-timer-throttling --disable-breakpad --force-color-profile=srgb --remote-debugging-pipe --allow-pre-commit-input --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --disable-gpu-compositing --lang=en-US --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1788794155085324 --launch-time-ticks=108173874781 --shared-files --field-trial-handle=1718379636,r,15376424828885904265,588228755876999527,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6483171696078146534,11364484290587152035,4 --trace-process-track-uuid=3190708990060038890"
+    },
+    {
+      "pid": 42614,
+      "parentPid": 42579,
+      "started": "Tue Sep 8 23:18:52 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=audio.mojom.AudioService --lang=en-US --service-sandbox-type=audio --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --message-loop-type-ui --headless=old --shared-files --field-trial-handle=1718379636,r,15376424828885904265,588228755876999527,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6483171696078146534,11364484290587152035,4 --trace-process-track-uuid=3190708990997080739"
+    },
+    {
+      "pid": 42615,
+      "parentPid": 42579,
+      "started": "Tue Sep 8 23:18:52 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=video_capture.mojom.VideoCaptureService --lang=en-US --service-sandbox-type=none --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --message-loop-type-ui --headless=old --shared-files --field-trial-handle=1718379636,r,15376424828885904265,588228755876999527,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6483171696078146534,11364484290587152035,4 --trace-process-track-uuid=3190708991934122588"
+    }
+  ],
+  "supervisorParent": {
+    "pid": 42521,
+    "liveIdentityCaptured": false,
+    "qualification": "Independent observer ran after completion; parent PID recorded by supervisor, absence verified now."
+  },
+  "pidPresence": [
+    {
+      "pid": 42521,
+      "present": false
+    },
+    {
+      "pid": 42541,
+      "present": false
+    },
+    {
+      "pid": 42573,
+      "present": false
+    },
+    {
+      "pid": 42574,
+      "present": false
+    },
+    {
+      "pid": 42579,
+      "present": false
+    },
+    {
+      "pid": 42580,
+      "present": false
+    },
+    {
+      "pid": 42581,
+      "present": false
+    },
+    {
+      "pid": 42582,
+      "present": false
+    },
+    {
+      "pid": 42614,
+      "present": false
+    },
+    {
+      "pid": 42615,
+      "present": false
+    }
+  ],
+  "remaining": [],
+  "profileMatches": [],
+  "port5199": false,
+  "pmset": {
+    "status": 0,
+    "error": null,
+    "window": [
+      "2026-09-08T21:18:48.592Z",
+      "2026-09-08T21:18:57.113Z"
+    ],
+    "transitionCount": 0,
+    "transitions": []
+  },
+  "fallbackSignals": []
+}

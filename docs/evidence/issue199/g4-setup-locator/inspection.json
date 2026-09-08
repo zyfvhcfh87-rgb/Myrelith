@@ -1,0 +1,94 @@
+{
+  "sourceHead": "f845e1a3a533bcae5842b44b3e10aaf72c8b3a58",
+  "rawTrace": "/private/tmp/issue199-g4/2026-09-08T20-32-46.561Z/trace.zip",
+  "resolutionLabelNode": [
+    "LABEL",
+    {
+      "class": "project-field project-field-resolution"
+    },
+    [
+      "SPAN",
+      {},
+      "Resolution"
+    ],
+    [
+      "SELECT",
+      {},
+      [
+        "OPTION",
+        {
+          "__playwright_selected_": "false",
+          "value": "720"
+        },
+        "1280",
+        " \u00d7 ",
+        "720"
+      ],
+      [
+        "OPTION",
+        {
+          "__playwright_selected_": "true",
+          "value": "1080"
+        },
+        "1920",
+        " \u00d7 ",
+        "1080"
+      ],
+      [
+        "OPTION",
+        {
+          "__playwright_selected_": "false",
+          "value": "1440"
+        },
+        "2560",
+        " \u00d7 ",
+        "1440"
+      ],
+      [
+        "OPTION",
+        {
+          "__playwright_selected_": "false",
+          "value": "2160"
+        },
+        "3840",
+        " \u00d7 ",
+        "2160"
+      ]
+    ]
+  ],
+  "playwrightLabelNormalizedText": "Resolution1280 \u00d7 7201920 \u00d7 10802560 \u00d7 14403840 \u00d7 2160",
+  "exactResolutionMatches": false,
+  "newLocator": ".project-field-resolution select",
+  "observedResolutionLabels": 1,
+  "selectsWithinLabel": 1,
+  "options": [
+    {
+      "value": "720",
+      "text": "1280 \u00d7 720"
+    },
+    {
+      "value": "1080",
+      "text": "1920 \u00d7 1080"
+    },
+    {
+      "value": "1440",
+      "text": "2560 \u00d7 1440"
+    },
+    {
+      "value": "2160",
+      "text": "3840 \u00d7 2160"
+    }
+  ],
+  "remainingSetupLocators": {
+    "Start a new project": "real button with matching strong text; passed in first attempt",
+    "Project name": "wrapping label text without option descendants; filled successfully in first attempt",
+    "Create project": "submit button uses this exact text once editorLoading is false; trace DOM contains Create project",
+    "Commands": "Toolbar has explicit aria-label Commands; unchanged readiness wait"
+  },
+  "runtimeQualification": "Static retained trace/source inspection only; no browser execution or new accepted checkpoint.",
+  "algorithmEvidence": {
+    "file": "node_modules/playwright-core/lib/coreBundle.js",
+    "sha256": "9393fa79e1c67c74edc26b610d65a4f7ed73d345a762465cc88340a33a2454ac",
+    "functions": "getElementLabels reads elementText for native labels; elementText recursively includes select/option descendants; internal strict matcher compares normalized text exactly."
+  }
+}

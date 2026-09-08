@@ -1,0 +1,48 @@
+{
+  "at": "2026-09-08T20:49:45.572152+00:00",
+  "pids": [
+    {
+      "pid": 33144,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 33158,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 33190,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 33191,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 33196,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 33197,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 33198,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 33199,
+      "returncode": 1,
+      "output": ""
+    }
+  ],
+  "connectEx5199": 61,
+  "profileExists": true,
+  "qualification": "Private profile retained as failure artifact; all recorded native owners absent. Previous root check incorrectly assumed artifact deletion and failed only at that assertion; no slot reassignment then."
+}

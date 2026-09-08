@@ -1,0 +1,47 @@
+{
+  "source": "Unmodified frozen oracle expressions evaluated once against saved decoded-facts; assertions collected without short-circuiting. No native run.",
+  "assertions": 53,
+  "passed": 48,
+  "failures": [
+    {
+      "method": "ok",
+      "passed": false,
+      "message": "The expression evaluated to a falsy value:\n\n  assert[method](...args)\n",
+      "actual": false,
+      "expected": true
+    },
+    {
+      "method": "ok",
+      "passed": false,
+      "message": "Interior glyph absent",
+      "actual": false,
+      "expected": true
+    },
+    {
+      "method": "ok",
+      "passed": false,
+      "message": "Encoded glyph coverage differs",
+      "actual": false,
+      "expected": true
+    },
+    {
+      "method": "ok",
+      "passed": false,
+      "message": "Interior glyph absent",
+      "actual": false,
+      "expected": true
+    },
+    {
+      "method": "ok",
+      "passed": false,
+      "message": "Encoded glyph coverage differs",
+      "actual": false,
+      "expected": true
+    }
+  ],
+  "notObserved": [
+    "final application admission drain",
+    "final persistence settle"
+  ],
+  "note": "Coverage-ratio failures at14/15 derive from zero/zero glyph counts, alongside the same missing-glyph defects. No predicate changed in this audit."
+}

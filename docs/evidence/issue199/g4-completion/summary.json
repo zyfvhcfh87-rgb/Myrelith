@@ -1,0 +1,73 @@
+{
+  "sourceHead": "705f07135ec30681ccc9593b41045dd378498698",
+  "status": "passed",
+  "rawDirectory": "/private/tmp/issue199-g4/2026-09-08T21-57-26.097Z",
+  "startedAt": "2026-09-08T21:57:26.284Z",
+  "finishedAt": "2026-09-08T21:57:34.716Z",
+  "chromium": "151.0.7922.34",
+  "checkpoints": [
+    {
+      "name": "bounded encoded fixture, canonical retime/split and undo",
+      "status": "passed"
+    },
+    {
+      "name": "native shared title Set key, numeric value, copy and paste",
+      "status": "passed"
+    },
+    {
+      "name": "muted native playback uses silent live audio",
+      "status": "passed"
+    },
+    {
+      "name": "portable reopen and exact media relink",
+      "status": "passed"
+    },
+    {
+      "name": "Animation workspace 1440/720 layout and focus",
+      "status": "passed"
+    },
+    {
+      "name": "missing named font refuses strict export before output",
+      "status": "passed"
+    },
+    {
+      "name": "settled mixed Program references at boundary and interior frames",
+      "status": "passed"
+    },
+    {
+      "name": "real VP9/Opus export, reopen decode and frozen pixel/PCM predicates",
+      "status": "passed"
+    },
+    {
+      "name": "drain all owned media",
+      "status": "passed"
+    }
+  ],
+  "problems": [],
+  "sessionEvents": 28,
+  "sessionErrors": [],
+  "finalSession": {
+    "events": 28,
+    "last": {
+      "sequence": 27,
+      "at": 1788904651804,
+      "projectId": "g4",
+      "screen": "editor",
+      "phase": "idle",
+      "savePhase": "idle",
+      "recoveryPhase": "idle",
+      "lastRecoveryAt": 1788904651804,
+      "lastSavedAt": null,
+      "errors": []
+    }
+  },
+  "encoded": {
+    "bytes": 270303,
+    "sha256": "ffaa6087a8999857fe170ba705872c00eaa611470cb465f749a1484a45a9c6e3"
+  },
+  "maxPacketTimestampError": 0.00033333333333340764,
+  "maxRgbMean": 1.0603472222222223,
+  "maxRgbP95": 2,
+  "pcmGainRatio": 3.003966029052266,
+  "qualification": "Source-module diagnostic against production implementations, Vite dev server; not ordinary production bundle/first-paint, performance or OS Save-picker acceptance."
+}

@@ -1,0 +1,144 @@
+{
+  "head": "15eee5e1d3525f727ea90aa5f88db96476828555",
+  "status": "failed",
+  "completedCheckpoints": 0,
+  "firstFailure": "Project setup: exact Resolution label selectOption timeout; before prepare or source generation.",
+  "startedAt": "2026-09-08T20:32:46.736Z",
+  "driverFinishedAt": "2026-09-08T20:33:03.676Z",
+  "supervisorFinishedAt": "2026-09-08T20:33:06.593Z",
+  "driverSeconds": 16.94,
+  "consolePageProblems": [],
+  "sourceHashesVerified": 939,
+  "cleanSource": true,
+  "copies": [
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-32-46.561Z/result.json",
+      "copy": "result.json",
+      "mode": "exact bytes",
+      "rawSha256": "fa4a58af12e758e749fb14a7344f232a42392aabb2c38b1b648d1ae5f29aaec1",
+      "copySha256": "fa4a58af12e758e749fb14a7344f232a42392aabb2c38b1b648d1ae5f29aaec1"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-32-46.561Z/supervisor.json",
+      "copy": "supervisor.json",
+      "mode": "exact bytes",
+      "rawSha256": "d6390f8220db79c658c7023158fe9f3577336dac744f4775d96bd82e201c0443",
+      "copySha256": "d6390f8220db79c658c7023158fe9f3577336dac744f4775d96bd82e201c0443"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-32-46.561Z/artifacts.json",
+      "copy": "artifacts.json",
+      "mode": "exact bytes",
+      "rawSha256": "2d9855ea85d1f96ece433fc4d8a05f3a2891322e8fe769c9235be1ea776eba82",
+      "copySha256": "2d9855ea85d1f96ece433fc4d8a05f3a2891322e8fe769c9235be1ea776eba82"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-32-46.561Z/failure-dom.txt",
+      "copy": "failure-dom.txt",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "093e311f9ec0fccbbf859655213cf7d5be49eab84af39f239e217d83eadea2bd",
+      "copySha256": "89010b6eb4e0b2c9b0ecd65e9ea2b1c09472e7bb6e484a0f894bd429dbfa3be8"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T20-32-46.561Z/server.log",
+      "copy": "server.log",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "21295d2c1be1e25821d146261380112e8dbf8b585f6996edd9157aa90a596c17",
+      "copySha256": "21295d2c1be1e25821d146261380112e8dbf8b585f6996edd9157aa90a596c17"
+    },
+    {
+      "source": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-attempt1-prelaunch.json",
+      "copy": "prelaunch.json",
+      "mode": "exact bytes",
+      "rawSha256": "8608e712fa06650399c0cd9141207eb10c797453a6d9eab9b92ed4b65ff9021b",
+      "copySha256": "8608e712fa06650399c0cd9141207eb10c797453a6d9eab9b92ed4b65ff9021b"
+    },
+    {
+      "source": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-attempt1-live-owned.json",
+      "copy": "live-observer.json",
+      "mode": "exact bytes",
+      "rawSha256": "655947b844d6e488f9b47abf1028ec36343bbdb7a82b509b1b55cd622bcc9a1c",
+      "copySha256": "655947b844d6e488f9b47abf1028ec36343bbdb7a82b509b1b55cd622bcc9a1c"
+    },
+    {
+      "source": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-attempt1-independent-cleanup.json",
+      "copy": "independent-cleanup.json",
+      "mode": "exact bytes",
+      "rawSha256": "3986d307e43158392d2b7c62847c7c6660da182f051182f89261a0b81d5ac1ba",
+      "copySha256": "3986d307e43158392d2b7c62847c7c6660da182f051182f89261a0b81d5ac1ba"
+    }
+  ],
+  "trace": {
+    "integrity": "passed",
+    "entries": 89,
+    "visualReview": "Worker viewed raw failure.png showing setup form with filled project name; full failure DOM retained."
+  },
+  "cleanup": {
+    "driverReleasedAt": "2026-09-08T20:33:03.632Z",
+    "supervisorFinishedAt": "2026-09-08T20:33:06.593Z",
+    "independentAt": "2026-09-08T20:34:22.757Z",
+    "pidPresence": [
+      {
+        "pid": 30651,
+        "present": false
+      },
+      {
+        "pid": 30665,
+        "present": false
+      },
+      {
+        "pid": 30697,
+        "present": false
+      },
+      {
+        "pid": 30698,
+        "present": false
+      },
+      {
+        "pid": 30703,
+        "present": false
+      },
+      {
+        "pid": 30704,
+        "present": false
+      },
+      {
+        "pid": 30705,
+        "present": false
+      },
+      {
+        "pid": 30706,
+        "present": false
+      }
+    ],
+    "port5199": false,
+    "fallbackSignals": [],
+    "sleepWakeTransitions": 0,
+    "supervisorIdentityQualification": {
+      "pid": 30651,
+      "liveIdentityCaptured": false,
+      "qualification": "Read-only observer ran after completion; parent PID recorded by supervisor, absence verified now."
+    }
+  },
+  "notReached": [
+    "fixture source encoding",
+    "canonical retime/split",
+    "native title editing",
+    "muted playback",
+    "portable reopen",
+    "layout/focus",
+    "strict missing font export",
+    "Program references",
+    "mixed VP9/Opus export",
+    "decoded pixels/PCM",
+    "final application admission assertion"
+  ],
+  "correctionOrRetry": "none; source/protocol/tolerances unchanged",
+  "parentIndependentRelease": {
+    "at": "2026-09-08T20:34:19.530Z",
+    "source": "Parent task message after its independent read-only check",
+    "allEightPidsAbsent": true,
+    "port5199": "refused",
+    "parentViewed": "failure.png and raw result/DOM/supervisor"
+  }
+}
