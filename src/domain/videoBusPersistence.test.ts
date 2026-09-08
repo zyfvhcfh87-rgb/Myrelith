@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { expect, test } from 'vitest'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from './projectSettings'
 import { sequenceProjectFromTimeline } from './projectSequences'
@@ -21,7 +22,7 @@ test('video buses roundtrip unknown/wrong-stage intent, and schema 20 migrates t
     for (const track of sequence.tracks) delete track.videoEffects
   }
   const migrated = parseProjectFile(JSON.stringify(old))
-  expect(migrated.sequences[0].schemaVersion).toBe(21)
+  expect(migrated.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
   expect(migrated.sequences[0].masterVideoEffects).toEqual([])
   expect(migrated.sequences[0].tracks.every((track) => track.videoEffects?.length === 0)).toBe(true)
 })

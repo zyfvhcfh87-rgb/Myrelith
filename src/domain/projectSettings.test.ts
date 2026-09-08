@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import {
   createTimelineDoc,
@@ -302,7 +303,7 @@ describe('createTimelineDoc', () => {
     const doc = createTimelineDoc('  Demo project  ', settings, 'project-123')
 
     expect(doc).toEqual({
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'project-123',
       name: 'Demo project',
       frameRate: { num: 60_000, den: 1_001 },
@@ -382,7 +383,7 @@ describe('createTimelineDoc', () => {
     )
 
     expect(JSON.stringify(doc)).toBe(JSON.stringify({
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc_default',
       name: 'Untitled',
       frameRate: { num: 30, den: 1 },

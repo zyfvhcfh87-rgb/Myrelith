@@ -457,7 +457,7 @@ export function dynamicZoomKeyframeBudgetReason(
 }
 
 export function isDynamicZoomFramingProperty(
-  property: ClipAnimationProperty,
+  property: string,
 ): boolean {
   return DYNAMIC_ZOOM_FRAMING_PROPERTIES.includes(
     property as (typeof DYNAMIC_ZOOM_FRAMING_PROPERTIES)[number],

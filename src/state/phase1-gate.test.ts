@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * state/phase1-gate.test.ts — the Phase 1 exit gate.
  *
@@ -62,7 +63,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-gate',
     name: 'Gate fixture',
     frameRate: { num: 30000, den: 1001 },

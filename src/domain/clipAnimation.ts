@@ -2,12 +2,8 @@
 
 import {
   clipAudioSettings,
-  MAX_AUDIO_BALANCE,
-  MAX_CLIP_SCALE,
-  MAX_CLIP_VOLUME,
-  MIN_AUDIO_BALANCE,
-  MIN_CLIP_SCALE,
-  MIN_CLIP_VOLUME,
+  clipVisualSettings,
+  cropInsetsValidationError,
 } from './clipInspector'
 import type {
   Clip,
@@ -29,6 +25,15 @@ import {
 } from './effectStack'
 import { EFFECT_STACK_LIMITS } from './effectBounds'
 import { mapAnimationTrackKeyframes } from './animationTiming'
+import { animationParameterIdentityError } from './animationParameterIdentity'
+import {
+  effectPathAnimationTracks, forEachAnimationTrack, mapAnimationCollections,
+  MAX_ANIMATION_PROPERTY_CHARACTERS, MAX_CLIP_SCALAR_ANIMATION_TRACKS,
+  MAX_TITLE_ANIMATION_TRACKS, titleAnimationTracks, type AnyAnimationTrack,
+} from './animationCollections'
+import { effectPathAnimationTracksBoundsError } from './maskPathAnimation'
+import { CLIP_SCALAR_PROPERTY_SPECS, CROP_ANIMATION_PROPERTIES, readClipScalarProperty } from './clipAnimationProperties'
+import { resolveEffectPathAnimation } from './effectPathAnimationResolution'
 import {
   animationEasingValidationError,
   cloneAnimationEasing,
@@ -69,6 +74,7 @@ export const ANIMATABLE_AUDIO_PROPERTIES = [
 export const ANIMATABLE_CLIP_PROPERTIES = [
   ...ANIMATABLE_VISUAL_PROPERTIES,
   ...ANIMATABLE_AUDIO_PROPERTIES,
+  ...CROP_ANIMATION_PROPERTIES,
 ] as const satisfies readonly ClipAnimationProperty[]
 
 export const MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP = 1_280
@@ -98,8 +104,7 @@ export function clipAnimation(clip: Clip): ClipAnimation {
 
 export function clipAnimationKeyframeCount(animation: ClipAnimation): number {
   let total = 0
-  for (const track of animation.tracks) total += track.keyframes.length
-  for (const track of effectAnimationTracks(animation)) total += track.keyframes.length
+  forEachAnimationTrack(animation, (track) => { total += track.keyframes.length })
   return total
 }
 
@@ -128,38 +133,20 @@ export function documentAnimationKeyframeGrowthAllowed(
 }
 
 export function cloneClipAnimation(animation: ClipAnimation): ClipAnimation {
-  return {
-    tracks: animation.tracks.map((track) => ({
-      property: track.property,
-      keyframes: track.keyframes.map((keyframe) => ({
-        frame: keyframe.frame,
-        ...(keyframe.sourceTimeTicks === undefined
-          ? {}
-          : { sourceTimeTicks: keyframe.sourceTimeTicks }),
-        value: keyframe.value,
-        easing: cloneAnimationEasing(keyframe.easing),
-      })),
-    })),
-    effectTracks: effectAnimationTracks(animation).map((track) => ({
-      effectId: track.effectId,
-      parameter: track.parameter,
-      keyframes: track.keyframes.map((keyframe) => ({
-        frame: keyframe.frame,
-        ...(keyframe.sourceTimeTicks === undefined
-          ? {}
-          : { sourceTimeTicks: keyframe.sourceTimeTicks }),
-        value: keyframe.value,
-        easing: cloneAnimationEasing(keyframe.easing),
-      })),
-    })),
-  }
+  return mapAnimationCollections(animation, <T extends AnyAnimationTrack>(tracks: readonly T[]): T[] =>
+    tracks.map((track) => ({
+      ...track,
+      ...('parameterIdentity' in track && track.parameterIdentity !== undefined
+        ? { parameterIdentity: { ...track.parameterIdentity } } : {}),
+      keyframes: track.keyframes.map((keyframe) => ({ ...keyframe, easing: { ...keyframe.easing } })),
+    })))!
 }
 
 export function clipAnimationTrack(
   clip: Clip,
   property: ClipAnimationProperty,
 ): ClipAnimationTrack | null {
-  return clipAnimation(clip).tracks.find((track) => track.property === property) ?? null
+  return clipAnimation(clip).tracks.find((track) => track.property === property && (track.propertyVersion ?? 1) === 1) ?? null
 }
 
 export function isClipPropertyAnimated(
@@ -170,38 +157,30 @@ export function isClipPropertyAnimated(
 }
 
 export function isAudioAnimationProperty(
-  property: ClipAnimationProperty,
+  property: string,
 ): property is (typeof ANIMATABLE_AUDIO_PROPERTIES)[number] {
   return property === 'volume' || property === 'balance'
 }
 
+export function isKnownClipAnimationProperty(property: string): property is ClipAnimationProperty {
+  return PROPERTY_SET.has(property as ClipAnimationProperty)
+}
+
+function propertyIdentityError(property: string, version: number): string | null {
+  if (typeof property !== 'string' || property.trim().length === 0 || property.length > MAX_ANIMATION_PROPERTY_CHARACTERS) return 'animation property name exceeds its bound'
+  if (!Number.isSafeInteger(version) || version < 1) return 'animation property version must be a positive safe integer'
+  return null
+}
+
 export function clipAnimationPropertyLabel(property: ClipAnimationProperty): string {
-  switch (property) {
-    case 'position-x': return 'Position X'
-    case 'position-y': return 'Position Y'
-    case 'scale-x': return 'Scale X'
-    case 'scale-y': return 'Scale Y'
-    case 'rotation': return 'Rotation'
-    case 'opacity': return 'Opacity'
-    case 'volume': return 'Volume'
-    case 'balance': return 'Balance'
-  }
+  return CLIP_SCALAR_PROPERTY_SPECS[property].label
 }
 
 export function readClipAnimationProperty(
   clip: Clip,
   property: ClipAnimationProperty,
 ): number {
-  switch (property) {
-    case 'position-x': return clip.transform.x
-    case 'position-y': return clip.transform.y
-    case 'scale-x': return clip.transform.scaleX
-    case 'scale-y': return clip.transform.scaleY
-    case 'rotation': return clip.transform.rotation
-    case 'opacity': return clip.opacity
-    case 'volume': return clip.volume
-    case 'balance': return clipAudioSettings(clip).balance
-  }
+  return readClipScalarProperty(clip, property)
 }
 
 export function animationPropertyValueError(
@@ -209,29 +188,10 @@ export function animationPropertyValueError(
   value: number,
 ): string | null {
   if (!Number.isFinite(value)) return `${property} value must be finite`
-  if (property === 'opacity' && (value < 0 || value > 1)) {
-    return 'opacity keyframe value must be from 0 to 1'
-  }
-  if (
-    property === 'volume'
-    && (value < MIN_CLIP_VOLUME || value > MAX_CLIP_VOLUME)
-  ) {
-    return `volume keyframe value must be from ${MIN_CLIP_VOLUME} to ${MAX_CLIP_VOLUME}`
-  }
-  if (
-    property === 'balance'
-    && (value < MIN_AUDIO_BALANCE || value > MAX_AUDIO_BALANCE)
-  ) {
-    return `balance keyframe value must be from ${MIN_AUDIO_BALANCE} to ${MAX_AUDIO_BALANCE}`
-  }
-  if (
-    (property === 'scale-x' || property === 'scale-y')
-    && (value < MIN_CLIP_SCALE || value > MAX_CLIP_SCALE)
-  ) {
-    return `${property} keyframe value must be from ${MIN_CLIP_SCALE} to ${MAX_CLIP_SCALE}`
-  }
-  if (Math.abs(value) > MAX_ANIMATED_FINITE_MAGNITUDE) {
-    return `${property} keyframe value exceeds the finite project bound`
+  const spec = CLIP_SCALAR_PROPERTY_SPECS[property]
+  if (value < spec.min || value > spec.max) {
+    if (spec.min === -MAX_ANIMATED_FINITE_MAGNITUDE) return `${property} keyframe value exceeds the finite project bound`
+    return `${property} keyframe value must be from ${spec.min} to ${spec.max}`
   }
   return null
 }
@@ -239,10 +199,14 @@ export function animationPropertyValueError(
 export function animationTrackValidationError(
   track: ClipAnimationTrack,
 ): string | null {
-  if (!PROPERTY_SET.has(track.property)) return 'unsupported animated property'
+  const identityError = propertyIdentityError(track.property, track.propertyVersion ?? 1)
+  if (identityError) return identityError
   return keyframesValidationError(
     track.keyframes,
-    (value) => animationPropertyValueError(track.property, value),
+    (value) => isKnownClipAnimationProperty(track.property) && (track.propertyVersion ?? 1) === 1
+      ? animationPropertyValueError(track.property, value)
+      : !Number.isFinite(value) || Math.abs(value) > MAX_ANIMATED_FINITE_MAGNITUDE
+        ? 'unavailable scalar exceeds the finite project bound' : null,
   )
 }
 
@@ -259,6 +223,10 @@ export function effectAnimationTrackValidationError(
     || track.parameter.trim().length === 0
     || track.parameter.length > EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters
   ) return 'effect parameter is missing or exceeds its bound'
+  if (track.parameterIdentity !== undefined) {
+    const identityError = animationParameterIdentityError(track.parameterIdentity)
+    if (identityError) return identityError
+  }
   return keyframesValidationError(track.keyframes, (value) =>
     !Number.isFinite(value) || Math.abs(value) > MAX_ANIMATED_FINITE_MAGNITUDE
       ? 'effect keyframe value exceeds the finite project bound'
@@ -274,15 +242,21 @@ export function clipAnimationKindError(
 ): string | null {
   const hasTracks = animation.tracks.length > 0
     || effectAnimationTracks(animation).length > 0
+    || titleAnimationTracks(animation).length > 0
+    || effectPathAnimationTracks(animation).length > 0
   if (!hasTracks) return null
-  if (isText) return 'keyframes are supported only on visual media clips'
+  if (isText) {
+    if (animation.tracks.some((track) => (track.propertyVersion ?? 1) === 1 && isKnownClipAnimationProperty(track.property)
+      && track.property !== 'opacity')) return 'title clips support only outer opacity animation'
+    return null
+  }
   if (trackKind === 'video') return null
   if (trackKind !== 'audio') return 'keyframes are supported only on visual media clips'
-  if (effectAnimationTracks(animation).length > 0) {
+  if (effectAnimationTracks(animation).length > 0 || effectPathAnimationTracks(animation).length > 0 || titleAnimationTracks(animation).length > 0) {
     return 'effect keyframes are supported only on visual media clips'
   }
   for (const track of animation.tracks) {
-    if (!isAudioAnimationProperty(track.property)) {
+    if ((track.propertyVersion ?? 1) === 1 && isKnownClipAnimationProperty(track.property) && !isAudioAnimationProperty(track.property)) {
       return 'audio clips support only volume and balance keyframes'
     }
   }
@@ -290,10 +264,10 @@ export function clipAnimationKindError(
 }
 
 export function clipAnimationValidationError(animation: ClipAnimation): string | null {
-  if (animation.tracks.length > ANIMATABLE_CLIP_PROPERTIES.length) {
-    return `clip animation exceeds ${ANIMATABLE_CLIP_PROPERTIES.length} property tracks`
+  if (animation.tracks.length > MAX_CLIP_SCALAR_ANIMATION_TRACKS) {
+    return `clip animation exceeds ${MAX_CLIP_SCALAR_ANIMATION_TRACKS} property tracks`
   }
-  const properties = new Set<ClipAnimationProperty>()
+  const properties = new Set<string>()
   for (const track of animation.tracks) {
     if (properties.has(track.property)) return `duplicate ${track.property} animation track`
     properties.add(track.property)
@@ -304,15 +278,37 @@ export function clipAnimationValidationError(animation: ClipAnimation): string |
   if (effectTracks.length > MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP) {
     return `clip animation exceeds ${MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP} effect tracks`
   }
-  const targets = new Set<string>()
+  const targets = new Map<string, Set<string>>()
   for (const track of effectTracks) {
-    const target = `${track.effectId}\u0000${track.parameter}`
-    if (targets.has(target)) {
+    const parameters = targets.get(track.effectId) ?? new Set<string>()
+    if (parameters.has(track.parameter)) {
       return `duplicate ${track.effectId}.${track.parameter} effect animation track`
     }
-    targets.add(target)
+    parameters.add(track.parameter)
+    targets.set(track.effectId, parameters)
     const error = effectAnimationTrackValidationError(track)
     if (error) return `${track.effectId}.${track.parameter}: ${error}`
+  }
+  const paths = effectPathAnimationTracks(animation)
+  const pathError = effectPathAnimationTracksBoundsError(paths)
+  if (pathError) return pathError
+  for (const track of paths) {
+    if (targets.get(track.effectId)?.has(track.parameter)) return 'scalar and path tracks cannot compete for one effect parameter'
+  }
+  const titleTracks = titleAnimationTracks(animation)
+  if (titleTracks.length > MAX_TITLE_ANIMATION_TRACKS) return 'title animation exceeds 256 tracks'
+  const titleTargets = new Map<string, Set<string>>()
+  for (const track of titleTracks) {
+    if (typeof track.elementId !== 'string' || !track.elementId.trim() || track.elementId.length > EFFECT_STACK_LIMITS.maxIdCharacters) return 'title element id exceeds its bound'
+    const identityError = propertyIdentityError(track.property, track.propertyVersion)
+    if (identityError) return identityError
+    const properties = titleTargets.get(track.elementId) ?? new Set<string>()
+    if (properties.has(track.property)) return 'duplicate title element property; versions cannot compete'
+    properties.add(track.property)
+    titleTargets.set(track.elementId, properties)
+    const keyError = keyframesValidationError(track.keyframes, (value) =>
+      !Number.isFinite(value) || Math.abs(value) > MAX_ANIMATED_FINITE_MAGNITUDE ? 'title scalar exceeds finite bound' : null)
+    if (keyError) return keyError
   }
   return null
 }
@@ -325,6 +321,7 @@ function applyAnimatedValues(
   let opacity = clip.opacity
   let volume = clip.volume
   let audio: ClipAudioSettings | undefined
+  let visual: Clip['visual'] | undefined
   for (const [property, value] of values) {
     switch (property) {
       case 'opacity':
@@ -337,6 +334,14 @@ function applyAnimatedValues(
         audio ??= { ...clipAudioSettings(clip) }
         audio.balance = value
         break
+      case 'crop-left':
+      case 'crop-right':
+      case 'crop-top':
+      case 'crop-bottom': {
+        visual ??= { ...clipVisualSettings(clip), crop: { ...clipVisualSettings(clip).crop } }
+        visual.crop[property.slice(5) as 'left' | 'right' | 'top' | 'bottom'] = value
+        break
+      }
       case 'position-x':
         transform ??= { ...clip.transform }
         transform.x = value
@@ -364,6 +369,7 @@ function applyAnimatedValues(
     && opacity === clip.opacity
     && volume === clip.volume
     && audio === undefined
+    && visual === undefined
   ) return clip
   return {
     ...clip,
@@ -371,6 +377,8 @@ function applyAnimatedValues(
     opacity,
     volume,
     ...(audio === undefined ? {} : { audio }),
+    // In-memory callers that bypass admission cannot emit an invalid rectangle.
+    ...(visual === undefined || cropInsetsValidationError(visual.crop) ? {} : { visual }),
   }
 }
 
@@ -388,6 +396,8 @@ function applyAnimatedEffectValues(
     const params = { ...effect.params }
     let changed = false
     for (const track of targeted) {
+      // Bound identities belong to plugin declarations, never to this built-in resolver.
+      if (track.parameterIdentity !== undefined) continue
       const spec = effectAnimationParameterSpec(effect, track.parameter)
       const fallback = params[track.parameter]
       if (!spec || typeof fallback !== 'number') continue
@@ -413,24 +423,28 @@ export function resolveClipAnimationAtFrame(clip: Clip, timelineFrame: number): 
   if (!Number.isSafeInteger(timelineFrame)) return clip
   const animation = clipAnimation(clip)
   if (
-    (animation.tracks.length === 0 && effectAnimationTracks(animation).length === 0)
+    (animation.tracks.length === 0 && effectAnimationTracks(animation).length === 0 && effectPathAnimationTracks(animation).length === 0)
     || clipAnimationValidationError(animation)
   ) return clip
   const localFrame = timelineFrame - clip.timelineRange.startFrame
   if (!Number.isSafeInteger(localFrame)) return clip
   const values = new Map<ClipAnimationProperty, number>()
   for (const track of animation.tracks) {
+    if (!isKnownClipAnimationProperty(track.property) || (track.propertyVersion ?? 1) !== 1
+      || (clip.text !== undefined && track.property !== 'opacity')) continue
     const fallback = readClipAnimationProperty(clip, track.property)
     values.set(
       track.property,
       evaluateAnimationTrack(track, localFrame, fallback),
     )
   }
-  return applyAnimatedEffectValues(
+  const resolved = applyAnimatedEffectValues(
     applyAnimatedValues(clip, values),
     effectAnimationTracks(animation),
     localFrame,
   )
+  // Title-path geometry remains unavailable until the title/path owners agree it.
+  return clip.text !== undefined ? resolved : resolveEffectPathAnimation(resolved, effectPathAnimationTracks(animation), localFrame)
 }
 
 function replaceTrack(
@@ -441,10 +455,10 @@ function replaceTrack(
   const tracks = animation.tracks.filter((track) => track.property !== property)
   if (nextTrack) tracks.push(nextTrack)
   tracks.sort(
-    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property)
-      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property),
+    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property as ClipAnimationProperty)
+      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property as ClipAnimationProperty),
   )
-  return { tracks, effectTracks: [...effectAnimationTracks(animation)] }
+  return { ...animation, tracks, effectTracks: [...effectAnimationTracks(animation)] }
 }
 
 /** Upsert semantics: a keyframe at the same property/time is replaced. */
@@ -462,13 +476,14 @@ export function upsertAnimationKeyframe(
   ) return null
   if (clipAnimationValidationError(animation)) return null
   const existing = animation.tracks.find((track) => track.property === property)
+  if (existing && (existing.propertyVersion ?? 1) !== 1) return null
   const keyframes = (existing?.keyframes ?? [])
     .filter((item) => item.frame !== keyframe.frame)
     .map((item) => ({ ...item, easing: cloneAnimationEasing(item.easing) }))
   keyframes.push({ ...keyframe, easing: cloneAnimationEasing(keyframe.easing) })
   keyframes.sort((left, right) => left.frame - right.frame)
   if (keyframes.length > MAX_KEYFRAMES_PER_TRACK) return null
-  return replaceTrack(animation, property, { property, keyframes })
+  return replaceTrack(animation, property, { ...existing, property, keyframes })
 }
 
 /** Move semantics: the moved source deterministically replaces a target-time key. */
@@ -480,7 +495,7 @@ export function moveAnimationKeyframe(
 ): ClipAnimation | null {
   const track = animation.tracks.find((item) => item.property === property)
   const source = track?.keyframes.find((keyframe) => keyframe.frame === fromFrame)
-  if (!track || !source) return null
+  if (!track || !source || (track.propertyVersion ?? 1) !== 1) return null
   if (fromFrame === toFrame) return animation
   const remainingKeyframes = track.keyframes
     .filter((keyframe) => keyframe.frame !== fromFrame)
@@ -490,7 +505,7 @@ export function moveAnimationKeyframe(
     property,
     remainingKeyframes.length === 0
       ? null
-      : { property, keyframes: remainingKeyframes },
+      : { ...track, property, keyframes: remainingKeyframes },
   )
   return upsertAnimationKeyframe(withoutSource, property, {
     ...source,
@@ -511,7 +526,7 @@ export function removeAnimationKeyframe(
   return replaceTrack(
     animation,
     property,
-    keyframes.length === 0 ? null : { property, keyframes },
+    keyframes.length === 0 ? null : { ...track, property, keyframes },
   )
 }
 
@@ -548,8 +563,9 @@ function replaceEffectTrack(
     return idOrder !== 0 ? idOrder : left.parameter.localeCompare(right.parameter)
   })
   return {
+    ...animation,
     tracks: animation.tracks.map((track) => ({
-      property: track.property,
+      ...track,
       keyframes: track.keyframes.map((keyframe) => ({
         ...keyframe,
         easing: cloneAnimationEasing(keyframe.easing),
@@ -575,6 +591,8 @@ export function upsertEffectAnimationKeyframe(
     || clipAnimationValidationError(animation)
   ) return null
   const existing = effectAnimationTrack(animation, effect.id, parameter)
+  if (existing?.parameterIdentity !== undefined
+    || effectPathAnimationTracks(animation).some((track) => track.effectId === effect.id && track.parameter === parameter)) return null
   const keyframes = (existing?.keyframes ?? [])
     .filter((item) => item.frame !== keyframe.frame)
     .map((item) => ({ ...item, easing: cloneAnimationEasing(item.easing) }))
@@ -585,6 +603,7 @@ export function upsertEffectAnimationKeyframe(
     return null
   }
   return replaceEffectTrack(animation, effect.id, parameter, {
+    ...existing,
     effectId: effect.id,
     parameter,
     keyframes,
@@ -600,7 +619,7 @@ export function moveEffectAnimationKeyframe(
 ): ClipAnimation | null {
   const track = effectAnimationTrack(animation, effect.id, parameter)
   const source = track?.keyframes.find((keyframe) => keyframe.frame === fromFrame)
-  if (!track || !source) return null
+  if (!track || !source || track.parameterIdentity !== undefined) return null
   if (fromFrame === toFrame) return animation
   const remaining = track.keyframes
     .filter((keyframe) => keyframe.frame !== fromFrame)
@@ -642,8 +661,9 @@ export function removeEffectAnimationTracks(
   parameters?: ReadonlySet<string>,
 ): ClipAnimation {
   return {
+    ...animation,
     tracks: animation.tracks.map((track) => ({
-      property: track.property,
+      ...track,
       keyframes: track.keyframes.map((keyframe) => ({
         ...keyframe,
         easing: cloneAnimationEasing(keyframe.easing),
@@ -660,6 +680,10 @@ export function removeEffectAnimationTracks(
           easing: cloneAnimationEasing(keyframe.easing),
         })),
       })),
+    ...(animation.effectPathTracks === undefined ? {} : {
+      effectPathTracks: animation.effectPathTracks.filter((track) => track.effectId !== effectId
+        || (parameters !== undefined && !parameters.has(track.parameter))),
+    }),
   }
 }
 
@@ -672,6 +696,9 @@ export function remapEffectAnimationIds(
     ...track,
     effectId: replacements.get(track.effectId) ?? track.effectId,
   }))
+  if (cloned.effectPathTracks) cloned.effectPathTracks = cloned.effectPathTracks.map((track) => ({
+    ...track, effectId: replacements.get(track.effectId) ?? track.effectId,
+  }))
   return cloned
 }
 
@@ -681,7 +708,7 @@ export function shiftClipAnimation(
   deltaFrames: number,
 ): ClipAnimation | null {
   if (!Number.isSafeInteger(deltaFrames) || clipAnimationValidationError(animation)) return null
-  const shiftTracks = <T extends ClipAnimationTrack | EffectAnimationTrack>(
+  const shiftTracks = <T extends AnyAnimationTrack>(
     sourceTracks: readonly T[],
   ): T[] | null => mapAnimationTrackKeyframes(sourceTracks, (keyframe) => {
     const frame = keyframe.frame + deltaFrames
@@ -690,9 +717,7 @@ export function shiftClipAnimation(
       || frame < -MAX_KEYFRAME_FRAME
       || frame > MAX_KEYFRAME_FRAME
     ) return null
-    return { ...keyframe, frame, easing: cloneAnimationEasing(keyframe.easing) }
+    return { ...keyframe, frame, easing: { ...keyframe.easing } }
   })
-  const tracks = shiftTracks(animation.tracks)
-  const effectTracks = shiftTracks(effectAnimationTracks(animation))
-  return tracks && effectTracks ? { tracks, effectTracks } : null
+  return mapAnimationCollections(animation, shiftTracks)
 }

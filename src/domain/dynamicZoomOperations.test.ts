@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test, vi } from 'vitest'
 import { evaluateAnimationTrack, resolveClipAnimationAtFrame } from './clipAnimation'
 import { defaultClipVisualSettings } from './clipInspector'
@@ -63,7 +64,7 @@ function track(item: Clip, locked = false): Track {
 
 function doc(item = clip(), locked = false): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-framing',
     name: 'Framing operation',
     frameRate: { num: 30, den: 1 },

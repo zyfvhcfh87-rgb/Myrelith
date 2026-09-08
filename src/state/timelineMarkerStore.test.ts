@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { TimelineDoc, TimelineMarker } from '../domain/schema'
 import { initSelectionReconciliation } from '../app/selectionReconciliationController'
@@ -13,7 +14,7 @@ const first: TimelineMarker = {
 
 function doc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-marker-store',
     name: 'Marker store',
     frameRate: { num: 30, den: 1 },

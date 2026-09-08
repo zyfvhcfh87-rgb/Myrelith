@@ -159,6 +159,7 @@ describe('plugin video effect stage plan', () => {
         {
           effectId: 'plugin-effect',
           parameter: 'strength',
+          parameterIdentity: { version: 1, effectType: EFFECT_TYPE, descriptorVersion: source.descriptorVersion, contributionId: source.contributionId, contributionVersion: source.contributionVersion, packageDigest: source.packageDigest },
           keyframes: [
             { frame: 0, value: 0, easing: { type: 'linear' } },
             { frame: 10, value: 1, easing: { type: 'linear' } },

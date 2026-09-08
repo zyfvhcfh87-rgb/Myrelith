@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type { Clip, EffectDescriptor, TimelineDoc, Track } from './schema'
 import {
@@ -58,7 +59,7 @@ function docWithEffects(effects: EffectDescriptor[], selected: Clip = clip('sele
     locked: false,
   }
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'effect-budget-doc',
     name: 'Effect budget',
     frameRate: { num: 30, den: 1 },

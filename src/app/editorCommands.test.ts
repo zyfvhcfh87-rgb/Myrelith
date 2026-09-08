@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
@@ -59,7 +60,7 @@ function track(id: string, clips: Clip[], locked = false): Track {
 
 function documentFixture(tracks: Track[] = [track('V1', [clip('clip-1', 0, 60)])]): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-commands',
     name: 'Command fixture',
     frameRate: { num: 30, den: 1 },

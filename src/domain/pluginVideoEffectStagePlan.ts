@@ -23,6 +23,7 @@ import {
   type PluginParameter,
 } from './pluginManifest'
 import { utf8ByteLength } from './documentMemory'
+import { animationParameterIdentityMatches } from './animationParameterIdentity'
 import type { Clip, EffectDescriptor, EffectParamValue } from './schema'
 
 export const PLUGIN_VIDEO_EFFECT_STAGE_LIMITS = Object.freeze({
@@ -541,6 +542,7 @@ function pluginStage(
     }
     record[parameter.key] = value
   }
+  let animationDetail: string | null = null
   const animation = clipAnimation(clip)
   if (!clipAnimationValidationError(animation)) {
     const localFrame = timelineFrame - clip.timelineRange.startFrame
@@ -550,7 +552,14 @@ function pluginStage(
         const track = effectAnimationTracks(animation).find((candidate) => (
           candidate.effectId === effect.id && candidate.parameter === parameter.key
         ))
-        if (!track || track.keyframes.some((keyframe) => (
+        if (!track) continue
+        if (!animationParameterIdentityMatches(track.parameterIdentity, declaration)) {
+          animationDetail = track.parameterIdentity === undefined
+            ? 'Plugin animation identity is unverified; keys are preserved and static parameters are used. Bind explicitly to the current declaration.'
+            : 'Plugin animation identity does not match the installed package; keys are preserved and static parameters are used.'
+          continue
+        }
+        if (track.keyframes.some((keyframe) => (
           keyframe.value < parameter.min || keyframe.value > parameter.max
         ))) continue
         const fallback = record[parameter.key]
@@ -590,7 +599,7 @@ function pluginStage(
     effect: frozenEffect(effect),
     label: declaration.contributionName,
     status: 'ready',
-    detail: declaration.detail,
+    detail: animationDetail ?? declaration.detail,
     execution,
   })
 }

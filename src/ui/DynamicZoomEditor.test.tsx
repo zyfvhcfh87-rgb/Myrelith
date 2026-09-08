@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -39,7 +40,7 @@ function clip(overrides: Partial<Clip> = {}): Clip {
 
 function doc(item = clip(), locked = false): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-dynamic-ui',
     name: 'Dynamic zoom UI',
     frameRate: { num: 30, den: 1 },

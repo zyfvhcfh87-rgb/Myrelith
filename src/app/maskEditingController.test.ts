@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { beginMaskEdit, commitMaskParams } from './maskEditingController'
-import { attributeClip } from '../test/clipAttributeFixtures'
+import { ATTRIBUTE_ASSET_DESCRIPTOR, attributeClip } from '../test/clipAttributeFixtures'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
 import { sequenceProjectFromTimeline } from '../domain/projectSequences'
 import { createMaskEffect } from '../domain/effectStack'
@@ -8,9 +8,11 @@ import { MAX_KEYFRAMES_PER_TRACK, resolveClipAnimationAtFrame } from '../domain/
 import { updateEffectParamsAtFrame } from '../domain/operations/effects'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
+import { useMediaStore } from '../state/mediaStore'
 
 const target = { sequenceId: 'mask-edit', clipId: 'clip', effectId: 'mask' }
 beforeEach(() => {
+  useMediaStore.setState({ descriptors: new Map([['asset', ATTRIBUTE_ASSET_DESCRIPTOR]]), collections: [] })
   useTransportStore.getState().resetTransport()
   const doc = structuredClone(createTimelineDoc('Mask', DEFAULT_PROJECT_SETTINGS, target.sequenceId))
   const clip = attributeClip('clip'); clip.effects = [createMaskEffect('mask', 'rectangle')]
@@ -83,7 +85,7 @@ test('static and animated patches match Inspector numeric operations, including 
 
 test('full scalar lanes reject growth atomically but permit updates at capacity', () => {
   const doc = structuredClone(useDocumentStore.getState().doc)
-  doc.tracks[0].clips[0].animation = { tracks: [], effectTracks: [{ effectId: 'mask', parameter: 'x', keyframes: Array.from({ length: MAX_KEYFRAMES_PER_TRACK }, (_, i) => ({ frame: i * 2, value: 0, easing: { type: 'linear' } })) }] }
+  doc.tracks[0].clips[0].animation = { tracks: [], effectTracks: [{ effectId: 'mask', parameter: 'x', keyframes: Array.from({ length: MAX_KEYFRAMES_PER_TRACK }, (_, i) => ({ frame: i * 2, sourceTimeTicks: i * 2_000_000, value: 0, easing: { type: 'linear' } })) }] }
   useDocumentStore.getState().setDoc(doc)
   const project = useDocumentStore.getState().project; useDocumentStore.setState({ future: [project] })
   useTransportStore.getState().setPlayheadFrame(1)

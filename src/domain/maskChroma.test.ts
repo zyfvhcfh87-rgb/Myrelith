@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from './schema'
 import {
@@ -80,7 +81,7 @@ function documentWithClip(clip = mediaClip()): TimelineDoc {
     locked: false,
   }
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-1',
     name: 'Masks and chroma',
     frameRate: { num: 30, den: 1 },

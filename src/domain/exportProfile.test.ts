@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import {
   AUTO_EXPORT_PRESET_ORDER,
@@ -68,7 +69,7 @@ function audioTimeline(hasClip: boolean): TimelineDoc {
     locked: false,
   }
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'export-profile-audio-doc',
     name: 'Audio profile fixture',
     frameRate: { num: 30, den: 1 },

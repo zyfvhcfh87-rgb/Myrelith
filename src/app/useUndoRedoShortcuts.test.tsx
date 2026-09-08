@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * app/useUndoRedoShortcuts.test.tsx — Phase 3 gate item.
  *
@@ -48,7 +49,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-shortcuts',
     name: 'shortcut fixture',
     frameRate: { num: 30, den: 1 },

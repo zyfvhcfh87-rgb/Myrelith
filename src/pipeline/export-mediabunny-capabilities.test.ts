@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { beforeEach, describe, expect, test, vi, type Mock } from 'vitest'
 import {
   DEFAULT_EXPORT_PROFILE,
@@ -233,7 +234,7 @@ function makeDoc({
   height?: number
 } = {}): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'fresh-probe-doc',
     name: 'Fresh probe',
     frameRate,

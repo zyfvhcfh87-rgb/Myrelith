@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../../domain/projectFile'
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../../domain/schema'
 import { defaultTextProps } from '../../domain/textOverlay'
@@ -57,7 +58,7 @@ function linkedDoc(
   audio = clip('audio', 'audio-asset', 35, 40, 2, 'link_bounds'),
 ): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'gesture-bounds',
     name: 'Gesture bounds',
     frameRate: { num: 30, den: 1 },

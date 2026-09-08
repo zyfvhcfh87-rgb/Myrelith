@@ -1,0 +1,580 @@
+## schema22-tests-first.log
+SHA256 of original: 3333c652845617e8312de938841396b3dec56dd0e2a5f5cd1ee21a0910a6c098
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/domain/clipAnimation.test.ts src/domain/scalarAnimation.test.ts src/domain/animationTiming.test.ts src/domain/clipAnimationOperations.test.ts src/domain/projectFile.test.ts src/domain/projectSequences.test.ts src/domain/adjustmentItems.test.ts src/domain/clipAttributes.test.ts src/domain/sourceTimeMap.test.ts src/domain/pluginVideoEffectStagePlan.test.ts src/app/clipAttributeController.test.ts src/domain/cropAnimationCertificate.test.ts src/domain/maskPathAnimation.test.ts src/test/architecture.test.ts --maxWorkers=1
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/domain/projectFile.test.ts (90 tests | 1 failed) 74ms
+     × counts effect keyframes against the global portable-project budget 6ms
+ ❯ src/test/architecture.test.ts (7 tests | 1 failed) 35ms
+     × keeps ordinary test documents on the current timeline schema 12ms
+ ❯ src/app/clipAttributeController.test.ts (5 tests | 2 failed) 10ms
+     × one paste is one history entry with exact undo/redo identities 6ms
+     × copies checked effects only and preserves the full stack snapshot after later source edits 1ms
+ ❯ src/domain/pluginVideoEffectStagePlan.test.ts (12 tests | 1 failed) 7ms
+     × uses the shared animation evaluator and canonicalizes cloned bounded parameters 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/clipAttributeController.test.ts > attribute clipboard and history > one paste is one history entry with exact undo/redo identities
+AssertionError: expected '$.sequences[0].tracks[0].clips[0].ass…' to be null
+
+- Expected:
+null
+
++ Received:
+"$.sequences[0].tracks[0].clips[0].assetId: references an unknown asset"
+
+ ❯ src/app/clipAttributeController.test.ts:29:78
+     27|     select('first', 'second')
+     28|     const original = useDocumentStore.getState().project
+     29|     expect(applyAttributeEdit(openAttributeEdit('paste'), 'paste', opt…
+       |                                                                              ^
+     30|     const { project: pasted, past } = useDocumentStore.getState()
+     31|     expect(past).toHaveLength(1)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/app/clipAttributeController.test.ts > attribute clipboard and history > copies checked effects only and preserves the full stack snapshot after later source edits
+AssertionError: expected '$.sequences[0].tracks[0].clips[0].ass…' to be null
+
+- Expected:
+null
+
++ Received:
+"$.sequences[0].tracks[0].clips[0].assetId: references an unknown asset"
+
+ ❯ src/app/clipAttributeController.test.ts:74:78
+     72|     expect(source.value.map((effect) => effect.type)).toEqual(['future…
+     73|     expect(copied.template).toBe(openAttributeEdit('paste').template)
+     74|     expect(applyAttributeEdit(openAttributeEdit('paste'), 'paste', opt…
+       |                                                                              ^
+     75|     expect(useDocumentStore.getState().doc.tracks[0].clips[1].animatio…
+     76|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/domain/pluginVideoEffectStagePlan.test.ts > plugin video effect stage plan > uses the shared animation evaluator and canonicalizes cloned bounded parameters
+AssertionError: expected { kind: 'plugin', …(5) } to match object { kind: 'plugin', …(2) }
+(18 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "execution": {
+-     "canonicalParameterJson": "{\"enabled\":true,\"mode\":\"soft\",\"strength\":0.5}",
++     "canonicalParameterJson": "{\"enabled\":true,\"mode\":\"soft\",\"strength\":0.2}",
+      "parameterRecord": {
+        "enabled": true,
+        "mode": "soft",
+-       "strength": 0.5,
++       "strength": 0.2,
+      },
+    },
+    "kind": "plugin",
+    "status": "ready",
+  }
+
+ ❯ src/domain/pluginVideoEffectStagePlan.test.ts:179:19
+    177|     const plan = resolveVideoEffectStagePlan(animated, 15, installed)
+    178|     const stage = plan?.stages[0]
+    179|     expect(stage).toMatchObject({
+       |                   ^
+    180|       kind: 'plugin',
+    181|       status: 'ready',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/domain/projectFile.test.ts > portable project file > counts effect keyframes against the global portable-project budget
+AssertionError: expected [Function] to throw error including 'exceeds 100000 keyframes in total' but got '$.sequences: exceeds the total keyfra…'
+
+Expected: "exceeds 100000 keyframes in total"
+Received: "$.sequences: exceeds the total keyframe budget"
+
+ ❯ src/domain/projectFile.test.ts:849:8
+    847|
+    848|     expect(() => validateProjectFile(current))
+    849|       .toThrow(`exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyfr…
+       |        ^
+    850|   })
+    851|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  src/test/architecture.test.ts > architecture guard > keeps ordinary test documents on the current timeline schema
+AssertionError: expected [ …(112) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "app/EditorShell.test.tsx:56 uses schema 21",
++   "app/audioEffectStatus.test.ts:12 uses schema 21",
++   "app/editorCommands.test.ts:62 uses schema 21",
++   "app/editorContextMenuCommands.test.ts:73 uses schema 21",
++   "app/exportCapabilitiesController.test.ts:18 uses schema 21",
++   "app/exportController.test.ts:80 uses schema 21",
++   "app/loudnessController.test.ts:10 uses schema 21",
++   "app/mediaPlacementController.test.ts:102 uses schema 21",
++   "app/pluginExportAttemptController.test.ts:62 uses schema 21",
++   "app/pluginExportAttemptController.test.ts:243 uses schema 21",
++   "app/pluginPreparedExportController.test.ts:131 uses schema 21",
++   "app/selectionReconciliationController.test.ts:70 uses schema 21",
++   "app/sequenceEditController.test.ts:43 uses schema 21",
++   "app/sourceMonitorPlaybackController.test.ts:77 uses schema 21",
++   "app/transportController.test.ts:153 uses schema 21",
++   "app/transportController.test.ts:295 uses schema 21",
++   "app/useEditShortcuts.test.tsx:52 uses schema 21",
++   "app/useUndoRedoShortcuts.test.tsx:51 uses schema 21",
++   "domain/audioEffects.test.ts:71 uses schema 21",
++   "domain/audioMixPlan.test.ts:126 uses schema 21",
++   "domain/audioMixer.test.ts:29 uses schema 21",
++   "domain/captions.test.ts:18 uses schema 21",
++   "domain/clipAnimationOperations.test.ts:56 uses schema 21",
++   "domain/crossfadePlan.test.ts:99 uses schema 21",
++   "domain/dynamicZoom.test.ts:43 uses schema 21",
++   "domain/dynamicZoomOperations.test.ts:66 uses schema 21",
++   "domain/effectBounds.test.ts:61 uses schema 21",
++   "domain/exportProfile.test.ts:71 uses schema 21",
++   "domain/linking.test.ts:114 uses schema 21",
++   "domain/linking.test.ts:163 uses schema 21",
++   "domain/linking.test.ts:180 uses schema 21",
++   "domain/linking.test.ts:227 uses schema 21",
++   "domain/linking.test.ts:279 uses schema 21",
++   "domain/linking.test.ts:330 uses schema 21",
++   "domain/linking.test.ts:372 uses schema 21",
++   "domain/linking.test.ts:411 uses schema 21",
++   "domain/linking.test.ts:460 uses schema 21",
++   "domain/linking.test.ts:689 uses schema 21",
++   "domain/linking.test.ts:1219 uses schema 21",
++   "domain/maskChroma.test.ts:83 uses schema 21",
++   "domain/mediaPlacement.test.ts:58 uses schema 21",
++   "domain/motionTracking.test.ts:44 uses schema 21",
++   "domain/motionTrackingOperations.test.ts:31 uses schema 21",
++   "domain/multiClipMove.test.ts:57 uses schema 21",
++   "domain/multicamOperations.test.ts:33 uses schema 21",
++   "domain/nestedSequences.test.ts:83 uses schema 21",
++   "domain/operations.test.ts:113 uses schema 21",
++   "domain/operations.test.ts:148 uses schema 21",
++   "domain/operations.test.ts:705 uses schema 21",
++   "domain/operations.test.ts:1441 uses schema 21",
++   "domain/projectAudioMixPlan.test.ts:123 uses schema 21",
++   "domain/projectSettings.test.ts:305 uses schema 21",
++   "domain/projectSettings.test.ts:385 uses schema 21",
++   "domain/projectVideoCompositionPlan.test.ts:114 uses schema 21",
++   "domain/selectors.test.ts:60 uses schema 21",
++   "domain/sequenceInstanceOperations.test.ts:78 uses schema 21",
++   "domain/threePointEdit.test.ts:87 uses schema 21",
++   "domain/timelineMarkers.test.ts:17 uses schema 21",
++   "domain/timelineSnapping.test.ts:57 uses schema 21",
++   "domain/videoCompositionPlan.test.ts:108 uses schema 21",
++   "domain/videoStabilization.test.ts:46 uses schema 21",
++   "domain/videoStabilizationOperations.test.ts:38 uses schema 21",
++   "engine/render-bridge.test.ts:245 uses schema 21",
++   "pipeline/export-audio.test.ts:118 uses schema 21",
++   "pipeline/export-audio.test.ts:267 uses schema 21",
++   "pipeline/export-capabilities.test.ts:20 uses schema 21",
++   "pipeline/export-mediabunny-capabilities.test.ts:236 uses schema 21",
++   "pipeline/export.test.ts:100 uses schema 21",
++   "pipeline/loudnessScan.test.ts:36 uses schema 21",
++   "pipeline/playback-audio.test.ts:125 uses schema 21",
++   "pipeline/playback-audio.test.ts:195 uses schema 21",
++   "pipeline/render.pixels.test.ts:572 uses schema 21",
++   "pipeline/render.test.ts:85 uses schema 21",
++   "state/clipAnimationStore.test.ts:34 uses schema 21",
++   "state/documentStore.test.ts:56 uses schema 21",
++   "state/documentStore.test.ts:73 uses schema 21",
++   "state/documentStore.test.ts:114 uses schema 21",
++   "state/documentStore.test.ts:1413 uses schema 21",
++   "state/documentStore.test.ts:1619 uses schema 21",
++   "state/documentStore.test.ts:1739 uses schema 21",
++   "state/documentStore.test.ts:1759 uses schema 21",
++   "state/dynamicZoomStore.test.ts:40 uses schema 21",
++   "state/lensCorrectionStore.test.ts:17 uses schema 21",
++   "state/motionTrackingDocumentStore.test.ts:41 uses schema 21",
++   "state/phase1-gate.test.ts:65 uses schema 21",
++   "state/timelineMarkerStore.test.ts:16 uses schema 21",
++   "test/effectBudgetFixtures.ts:97 uses schema 21",
++   "ui/AnimationCurveEditor.test.tsx:40 uses schema 21",
++   "ui/DynamicZoomEditor.test.tsx:42 uses schema 21",
++   "ui/EditorCommandPalette.test.tsx:39 uses schema 21",
++   "ui/ExportDialog.test.tsx:179 uses schema 21",
++   "ui/Inspector.test.tsx:54 uses schema 21",
++   "ui/MediaImportDialog.test.tsx:211 uses schema 21",
++   "ui/MotionTrackingEditor.test.tsx:63 uses schema 21",
++   "ui/StabilizationEditor.test.tsx:51 uses schema 21",
++   "ui/exportProfileUi.test.ts:76 uses schema 21",
++   "ui/mediadrop.test.tsx:100 uses schema 21",
++   "ui/timeline/SequenceInstanceView.test.tsx:21 uses schema 21",
++   "ui/timeline/TimelineZoomControls.test.tsx:27 uses schema 21",
++   "ui/timeline/clipdrag.test.tsx:57 uses schema 21",
++   "ui/timeline/clipdrag.test.tsx:617 uses schema 21",
++   "ui/timeline/clipdrag.test.tsx:667 uses schema 21",
++   "ui/timeline/edittools.test.tsx:72 uses schema 21",
++   "ui/timeline/edittools.test.tsx:743 uses schema 21",
++   "ui/timeline/gestureBounds.test.ts:60 uses schema 21",
++   "ui/timeline/markers.test.tsx:11 uses schema 21",
++   "ui/timeline/timeline.test.tsx:28 uses schema 21",
++   "ui/timeline/timelineMarqueeInteraction.test.tsx:50 uses schema 21",
++   "ui/timeline/trackheader.test.tsx:44 uses schema 21",
++   "ui/timeline/transitions.test.tsx:136 uses schema 21",
++   "ui/timeline/transitions.test.tsx:175 uses schema 21",
++   "workers/render.worker.test.ts:723 uses schema 21",
++ ]
+
+ ❯ src/test/architecture.test.ts:467:27
+    465|       }
+    466|     }
+    467|     expect(staleFixtures).toEqual([])
+       |                           ^
+    468|   })
+    469| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  4 failed | 10 passed (14)
+      Tests  5 failed | 206 passed (211)
+   Start at  11:58:38
+   Duration  5.16s (transform 377ms, setup 225ms, import 1.25s, tests 292ms, environment 2.64s)
+
+
+## schema22-foundation-tests.log
+SHA256 of original: 1cc209c4b52fe27dee9728616076aa8768628de742983c1f5be75cb3b1bd6488
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/domain/animationFoundation.test.ts src/domain/scalarAnimation.test.ts src/domain/animationTiming.test.ts src/domain/pluginVideoEffectStagePlan.test.ts src/app/clipAttributeController.test.ts src/test/architecture.test.ts --maxWorkers=1
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/domain/animationFoundation.test.ts (10 tests | 1 failed) 11ms
+     × round-trips future/title/path data across dormant sequences and duplicates path effect ids 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/domain/animationFoundation.test.ts > schema22 canonical animation foundation > round-trips future/title/path data across dormant sequences and duplicates path effect ids
+AssertionError: expected 'invalid-name' to be null
+
+- Expected:
+null
+
++ Received:
+"invalid-name"
+
+ ❯ src/domain/animationFoundation.test.ts:95:31
+     93|     let id = 0
+     94|     const duplicate = duplicateProjectSequence(project, project.rootSe…
+     95|     expect(duplicate.failure).toBeNull()
+       |                               ^
+     96|     const copied = duplicate.project.sequences[1].tracks[0].clips[0]
+     97|     expect(copied.animation?.effectPathTracks?.[0].effectId).toBe(copi…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 5 passed (6)
+      Tests  1 failed | 40 passed (41)
+   Start at  12:08:00
+   Duration  2.64s (transform 323ms, setup 99ms, import 1.05s, tests 64ms, environment 1.11s)
+
+
+## schema22-boundary-tests-first.log
+SHA256 of original: b6f4567f78104a38c51116672dc1a2b0cd5008d5b03f1cc94ea38d30d8988628
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/app/animationBindingController.test.ts src/app/animationFileBoundary.test.ts src/domain/animationFoundation.test.ts src/domain/titleBudgets.test.ts --maxWorkers=1
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/app/animationFileBoundary.test.ts (4 tests | 4 failed) 21ms
+     × migrates 9999999 characters (legacy scalar false), edits and undoes without growth 9ms
+     × migrates 10000000 characters (legacy scalar false), edits and undoes without growth 5ms
+     × migrates 9999999 characters (legacy scalar true), edits and undoes without growth 4ms
+     × migrates 10000000 characters (legacy scalar true), edits and undoes without growth 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/animationFileBoundary.test.ts > schema22 production file and history boundary > migrates 9999999 characters (legacy scalar false), edits and undoes without growth
+ FAIL  src/app/animationFileBoundary.test.ts > schema22 production file and history boundary > migrates 10000000 characters (legacy scalar false), edits and undoes without growth
+ FAIL  src/app/animationFileBoundary.test.ts > schema22 production file and history boundary > migrates 9999999 characters (legacy scalar true), edits and undoes without growth
+ FAIL  src/app/animationFileBoundary.test.ts > schema22 production file and history boundary > migrates 10000000 characters (legacy scalar true), edits and undoes without growth
+ProjectFileError: $.sequences[1].tracks[0].id: duplicate track id
+ ❯ fail src/domain/projectFile/validationPrimitives.ts:8:9
+      6|
+      7| export function fail(path: string, problem: string): never {
+      8|   throw new ProjectFileError(`${path}: ${problem}`)
+       |         ^
+      9| }
+     10|
+ ❯ validateTrack src/domain/projectFile/documentValidation.ts:400:31
+ ❯ validateDocument src/domain/projectFile/documentValidation.ts:587:5
+ ❯ validateProjectFile src/domain/projectFile/documentValidation.ts:723:5
+ ❯ createProjectFileSnapshot src/domain/projectFile/serialization.ts:295:3
+ ❯ exactLegacyFile src/app/animationFileBoundary.test.ts:30:16
+ ❯ src/app/animationFileBoundary.test.ts:58:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  4 failed | 32 passed (36)
+   Start at  12:18:29
+   Duration  1.67s (transform 323ms, setup 68ms, import 448ms, tests 211ms, environment 729ms)
+
+
+## schema22-file-boundary-fixture-failure.txt
+SHA256 of original: c06271e9c9c8969153f4359e90febdd03512ae65199d1355f182a087bfa85f31
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/app/animationFileBoundary.test.ts --maxWorkers=1
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/app/animationFileBoundary.test.ts (4 tests | 4 failed) 272ms
+     × migrates 9999999 characters (legacy scalar false), edits and undoes without growth 76ms
+     × migrates 10000000 characters (legacy scalar false), edits and undoes without growth 65ms
+     × migrates 9999999 characters (legacy scalar true), edits and undoes without growth 62ms
+     × migrates 10000000 characters (legacy scalar true), edits and undoes without growth 69ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/animationFileBoundary.test.ts > schema22 production file and history boundary > migrates 9999999 characters (legacy scalar false), edits and undoes without growth
+AssertionError: expected '{"assets":[],"collections":[],"colorL…' to be '{"format":"myrelith-project","formatV…' // Object.is equality
+
+- Expected
++ Received
+
+[Large assertion fixture payload omitted.]
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  12:19:06
+   Duration  972ms (transform 283ms, setup 27ms, import 331ms, tests 272ms, environment 184ms)
+
+[Large assertion fixture payload omitted.]
+[Large assertion fixture payload omitted.]
+
+ ❯ src/app/animationFileBoundary.test.ts:61:22
+     59|     const legacy = exactLegacyFile(characters, scalar), file = parsePr…
+     60|     const migrated = serializeProjectFile(file)
+     61|     expect(migrated).toBe(legacy.replaceAll('"schemaVersion":21', '"sc…
+       |                      ^
+     62|     expect(migrated.length).toBe(characters)
+     63|     useMediaStore.setState({ descriptors: new Map(file.assets.map((ass…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/app/animationFileBoundary.test.ts > schema22 production file and history boundary > migrates 10000000 characters (legacy scalar false), edits and undoes without growth
+AssertionError: expected '{"assets":[],"collections":[],"colorL…' to be '{"format":"myrelith-project","formatV…' // Object.is equality
+
+- Expected
++ Received
+
+[Large assertion fixture payload omitted.]
+[Large assertion fixture payload omitted.]
+
+ ❯ src/app/animationFileBoundary.test.ts:61:22
+     59|     const legacy = exactLegacyFile(characters, scalar), file = parsePr…
+     60|     const migrated = serializeProjectFile(file)
+     61|     expect(migrated).toBe(legacy.replaceAll('"schemaVersion":21', '"sc…
+       |                      ^
+     62|     expect(migrated.length).toBe(characters)
+     63|     useMediaStore.setState({ descriptors: new Map(file.assets.map((ass…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/app/animationFileBoundary.test.ts > schema22 production file and history boundary > migrates 9999999 characters (legacy scalar true), edits and undoes without growth
+AssertionError: expected '{"assets":[{"audioChannels":null,"aud…' to be '{"format":"myrelith-project","formatV…' // Object.is equality
+
+- Expected
++ Received
+
+[Large assertion fixture payload omitted.]
+[Large assertion fixture payload omitted.]
+
+ ❯ src/app/animationFileBoundary.test.ts:61:22
+     59|     const legacy = exactLegacyFile(characters, scalar), file = parsePr…
+     60|     const migrated = serializeProjectFile(file)
+     61|     expect(migrated).toBe(legacy.replaceAll('"schemaVersion":21', '"sc…
+       |                      ^
+     62|     expect(migrated.length).toBe(characters)
+     63|     useMediaStore.setState({ descriptors: new Map(file.assets.map((ass…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/app/animationFileBoundary.test.ts > schema22 production file and history boundary > migrates 10000000 characters (legacy scalar true), edits and undoes without growth
+AssertionError: expected '{"assets":[{"audioChannels":null,"aud…' to be '{"format":"myrelith-project","formatV…' // Object.is equality
+
+- Expected
++ Received
+
+[Large assertion fixture payload omitted.]
+[Large assertion fixture payload omitted.]
+
+ ❯ src/app/animationFileBoundary.test.ts:61:22
+     59|     const legacy = exactLegacyFile(characters, scalar), file = parsePr…
+     60|     const migrated = serializeProjectFile(file)
+     61|     expect(migrated).toBe(legacy.replaceAll('"schemaVersion":21', '"sc…
+       |                      ^
+     62|     expect(migrated.length).toBe(characters)
+     63|     useMediaStore.setState({ descriptors: new Map(file.assets.map((ass…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+## schema22-admission-tests-first.log
+SHA256 of original: 8ddfab3b2bbec86e1f5e3189147f8866d48ef64909026d99ef021675fb67910c
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/app/animationAdmission.test.ts src/domain/projectCropAnimation.test.ts --maxWorkers=1
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/domain/projectCropAnimation.test.ts (3 tests | 1 failed) 4ms
+     × key removal preserves explicit version metadata and unavailable adjustment values stay inert 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/domain/projectCropAnimation.test.ts > crop snapshot ownership and held tails > key removal preserves explicit version metadata and unavailable adjustment values stay inert
+TypeError: createAdjustment is not a function
+ ❯ src/domain/projectCropAnimation.test.ts:43:18
+     41|     const doc = foundationProject().sequences[0]
+     42|     doc.tracks[0].clips = []
+     43|     const item = createAdjustment('adjustment', 0, 60)
+       |                  ^
+     44|     item.animation.tracks = [{ property: 'opacity', propertyVersion: 7…
+     45|     doc.tracks[0].adjustments = [item]
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 5 passed (6)
+   Start at  12:21:30
+   Duration  2.25s (transform 279ms, setup 37ms, import 353ms, tests 1.40s, environment 358ms)
+
+
+## schema22-lifecycle-tests-first.log
+SHA256 of original: d12d17f297a16c5d4c18a56e920ce21e65420a3ff6b7a32d8ac8f2b253b5b86a
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/domain/animationLifecycle.test.ts src/domain/effectStack.test.ts --maxWorkers=1
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/domain/animationLifecycle.test.ts (4 tests | 1 failed) 7ms
+     × split, trim, slip and retime transform every lane with the established source-time rules 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/domain/animationLifecycle.test.ts > typed animation lifecycle integration > split, trim, slip and retime transform every lane with the established source-time rules
+TypeError: Cannot read properties of null (reading 'project')
+ ❯ src/domain/animationLifecycle.test.ts:37:68
+     35|     expect(retimed.titleTracks![0].propertyVersion).toBe(3)
+     36|     expect(JSON.stringify(doc)).toBe(before)
+     37|     expect(matchEmptyProjectFrameRate(project, { num: 60, den: 1 }).pr…
+       |                                                                    ^
+     38|   })
+     39|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 9 passed (10)
+   Start at  12:25:22
+   Duration  765ms (transform 212ms, setup 40ms, import 251ms, tests 9ms, environment 360ms)
+
+
+## schema22-final-tests-first.log
+SHA256 of original: 1878fe04384f380840fc485a88ba3dd13811056e6e691d52270c4bff2c182b6d
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/domain/animationFoundation.test.ts src/domain/animationLifecycle.test.ts src/domain/projectCropAnimation.test.ts src/domain/cropAnimationCertificate.test.ts src/domain/scalarAnimation.test.ts src/domain/animationTiming.test.ts src/domain/titleElements.test.ts src/domain/titleBudgets.test.ts src/domain/maskPathAnimation.test.ts src/domain/maskPath.test.ts src/domain/effectStack.test.ts src/domain/clipAnimation.test.ts src/domain/clipAnimationOperations.test.ts src/domain/adjustmentItems.test.ts src/domain/sourceTimeMap.test.ts src/domain/projectFile.test.ts src/domain/projectSequences.test.ts src/domain/clipAttributes.test.ts src/domain/colorLutCatalog.test.ts src/domain/pluginVideoEffectStagePlan.test.ts src/domain/dynamicZoomOperations.test.ts src/domain/motionTrackingOperations.test.ts src/domain/videoStabilizationOperations.test.ts src/domain/videoCompositionPlan.test.ts src/domain/projectVideoCompositionPlan.test.ts src/domain/audioMixPlan.test.ts src/domain/projectAudioMixPlan.test.ts src/state/documentStore.test.ts src/state/clipAnimationStore.test.ts src/app/clipAttributeController.test.ts src/app/animationBindingController.test.ts src/app/animationFileBoundary.test.ts src/app/animationAdmission.test.ts src/app/pluginPreparedExportController.test.ts src/app/pluginDescriptorMigrationController.test.ts src/test/architecture.test.ts --maxWorkers=1
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/domain/colorLutCatalog.test.ts (14 tests | 1 failed) 44ms
+     × format 8 roundtrips embedded data and schema 21; format 7 migrates with an empty catalog 6ms
+ ❯ src/domain/videoCompositionPlan.test.ts (16 tests | 1 failed) 9ms
+     × plans animated plugin parameters independently on both crossfade legs 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/domain/colorLutCatalog.test.ts > portable LUT ownership > format 8 roundtrips embedded data and schema 21; format 7 migrates with an empty catalog
+AssertionError: expected 22 to be 21 // Object.is equality
+
+- Expected
++ Received
+
+- 21
++ 22
+
+ ❯ src/domain/colorLutCatalog.test.ts:24:47
+     22|     const loaded = parseProjectFile(serializeProjectFile(snapshot))
+     23|     expect(loaded.formatVersion).toBe(8)
+     24|     expect(loaded.sequences[0].schemaVersion).toBe(21)
+       |                                               ^
+     25|     expect(loaded.colorLuts).toEqual(original.colorLuts)
+     26|     expect(Object.isFrozen(loaded.colorLuts[0])).toBe(true)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/domain/videoCompositionPlan.test.ts > video composition plan > plans animated plugin parameters independently on both crossfade legs
+AssertionError: expected { kind: 'crossfade', …(5) } to match object { kind: 'crossfade', …(1) }
+(83 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -4,11 +4,11 @@
+      {
+        "effectStagePlan": {
+          "stages": [
+            {
+              "execution": {
+-               "canonicalParameterJson": "{\"strength\":0.5}",
++               "canonicalParameterJson": "{\"strength\":0}",
+              },
+              "kind": "plugin",
+            },
+          ],
+        },
+@@ -16,11 +16,11 @@
+      {
+        "effectStagePlan": {
+          "stages": [
+            {
+              "execution": {
+-               "canonicalParameterJson": "{\"strength\":0.5}",
++               "canonicalParameterJson": "{\"strength\":0}",
+              },
+              "kind": "plugin",
+            },
+          ],
+        },
+
+ ❯ src/domain/videoCompositionPlan.test.ts:607:30
+    605|     ).planFrame(11)
+    606|
+    607|     expect(planned.items[0]).toMatchObject({
+       |                              ^
+    608|       kind: 'crossfade',
+    609|       requests: [
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 33 passed (35)
+      Tests  2 failed | 444 passed (446)
+   Start at  12:27:41
+   Duration  13.43s (transform 670ms, setup 524ms, import 2.13s, tests 2.87s, environment 6.17s)

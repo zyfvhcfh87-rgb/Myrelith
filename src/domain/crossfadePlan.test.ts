@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type {
   AssetId,
@@ -96,7 +97,7 @@ function track(
 
 function doc(tracks: Track[], rate: FrameRate = F30): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'crossfade-plan-doc',
     name: 'Crossfade plan',
     frameRate: rate,

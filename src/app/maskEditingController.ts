@@ -1,6 +1,8 @@
 import { editMaskParamsAtFrame, maskEditingTarget, type MaskEditPatch, type MaskEditTarget } from '../domain/maskEditing'
+import { replaceProjectSequence } from '../domain/projectSequences'
 import { useDocumentStore } from '../state/documentStore'
 import { getTransportResetRevision, useTransportStore } from '../state/transportStore'
+import { portableProjectEditError } from './portableProjectEdit'
 
 export interface MaskEditSession {
   preview(patch: MaskEditPatch): string | null
@@ -44,6 +46,9 @@ export function beginMaskEdit(target: MaskEditTarget, onEnd?: () => void): MaskE
       if (commit) {
         cancel()
         if (active !== null || !contextCurrent()) return 'The project, selection or playhead changed. Start the mask edit again.'
+        const candidate = replaceProjectSequence(document.project, target.sequenceId, next)
+        const error = portableProjectEditError(document.project, document.projectGeneration, candidate)
+        if (error) return error
         return useDocumentStore.getState().commitMaskEdit(document.project, document.projectGeneration, target.sequenceId, next)
       }
       useTransportStore.getState().setMaskPreview({ sequenceId: target.sequenceId, effectId: target.effectId, params: { ...patch } as Record<string, number | string | boolean>, document: next })

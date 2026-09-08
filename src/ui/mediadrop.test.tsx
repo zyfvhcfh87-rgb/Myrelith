@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * ui/mediadrop.test.tsx — Phase 4.0 media → timeline flow.
  *
@@ -97,7 +98,7 @@ function makeTrack(
 /** V1 (video, empty), A1 (audio, empty), VL (video, locked). */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-mediadrop',
     name: 'media drop fixture',
     frameRate: { num: 30, den: 1 },

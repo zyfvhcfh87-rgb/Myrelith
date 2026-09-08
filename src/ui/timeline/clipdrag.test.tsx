@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../../domain/projectFile'
 /**
  * ui/timeline/clipdrag.test.tsx — Phase 3.3.
  *
@@ -54,7 +55,7 @@ function makeTrack(
 /** V1: clipA [100,50), clipB [300,80) — room to move, room to collide. */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-drag',
     name: 'drag fixture',
     frameRate: { num: 30, den: 1 },
@@ -614,7 +615,7 @@ describe('linked clip gestures (A/V pairs)', () => {
    * the SAME range, both sharing 'link_1' — a linked pair by construction. */
   function makeLinkedDoc(): TimelineDoc {
     return {
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc-linked-drag',
       name: 'linked drag fixture',
       frameRate: { num: 30, den: 1 },
@@ -664,7 +665,7 @@ describe('linked clip gestures (A/V pairs)', () => {
       linkGroupId: 'link_1',
     }
     return {
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc-unequal-linked-drag',
       name: 'unequal linked drag fixture',
       frameRate: { num: 30, den: 1 },

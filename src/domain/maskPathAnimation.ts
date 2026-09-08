@@ -149,8 +149,12 @@ export function maskPathAnimationSnapshotBudget(snapshot: MaskPathAnimationSnaps
     declaredKeys += track.keyframes.length
     if (declaredKeys > MASK_PATH_ANIMATION_LIMITS.projectKeys) return { ok: false, reason: 'A project or clipboard exceeds 4,096 path keys.' }
   }
-  const error = collectionError(snapshot.tracks, MASK_PATH_ANIMATION_LIMITS.projectKeys, false)
-  if (error) return { ok: false, reason: error }
+  // Targets are unique within their owning clip collection, not across this
+  // flattened accounting projection (distinct clips may retain dangling ids).
+  for (const track of snapshot.tracks) {
+    const error = effectPathAnimationTrackBoundsError(track)
+    if (error) return { ok: false, reason: error }
+  }
   let keys = 0, valueCharacters = 0, retainedBytes = 0
   for (const track of snapshot.tracks) {
     keys += track.keyframes.length

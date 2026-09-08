@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../../domain/projectFile'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { TimelineDoc } from '../../domain/schema'
@@ -24,7 +25,7 @@ const FAR_PLAYHEAD_FRAME = 8_000_000
 
 function makeDoc(durationFrames = 6000): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: `doc-zoom-${durationFrames}`,
     name: 'zoom fixture',
     frameRate: RATE,

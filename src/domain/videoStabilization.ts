@@ -1001,7 +1001,7 @@ export function createVideoStabilizationPlan(
       return { ok: false, reason: 'Stabilization would exceed the clip scale limit.' }
     }
   }
-  const owned = new Set<ClipAnimationProperty>(VIDEO_STABILIZATION_PROPERTIES)
+  const owned = new Set<string>(VIDEO_STABILIZATION_PROPERTIES)
   const current = clipAnimation(clip)
   const replacementRequired = current.tracks.some((track) => owned.has(track.property))
   const retainedKeyCount = current.tracks

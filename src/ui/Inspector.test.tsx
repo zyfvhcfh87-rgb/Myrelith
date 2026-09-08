@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * ui/Inspector.test.tsx — Phase 4.3.
  *
@@ -51,7 +52,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-inspector',
     name: 'inspector fixture',
     frameRate: { num: 30, den: 1 },

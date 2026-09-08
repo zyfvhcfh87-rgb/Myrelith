@@ -4,7 +4,7 @@ import { rangeEnd, rangeOverlap } from '../time';
 import { effectCollectionAppendBudgetError } from '../effectBounds';
 import { audioEffectCollectionAppendBudgetError, clipAudioEffects } from '../audioEffectBounds';
 import { cloneAudioEffectDescriptor } from '../audioEffectStack';
-import { clipSourceTimeMap, cloneSourceTimeMap, defaultSourceTimeMap, retimeClipAnimation, shiftClipAnimationSourceTimeIntent, sourceRangeForMap, sourceTimeMapAtOffset, sourceTimeMapForTimelineDuration, sourceTimeMapUsesSpeedCurve, sourceTimeMapValidationError, sourceTimeMapWithSpeedPoint, sourceTimeMapWithoutSpeedCurve, sourceTimeMapWithoutSpeedPoint, sourceTimeRateValidationError, timelineFramesWithinSourceMap, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
+import { reanchorProceduralAnimation, clipSourceTimeMap, cloneSourceTimeMap, defaultSourceTimeMap, retimeClipAnimation, shiftClipAnimationSourceTimeIntent, sourceRangeForMap, sourceTimeMapAtOffset, sourceTimeMapForTimelineDuration, sourceTimeMapUsesSpeedCurve, sourceTimeMapValidationError, sourceTimeMapWithSpeedPoint, sourceTimeMapWithoutSpeedCurve, sourceTimeMapWithoutSpeedPoint, sourceTimeRateValidationError, timelineFramesWithinSourceMap, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
 import { byStart, clipsOverlapAdjustments, locateClip, newId, overlapsAny, reconcileTransitions, reject, shiftLaterAdjustments, withClampedAudioFades, withTrack, type ClipLocation } from './operationInternals';
 import type { TrimEdge } from './operationTypes';
 
@@ -71,7 +71,7 @@ export function splitClipAtFrame(
     ...cloneAudioEffectDescriptor(effect),
     id: newId('afx'),
   }))
-  const rightAnimation = remapEffectAnimationIds(shiftedRightAnimation, effectIdMap)
+  const rightAnimation = remapEffectAnimationIds(textSource ? reanchorProceduralAnimation(shiftedRightAnimation) : shiftedRightAnimation, effectIdMap)
   const left: Clip = withClampedAudioFades({
     ...clip,
     sourceRange: stillSource
@@ -200,7 +200,7 @@ export function trimClip(
     timelineRange: newTl,
     sourceRange: newSrc,
     sourceTimeMap: newSourceTimeMap,
-    animation: nextAnimation,
+    animation: textSource && edge === 'start' ? reanchorProceduralAnimation(nextAnimation) : nextAnimation,
   })
   clips.sort(byStart)
   const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
