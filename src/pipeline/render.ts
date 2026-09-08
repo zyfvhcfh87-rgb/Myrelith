@@ -52,7 +52,7 @@ import type {
   Transform,
 } from '../domain/schema'
 import type { PresentationProfile } from '../domain/presentationProfile'
-import { textLayoutMetrics, wrapTextLines } from '../domain/textLayout'
+import { textCanvasFont, textLayoutMetrics, wrapTextLines } from '../domain/textLayout'
 import type { TitlePaintElement } from '../domain/titleComposition'
 import { textPropsValidationError } from '../domain/textOverlay'
 import {
@@ -652,7 +652,7 @@ function drawTextPayload(
       ctx.fillStyle = text.backgroundColor
       ctx.fillRect(0, 0, text.boxWidthPx, text.boxHeightPx)
     }
-    ctx.font = `${text.italic ? 'italic' : 'normal'} ${text.bold ? '700' : '400'} ${text.fontSizePx}px ${text.fontFamily}`
+    ctx.font = textCanvasFont(text)
     ctx.textAlign = text.align
     ctx.textBaseline = 'top'
     ctx.lineJoin = 'round'

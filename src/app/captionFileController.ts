@@ -1,13 +1,20 @@
 /** Browser composition root for whole-project caption import and reviewed loss. */
 import { CaptionFileError, MAX_CAPTION_FILE_CHARACTERS, parseCaptionFile, serializeCaptionTrack, type CaptionFileFormat } from '../domain/captionFiles'
-import { parseCaptionAss, type CaptionAssImport, type CaptionAssReport } from '../domain/captionAss'
+import { parseCaptionAss, planCaptionAssExport, type CaptionAssImport, type CaptionAssReport } from '../domain/captionAss'
 import { createCaptionTrack, findCaptionTrack, replaceCaptionItems } from '../domain/captions'
-import type { CaptionTrack, CaptionTrackId, TextFontFamily } from '../domain/schema'
+import { resolveCaptionPaint } from '../domain/captionPaint'
+import { combineCaptionStyleOverrides, type CaptionStyleV1 } from '../domain/captionStyle'
+import type { CaptionTrack, CaptionTrackId, TextFontFamily, TimelineDoc } from '../domain/schema'
 import { utf8ByteLength } from '../domain/documentMemory'
 import { useDocumentStore } from '../state/documentStore'
 import { CaptionEditSession, type CaptionEditReview } from './captionEditingController'
 
 export const MAX_CAPTION_FILE_BYTES = 4_000_000
+export type CaptionDownloadFormat = CaptionFileFormat | 'ass'
+export interface CaptionDownloadPlan {
+  fileName: string; mimeType: string; content: string; cueCount: number;
+  diagnostics: readonly string[]; omittedDiagnostics: number;
+}
 export interface CaptionFileBrowserPort {
   createId(prefix: 'caption_track' | 'caption_item'): string
   download(fileName: string, mimeType: string, content: string): void
@@ -31,8 +38,8 @@ function defaultBrowserPort(): CaptionFileBrowserPort {
       const anchor = document.createElement('a')
       anchor.href = url
       anchor.download = fileName
-      anchor.click()
-      queueMicrotask(() => URL.revokeObjectURL(url))
+      try { anchor.click() }
+      finally { queueMicrotask(() => URL.revokeObjectURL(url)) }
     },
   }
 }
@@ -45,6 +52,40 @@ function safeFileStem(value: string): string {
 export class CaptionFileController {
   private readonly browser: CaptionFileBrowserPort
   constructor(browser: CaptionFileBrowserPort = defaultBrowserPort()) { this.browser = browser }
+
+  /** App-owned preparation; the editor receives only its bounded loss summary. */
+  planDownload(doc: TimelineDoc, trackId: CaptionTrackId, format: CaptionDownloadFormat): CaptionDownloadPlan {
+    const track = findCaptionTrack(doc, trackId)
+    if (!track?.items.length) throw new RangeError('Caption track has no items to export')
+    const fileName = `${safeFileStem(track.name)}.${format}`
+    const metadataLoss = 'The file omits project cue/track identity, language/role settings, preset inheritance and generated origin. The project is unchanged.'
+    if (format !== 'ass') return { fileName, mimeType: format === 'srt' ? 'application/x-subrip' : 'text/vtt',
+      content: serializeCaptionTrack(track, format, doc.frameRate), cueCount: track.items.length, omittedDiagnostics: 0,
+      diagnostics: [`${format.toUpperCase()} carries cue timing and text. Caption preset appearance and all track/cue style overrides are omitted.`, metadataLoss] }
+    const first = track.items[0]!
+    const resolved = resolveCaptionPaint(doc, track, { ...first, style: undefined }, 0, 1)
+    if (resolved.unavailable.length) throw new RangeError('ASS export cannot interpret this track’s unavailable caption style. Preserve it in the project file.')
+    const text = resolved.paint.text, overrides = combineCaptionStyleOverrides(track.style, undefined).params
+    const rgba = (value: string): string => value.length === 7 ? `${value}ff` : value
+    const base: CaptionStyleV1 = {
+      fontFamily: text.fontFamily, fontSizePermille: text.fontSizePx * 1000 / doc.height,
+      color: rgba(text.color), outlineColor: rgba(text.outlineColor), backgroundColor: rgba(text.backgroundColor),
+      bold: text.bold, italic: text.italic, backgroundEnabled: text.backgroundEnabled,
+      shadowEnabled: text.shadowEnabled, outlineEnabled: text.outlineEnabled,
+      outlinePermille: text.outlineWidthPx * 1000 / doc.height, align: text.align,
+      position: 'bottom', marginXPermille: (1 - text.boxWidthPx / doc.width) * 500,
+      marginYPermille: Math.round(doc.height * 0.06) * 1000 / doc.height, ...overrides,
+    }
+    const planned = planCaptionAssExport({ stylePreset: 'minimal', style: { version: 1, params: { ...base } },
+      items: track.items.map(item => ({ id: item.id, range: item.range, text: item.text,
+        ...(item.style === undefined ? {} : { style: item.style }) })),
+      scriptWidth: doc.width, scriptHeight: doc.height }, doc.frameRate)
+    if (planned.kind === 'rejected') throw new RangeError(planned.report.details[0]?.detail ?? 'This caption track cannot be represented by the supported ASS profile.')
+    return { fileName, mimeType: 'text/x-ssa', content: planned.text, cueCount: track.items.length,
+      diagnostics: ['ASS anchors glyph lines; Myrelith anchors caption boxes. Placement, wrapping and simultaneous-track stacking may differ. Compare the exported file in its destination player.', metadataLoss,
+        ...planned.report.details.map(detail => `${detail.severity}: ${detail.detail}`)], omittedDiagnostics: planned.report.omittedDetails }
+  }
+  saveDownload(plan: CaptionDownloadPlan): void { this.browser.download(plan.fileName, plan.mimeType, plan.content) }
 
   private async read(file: File): Promise<string> {
     if (file.size > MAX_CAPTION_FILE_BYTES) throw new CaptionFileError('file-too-large', `Caption file exceeds ${MAX_CAPTION_FILE_BYTES} bytes`)

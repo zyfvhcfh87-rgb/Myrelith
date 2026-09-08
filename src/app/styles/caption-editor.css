@@ -10,7 +10,8 @@
 }
 
 .caption-editor {
-  width: min(1120px, 96vw);
+  box-sizing: border-box;
+  width: min(1120px, 100%);
   max-height: min(860px, 94vh);
   overflow: auto;
   border: 1px solid rgb(255 255 255 / 11%);
@@ -59,6 +60,12 @@
   border-radius: 9px;
   color: inherit;
   background: #1a2130;
+}
+
+.caption-editor :is(button, input, textarea, select):focus-visible,
+.caption-import-button:focus-within {
+  outline: 2px solid #af9dff;
+  outline-offset: 2px;
 }
 
 .caption-editor button,
@@ -199,6 +206,118 @@
   background: #302b52;
 }
 
+.caption-cue-list button[data-active='true'] {
+  box-shadow: inset 3px 0 #e0d8ff;
+}
+
+#caption-selection-help {
+  margin-top: 10px;
+  color: #b9c1d4;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.caption-batch-tools,
+.caption-style-tools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+  margin: 4px 0;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 10px;
+}
+
+.caption-batch-tools legend,
+.caption-style-tools legend {
+  padding-inline: 6px;
+}
+
+.caption-batch-tools > :is(p, button),
+.caption-style-tools > :is(p, button, div) {
+  grid-column: 1 / -1;
+}
+
+.caption-batch-tools p,
+.caption-style-tools p,
+.caption-reading-advisory p {
+  color: #b9c1d4;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.caption-reading-advisory {
+  display: grid;
+  gap: 8px;
+}
+
+.caption-review-panel {
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.caption-review-panel h3:focus {
+  outline: 2px solid #af9dff;
+  outline-offset: 4px;
+}
+
+.caption-review-rows {
+  display: grid;
+  gap: 12px;
+  max-height: 42vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.caption-review-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 10px;
+}
+
+.caption-review-row p {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.caption-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  position: sticky;
+  bottom: 0;
+  background: #121722;
+  padding-block: 8px;
+}
+
+.caption-import-panel {
+  min-width: 0;
+  padding: 16px 22px;
+  overflow-wrap: anywhere;
+}
+
+.caption-import-panel > p { margin-block: 10px; }
+.caption-import-panel .caption-review-panel { padding-inline: 0; }
+.caption-import-diagnostics { max-height: 24vh; overflow-y: auto; padding-left: 22px; }
+.caption-import-diagnostics li { margin-bottom: 8px; }
+.caption-import-fonts { display: grid; gap: 12px; margin-bottom: 14px; }
+.caption-import-fonts label { display: grid; gap: 6px; }
+.caption-import-fonts select { max-width: 100%; }
+
+.caption-editor > [inert] {
+  display: none;
+}
+
 .caption-row-actions {
   flex-wrap: wrap;
   margin-top: 10px;
@@ -252,4 +371,21 @@
   .caption-editor-backdrop {
     padding: 8px;
   }
+}
+
+@media (max-width: 480px) {
+  .caption-batch-tools,
+  .caption-style-tools,
+  .caption-review-row,
+  .caption-timing-grid {
+    grid-template-columns: 1fr;
+  }
+  .caption-editor-header,
+  .caption-track-bar,
+  .caption-editor-body,
+  .caption-review-panel {
+    padding-inline: 12px;
+  }
+  .caption-track-settings { margin-inline: 12px; }
+  .caption-editor-footer { flex-wrap: wrap; }
 }
