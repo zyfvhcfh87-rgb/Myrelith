@@ -10,7 +10,7 @@ import { performance } from 'node:perf_hooks'
 import { chromium, expect } from '@playwright/test'
 
 const root = fileURLToPath(new URL('../..', import.meta.url))
-const productSource = '42eb93bf082dceb8fe7bc66434436c5d4614e7ba'
+const productSource = 'b33b7531027979b8886f5db979d57cd96b96175d'
 const url = 'http://127.0.0.1:5199'
 const out = `/private/tmp/issue199-gate3-browser/${new Date().toISOString().replaceAll(':', '-')}`
 mkdirSync(out, { recursive: true })

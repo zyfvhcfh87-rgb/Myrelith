@@ -1,11 +1,13 @@
 # Gate3 production browser observations
 
 Supervisor approved `docs/evidence/issue199/gate3-browser-protocol.md` and granted
-port5199 exclusively after accepting product source87d8032. The first product
-failure stopped that run and released the slot. The bounded corrections are
-committed and accepted at42eb93b; this early harness is now pinned to that exact
-source with observation-source-hashes.json. A fresh slot grant is pending;
-do not execute the repinned harness yet. Current queue is198 →200 →201 →199.
+port5199 exclusively after accepting product source87d8032. After the entry and
+handle corrections at42eb93b, the granted early rerun passed those checks but
+stopped on Back-to-Timeline losing focus to BODY. That slot was released and
+the separate focus correction is accepted at finalb33b753. This early harness
+is now pinned to that source and242 hashes in observation-source-hashes.json.
+All native assertions are unchanged. A fresh slot grant is pending; do not
+execute the repinned harness yet. Ignored continuation drafts remain separate.
 
 `prepare-browser-fixtures.mjs` calls the canonical portable serializer/parser via
 Vite SSR without opening a listener. Generated fixtures and hashes are committed

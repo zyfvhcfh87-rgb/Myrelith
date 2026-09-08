@@ -3,7 +3,8 @@
 > tsc -b && vite build
 
 vite v8.1.2 building client environment for production...
-[2Ktransforming...✓ 5058 modules transformed.
+
+transforming...✓ 5058 modules transformed.
 rendering chunks...
 computing gzip size...
 dist/assets/rolldown-runtime-BHe-jwch.js                  0.95 kB
