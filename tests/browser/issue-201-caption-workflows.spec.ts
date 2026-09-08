@@ -47,7 +47,7 @@ test('caption batch and style review are atomic and survive actual Save/Open wit
   const before = await state(page)
   const cues = page.getByRole('listbox', { name: 'Caption cues' })
   await cues.focus(); await page.keyboard.press('Shift+ArrowDown')
-  await expect(page.getByRole('option', { selected: true })).toHaveCount(2)
+  await expect(cues.getByRole('option', { selected: true })).toHaveCount(2)
   await page.getByLabel('Shift frames', { exact: true }).fill('3')
   await page.getByRole('button', { name: 'Review shift', exact: true }).click()
   expect((await state(page)).project).toEqual(before.project)
@@ -127,6 +127,9 @@ test('ASS substitution and loss review download real caption files and stay keyb
   await page.getByRole('button', { name: 'Export ASS', exact: true }).click()
   const heading = page.getByRole('heading', { name: 'Review caption download' })
   await expect(heading).toBeFocused()
+  await page.keyboard.press('Tab')
+  // Chromium also makes the scrollable loss disclosure keyboard reachable.
+  await expect(page.locator('.caption-import-diagnostics')).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(page.getByRole('checkbox', { name: 'I accept the disclosed download losses' })).toBeFocused()
   await page.keyboard.press('Space'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab')
