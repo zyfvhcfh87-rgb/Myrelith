@@ -1,7 +1,9 @@
-# Initial source investigation and support matrix
+# Source investigation and measured support matrix
 
 Inspected 2026-09-08; baseline and package hashes are in `source-inventory.json`.
-This is R0 documentary evidence. **No browser capability probe has run.**
+The source inventory and documentary tables began at R0. Bounded R2 results
+are added below; each measured cell retains its narrow qualification. No codec
+has yet encoded or decoded a frame, and no physical HDR display is qualified.
 
 Labels: **S** = supported by the cited specification/source for the narrow
 operation; **P** = partial, conditional or unmeasured end-to-end path; **I** =
@@ -51,7 +53,7 @@ Mediabunny guide and its installed source were available.
 
 | Target | Available facts | 10-bit decode/readback | Float processing | HDR monitor | 10-bit encode + metadata |
 | --- | --- | --- | --- | --- | --- |
-| Installed Playwright Chromium, macOS 26.6.2 / arm64 | Chromium revision 1234 executable exists; actual version/adapter not yet probed. Node is 26.8.1. Orchestrator-supplied sysctl evidence: Mac17,6 / Apple M5 Max / 64 GiB installed RAM; initial restricted query failed. | U/P | U/P | U; headless cannot qualify | U/P |
+| Installed Playwright Chromium, macOS 26.6.2 / arm64 | Version 151.0.7922.34; follow-up reports ANGLE/SwiftShader, software canvas/video feature status. Node 26.8.1. Supplied physical host: Mac17,6 / Apple M5 Max / 64 GiB; this is not the measured GPU backend. | S for raw construction/copy only; decode U | P; float16 storage works in tiny tests, P3 draw changes pixels | U; headless cannot qualify | P config/structural only; actual encode U |
 | Released Safari, macOS / Apple hardware | Not yet inventoried or driven. WebKit development support cannot stand in for released Safari. | U/P | U/P | U | U/P |
 | Playwright WebKit on this Mac | Not installed; even if installed it would not automatically qualify Safari/VideoToolbox. | U | U | U | U |
 | Firefox on this Mac | Playwright binary not installed. | U | U | U | U |
@@ -78,3 +80,54 @@ command are retained in `initial-validation.md` and `source-inventory.json`.
   cannot satisfy the proposed HDR10 contract as it stands.
 - Raw sample APIs, CanvasSink conversion and native VideoFrame transport need
   separate experiments. No decode-to-canvas success qualifies source precision.
+
+## Measured bounded R2 cells
+
+Artifacts: [API/config probe](browser-probe-1.json),
+[transfer follow-up](transfer-probe-1.json),
+[metadata probe](metadata-probe-1.json). All are headless Chromium
+151.0.7922.34, requested extra flag `--mute-audio`; follow-up CDP identifies
+SwiftShader and refuses complete command-line disclosure because
+`--enable-automation` is absent. Flags were not altered to obtain disclosure.
+Do not attribute these measurements to native M5 Max acceleration.
+
+| Operation | Measured result | Decision for this exact operation |
+| --- | --- | --- |
+| Raw I420P10 2×2 / I444P10 1024×2 construction/copy | Exact luma/chroma, preserved requested PQ/2020/full-range tags; respectively 4 and 1,024 distinct luma values | S for tested raw transport; compressed decode remains U |
+| sRGB and P3 float16 ImageData put/get | Returned `float16`, preserved 1,024 red levels and tested -0.125 / 4 values | S for this tiny direct storage boundary |
+| sRGB float16 canvas draw | Two-pixel opaque/half-alpha copy exact in all four requested standard/extended combinations | P; broader operations, rasterization and native backend untested |
+| P3 float16 canvas draw | All four copies differ; opaque `[-.125,.5,4,1]` becomes `[0,.501953125,1,1]`; half-alpha also changes | No-go for unchanged-value extended P3 transfer on this backend |
+| Canvas tone mapping | Both source and destination return `standard`, even when `extended` requested | Requested extended mode is not qualified |
+| Float16 canvas → VideoFrame | `format=null`; native two-pixel copy returns 16 bytes with no public format interpretation established; explicit RGBA returns 8 bytes and clipped/converted values | P; byte count alone does not qualify float interchange or encoder input |
+| Unorm8 negative control | 1,024 input levels become 256 | I for preserving original 10-bit detail through that boundary |
+| WebGL2 RGBA16F | 2×2 framebuffer complete; known `[-.125,.5,4,1]` readback exact; 32-byte target plus 64-byte Float32 readback | S for tiny constant shader/readback only; filtering/composition/timing remain U |
+| WebGPU extended config | No adapter returned | Unavailable in this headless configuration, not a claim about the physical GPU |
+| MP4 / WebM basic color tags | Six complete SDR/PQ/HLG structural cases carry expected CICP fields; two missing-transfer cases reopen without complete tags | P; no decodable picture or mastering authoring qualified |
+| VP9 packet color preservation in WebM | Three synthetic BT.2020 prefixes change color ID 5 to 0; SDR ID 2 remains unchanged; MP4 prefixes unchanged | Fails original in-band preservation; visible decode consequence remains unmeasured |
+
+Encoder rows request 1920×1080, 30 fps, 8 Mb/s. Values below are
+`isConfigSupported` answers only. Every row records requested and returned
+configuration. A `true` cell is not proof of successful configuration, output
+depth, usable packets, hardware use, or HDR metadata.
+
+| Exact codec string | Encoder no preference | Encoder prefer hardware | Encoder prefer software | Decoder config |
+| --- | --- | --- | --- | --- |
+| `avc1.6e0028` | false | false | false | true |
+| `hvc1.2.4.L120.B0` | false | false | false | false |
+| `vp09.02.40.10.01.09.16.09.00` | true | false | true | true |
+| `av01.0.08M.10` | false | false | false | true |
+
+The [VP9 specification](https://storage.googleapis.com/downloads.webmproject.org/docs/vp9/vp9-bitstream-specification-v0.7-20170222-draft.pdf),
+§6.2.2/§7.2.2, identifies 5 as BT.2020 and 0 as unknown; unknown permits
+external signaling. Therefore the WebM rewrite demonstrates lost in-band
+information, not proven incorrect displayed colors when container tags exist.
+VP9's color ID does not independently express PQ versus HLG, so a future
+metadata resolver needs codec-aware authority, not a blanket requirement that
+every tag exist in both places. The laboratory's complete-tag policy tests
+are intentionally restrictive examples, not a finished import resolver.
+
+The [VP codec MP4 binding](https://www.webmproject.org/vp9/mp4/) supplies
+the separate profile, bit depth and color fields, and `SmDm`/`CoLL` mastering
+boxes checked by the independent parser. None of the eight synthetic outputs
+contains mastering/content-light elements. This does not establish that every
+possible library pass-through path lacks them.

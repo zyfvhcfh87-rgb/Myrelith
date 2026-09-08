@@ -1,8 +1,14 @@
 # Independent fixture and measurement protocol
 
-R0 design, 2026-09-08. **No reference or browser fixtures have passed yet.**
-Freeze the oracle, input manifest, exact equations and thresholds in R1 before
-the candidate's output is inspected. Retain rejected candidates/results.
+R0 design, 2026-09-08; updated after the R1 CPU and bounded R2 experiments.
+The protocol below was established before candidate results. Numerical sources
+and 118 goldens were committed at `4be10d0`, then 68 independent final-view
+references at `69dbbbe`, before JS candidate comparison. See
+[equations](equations-v1.md), [freeze manifest](oracle-freeze-v1.json) and
+[results](r1-r2-results.md). Limits remain unchanged: scalar 118/118 and final
+view 68/68 pass; the binary16 scope fixture fails. Full shader, codec, raster,
+lifecycle and timing qualification remains open. Earlier rejected/provisional
+reference artifacts and original candidate sources are retained.
 
 ## Independence and provenance
 

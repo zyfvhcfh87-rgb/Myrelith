@@ -1,6 +1,6 @@
 # Issue #202 — managed 10-bit and HDR research
 
-Status: **R0 approved; R1 numerical proof and bounded R2 probes in progress**.
+Status: **R1 CPU comparison and bounded R2 probes recorded; full R2/R3/R4 open**.
 Baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue202`, inspected 2026-09-08. Scope comes from
 [#202](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/202) and the Milestone 9
@@ -18,6 +18,15 @@ experiments. The color model remains a research candidate. The original limits
 stand; substantial decode/encode, timings and full suites require an exclusive
 slot, which has not been granted. Host identity supplied by the orchestrator is
 recorded in the evidence inventory and does not qualify HDR presentation.
+
+The [R1/R2 evidence](evidence/issue202/r1-r2-results.md) records 118/118 scalar
+comparisons and 68/68 final-view storage comparisons passing, with the exact
+scope-bin fixture failing after binary16 storage. The measured browser uses
+SwiftShader; P3 canvas drawing changes extended pixels, WebGPU has no adapter,
+and no codec has yet encoded or decoded a frame. Basic mux tags were inspected
+using synthetic header-only packets. These results do not promote the managed
+candidate or qualify a product HDR path. The next bounded codec script is
+prepared for an exclusive-slot decision; 1080p/4K timing remains unmeasured.
 
 ## Gates and deliverables
 
@@ -225,3 +234,7 @@ Pending commands/results are recorded in
 [initial validation](evidence/issue202/initial-validation.md). The issue's
 six acceptance criteria remain open until R1–R4 supply their evidence. R0
 must not be described as HDR implementation or completed research.
+
+Current follow-up validation and exact command limits are recorded in
+[R1/R2 results](evidence/issue202/r1-r2-results.md) and the hashed evidence
+manifest. Existing production source and dependency hashes remain the baseline.

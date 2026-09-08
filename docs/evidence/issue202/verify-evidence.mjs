@@ -1,0 +1,69 @@
+// Evidence integrity, not a claim that the candidate's failed gate passed.
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
+import {execFileSync,spawnSync} from 'node:child_process';
+const root=path.dirname(fileURLToPath(import.meta.url)),repository=path.resolve(root,'../../..');
+const read=name=>JSON.parse(fs.readFileSync(path.join(root,name),'utf8'));
+const sha=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const check=(file,expected)=>assert.equal(sha(file),expected,file);
+const freeze=read('oracle-freeze-v1.json'),inventory=read('source-inventory.json');
+for(const file of freeze.files)check(path.join(root,file.path),file.sha256);
+for(const file of inventory.files)check(path.join(repository,file.path),file.sha256);
+
+for(const run of [1,2]){
+  const result=read(`numerical-result-${run}.json`);
+  for(const file of result.files){
+    const name=run===1&&['candidate.mjs','compare.mjs'].includes(file.path)?`history/${file.path.replace('.mjs','-run-1.mjs')}`:file.path;
+    check(path.join(root,name),file.sha256);
+  }
+  assert.equal(result.summary.scalarPassed,118);
+  assert.equal(result.scalar.filter(r=>r.passed).length,118);
+  assert.equal(result.summary.storagePassed,68);
+  assert.equal(result.storage.filter(r=>r.passed).length,68);
+  assert.deepEqual(result.summary.storageFailures,['scopes-pre-view-bin-edges']);
+  assert.equal(result.storage.find(r=>r.kind==='discrete-scope').passed,false);
+}
+assert.deepEqual(read('numerical-result-1.json').summary,read('numerical-result-2.json').summary);
+
+const browser=read('browser-probe-1.json'),transfer=read('transfer-probe-1.json'),metadata=read('metadata-probe-1.json');
+for(const [result,source] of [[browser,'probe-browser.mjs'],[transfer,'probe-transfers.mjs'],[metadata,'history/metadata-probe-run-1.mjs']]){
+  check(path.join(root,source),result.scriptSha256);
+}
+assert.equal(browser.rows.length,23);assert.equal(transfer.rows.length,8);assert.equal(metadata.rows.length,8);
+assert.equal(browser.owners.framesOpened,browser.owners.framesClosed);
+assert.equal(browser.owners.devicesOpened,browser.owners.devicesDestroyed);
+for(const row of transfer.rows)assert.equal(row.owners.framesOpened,row.owners.framesClosed);
+assert.equal(transfer.rows.filter(r=>r.exactCanvasCopy).length,4);
+for(const row of metadata.rows){
+  assert.equal(row.error,undefined);check(path.join(root,row.filename),row.sha256);
+  assert.equal(fs.statSync(path.join(root,row.filename)).size,row.bytes);
+  assert.equal((row.masteringBoxes??row.masteringElements).length,0);
+}
+assert.deepEqual(metadata.rows.filter(r=>!r.packetUnchanged).map(r=>r.id),['webm-pq2020','webm-hlg2020','webm-missing-transfer']);
+
+for(const name of fs.readdirSync(root).filter(name=>name.endsWith('.mjs'))){
+  execFileSync(process.execPath,['--check',path.join(root,name)],{stdio:'pipe'});
+}
+const allowedImports={
+  'oracle.py':new Set(['hashlib','json','decimal','fractions','pathlib','struct','sys']),
+  'presentation-oracle.py':new Set(['json','pathlib','sys','oracle']),
+};
+for(const [name,allowed]of Object.entries(allowedImports)){
+  const source=fs.readFileSync(path.join(root,name),'utf8');
+  for(const match of source.matchAll(/^(?:from|import)\s+([a-zA-Z0-9_.]+)/gm))assert.ok(allowed.has(match[1]),`${name}: ${match[1]}`);
+}
+const references=spawnSync('rg',['-l','issue202|evidence/issue202',path.join(repository,'src'),path.join(repository,'package.json')],{encoding:'utf8'});
+assert.equal(references.status,1,`Unexpected product reference: ${references.stdout} ${references.stderr}`);
+const env={...process.env,DEVELOPER_DIR:'/Library/Developer/CommandLineTools'};
+const git=args=>execFileSync('git',args,{cwd:repository,env,encoding:'utf8'}).trim().split('\n').filter(Boolean);
+assert.equal(git(['branch','--show-current'])[0],'codex/issue202');
+const changed=[...git(['diff','--name-only',inventory.baseCommit]),...git(['ls-files','--others','--exclude-standard'])];
+for(const file of changed)assert.ok(file==='docs/ISSUE_202_PLAN.md'||file.startsWith('docs/evidence/issue202/'),`Unowned change: ${file}`);
+if(fs.existsSync(path.join(root,'r1-r2-manifest.json'))){
+  for(const file of read('r1-r2-manifest.json').files)check(path.join(repository,file.path),file.sha256);
+}
+process.stdout.write(JSON.stringify({frozenFiles:freeze.files.length,productionHashes:inventory.files.length,scalarPasses:118,viewPasses:68,
+  retainedScopeFailures:1,browserRows:23,transferRows:8,structuralRows:8,productionImports:0,changedPathsWithinOwnership:true})+'\n');
