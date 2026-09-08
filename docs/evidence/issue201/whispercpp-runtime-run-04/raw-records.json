@@ -1,0 +1,32 @@
+[
+  {
+    "source": ".tmp/issue201-whispercpp-lab/runtime-attempt-04.json",
+    "archive": "runtime-attempt-04.json.gz",
+    "bytes": 208,
+    "sha256": "da512619d7a54b91efd9c937d56a89ad2f24a5156b224f8df5f51f39f9b35255"
+  },
+  {
+    "source": ".tmp/issue201-whispercpp-lab/runtime-partial-04.jsonl",
+    "archive": "runtime-partial-04.jsonl.gz",
+    "bytes": 165260,
+    "sha256": "94d26cc0e81f175df64b017a5f25242893749e72a56cd0b49cdeb0ce3935dd87"
+  },
+  {
+    "source": ".tmp/issue201-whispercpp-lab/runtime-results-04.json",
+    "archive": "runtime-results-04.json.gz",
+    "bytes": 219681,
+    "sha256": "cce9e189af2ef53a3ac5e89ef20a3037ef4aff656c50637c50832ac5e9d7e533"
+  },
+  {
+    "source": ".tmp/issue201-whispercpp-lab/runtime-independent-release-04.json",
+    "archive": "runtime-independent-release-04.json.gz",
+    "bytes": 228,
+    "sha256": "e473af2f09a170fb33bb9818894a8c9ce5e35247c30267b28106b2c09cac9cc3"
+  },
+  {
+    "source": ".tmp/issue201-deferred-runtime-outer.txt",
+    "archive": "issue201-deferred-runtime-outer.txt.gz",
+    "bytes": 2206,
+    "sha256": "30cc6b9b4dd5f91d2eb62fc6774984892e1b7f275422ac6dbeccc19dc5dd3063"
+  }
+]
