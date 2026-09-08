@@ -1,6 +1,6 @@
 # Local speech model decision — replacement lab preflight
 
-Date: 2026-09-08. Status: first frozen lab attempt failed at a cache-key prerequisite.
+Date: 2026-09-08. Status: second frozen attempt failed during ONNX session preparation.
 **Product enablement remains NO-GO pending runtime/offline/lifecycle evidence.**
 This status preserves the separate decision required by issue #201. The
 orchestrator may approve the independent caption implementation after reviewing
@@ -26,7 +26,13 @@ native-WASM advisory coverage or approve production use. The first frozen run
 failed before model initialization because the cache adapter omitted the SDK's
 leading-slash local lookup key. [LAB_RUN_01.md](LAB_RUN_01.md) preserves the raw
 evidence, invalid/aborted downstream classifications and released-slot cleanup.
-No model inference occurred; corrections need a new review and exclusive slot.
+The corrected adapter in run 02 serves the complete pinned model and WASM. That
+run fails with `TransposeDQWeightsForMatMulNBits Missing required scale` during
+session preparation. [LAB_RUN_02.md](LAB_RUN_02.md) preserves the separate raw
+evidence: eight initial checks passed, the first model initialization failed,
+14 downstream cases are explicitly missing, and cleanup was verified. No model
+inference occurred. Source investigation and an explicitly frozen next candidate
+need review and a fresh exclusive slot; this error does not prove corrupt weights.
 
 The original 3.8.1 standalone candidate is **superseded for lab execution** after
 the advisory lookup in [candidate-advisories.json](candidate-advisories.json).
