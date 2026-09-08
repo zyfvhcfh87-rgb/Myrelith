@@ -62,7 +62,8 @@ and 0.75 afterward; balance holds hard-left then hard-right. The source WAV and
 encoded video bytes are preserved with hashes. No speakers, external media,
 network download, codec install or persistent power settings are involved.
 
-The title uses literal `MOVE` text with font intent `G4 Missing Named Font` and
+The title track follows the media tracks in canonical paint order, so its
+elements overlay the opaque video. The title uses literal `MOVE` text with font intent `G4 Missing Named Font` and
 persisted explicit `serif` fallback, plus a colored rectangle with an ordinary
 position-y title lane. Canonical generated left crawl creates position-x keys at
 0 and 29. The pure fixture test requires the word box to be fully off-canvas at
@@ -103,8 +104,12 @@ timestamp quantization and are retained with durations. Six decoded samples at f
 29 cover boundaries, interior motion and the split. Every video sample closes in
 finally; inputs, temporary surfaces and export ownership are explicitly disposed.
 
-- Video must decode as VP9 at 1280×720, exactly 30 packets and average packet rate
-  within 0.001 of 30. Video duration is within 1/30000 second of one second; total
+- Video must decode as VP9 at 1280×720 with exactly 30 packets. Every packet's
+  timestamp must be within 1 ms of its ordinal divided by 30, and its duration
+  finite and positive. This checks the complete 30 fps cadence at WebM timestamp
+  precision. The packet-extent average rate remains recorded but is not an
+  exact-Hz predicate: the final default packet duration can extend its computed
+  span by a fraction of a millisecond. Video duration is within 1/30000 second of one second; total
   A/V duration is within 30 ms to allow codec priming/padding.
 - The reference pins project identity, generation, active sequence and canvas
   identity; its actual backing dimensions must be 1280×720. A fresh drawn event

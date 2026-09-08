@@ -5,7 +5,7 @@ import { PcmCoverage } from './pcmCoverage'
 import { buildFixtureProject } from './fixture'
 import { G4PreparedExportFailure, runPreparedExport, type PreparedExportEvent } from './preparedExport'
 /** Disposable source-module browser adapter. Never imported by the production app. */
-import { Output, BufferTarget, CanvasSource, WebMOutputFormat, Input, BlobSource, ALL_FORMATS, VideoSampleSink, AudioBufferSink } from 'mediabunny'
+import { Output, BufferTarget, CanvasSource, WebMOutputFormat, Input, BlobSource, ALL_FORMATS, VideoSampleSink, AudioBufferSink, EncodedPacketSink } from 'mediabunny'
 import { importMedia } from '../../../src/app/mediaImportController'
 import { useDocumentStore } from '../../../src/state/documentStore'
 import { useMediaStore } from '../../../src/state/mediaStore'
@@ -160,10 +160,17 @@ export async function decodeOutput(progress: (value: unknown) => Promise<void>) 
   check(encoded, 'No preserved export bytes')
   const bytes = encoded, admission = mediaResourceAdmission.snapshot()
   const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(new Blob([bytes])) })
-  const partial: { frames: unknown[]; pcm?: unknown; error?: string } = { frames: [] }
+  const partial: { frames: unknown[]; packetTimeline?: { timestamp: number; duration: number }[]; pcm?: unknown; error?: string } = { frames: [] }
   const canvas = new OffscreenCanvas(1280, 720), ctx = canvas.getContext('2d', { willReadFrequently: true })!
   try {
     const video = await input.getPrimaryVideoTrack(), audio = await input.getPrimaryAudioTrack(); check(video && audio, 'Missing encoded A/V tracks')
+    const packetTimeline: { timestamp: number; duration: number }[] = []
+    partial.packetTimeline = packetTimeline
+    for await (const packet of new EncodedPacketSink(video).packets(undefined, undefined, { metadataOnly: true })) {
+      packetTimeline.push({ timestamp: packet.timestamp, duration: packet.duration })
+      check(packetTimeline.length <= 30, 'More than 30 encoded video packets')
+    }
+    await progress(partial)
     const sink = new VideoSampleSink(video), frames = []
     for (const frame of FRAMES) {
       const sample = await sink.getSample((frame + 0.5) / 30); check(sample, `Missing encoded frame ${frame}`)
@@ -187,7 +194,7 @@ export async function decodeOutput(progress: (value: unknown) => Promise<void>) 
     const complete = coverage.finish(), pcm = coverage.channels
     const rms = (channel: number, start: number) => Math.sqrt(pcm[channel].slice(start, start + 2400).reduce((sum, value) => sum + value * value, 0) / 2400)
     return { sha256: await digest(bytes), size: bytes.length, duration: await input.computeDuration(), videoDuration: await video.computeDuration(), width: video.displayWidth, height: video.displayHeight,
-      videoCodec: await video.getCodec(), audioCodec: await audio.getCodec(), videoPackets: await video.computePacketStats(), frames, pcm: { through: complete.coveredSamples, coverage: complete, early: [rms(0, 9600), rms(1, 9600)], late: [rms(0, 33600), rms(1, 33600)] }, admission, afterAdmission: mediaResourceAdmission.snapshot() }
+      videoCodec: await video.getCodec(), audioCodec: await audio.getCodec(), videoPackets: await video.computePacketStats(), packetTimeline, frames, pcm: { through: complete.coveredSamples, coverage: complete, early: [rms(0, 9600), rms(1, 9600)], late: [rms(0, 33600), rms(1, 33600)] }, admission, afterAdmission: mediaResourceAdmission.snapshot() }
   } catch (error) { partial.error = String(error); await progress(partial); throw error } finally { input.dispose(); canvas.width = canvas.height = 0; await disposeExport(); raw = []; encoded = null }
 }
 export async function rejectMissingFont(progress: (event: PreparedExportEvent) => Promise<void>) {

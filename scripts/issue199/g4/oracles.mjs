@@ -9,7 +9,11 @@ export function verifyEncoded(result) {
   assert.ok(result.size > 1000); assert.equal(result.width, 1280); assert.equal(result.height, 720)
   assert.ok(Math.abs(result.duration - 1) <= 0.03); assert.ok(Math.abs(result.videoDuration - 1) <= 1 / 30000)
   assert.equal(result.videoCodec, 'vp9'); assert.equal(result.audioCodec, 'opus')
-  assert.equal(result.videoPackets.packetCount, 30); assert.ok(Math.abs(result.videoPackets.averagePacketRate - 30) < 0.001)
+  assert.equal(result.videoPackets.packetCount, 30); assert.equal(result.packetTimeline.length, 30)
+  for (const [frame, packet] of result.packetTimeline.entries()) {
+    assert.ok(Math.abs(packet.timestamp - frame / 30) <= 0.001, `Packet ${frame} differs from the 30 fps cadence`)
+    assert.ok(Number.isFinite(packet.duration) && packet.duration > 0, 'Invalid packet duration')
+  }
   assert.deepEqual(result.frames.map((f) => f.frame), SAMPLE_FRAMES)
   for (const row of result.frames) {
     assert.ok(Math.abs(row.timestamp - row.frame / 30) <= 0.001, 'Decoded timestamp differs from selected frame')

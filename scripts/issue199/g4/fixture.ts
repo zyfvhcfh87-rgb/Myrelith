@@ -27,14 +27,14 @@ export function buildFixtureProject(video: MediaAsset, sound: MediaAsset) {
   audio.animation = { tracks: [{ property: 'volume', keyframes: [key(0, 0.25, true), key(15, 0.75, true)] }, { property: 'balance', keyframes: [key(0, -1, true), key(15, 1, true)] }] }
   doc.tracks.find((t) => t.kind === 'audio')!.clips = [audio]
   const text = createTextClip(doc, 0, 30, 'MOVE'); text.id = 'g4-title'; text.assetId = proceduralTextAssetId(text.id)
-  doc.tracks.unshift({ ...doc.tracks.find((t) => t.kind === 'video')!, id: 'g4-title-track', name: 'Title', clips: [text] })
+  doc.tracks.push({ ...doc.tracks.find((t) => t.kind === 'video')!, id: 'g4-title-track', name: 'Title', clips: [text] })
   const upgraded = upgradeLegacyTextTitle(sequenceProjectFromTimeline(doc), 'g4', 'g4-title', () => 'g4-words'); check(upgraded.ok, 'Title upgrade failed')
   let project = planTitleEdit(upgraded.project, { sequenceId: 'g4', clipId: 'g4-title' }, { kind: 'patch', ids: ['g4-words'], patch: { font: { family: 'G4 Missing Named Font', fallbackFamily: 'serif' }, text: { content: 'MOVE', fontSizePx: 72, color: '#ffffff' } } }, () => 'g4-unused')
   const rectangle = defaultTitleElement('rectangle', 'g4-shape', doc)
-  const root = project.sequences[0], title = root.tracks[0].clips[0]
+  const root = project.sequences[0], title = root.tracks.find((t) => t.id === 'g4-title-track')!.clips[0]
   check(title.title?.version === 1 && 'elements' in title.title, 'Expanded title missing')
   const shape = { ...rectangle, transform: { ...rectangle.transform, x: -300, y: -160 }, ...(rectangle.kind === 'rectangle' ? { shape: { ...rectangle.shape, boxWidthPx: 90, boxHeightPx: 40, fillColor: '#00b080' } } : {}) }
-  project = { ...project, sequences: [{ ...root, tracks: root.tracks.map((t, i) => i ? t : { ...t, clips: [{ ...title, title: { version: 1, elements: [...title.title!.elements as object[], shape] }, animation: { ...title.animation!, titleTracks: [{ elementId: 'g4-shape', property: 'position-y', propertyVersion: 1, keyframes: [key(0, -160), key(29, -100)] }] } }] }) }] }
+  project = { ...project, sequences: [{ ...root, tracks: root.tracks.map((t) => t.id !== 'g4-title-track' ? t : { ...t, clips: [{ ...title, title: { version: 1, elements: [...title.title!.elements as object[], shape] }, animation: { ...title.animation!, titleTracks: [{ elementId: 'g4-shape', property: 'position-y', propertyVersion: 1, keyframes: [key(0, -160), key(29, -100)] }] } }] }) }] }
   project = planTitleEdit(project, { sequenceId: 'g4', clipId: 'g4-title' }, { kind: 'motion', ids: ['g4-words'], direction: 'left', start: 0, end: 29, replace: false }, () => 'g4-unused')
   return project
 }
