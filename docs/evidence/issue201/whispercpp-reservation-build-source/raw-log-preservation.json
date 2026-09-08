@@ -1,0 +1,15 @@
+{
+  "purpose": "Exact command-output bytes in raw gzip; readable copies normalize trailing whitespace only.",
+  "files": [
+    {
+      "path": "inert-tests.txt.raw.gz",
+      "decodedBytes": 104,
+      "decodedSha256": "a25b5619af971eae96a8c9d37ebc69133b4c28e990455e210be0507206df182c"
+    },
+    {
+      "path": "lint.txt.raw.gz",
+      "decodedBytes": 41,
+      "decodedSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    }
+  ]
+}
