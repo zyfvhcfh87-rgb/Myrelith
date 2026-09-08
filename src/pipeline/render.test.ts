@@ -17,7 +17,7 @@ import {
   type PresentationProfile,
 } from '../domain/presentationProfile'
 import { defaultTextProps } from '../domain/textOverlay'
-import { createColorAdjustEffect, createMaskEffect } from '../domain/effectStack'
+import { createColorAdjustEffect, createMaskEffect, resolveCanvasEffectStack } from '../domain/effectStack'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import {
   createPluginVideoEffectContributionSnapshot,
@@ -34,6 +34,9 @@ import { clearTextLayoutCaches, compositeFrame as compositeFrameCore } from './r
 import { COLOR_CURVES_TYPE, DEFAULT_COLOR_CURVES } from '../domain/colorCurves'
 import type { LensRemapProvider } from './lensRemap'
 import { DEFAULT_MANUAL_LENS_CORRECTION } from '../domain/lensCorrection'
+import { MAX_RENDER_AGGREGATE_SURFACE_BYTES } from '../domain/renderSurfaceBudget'
+import { createDocumentLensRemapProvider, type WebGl2LensRemapBackend } from './lensRemapWebgl'
+import { ColorGradingRuntime } from './colorGradingRuntime'
 import {
   VideoEffectStageExecutionError,
   type VideoEffectStageExecutor,
@@ -368,6 +371,51 @@ function deferred<T>() {
 /* ------------------------------------------------------------------ */
 /* Tests                                                                */
 /* ------------------------------------------------------------------ */
+
+describe('frame work admission before resources', () => {
+  test('a 4K mask plus retained lens fails before any provider, source, canvas or readback operation', async () => {
+    const mask = createMaskEffect('mask', 'bezier')
+    mask.params = { ...mask.params, x: 0, y: 0, width: 1, height: 1, feather: 0.05 }
+    const doc = makeDoc([makeTrack('video', 'video', [makeClip('mask', 0, 60, { effects: [mask] })])])
+    doc.width = 3840; doc.height = 2160
+    const backend = { retainedBytes: () => 3840 * 2160 * 8 } as WebGl2LensRemapBackend
+    const lens = createDocumentLensRemapProvider(doc, backend, 3840, 2160, false)!
+    const destination = makeCtx(), surfaces = makeTransitionSurfaceProvider(), source = makeSource()
+    await expect(compositeFrame(doc, 0, destination.ctx, source.source, surfaces.provider, undefined, lens)).rejects.toThrow(/256 MiB/)
+    expect(surfaces.gets()).toBe(0); expect(source.requests).toEqual([]); expect(destination.log).toEqual([])
+  })
+  test('the actual cache retained by a previous grading frame participates in a later plain-mask admission', async () => {
+    const runtime = new ColorGradingRuntime(async () => {})
+    const curve = { id: 'curve', type: COLOR_CURVES_TYPE, version: 1, enabled: true,
+      params: { ...DEFAULT_COLOR_CURVES, master: '[[0,0],[1,0.8]]', strength: 1 } }
+    await runtime.apply(Uint8ClampedArray.of(20, 30, 40, 255), resolveCanvasEffectStack([curve], true, true).pixelEffects,
+      { surfaceWidth: 1, surfaceHeight: 1, projectWidth: 1, projectHeight: 1 })
+    expect(runtime.ledger().bytes).toBeGreaterThan(0)
+    const mask = createMaskEffect('mask', 'bezier')
+    mask.params = { ...mask.params, x: 0, y: 0, width: 1, height: 1, feather: 0.05 }
+    const doc = makeDoc([makeTrack('video', 'video', [makeClip('mask', 0, 60, { effects: [mask] })])])
+    doc.width = 3840; doc.height = 2160
+    const backend = { retainedBytes: () => MAX_RENDER_AGGREGATE_SURFACE_BYTES - 3840 * 2160 * 25 } as WebGl2LensRemapBackend
+    const lens = createDocumentLensRemapProvider(doc, backend, 3840, 2160, false)!
+    const source = makeSource(), surfaces = makeTransitionSurfaceProvider(), destination = makeCtx()
+    const plan = videoCompositionPlanAtFrame(doc, 0, new Map([['asset-1', {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 10_000_000 }, audio: null,
+    }]]))
+    await expect(compositeFrameCore(doc, plan, destination.ctx, source.source, surfaces.provider, undefined, lens, undefined,
+      { runtime, context: runtime.context, check: () => {}, policy: 'bypass' })).rejects.toThrow(/256 MiB/)
+    expect(surfaces.gets()).toBe(0); expect(source.requests).toEqual([])
+    runtime.dispose()
+  })
+  test('a composite failure releases the real lens frame reservation before a retry', async () => {
+    const doc = makeDoc([makeTrack('video', 'video', [makeClip('plain', 0, 60)])])
+    const lens = createDocumentLensRemapProvider(doc, { retainedBytes: () => 0 } as WebGl2LensRemapBackend, 1920, 1080, false)!
+    const ctx = makeCtx(), source = makeSource()
+    vi.spyOn(ctx.ctx, 'fillRect').mockImplementationOnce(() => { throw new Error('canvas failure') })
+    await expect(compositeFrame(doc, 0, ctx.ctx, source.source, undefined, undefined, lens)).rejects.toThrow('canvas failure')
+    await compositeFrame(doc, 0, ctx.ctx, makeSource().source, undefined, undefined, lens)
+    expect(source.requests).toEqual(['asset-1@0'])
+  })
+})
 
 describe('expanded title composition ownership', () => {
   test('layout reuse is bounded and invalidates on document or explicit render-owner replacement', async () => {

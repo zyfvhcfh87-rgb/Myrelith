@@ -70,6 +70,7 @@ export default function Preview() {
     }
     return false
   })
+  const renderError = usePreviewStatusStore((state) => state.renderError)
   const titleNotices = usePreviewStatusStore((state) => state.titleNotices)
   const offlineVisualAssetIds = usePreviewStatusStore(
     (state) => state.offlineVisualAssetIds,
@@ -173,7 +174,10 @@ export default function Preview() {
       </>}
       <MaskOverlayControls canvasRef={canvasRef} panelRef={panelRef} toolbarHost={maskControlsHost} />
       {scopesEnabled ? <VideoScopesPanel /> : null}
-      {titleNotices.length > 0 && <div className="preview-title-status" role="status">
+      {renderError ? <div className="preview-title-status" role="status">
+        <strong>Preview unavailable</strong>
+        <span>{renderError}</span>
+      </div> : titleNotices.length > 0 && <div className="preview-title-status" role="status">
         <strong>{titleNotices.some((notice) => notice.kind === 'unavailable') ? 'Title unavailable' : 'Title font notice'}</strong>
         <span>{titleNotices.slice(0, 2).map((notice) => `${notice.clipName} / ${notice.name}: ${notice.detail}`).join(' ')}</span>
         {titleNotices.length > 2 && <span> {titleNotices.length - 2} more title notices.</span>}

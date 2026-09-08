@@ -75,6 +75,36 @@ export function assertRenderSurfaceBudget(width: number, height: number): void {
   if (!budget.allowed) throw new RangeError(budget.reason ?? 'Unsafe render surface')
 }
 
+/** Compose actual co-live pixel work with reusable owner surfaces in one place. */
+export function renderWorkSurfaceBudget(
+  outputWidth: number,
+  outputHeight: number,
+  work: {
+    readonly additionalOwnedBytes: number
+    readonly lensReusableBytes?: number
+    readonly includeExportReadback?: boolean
+  },
+): LensRemapSurfaceBudget {
+  const compositor = renderSurfaceBudget(outputWidth, outputHeight)
+  const remapReusableBytes = work.lensReusableBytes ?? 0
+  const exportReadbackBytes = work.includeExportReadback
+    ? compositor.pixelCount * RENDER_SURFACE_BYTES_PER_PIXEL * EXPORT_READBACK_SURFACE_COUNT : 0
+  const aggregateBytes = compositor.aggregateBytes + remapReusableBytes
+    + exportReadbackBytes + work.additionalOwnedBytes
+  let reason = compositor.reason
+  if (!Number.isSafeInteger(work.additionalOwnedBytes) || work.additionalOwnedBytes < 0) {
+    reason ??= 'Additional owned render bytes must be a non-negative safe integer.'
+  }
+  if (!Number.isSafeInteger(remapReusableBytes) || remapReusableBytes < 0) {
+    reason ??= 'Retained lens bytes must be a non-negative safe integer.'
+  }
+  if (!Number.isSafeInteger(aggregateBytes) || aggregateBytes > MAX_RENDER_AGGREGATE_SURFACE_BYTES) {
+    reason ??= 'Pixel work plus compositor, lens and export readback exceeds the 256 MiB render memory limit.'
+  }
+  return Object.freeze({ allowed: reason === null, compositorBytes: compositor.aggregateBytes,
+    remapReusableBytes, exportReadbackBytes, aggregateBytes, reason })
+}
+
 /**
  * Admission for source-space lens remapping plus the existing compositor.
  * Preview has four reusable compositor surfaces plus two remap surfaces;
@@ -95,17 +125,12 @@ export function lensRemapSurfaceBudget(
     && sourceWidth > 0
     && sourceHeight > 0
   const sourcePixels = sourceValid ? sourceWidth * sourceHeight : Number.NaN
-  const outputFrameBytes = compositor.pixelCount * RENDER_SURFACE_BYTES_PER_PIXEL
   const remapReusableBytes = sourcePixels
     * RENDER_SURFACE_BYTES_PER_PIXEL
     * LENS_REMAP_REUSABLE_SURFACE_COUNT
-  const exportReadbackBytes = includeExportReadback
-    ? outputFrameBytes * EXPORT_READBACK_SURFACE_COUNT
-    : 0
-  const aggregateBytes = compositor.aggregateBytes
-    + remapReusableBytes
-    + exportReadbackBytes
-    + additionalOwnedBytes
+  const work = renderWorkSurfaceBudget(outputWidth, outputHeight, {
+    additionalOwnedBytes, lensReusableBytes: remapReusableBytes, includeExportReadback,
+  })
   let reason = compositor.reason
   if (!Number.isSafeInteger(additionalOwnedBytes) || additionalOwnedBytes < 0) reason ??= 'Additional owned render bytes must be a non-negative safe integer.'
   if (!sourceValid) {
@@ -118,17 +143,16 @@ export function lensRemapSurfaceBudget(
   } else if (!Number.isSafeInteger(sourcePixels) || sourcePixels > MAX_RENDER_SURFACE_PIXELS) {
     reason ??= `The lens-remap source exceeds the ${MAX_RENDER_SURFACE_PIXELS}-pixel limit.`
   } else if (
-    !Number.isSafeInteger(aggregateBytes)
-    || aggregateBytes > MAX_RENDER_AGGREGATE_SURFACE_BYTES
+    !work.allowed
   ) {
     reason ??= 'Lens remap plus compositor/readback exceeds the render memory limit.'
   }
   return Object.freeze({
     allowed: reason === null,
-    compositorBytes: compositor.aggregateBytes,
-    remapReusableBytes,
-    exportReadbackBytes,
-    aggregateBytes,
+    compositorBytes: work.compositorBytes,
+    remapReusableBytes: work.remapReusableBytes,
+    exportReadbackBytes: work.exportReadbackBytes,
+    aggregateBytes: work.aggregateBytes,
     reason,
   })
 }

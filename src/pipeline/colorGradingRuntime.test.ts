@@ -5,7 +5,7 @@ import { COLOR_CURVES_TYPE, DEFAULT_COLOR_CURVES, materializeCurveChannels } fro
 import { COLOR_WHEELS_TYPE, DEFAULT_COLOR_WHEELS, materializeWheelChannels } from '../domain/colorWheels'
 import { applyChannelTables } from '../domain/colorChannels'
 import { createColorAdjustEffect, effectRegistration, resolveCanvasEffectStack, resolveEffectStack, type CanvasPixelEffect } from '../domain/effectStack'
-import { colorGradingAdditionalBytes, colorGradingPlanError } from '../domain/colorGradingBudget'
+import { colorGradingPlanError } from '../domain/colorGradingBudget'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import type { EffectDescriptor } from '../domain/schema'
 
@@ -143,15 +143,10 @@ describe('shared grading runtime', () => {
     expect(value.slice(4096 * 4)).toEqual(original.slice(4096 * 4))
     expect(runtime.ledger()).toMatchObject({ active: false, bytes: 0, pendingTasks: 0 })
   })
-  test('bounds work across expanded buses and accounts for plugin copies, Bezier scratch and lookup buffers', () => {
+  test('bounds grading pixel-stage visits across expanded buses independently of buffer admission', () => {
     const long = Array.from({ length: 17 }, (_, i) => ({ ...curveEffect, id: `curve-${i}` }))
     expect(colorGradingPlanError(plan(long), 3840, 2160, { colorLuts: [] }, 'fail', true)).toMatch(/pixel-stage/)
     expect(colorGradingPlanError(plan(long.slice(0, 16)), 3840, 2160, { colorLuts: [] }, 'fail', true)).toBeNull()
-    const plugin = { ...curveEffect, type: 'plugin:some/plugin' }
-    const mask = { ...curveEffect, type: 'builtin.mask', params: { shape: 'bezier' } }
-    const baseline = colorGradingAdditionalBytes([curveEffect], 3840, 2160)
-    expect(baseline).toBe(3840 * 2160 * 4 + COLOR_LUT_LIMITS.runtimeBytes)
-    expect(colorGradingAdditionalBytes([curveEffect, plugin, mask], 3840, 2160)).toBe(3840 * 2160 * 21 + COLOR_LUT_LIMITS.runtimeBytes)
-    expect(colorGradingPlanError(plan([curveEffect, plugin, mask]), 3840, 2160, { colorLuts: [] }, 'bypass', true)).toMatch(/256 MiB/)
-  })
-})
+    // The common videoPixelWorkBudget now owns readback, mask, plugin and cache
+    // lifetimes for every executable frame, including those without grading.
+  })})
