@@ -1,0 +1,37 @@
+{
+  "testedSha": "12449aafa3c5a84bf44f3071cc14a5b954b2880a",
+  "outcome": "failed-incomplete-before-decode",
+  "rawOriginalDirectory": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-12449aa-diagnostic-attempt1",
+  "rawEntries": 10,
+  "archiveMembersVerified": 11,
+  "files": {
+    "audit.json": {
+      "bytes": 3736,
+      "sha256": "7f83219ce88d6643ccaa1eac6b4123d1216761ac4f143d6e205bc356a02cc8af"
+    },
+    "command.log": {
+      "bytes": 1257,
+      "sha256": "0b66dd9503ef842c316b3677184eb766c7456e62c2c2ebcf640388fae9828c64"
+    },
+    "raw-evidence.tar.gz": {
+      "bytes": 3349,
+      "sha256": "c880f3bd2e08607ad6a312e5f3545ad19434ad7f131106114733152b92d94d0f"
+    },
+    "raw-manifest.json": {
+      "bytes": 1349,
+      "sha256": "9a451a1bd39f5de43991e2d47a068eddfaee662c26e979446506bd1b76c6c47e"
+    },
+    "results.md": {
+      "bytes": 3786,
+      "sha256": "1703d12174ade5a164abcadaeabfc9edff295855c96fd87a015374124c0d6c48"
+    },
+    "source-diagnosis.md": {
+      "bytes": 2843,
+      "sha256": "e7426c10e4926395f29aad7c0d0591e170d9013b612078c803c54c7c6b1d924a"
+    },
+    "worker-cleanup.json": {
+      "bytes": 1067,
+      "sha256": "d8e4a5e995f6a013875681e4a36ff985779285d1ac33018e5a45ffc6864901d4"
+    }
+  }
+}
