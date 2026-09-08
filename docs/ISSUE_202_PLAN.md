@@ -1,6 +1,6 @@
 # Issue #202 — managed 10-bit and HDR research
 
-Status: **R1 CPU comparison and bounded R2 probes recorded; full R2/R3/R4 open**.
+Status: **R1/bounded R2 accepted as partial evidence; R3 harness prepared for review; R4 open**.
 Baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue202`, inspected 2026-09-08. Scope comes from
 [#202](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/202) and the Milestone 9
@@ -45,6 +45,15 @@ the tested size-guard limitation; it is not a lossy-quality GO or independent
 codec/display/performance qualification. The second slot is released; no R3
 or further heavy extension has run.
 
+The parent accepted the bounded R1/R2 evidence after independently reproducing
+the references, comparisons and retained scope failure. The
+[R3 harness preparation](evidence/issue202/r3-harness-preparation.md) now defines
+one paired resident dissolve at 1080p/4K with explicit ownership admission.
+Its 40 independent reference cases and protocol were committed at `d6f5c36`
+before shader authorship. Ten pure decision/admission tests and a static browser
+bundle check pass; no R3 shader, timing or native lifecycle test has run.
+Execution requires review of the committed harness and a fresh exclusive slot.
+
 ## Gates and deliverables
 
 | Gate | Work | Exit evidence |
@@ -57,8 +66,10 @@ or further heavy extension has run.
 
 All laboratories, fixtures and results will live under `docs/evidence/issue202/`
 and run only from explicit commands there. They may import pure domain
-evaluators as subjects under test and existing public app facades for the
-paired SDR baseline. They must not change architecture exceptions, install
+evaluators as subjects under test and existing public facades for the paired
+SDR baseline. The reviewed R3 preparation narrows that baseline to the unchanged
+public `pipeline/render.ts` compositor and pure domain factories, without an
+application/store/UI host or private renderer internals. They must not change architecture exceptions, install
 themselves into an application entry point, or add a production dependency.
 An independent oracle imports neither candidate code nor production evaluators.
 

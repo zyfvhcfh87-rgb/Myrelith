@@ -119,7 +119,20 @@ if(fs.existsSync(path.join(root,'codec-readback-1.json'))){
 if(fs.existsSync(path.join(root,'codec-readback-1-manifest.json'))){
   for(const file of read('codec-readback-1-manifest.json').files)check(path.join(repository,file.path),file.sha256);
 }
+for(const name of ['r3-reference-freeze-v1.json','r3-harness-manifest.json']){
+  if(fs.existsSync(path.join(root,name)))for(const file of read(name).files)check(path.resolve(root,file.path),file.sha256);
+}
+if(fs.existsSync(path.join(root,'r3-preparation-check-1.json'))){
+  const preparation=read('r3-preparation-check-1.json');
+  check(path.join(root,'r3-check-preparation.mjs'),preparation.scriptSha256);
+  assert.equal(preparation.reference.shaderReferenceCases,40);
+  assert.equal(preparation.browserLaunched,false);assert.equal(preparation.shaderExecuted,false);
+  assert.equal(preparation.measuredPerformance,false);assert.equal(preparation.nativeLifecycleTested,false);
+  assert.equal(preparation.unauthorizedRunnerRejected,true);
+  for(const file of preparation.sourceFiles)check(path.resolve(root,file.path),file.sha256);
+}
 process.stdout.write(JSON.stringify({frozenFiles:freeze.files.length,productionHashes:inventory.files.length,scalarPasses:118,viewPasses:68,
   retainedScopeFailures:1,browserRows:23,transferRows:8,structuralRows:8,
   codecReadbackRows:fs.existsSync(path.join(root,'codec-readback-1.json'))?read('codec-readback-1.json').rows.length:0,
-  codecQualityDecision:'not-qualified',productionImports:0,changedPathsWithinOwnership:true})+'\n');
+  codecQualityDecision:'not-qualified',r3ReferenceCases:fs.existsSync(path.join(root,'r3-reference-v1.json'))?read('r3-reference-v1.json').rows.length:0,
+  r3PreparationOnly:true,productionImports:0,changedPathsWithinOwnership:true})+'\n');
