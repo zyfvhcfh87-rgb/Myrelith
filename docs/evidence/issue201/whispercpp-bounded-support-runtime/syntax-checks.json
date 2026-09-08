@@ -1,0 +1,14 @@
+[
+  {
+    "path": "scripts/issue201/whispercpp-bounded-support-run/preflight.mjs",
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "scripts/issue201/whispercpp-bounded-support-run/run-lab.mjs",
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]
