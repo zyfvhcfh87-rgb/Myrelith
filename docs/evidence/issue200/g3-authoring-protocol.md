@@ -7,8 +7,10 @@ the caption owner correction, all four existing preview owners, and the accepted
 shared animation APIs. It adds a fifth named title-authoring preview owner.
 
 G3 implementation is authorized; this document requests review of source and the
-following six-flow observable protocol. **Browser/native/full/performance runs
-are not yet authorized or executed for this source.** #199's final shared
+following six-flow observable protocol. The granted run at1fff897 failed its first
+flow and stopped; all failure evidence is preserved in g3-first-authoring-failure.md.
+This fixture/selector correction has **not run in a browser** and requires fresh
+source review and an exclusive grant. No full/performance gate has run. #199's final shared
 animation workspace has not been integrated. Its property/dope-sheet wiring is
 explicitly pending the supervisor's accepted sync; no second key editor is added.
 
@@ -46,7 +48,8 @@ parallel browser/performance workload during the run. Historical G2 baseline and
 proof archives/guards remain untouched; they are not misapplied to this new tree.
 
 1. Real compact Upgrade, content, added shape, multi-opacity, stable-ID reorder,
-   and command-palette Undo/Redo. Check exact history increments and portable wire state.
+   and command-palette Undo/Redo. Check exact history increments and portable wire
+   state; require a real recovery write to complete for the active document/session.
 2. Actual Program pointer movement and Escape cancellation; safe-guide visibility
    with identical project serialization and history. Retain guide/handle screenshot.
    At an interpolated frame, trusted no-motion native clicks on both Move and
@@ -66,10 +69,17 @@ proof archives/guards remain untouched; they are not misapplied to this new tree
 6. 720×800 dialog reachability and stale review rejection. This qualifies the title
    dialog only; shared workspace clipping observed in G2 is not relabeled fixed.
 
-Fixtures are inserted through test-only production-module imports after entering
-the real editor through its new-project UI. All task mutations use actual UI;
-imports are for fixture construction, positioning, stale-context injection,
-serialization/reopen and read-only evidence. The capture-loss probe additionally
+After entering through the real new-project UI, fixture construction produces a
+portable file. Every initial/replacement/reopen fixture passes through the real
+leaveActiveProject → openProjectFile → activateResumedProject lifecycle. Each
+transition asserts successful status, exact portable bytes, empty history and
+a healthy active session, with attached evidence. There is no direct setProject
+in the browser protocol. This includes the interpolated gesture fixture, the
+unavailable-font fixture and the actual fallback-file reopen. Feature mutations
+remain actual UI actions; imports are for fixture construction, canonical portable
+installation, positioning, stale-context injection and read-only evidence.
+Wrapped textarea/select fields use exact accessible role/name selectors; original
+assertions are retained, and no warning/status is silenced. The capture-loss probe additionally
 requests releasePointerCapture on the actually captured trusted pointer; it does
 not synthesize pointer events. Trusted event observations and the next native
 held move establish the actual loss. This is an authoring gate, not another
@@ -77,6 +87,9 @@ held move establish the actual loss. This is an authoring gate, not another
 
 The observer records warnings, console errors, page errors, URL/title/body identity,
 Vite overlays and viewport/bounds through the final screenshot of every test.
+It also records project/save/recovery phase/error state with each screenshot and
+requires healthy state on completed flows, including a real recovery write in
+flow1. A UI recovery failure cannot be hidden by otherwise empty console arrays.
 Any warning/error fails this G3 authoring run; no warning is filtered or suppressed.
 The G2 Canvas2D readback advisories remain historical and qualified, and no
 production canvas setting is changed to hide them. Failure preserves trace,

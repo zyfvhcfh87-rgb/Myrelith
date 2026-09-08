@@ -1,5 +1,31 @@
 /** G3 observable protocol: actual UI mutations; imports are fixture setup and read-only evidence. */
 import { expect, test, type Page } from '@playwright/test'
+/** All replacement fixtures pass through the real portable-open lifecycle owner. */
+async function openPortableTitle(page: Page, wire: string, frame = 0) {
+  const evidence = await page.evaluate(async ({ wire, frame }) => {
+    const p = '/src/app/projectController.ts', d = '/src/state/documentStore.ts', f = '/src/domain/projectFile.ts'
+    const t = '/src/state/transportStore.ts', s = '/src/state/titleEditorStore.ts', session = '/src/state/projectSessionStore.ts'
+    const lifecycle = await import(p), files = await import(f), store = (await import(d)).useDocumentStore
+    const left = await lifecycle.leaveActiveProject()
+    if (left.status !== 'ready') throw new Error(JSON.stringify(left))
+    const opened = await lifecycle.openProjectFile(new File([wire], 'title-g3.myrelith', { type: 'application/json' }))
+    if (opened.status !== 'ready') throw new Error(JSON.stringify(opened))
+    const activated = await lifecycle.activateResumedProject()
+    if (activated.status !== 'activated') throw new Error(JSON.stringify(activated))
+    const state = store.getState(), transport = (await import(t)).useTransportStore
+    const clip = state.doc.tracks[0].clips[0]
+    transport.getState().setSelectedClip(clip.id); transport.getState().setPlayheadFrame(frame)
+    ;(await import(s)).useTitleEditorStore.getState().select(clip.id, clip.title?.elements.slice(0, 1).map((element: { id: string }) => element.id) ?? [])
+    const active = (await import(session)).useProjectSessionStore.getState()
+    return { left: left.status, opened: opened.status, activated: activated.status, past: state.past.length, future: state.future.length,
+      wire: files.serializeProjectFile(files.createProjectFileSnapshot(state.project, [], [])),
+      session: { screen: active.screen, phase: active.phase, error: active.error, saveError: active.saveError, recoveryError: active.recoveryError } }
+  }, { wire, frame })
+  await test.info().attach(`portable-title-open-${test.info().attachments.length}`, { body: JSON.stringify(evidence, null, 2), contentType: 'application/json' })
+  expect(evidence).toEqual({ left: 'ready', opened: 'ready', activated: 'activated', past: 0, future: 0, wire,
+    session: { screen: 'editor', phase: 'idle', error: null, saveError: null, recoveryError: null } })
+  await expect(page.getByRole('button', { name: 'Commands', exact: true })).toBeVisible()
+}
 async function enter(page: Page, expanded = true) {
   await page.goto('/')
   await page.getByRole('button', { name: 'Start a new project' }).click()
@@ -7,13 +33,12 @@ async function enter(page: Page, expanded = true) {
   await page.getByLabel('Resolution').selectOption('720')
   await page.getByRole('button', { name: 'Create project', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Commands' })).toBeVisible()
-  await page.evaluate(async (expanded) => {
-    const f = '/src/test/titleOwnerFixtures.ts', d = '/src/state/documentStore.ts', t = '/src/state/transportStore.ts', s = '/src/state/titleEditorStore.ts'
-    const fixture = await import(f), store = (await import(d)).useDocumentStore, transport = (await import(t)).useTransportStore
-    store.getState().setProject(expanded ? fixture.expandedTitleProject() : fixture.legacyTitleProject())
-    transport.getState().setSelectedClip('root-text'); transport.getState().setPlayheadFrame(0)
-    ;(await import(s)).useTitleEditorStore.getState().select('root-text', ['root-element'])
+  const wire = await page.evaluate(async (expanded) => {
+    const f = '/src/test/titleOwnerFixtures.ts', p = '/src/domain/projectFile.ts'
+    const fixture = await import(f), files = await import(p)
+    return files.serializeProjectFile(files.createProjectFileSnapshot(expanded ? fixture.expandedTitleProject() : fixture.legacyTitleProject(), [], []))
   }, expanded)
+  await openPortableTitle(page, wire)
 }
 async function snapshot(page: Page) {
   return page.evaluate(async () => {
@@ -29,12 +54,14 @@ test('compact upgrade, elements, static editing and real project undo/redo', asy
   await enter(page, false)
   const before = await snapshot(page)
   await page.getByRole('button', { name: 'Upgrade to title', exact: true }).click()
-  await page.getByLabel('Text content', { exact: true }).fill('G3 title 世界')
-  await page.getByLabel('Text content', { exact: true }).press('Tab')
+  await page.getByRole('textbox', { name: 'Text content', exact: true }).fill('G3 title 世界')
+  await page.getByRole('textbox', { name: 'Text content', exact: true }).press('Tab')
   await page.getByRole('button', { name: 'Add rectangle', exact: true }).click()
   await page.getByRole('checkbox', { name: /Rectangle rectangle/ }).check()
   await page.getByTestId('title-opacity').fill('0.5'); await page.getByTestId('title-opacity').press('Tab')
   await page.getByRole('button', { name: 'Move Rectangle backward' }).click()
+  // A real recovery write must complete for this canonical document/session.
+  await expect.poll(() => page.evaluate(async () => { const p = '/src/state/projectSessionStore.ts'; return (await import(p)).useProjectSessionStore.getState().lastRecoveryAt })).not.toBeNull()
   const after = await snapshot(page)
   expect(after.past - before.past).toBe(5)
   expect(after.clip.text).toBeUndefined()
@@ -67,15 +94,17 @@ test('direct manipulation, Escape cancellation and editor-only safe guides', asy
   expect((await snapshot(page)).wire).toBe(moved.wire)
   await expect(page.getByTestId('title-safe-0.9')).toBeVisible(); await expect(page.getByTestId('title-safe-0.95')).toBeVisible()
   await page.screenshot({ path: info.outputPath('guides-and-handles.png') })
-  await page.evaluate(async () => {
-    const d = '/src/state/documentStore.ts', t = '/src/state/transportStore.ts'
+  const animatedWire = await page.evaluate(async () => {
+    const d = '/src/state/documentStore.ts', f = '/src/domain/projectFile.ts'
+    const files = await import(f)
     const store = (await import(d)).useDocumentStore, project = structuredClone(store.getState().project)
     const clip = project.sequences[0].tracks[0].clips[0], element = clip.title.elements[0]
     const values = { 'position-x': element.transform.x, 'position-y': element.transform.y, 'box-width': element.text.boxWidthPx, 'box-height': element.text.boxHeightPx }
     clip.animation = { ...clip.animation, titleTracks: Object.entries(values).map(([property, value]) => ({ elementId: element.id, propertyVersion: 1, property,
       keyframes: [{ frame: 0, value, easing: { type: 'linear' } }, { frame: 99, value: Number(value) + 100, easing: { type: 'linear' } }] })) }
-    store.getState().setProject(project); (await import(t)).useTransportStore.getState().setPlayheadFrame(50)
+    return files.serializeProjectFile(files.createProjectFileSnapshot(project, [], []))
   })
+  await openPortableTitle(page, animatedWire, 50)
   const observations: unknown[] = []
   for (const mode of ['Move', 'Resize']) {
     const control = page.getByRole('button', { name: `${mode} title element Text`, exact: true })
@@ -154,34 +183,34 @@ test('motion preview, cancellation, Apply and explicit Reapply', async ({ page }
   await page.getByRole('button', { name: 'Roll / crawl…' }).click()
   await expect(page.getByRole('button', { name: 'Reapply motion', exact: true })).toBeDisabled()
   await page.getByRole('checkbox', { name: 'Replace all listed movement tracks' }).check()
-  await page.getByLabel('End frame', { exact: true }).fill('90')
+  await page.getByRole('spinbutton', { name: 'End frame', exact: true }).fill('90')
   await page.screenshot({ path: info.outputPath('reapply-review.png') })
   await page.getByRole('button', { name: 'Reapply motion', exact: true }).click()
   expect((await snapshot(page)).clip.animation.titleTracks[0].keyframes.map((key: { frame: number }) => key.frame)).toEqual([0, 90])
 })
 test('unknown font gets an explicit persisted fallback through real controls', async ({ page }, info) => {
   await enter(page)
-  await page.evaluate(async () => {
-    const d = '/src/state/documentStore.ts', store = (await import(d)).useDocumentStore, project = structuredClone(store.getState().project)
+  const unavailableWire = await page.evaluate(async () => {
+    const d = '/src/state/documentStore.ts', f = '/src/domain/projectFile.ts'
+    const files = await import(f), store = (await import(d)).useDocumentStore, project = structuredClone(store.getState().project)
     project.sequences[0].tracks[0].clips[0].title.elements[0].font = { family: 'Missing G3 Face', fallbackFamily: null }
-    store.getState().setProject(project)
+    return files.serializeProjectFile(files.createProjectFileSnapshot(project, [], []))
   })
+  await openPortableTitle(page, unavailableWire)
   await expect(page.locator('.preview-title-status')).toContainText('Title unavailable')
-  await page.getByLabel('Explicit font fallback', { exact: true }).selectOption('serif')
+  await page.getByRole('combobox', { name: 'Explicit font fallback', exact: true }).selectOption('serif')
   await expect(page.locator('.preview-title-status')).toContainText('explicit serif fallback')
   const saved = await snapshot(page)
   expect(saved.clip.title.elements[0].font).toEqual({ family: 'Missing G3 Face', fallbackFamily: 'serif' })
-  await page.evaluate(async (wire) => {
-    const d = '/src/state/documentStore.ts', f = '/src/domain/projectFile.ts', p = '/src/test/titleFileBoundaryFixtures.ts'
-    ;(await import(d)).useDocumentStore.getState().setProject((await import(p)).titleProjectFromFile((await import(f)).parseProjectFile(wire)))
-  }, saved.wire)
+  await openPortableTitle(page, saved.wire)
+  await expect(page.locator('.preview-title-status')).toContainText('explicit serif fallback')
   expect((await snapshot(page)).wire).toBe(saved.wire)
   await page.screenshot({ path: info.outputPath('font-fallback-reopened.png') })
 })
 test('local template save/use/delete retains independent project copies and real IndexedDB data', async ({ page }, info) => {
   await enter(page)
   await page.getByRole('button', { name: 'Save title template…' }).click()
-  await page.getByLabel('Template name', { exact: true }).fill('My G3 title')
+  await page.getByRole('textbox', { name: 'Template name', exact: true }).fill('My G3 title')
   await page.getByRole('button', { name: 'Save template', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Save title template' })).not.toBeVisible()
   expect((await snapshot(page)).past).toBe(0)

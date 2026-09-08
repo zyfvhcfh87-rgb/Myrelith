@@ -6,9 +6,14 @@ type Observation = { warnings: unknown[]; errors: unknown[]; pageErrors: string[
 const runs = new Map<string, Observation>()
 async function identity(page: Page) {
   const text = await page.locator('body').innerText({ timeout: 3000 })
+  const session = await page.evaluate(async () => {
+    const path = '/src/state/projectSessionStore.ts', state = (await import(path)).useProjectSessionStore.getState()
+    return { screen: state.screen, phase: state.phase, error: state.error, savePhase: state.savePhase, saveError: state.saveError,
+      recoveryPhase: state.recoveryPhase, recoveryError: state.recoveryError, lastRecoveryAt: state.lastRecoveryAt }
+  })
   return { url: page.url(), title: await page.title(), viewport: page.viewportSize(), bodyTextLength: text.trim().length,
     bodyExcerpt: text.slice(0, 1800), viteErrorOverlays: await page.locator('vite-error-overlay').count(),
-    bodyBounds: await page.locator('body').boundingBox() }
+    bodyBounds: await page.locator('body').boundingBox(), session }
 }
 async function persist(info: TestInfo, value: Observation) {
   await writeFile(info.outputPath('browser-observations.json'), JSON.stringify(value, null, 2))
@@ -44,6 +49,9 @@ test.afterEach(async ({ page }, info) => {
         expect(observed.bodyTextLength).toBeGreaterThan(50)
         expect(observed.bodyBounds?.height).toBeGreaterThan(0)
         expect(observed.viteErrorOverlays).toBe(0)
+        expect(observed.session).toMatchObject({ screen: 'editor', phase: 'idle', error: null, saveError: null, recoveryError: null })
+        expect(observed.session.savePhase).not.toBe('error')
+        expect(observed.session.recoveryPhase).not.toBe('error')
         expect(observation.errors).toEqual([])
         expect(observation.pageErrors).toEqual([])
         expect(observation.warnings).toEqual([])
