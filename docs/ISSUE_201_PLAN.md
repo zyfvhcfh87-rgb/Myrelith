@@ -173,7 +173,10 @@ must keep the selected cue and Apply/Cancel reachable. No mouse-only operation.
 
 The measured candidate is documented in
 [the model decision](evidence/issue201/MODEL_DECISION.md) and machine-readable
-[package measurements](evidence/issue201/package-measurements.json).
+[replacement manifest](evidence/issue201/replacement-manifest.json). The current
+lab candidate uses Transformers.js 4.2.0 and the exact WASM-only ORT closure
+documented in [replacement preflight](evidence/issue201/REPLACEMENT_PREFLIGHT.md);
+the initial 3.8.1 measurements are retained as superseded evidence.
 This first review **does not grant speech enablement**: complete offline assets,
 actual browser transfer/cache/resident measurements, transitive notice review,
 real transcription and cancellation still require Gate 1's exclusive lab.

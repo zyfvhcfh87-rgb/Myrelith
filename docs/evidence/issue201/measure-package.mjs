@@ -36,9 +36,9 @@ function tarMembers(gzip) {
   const tar = gunzipSync(gzip, { maxOutputLength: 300_000_000 })
   const members = []
   for (let offset = 0; offset + 512 <= tar.length;) {
-    const name = tar.subarray(offset, offset + 100).toString().replace(/\0.*$/su, '')
+    const name = tar.subarray(offset, offset + 100).toString().split('\0', 1)[0]
     if (!name) break
-    const length = Number.parseInt(tar.subarray(offset + 124, offset + 136).toString().replace(/\0.*$/su, '').trim(), 8)
+    const length = Number.parseInt(tar.subarray(offset + 124, offset + 136).toString().split('\0', 1)[0].trim(), 8)
     if (!Number.isSafeInteger(length) || length < 0 || offset + 512 + length > tar.length) throw new Error('Invalid tar member')
     const body = tar.subarray(offset + 512, offset + 512 + length)
     if (/^package\/dist\/.*(?:\.min\.js|\.mjs|\.wasm)$/u.test(name) || /(?:^|\/)(?:LICENSE|NOTICE|ThirdPartyNotices\.txt)$/u.test(name)) {

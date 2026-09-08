@@ -1,12 +1,38 @@
-# Local speech candidate — measured intake, not an enablement decision
+# Local speech model decision — replacement lab preflight
 
-Date: 2026-09-08. Status: candidate recommended for the exclusive Gate 1 lab.
+Date: 2026-09-08. Status: replacement prepared for review before exclusive Gate 1.
 **Product enablement remains NO-GO pending runtime/offline/lifecycle evidence.**
 This status preserves the separate decision required by issue #201. The
 orchestrator may approve the independent caption implementation after reviewing
 the plan without approving speech enablement.
 
-## Candidate and source selection
+## Current replacement and outstanding decision
+
+The current isolated-lab candidate keeps the exact model revision and seven
+model files below, with **Transformers.js 4.2.0** and **ORT Web
+1.26.0-dev.20260416-b7804b056c**, using its WASM-only entry point and matching
+non-JSEP loader/binary. The concrete browser payload is **14,073,343 raw bytes /
+3,627,462 locally gzipped bytes**, including the existing Mediabunny audio adapter.
+The selected model remains **43,622,127 bytes**; combined raw payload is
+**57,695,470 bytes**. These are asset measurements, not runtime or Vite claims.
+
+[REPLACEMENT_PREFLIGHT.md](REPLACEMENT_PREFLIGHT.md) explains the removed
+JavaScript protobuf route, actual import substitution/common-version identity,
+license and notice inventory, fixture provenance, frozen thresholds, executable
+harness and remaining qualifications. [replacement-manifest.json](replacement-manifest.json)
+binds every selected asset and measurement. The inspected executable JavaScript
+package advisory query returned no entries; this does not establish complete
+native-WASM advisory coverage or approve production use. Inference has not run.
+
+The original 3.8.1 standalone candidate is **superseded for lab execution** after
+the advisory lookup in [candidate-advisories.json](candidate-advisories.json).
+The sections below preserve its original measurements and source findings so
+the replacement cannot erase the reason for changing course. Their package
+choice and byte totals are historical; their acceptance requirements remain
+binding. Neither unchanged model bytes nor a new version label qualifies the
+replacement runtime without fresh execution evidence.
+
+## Historical initial candidate and source selection
 
 - Model: multilingual `Xenova/whisper-tiny`, immutable revision
   `5332fcc35e32a33b86612b9a57a89be7906102b1`, encoder q8 and merged decoder q8.
