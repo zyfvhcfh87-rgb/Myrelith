@@ -1,0 +1,37 @@
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --run src/domain/animationFoundation.test.ts src/domain/animationLifecycle.test.ts src/domain/projectCropAnimation.test.ts src/domain/cropAnimationCertificate.test.ts src/domain/scalarAnimation.test.ts src/domain/animationTiming.test.ts src/domain/titleElements.test.ts src/domain/titleBudgets.test.ts src/domain/maskPathAnimation.test.ts src/domain/effectStack.test.ts src/domain/clipAnimation.test.ts src/domain/clipAnimationOperations.test.ts src/domain/adjustmentItems.test.ts src/domain/sourceTimeMap.test.ts src/domain/projectFile.test.ts src/domain/projectSequences.test.ts src/domain/clipAttributes.test.ts src/domain/colorLutCatalog.test.ts src/domain/pluginVideoEffectStagePlan.test.ts src/domain/dynamicZoomOperations.test.ts src/domain/motionTrackingOperations.test.ts src/domain/videoStabilizationOperations.test.ts src/domain/videoCompositionPlan.test.ts src/domain/projectVideoCompositionPlan.test.ts src/domain/audioMixPlan.test.ts src/domain/projectAudioMixPlan.test.ts src/state/documentStore.test.ts src/state/clipAnimationStore.test.ts src/app/clipAttributeController.test.ts src/app/animationBindingController.test.ts src/app/animationFileBoundary.test.ts src/app/animationAdmission.test.ts src/app/pluginPreparedExportController.test.ts src/app/pluginDescriptorMigrationController.test.ts src/test/architecture.test.ts src/domain/maskChroma.test.ts src/domain/nestedSequenceProjectFile.test.ts src/domain/multicamProjectFile.test.ts src/domain/videoBusPersistence.test.ts src/domain/adjustmentProjectFile.test.ts src/app/colorGradingController.test.ts src/app/colorLutController.test.ts src/domain/animationBatch.test.ts src/app/animationEditingController.test.ts src/state/transportStore.test.ts src/app/EditorShell.test.tsx src/app/selectionReconciliationController.test.ts src/app/maskEditingController.test.ts src/ui/Inspector.test.tsx src/domain/animationLaneIndex.test.ts src/domain/timelineSnapping.test.ts src/ui/animation/AnimationWorkspace.test.tsx src/ui/timeline/timelineViewport.test.ts src/ui/timeline/timelineZoom.test.ts src/ui/MaskPathAnimation.test.tsx src/app/animationTitleIntegration.test.ts --maxWorkers=2
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+
+ Test Files  56 passed (56)
+      Tests  726 passed (726)
+   Start at  14:45:31
+   Duration  13.08s (transform 1.34s, setup 837ms, import 5.33s, tests 7.25s, environment 9.84s)
+
+✔ cold samples each use and close a fresh BrowserContext (0.583083ms)
+✔ source identity rejects end-of-run drift (0.1465ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (167.321416ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (82.07175ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.225625ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.654333ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.096833ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.235417ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.118917ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.088041ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.1965ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.379875ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.750417ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.090666ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.133834ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.156708ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.105584ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 414.276375

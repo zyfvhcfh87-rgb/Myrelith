@@ -1,10 +1,12 @@
 # Issue #199 — unified animation editor plan
 
-Status: Schema 22 Gate 1 was accepted at `f555a04` and integrated at
-`f9945c44f75a4818bc939d8b6e63c09db353e669`. Gate 2 atomic editing is complete
-for committed review; see [Gate 2 evidence](evidence/issue199/gate2-atomic-editing.md).
-The unified UI and browser/export acceptance remain later gates. This document
-does not approve itself.
+Status: Corrected Gate 2 `971b5114b7c45028cef0991c8cca7eb16fd7614f`
+was accepted and integrated with schema23 owners at
+`4340f9675ad56aa320f2498cf107fd55f8819568`. Authorized Gate 3 source is ready
+for exact-commit review; see [UI evidence](evidence/issue199/gate3-unified-ui.md)
+and the [requested browser protocol](evidence/issue199/gate3-browser-protocol.md).
+Observable, performance and cross-feature/export acceptance remain pending the
+supervisor's review and exclusive slot. This document does not approve itself.
 
 Issue: <https://github.com/zyfvhcfh87-rgb/Myrelith/issues/199>
 

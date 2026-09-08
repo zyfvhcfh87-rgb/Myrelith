@@ -1,3 +1,4 @@
+import AnimationEntry from './animation/AnimationEntry'
 import ColorGradingAdd from './ColorGradingAdd'
 import ColorGradingFields from './ColorGradingFields'
 import ColorGradingAnimation from './ColorGradingAnimation'
@@ -9,7 +10,6 @@ import { SPATIAL_EFFECT_PARAMETERS, spatialEffectKind, spatialEffectParams } fro
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import type {
   Clip,
-  ClipAnimationEasing,
   EffectDescriptor,
   EffectParamValue,
   TimelineDoc,
@@ -141,149 +141,15 @@ function updateAtFrame(
   )
 }
 
-function easingFromType(
-  type: ClipAnimationEasing['type'],
-): ClipAnimationEasing {
-  return type === 'cubic-bezier'
-    ? { type, x1: 0.42, y1: 0, x2: 0.58, y2: 1 }
-    : { type }
-}
-
-function EffectParameterAnimation({
-  clip,
-  effect,
-  parameter,
-  spec,
-  value,
-  playheadFrame,
-  locked,
-}: {
-  clip: Clip
-  effect: EffectDescriptor
-  parameter: string
-  spec: EffectAnimationParameterSpec
-  value: number
-  playheadFrame: number
-  locked: boolean
+function EffectParameterAnimation({ clip, effect, parameter, spec }: {
+  clip: Clip; effect: EffectDescriptor; parameter: string; spec: EffectAnimationParameterSpec
+  value: number; playheadFrame: number; locked: boolean
 }) {
   const track = effectAnimationTrack(clip.animation ?? { tracks: [] }, effect.id, parameter)
-  const localFrame = playheadFrame - clip.timelineRange.startFrame
-  const playheadInside = localFrame >= 0 && localFrame < clip.timelineRange.durationFrames
-  const actionLabel = track
-    ? `Add ${spec.label} keyframe at playhead`
-    : `Animate ${spec.label}`
-  const store = useDocumentStore.getState
-  return (
-    <div className="inspector-effect-animation" aria-label={`${spec.label} animation`}>
-      <div className="inspector-effect-actions">
-        <button
-          type="button"
-          disabled={locked || !playheadInside}
-          onClick={() => store().setEffectKeyframe(
-            clip.id,
-            effect.id,
-            parameter,
-            { frame: localFrame, value, easing: { type: 'linear' } },
-          )}
-        >
-          {actionLabel}
-        </button>
-        {track && (
-          <button
-            type="button"
-            disabled={locked}
-            aria-label={`Reset ${spec.label} animation`}
-            onClick={() => store().resetEffectAnimationTrack(
-              clip.id,
-              effect.id,
-              parameter,
-            )}
-          >
-            Clear keys
-          </button>
-        )}
-      </div>
-      {track && <p className="inspector-note">Moving a key to an occupied frame replaces the existing key.</p>}
-      {track && (
-        <ol className="animation-keyframe-list" aria-label={`${spec.label} keyframes`}>
-          {track.keyframes.map((keyframe, index) => (
-            <li key={keyframe.frame} className="animation-keyframe-fields">
-              <NumericField
-                label={`${spec.label} keyframe ${index + 1} frame`}
-                value={keyframe.frame}
-                min={-1_000_000_000}
-                max={1_000_000_000}
-                step={1}
-                disabled={locked}
-                testId={`effect-keyframe-frame-${effect.id}-${parameter}-${index}`}
-                onCommit={(frame) => store().moveEffectKeyframe(
-                  clip.id,
-                  effect.id,
-                  parameter,
-                  keyframe.frame,
-                  Math.round(frame),
-                )}
-              />
-              <NumericField
-                label={`${spec.label} keyframe ${index + 1} value`}
-                value={keyframe.value}
-                min={spec.min}
-                max={spec.max}
-                step={spec.step}
-                scale={100}
-                disabled={locked}
-                testId={`effect-keyframe-value-${effect.id}-${parameter}-${index}`}
-                onCommit={(nextValue) => store().setEffectKeyframe(
-                  clip.id,
-                  effect.id,
-                  parameter,
-                  { ...keyframe, value: nextValue },
-                )}
-              />
-              <label className="inspector-field">
-                <span className="inspector-field-label">
-                  {spec.label} keyframe {index + 1} easing
-                </span>
-                <select
-                  value={keyframe.easing.type}
-                  disabled={locked}
-                  onChange={(event) => store().setEffectKeyframe(
-                    clip.id,
-                    effect.id,
-                    parameter,
-                    {
-                      ...keyframe,
-                      easing: easingFromType(event.target.value as ClipAnimationEasing['type']),
-                    },
-                  )}
-                >
-                  <option value="linear">Linear</option>
-                  <option value="hold">Hold</option>
-                  <option value="cubic-bezier">Ease</option>
-                </select>
-              </label>
-              <button
-                type="button"
-                disabled={locked}
-                aria-label={`Remove ${spec.label} keyframe ${index + 1}`}
-                onClick={() => store().removeEffectKeyframe(
-                  clip.id,
-                  effect.id,
-                  parameter,
-                  keyframe.frame,
-                )}
-              >
-                Remove key
-              </button>
-            </li>
-          ))}
-        </ol>
-      )}
-      {!playheadInside && (
-        <span className="inspector-note">Move the playhead inside this clip to add keys.</span>
-      )}
-    </div>
-  )
+  return <div className="inspector-effect-animation" aria-label={`${spec.label} animation`}>
+    <AnimationEntry lane={{ owner: { kind: 'clip', id: clip.id }, kind: 'effect', effectId: effect.id, parameter }} label={`Open ${spec.label} animation`} />
+    {track && <span className="inspector-note">{track.keyframes.length} keys · Edit timing, values and easing in Animation.</span>}
+  </div>
 }
 
 function BezierPathField({

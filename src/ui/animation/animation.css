@@ -1,0 +1,56 @@
+.animation-workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; background: #15191e; color: #dce8f3; font-size: 11px; }
+.animation-workspace button, .animation-workspace select, .animation-workspace input { font: inherit; color: inherit; background: #222a33; border: 1px solid #475565; border-radius: 4px; padding: 4px 6px; }
+.animation-workspace button { cursor: pointer; white-space: nowrap; }
+.animation-workspace button:disabled { opacity: .45; cursor: default; }
+.animation-workspace button[aria-pressed="true"] { background: #325471; border-color: #78b9e4; }
+.animation-workspace :focus-visible { outline: 2px solid #a2d8ff; outline-offset: 1px; }
+.animation-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding: 5px 8px; border-bottom: 1px solid #34414e; }
+.animation-toolbar label { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.animation-toolbar input[type="checkbox"] { margin: 0; }
+.animation-toolbar input[aria-label="Filter animation lanes"] { flex: 1; min-width: 140px; max-width: 300px; }
+.animation-tools { flex-wrap: nowrap; overflow-x: auto; flex-shrink: 0; }
+.animation-main { flex: 1; display: flex; min-width: 0; min-height: 80px; overflow: hidden; }
+.animation-grid-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.animation-ruler { height: 22px; display: flex; flex-shrink: 0; overflow: hidden; background: #202730; }
+.animation-ruler > span { flex-shrink: 0; box-sizing: border-box; padding: 4px 8px; }
+.animation-ruler svg { flex-shrink: 0; fill: #b9ccde; font-size: 10px; }
+.animation-grid { flex: 1; min-height: 0; overflow: auto; position: relative; overscroll-behavior: contain; }
+.animation-grid-surface { position: relative; }
+.animation-lane { position: absolute; left: 0; right: 0; border-bottom: 1px solid #2a333e; box-sizing: border-box; }
+.animation-lane.is-focused { background: #213343; }
+.animation-workspace .animation-lane-label { position: absolute; height: 100%; padding: 2px 8px; text-align: left; border: 0; border-right: 1px solid #3e4c5b; border-radius: 0; background: #202731; overflow: hidden; z-index: 1; }
+.animation-lane.is-focused .animation-lane-label { background: #2e475c; }
+.animation-lane-label span, .animation-lane-label strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.animation-lane-label span { font-size: 9px; color: #aabccc; }
+.animation-lane-label small { font-weight: normal; color: #e5c68e; font-size: 9px; }
+.animation-key-lane { position: absolute; top: 0; overflow: hidden; }
+.animation-key { fill: #b4c3d0; stroke: #17242e; cursor: ew-resize; touch-action: none; }
+.animation-key text { fill: #111b24; stroke: none; font-size: 9px; pointer-events: none; }
+.animation-key.is-selected { fill: #83d1ff; stroke: #e5f5ff; }
+.animation-key-ghost { fill: none; stroke: #f2cf85; stroke-width: 2; pointer-events: none; }
+.animation-playhead, .animation-snap-guide { position: absolute; width: 1px; background: #f88787; pointer-events: none; z-index: 2; }
+.animation-snap-guide { background: #f0d785; }
+.animation-key-controls { width: 216px; flex-shrink: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 1px solid #3e4c5b; box-sizing: border-box; }
+.animation-key-controls small { color: #aabccc; overflow-wrap: anywhere; }
+.animation-key-controls label { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+.animation-key-controls input { min-width: 0; width: 76px; }
+.animation-key-controls select { max-width: 110px; }
+.animation-key-controls p { margin: 0; }
+.animation-unavailable { color: #e5c68e; }
+.animation-bezier-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.animation-bezier-fields label { flex-direction: column; }
+.animation-inline-actions { display: flex; gap: 5px; }
+.animation-curve-view { position: relative; height: 100%; overflow: hidden; }
+.animation-curve-actions { position: absolute; z-index: 1; display: flex; align-items: center; gap: 4px; padding: 2px; background: #15191ed9; }
+.animation-curve-actions span { padding-right: 5px; }
+.animation-curve-path { stroke: #8bd1ff; stroke-width: 1.5; }
+.animation-axis { stroke: #435465; stroke-dasharray: 3 4; }
+.animation-bezier-handle { fill: #eacb8d; stroke: #f6e7c9; cursor: crosshair; touch-action: none; }
+.animation-dense-note { position: absolute; bottom: 2px; left: 5px; background: #15191ee8; }
+.animation-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 4px 8px; border-top: 1px solid #34414e; }
+.animation-footer details { position: relative; }
+.animation-footer details p { position: absolute; bottom: 20px; left: 0; width: min(440px, 60vw); padding: 12px; margin: 0; background: #202a35; border: 1px solid #637c93; line-height: 1.5; z-index: 5; }
+.animation-footer [role="status"] { flex: 1; color: #c4d9e9; min-width: 120px; }
+.animation-mapping { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 6px 8px; border-bottom: 1px solid #596d7e; max-height: 100px; overflow-y: auto; }
+.animation-mapping span { overflow-wrap: anywhere; }
+@media (max-width: 850px) { .animation-key-controls { width: 184px; } .animation-toolbar { flex-wrap: nowrap; overflow-x: auto; flex-shrink: 0; } }

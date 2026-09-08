@@ -59,7 +59,7 @@ describe('animation gesture ownership', () => {
     expect(useTransportStore.getState().animationSelection).toEqual([])
   })
 
-  test.each(['project', 'generation', 'sequence', 'selection', 'playhead', 'source', 'catalog', 'reset', 'playback'] as const)('cancels stale %s and a late queued callback without history', (change) => {
+  test.each(['project', 'generation', 'sequence', 'selection', 'playhead', 'source', 'catalog', 'reset', 'playback', 'workspace', 'focused lane'] as const)('cancels stale %s and a late queued callback without history', (change) => {
     const gesture = controller.begin()
     gesture.preview({ kind: 'move', deltaFrames: 3 })
     const lateCallback = [...pending.values()][0]
@@ -72,6 +72,8 @@ describe('animation gesture ownership', () => {
     if (change === 'source') useMediaStore.setState({ descriptors: new Map(useMediaStore.getState().descriptors) })
     if (change === 'catalog') { plugins = animationCatalog(2); contextChanged() }
     if (change === 'reset') useTransportStore.getState().resetTransport()
+    if (change === 'workspace') useTransportStore.getState().setAnimationWorkspaceOpen(true)
+    if (change === 'focused lane') useTransportStore.getState().setAnimationFocusedLane({ ...key(0).lane, kind: 'scalar', property: 'volume', propertyVersion: 1 })
     if (change === 'playback') useTransportStore.setState({ isPlaying: true })
     const expected = useDocumentStore.getState()
     lateCallback()

@@ -8,6 +8,7 @@ import { colorLutController } from './colorLutController'
  */
 
 import {
+  lazy,
   useCallback,
   useEffect,
   useRef,
@@ -61,6 +62,11 @@ import { initSourceMonitorLifecycle } from './sourceMonitorController'
 import { initAudioEffectStatusProjection } from './audioEffectStatus'
 import SequenceControls from '../ui/SequenceControls'
 import MulticamControls from '../ui/MulticamControls'
+import AnimationEntry from '../ui/animation/AnimationEntry'
+import LazySurfaceBoundary from '../ui/LazySurfaceBoundary'
+import { closeAnimationWorkspace } from './animationWorkspaceController'
+
+const AnimationWorkspace = lazy(() => import('../ui/animation/AnimationWorkspace'))
 
 const pluginAppController = getPluginAppController()
 
@@ -75,6 +81,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
   const [ProxyBenchmarkPanel, setProxyBenchmarkPanel] = useState<ComponentType | null>(null)
   const workspace = useWorkspaceLayoutStore()
   const documentId = useDocumentStore((state) => state.doc.id)
+  const animationOpen = useTransportStore((state) => state.animationWorkspaceOpen)
   const fitted = fitWorkspaceLayout(workspace, viewport)
   useUndoRedoShortcuts()
   useEditShortcuts()
@@ -335,6 +342,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
       <section className="area-transport" inert={closing}>
         <ToolButtons />
         <TransportBar />
+        <AnimationEntry label="Animation" />
         <TimelineZoomControls />
       </section>
       <WorkspaceResizeHandle
@@ -359,10 +367,9 @@ export default function EditorShell({ closing }: EditorShellProps) {
         aria-hidden={fitted.timelineHeight === 0 || undefined}
         inert={closing || fitted.timelineHeight === 0}
       >
-        <AudioMixer />
-        <div className="timeline-scroll-host" data-timeline-scroll>
-          <Timeline />
-        </div>
+        {animationOpen ? <LazySurfaceBoundary loadingLabel="Loading Animation workspace…" failureTitle="Animation workspace could not load" onClose={closeAnimationWorkspace}>
+          <AnimationWorkspace />
+        </LazySurfaceBoundary> : <><AudioMixer /><div className="timeline-scroll-host" data-timeline-scroll><Timeline /></div></>}
       </section>
       {ProxyBenchmarkPanel ? <ProxyBenchmarkPanel /> : null}
       <MediaDropStatus />

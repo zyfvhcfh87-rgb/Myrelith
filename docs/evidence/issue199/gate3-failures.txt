@@ -1,0 +1,10 @@
+Gate3 development record, 2026-09-08
+- Initial index test used a nonexistent expandedTitleClip fixture export; corrected to the actual expandedTitleProject fixture before the index passed.
+- First main-workspace typecheck rejected nullable animationVisibleRange access; use the shared integer origin when no range has been measured.
+- Initial7-file matrix:104passed/5failed. Stale Inspector entry-label expectation, two numeric-input string/number assertions and a guessed transport selection API were corrected to actual APIs/new routing. A real Bézier rejection left the typed draft visible; added a validation revision to reset NumberField without remounting.
+- Next4-file UI run:79passed/1failed. The second guessed selection method was still wrong; inspected transportStore and used setSelectedClip. Build additionally caught unsupported Testing Library exact options; removed them.
+- Lint initially reported an exported constant in a component module; kept the internal easing preset constant private. Final lint has no warning.
+- Source review caught click-to-snap motion without a drag, loss of multi-selection on drag start, unavailable empty entry falling back to a different property, a future stored semantic version being offered as a new current lane, and Bézier drafts painting before rAF admission. Corrected these and added relevant component regressions.
+- Final entry review found that a newly focused Inspector property could retain old selected keys. Property-specific entry now clears selection before focusing, with a regression preserving project identity. Generic Timeline entry retains existing workspace selection.
+- Earlier peer/upward message auto-review rejection was not retried. Root explicitly coordinated via the owned local report. No browser fallback or rejected messaging workaround was attempted.
+- Final56-file focused matrix,12 component tests,6 pure view tests,17 runner checks, build and lint pass. No unresolved failure in this bounded qualification; browser/performance/full-suite/audit/export checks remain unrun pending their gates.
