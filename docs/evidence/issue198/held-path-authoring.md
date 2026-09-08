@@ -126,8 +126,31 @@ console or pageError events. Its final in-test error assertion was not reached.
 The run ended before testing the frame14/15 held pixel boundary, direct control
 edit, navigation and Clear/undo, so those remain unqualified in Chromium.
 Playwright exited and no port5198 listener or matching Chromium/Playwright/Vite
-test process remained. The slot was explicitly released. No rerun occurred;
-the committed fixture correction requires review and another exclusive grant.
+test process remained. The slot was explicitly released before correction review.
+
+## Corrected exact-source browser gate
+
+After the parent accepted test/evidence correction
+`13f0cfe28d2530ef8e0f504156c31b20ec809798` and granted one new exclusive run,
+the same command ran on that clean HEAD. Product source remained `f923315`.
+**All five checks passed in 15.5 seconds**: rectangle 2.6s, Bezier 2.8s, ellipse
+3.1s, open authoring 3.1s and held paths 3.1s. The unchanged key/tick assertion
+passed, followed by actual frame14/15 held pixels, a direct control edit on the
+occupied path key, exact undo, previous/next navigation and Clear/undo.
+
+The run used strict5198, one muted headless Chromium worker and the same silent
+720p PNG. All test console/page-error assertions passed. Only the existing
+NO_COLOR/FORCE_COLOR shell notices were logged. All six screenshots were inspected,
+including the final `issue198-path-key.png`: mask handles and controls remain
+separate, held-key status/navigation is visible, and static/open/small layouts
+remain consistent. Exact log and six screenshots are retained separately under
+`.tmp/issue198-13f0cfe/`; the failed earlier run remains under
+`.tmp/issue198-f923315/`.
+
+Playwright exited successfully, with no5198listener and no matching test Chromium,
+Playwright or Vite process afterward. The exclusive slot was explicitly released
+before this evidence update. This qualifies the five bounded browser flows only;
+it does not complete the remaining tracking/full/export/performance gates.
 
 The accepted tracking contract is still a separate implementation gate. Its
 canonical architecture amendment has not been promoted here. Shared timing-editor
