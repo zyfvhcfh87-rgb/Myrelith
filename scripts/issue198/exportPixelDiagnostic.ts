@@ -18,8 +18,11 @@ async function sha256(bytes: ArrayBuffer | DiagnosticPixels) {
 
 async function immutableBlob(input: typeof IMMUTABLE_DIAGNOSTIC_INPUTS[number]) {
   const response = await diagnosticBounded(fetch(`/__issue198_diagnostic/${input.name}`, { cache: 'no-store' }), 5000, 'Immutable input read')
-  if (!response.ok) throw new Error(`Missing immutable input ${input.name}`)
-  if (response.headers.get('content-length') !== String(input.bytes)) throw new Error('Immutable input response extent differs')
+  const contentLength = response.headers.get('content-length')
+  const details = JSON.stringify({ requestedPath: `/__issue198_diagnostic/${input.name}`, status: response.status,
+    contentLength: contentLength?.slice(0, 128) ?? null, contentType: response.headers.get('content-type')?.slice(0, 128) ?? null })
+  if (!response.ok) throw new Error(`Missing immutable input ${input.name}: ${details}`)
+  if (contentLength !== String(input.bytes)) throw new Error(`Immutable input response extent differs: ${details}`)
   const bytes = await diagnosticBounded(response.arrayBuffer(), 5000, 'Immutable input bytes')
   if (bytes.byteLength !== input.bytes || await sha256(bytes) !== input.sha256) throw new Error(`Immutable input differs: ${input.name}`)
   return new Blob([bytes], { type: 'video/mp4' })

@@ -1,0 +1,47 @@
+{
+  "at": "2026-09-08T20:44:19.813643+00:00",
+  "pids": [
+    {
+      "pid": 31490,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 31510,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 31511,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 31512,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 31513,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 31515,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 31522,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 31547,
+      "returncode": 1,
+      "output": ""
+    }
+  ],
+  "connectEx5198": 61,
+  "rawHashesVerified": 10
+}

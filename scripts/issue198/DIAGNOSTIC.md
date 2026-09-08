@@ -1,7 +1,7 @@
 # Immutable export pixel diagnostic
 
-Source preparation only. The parent must review the exact clean commit and
-grant this diagnostic before the command runs. The accepted raster result and
+The parent must review the exact clean commit and grant each diagnostic before
+the command runs. The accepted raster result and
 failed/incomplete export result remain unchanged. No cause or export pass is
 inferred from preparing this harness.
 
@@ -27,6 +27,11 @@ on the existing blank harness page. It never opens the application editor or
 imports application/state mutation controllers. The production check constructs
 an isolated local document with the same pure clip factory, settings, 300-frame
 mapping and 256 held paths. Its identity is checked after composition.
+
+The immutable route is registered in Vite's `configureServer` hook before its
+SPA/terminal handlers. Admission failures retain the requested fixed path,
+response status and Content-Length/Content-Type headers capped at 128 characters
+each, without reading an inadmissible body or adding another evidence record.
 
 No encoder, export sink, export controller or new source video is constructed.
 No existing project, original video, raw run, tolerance or accepted harness
@@ -148,3 +153,23 @@ attribute typings and unsafe-finally lint warnings; feature detection and
 first-failure-preserving cleanup resolved those before freeze. The final gate
 includes actual stalled-store cleanup flow and late-closure failure checks.
 These are source/inert results only; no diagnostic/native execution occurred.
+
+## Routing correction after attempt 1
+
+The single native diagnostic at clean `12449aafa3c5a84bf44f3071cc14a5b954b2880a`
+failed during its first response extent check; every decode/composite/pixel
+counter was zero. Failure evidence is committed at
+`32ae47a3b800a0b273dba7685fe45c766105e69c`. The parent independently confirmed
+all recorded processes and port 5198 released. The original export remains
+failed/incomplete and its pixel cause unresolved.
+
+The corrected driver moves the same immutable handler before Vite's internal
+fallbacks. Two inert tests exercise the actual registration helper and handler
+against a small in-memory model of the inspected Vite8.1.2 hook/fallback order.
+They fail with the old placement and pass with the correction. They cover both
+exact binary bodies/headers, unknown/nonexact paths, invalid methods, normal
+route fallthrough and refusal of a third admitted request. They do not start
+Vite, open a socket, launch a browser or decode video, so actual Vite/browser
+integration still requires a separate approved native run. All immutable
+inputs, request/work limits, pixel bounds, deadlines and tolerances above remain
+unchanged. See the [routing source evidence](../../docs/evidence/issue198/diagnostic-route-source/results.md).

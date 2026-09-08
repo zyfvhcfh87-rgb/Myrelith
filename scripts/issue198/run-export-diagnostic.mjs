@@ -49,6 +49,20 @@ export async function readDiagnosticInput(path, expected) {
     return bytes
   } finally { await handle.close() }
 }
+export async function createDiagnosticVite(root, files, nextMediaRequestCount, makeServer = createServer) {
+  return makeServer({ root, server: { host: '127.0.0.1', port: 5198, strictPort: true }, logLevel: 'warn',
+    plugins: [{ name: 'issue198-immutable-diagnostic-inputs', configureServer(vite) {
+      // Vite installs its SPA and terminal handlers before createServer returns.
+      vite.middlewares.use((req, res, next) => {
+        const prefix = '/__issue198_diagnostic/'
+        if (!req.url?.startsWith(prefix)) return next()
+        const bytes = files.get(req.url.slice(prefix.length))
+        if (req.method !== 'GET' || !bytes || nextMediaRequestCount() > 2) { res.statusCode = 400; res.end('Invalid immutable input request'); return }
+        res.setHeader('Content-Type', 'video/mp4'); res.setHeader('Content-Length', bytes.byteLength); res.setHeader('Cache-Control', 'no-store'); res.end(bytes)
+      })
+    } }],
+  })
+}
 async function identity(root) {
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', timeout: 5000 }).trim()
   return { commit, ...await bounded(dirtyFingerprint(root, commit), 30_000, 'Diagnostic source identity') }
@@ -112,14 +126,7 @@ export async function runDiagnostic(options) {
         setupStepMs: 30_000, ownerCloseMs: 10_000, forcedCloseMs: 10_000,
         durableWriteMs: 5000, evidenceCloseMs: 10_000, stdoutReceiptMs: 1000,
         timingScope: '120s bounds diagnostic evaluation only; setup and teardown have separate deadlines.' }, node: process.version })
-    vite = await step(() => createServer({ root, server: { host: '127.0.0.1', port: 5198, strictPort: true }, logLevel: 'warn' }), 'Diagnostic Vite creation')
-    vite.middlewares.use((req, res, next) => {
-      const prefix = '/__issue198_diagnostic/'
-      if (!req.url?.startsWith(prefix)) return next()
-      const bytes = files.get(req.url.slice(prefix.length))
-      if (req.method !== 'GET' || !bytes || ++servedMediaRequests > 2) { res.statusCode = 400; res.end('Invalid immutable input request'); return }
-      res.setHeader('Content-Type', 'video/mp4'); res.setHeader('Content-Length', bytes.byteLength); res.setHeader('Cache-Control', 'no-store'); res.end(bytes)
-    })
+    vite = await step(() => createDiagnosticVite(root, files, () => ++servedMediaRequests), 'Diagnostic Vite creation')
     await step(() => vite.listen(), 'Diagnostic Vite listen')
     const launch = { headless: true, args: ['--mute-audio'], timeout: 30_000 }
     server = await chromium.launchServer(launch); pids.add(server.process().pid)
