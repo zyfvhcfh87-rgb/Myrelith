@@ -1,0 +1,12 @@
+{
+  "tests/diagnostics/issue200/first-paint.gate.ts": "9d271a571c4017e41219a5d15725b35da7146ca782ddac8c9390e8c6d62d515e",
+  "tests/diagnostics/issue200/first-paint-client.ts": "73a9dc66d58cb5b0d240ecee927658fb6d06573ff65b168bcb75f80066250057",
+  "tests/diagnostics/issue200/first-paint.playwright.config.ts": "2673c6fdb6223f8884c3268a879d8fb1e0db6c5274887a713311ef568c602c4e",
+  "tests/diagnostics/issue200/first-paint-runner_test.py": "09f1e81147e0b4e26171233291d2d1a4089b1a236b06ac6334575a1696b70bf4",
+  "tests/diagnostics/issue200/first-paint-model.ts": "774066c58348a46da5525f8e00200a563b02e97169baf19fdfc1aaf969d36a80",
+  "tests/diagnostics/issue200/first-paint-reference.ts": "c7e14f78885fe9419b6ebbbc40638291c05ec36f42a930ed19b03413068e087f",
+  "docs/evidence/issue200/verify-first-paint-source.mjs": "e6f8daf25845996a29f6dc3d26a3da36976beeb3dbdeb544264bedb99c781aad",
+  "docs/evidence/issue200/run-first-paint-browser.py": "63a62d3c150f340a2a5b6f658141b905c067449290b0547665e0d291d4c1e4a1",
+  "src/test/titleFirstPaintDiagnostic.test.ts": "46dd77c81cd4ade2f06dc36c1944d2cd8667d3ae39b65fb4cfc6f77e38da0d79",
+  "src/test/titleFirstPaintObserver.test.ts": "2e1f56c01161fe22c6839af3585eaccfbfdac9c49653909b65df170b000cc8f6"
+}
