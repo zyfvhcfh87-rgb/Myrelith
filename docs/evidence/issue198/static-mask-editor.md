@@ -88,4 +88,25 @@ domain bounds; no point quantization. The browser regression changes only X afte
 a keyboard-generated fractional Y and asserts unchanged Y and one history entry.
 Correction checks: 52 tests in four files (mask controller, mask UI, Preview UI,
 architecture) plus 17 runner checks; build/typecheck, lint and diff check passed.
-The observable gate still awaits the corrected committed rerun.
+The corrected exact commit `758ee9c6edafea72216aa55d8879d79a1905d09d`
+then passed **all three Chromium tests in 8.9s** using the same command and slot.
+The test process exited 0. No console/page errors or framework overlays were
+reported; shell-only NO_COLOR/FORCE_COLOR notices are retained in the log.
+The local server and browser processes stopped and port 5198 had no listener
+before the exclusive slot was released.
+
+Final log and inspected screenshots are preserved under
+`.tmp/issue198-758ee9c/`: `issue198-browser-758ee9c.log`,
+`issue198-rectangle.png`, `issue198-bezier.png`, and `issue198-small.png`.
+Rectangle outline/handles match the rendered mask; original clip transform
+handles no longer compete. Bezier numeric/pointer edits visibly change the
+inverted feathered region, and the fractional-coordinate submit regression
+passes with one history step and an unchanged sibling coordinate.
+
+Screenshot qualification: at 768px the bottom toolbar overlaps the lower
+ellipse corner handles. CSS coordinate alignment, keyboard edits and Inspector
+numeric alternatives passed, but unobstructed pointer access to every handle
+at that narrow layout is not established. This is a remaining layout concern
+for the orchestrator's UI review; the three passing checks do not erase it.
+The static slice is ready for review, not final issue acceptance. No claim is
+made for animated path wires, source tracking, export/reopen or 4K timing.
