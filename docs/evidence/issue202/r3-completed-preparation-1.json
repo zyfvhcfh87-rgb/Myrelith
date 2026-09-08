@@ -1,0 +1,422 @@
+{
+  "kind": "issue202-r3-completion-preparation-only",
+  "browserLaunched": false,
+  "shaderExecuted": false,
+  "measuredPerformance": false,
+  "nativeLifecycleTested": false,
+  "nodeVersion": "v26.8.1",
+  "startingCommit": "dbd7b70c8cd5fdaf3e67a3862f2a93cc4d7acda3",
+  "scriptSha256": "0a575cbde252265eeef7d0596fda39dce8a6ab321e314b85005338e11b2c9458",
+  "tests": "✔ negative control leaves finish-only work pending; corrected preview returns after one-pixel readback (1.010208ms)\n✔ readback failure rejects the frame and owned cleanup releases the charged probe (0.197958ms)\n✔ setup waits for an initial returned composition and charges the preview probe before use (0.261166ms)\n✔ export setup reuses its existing full readback without adding another probe buffer (0.10525ms)\n✔ frozen references compare without importing or executing the shader; hostile readbacks fail (1.051042ms)\n✔ an incomplete or nonfinite timing cannot produce a full p95 or pass (0.208334ms)\n✔ fixed nearest-rank budgets retain failure and do not fabricate complete early p95 (0.192583ms)\n✔ paired ratio requires complete evidence and clean owners; passing a lower bound is qualified (0.252667ms)\n✔ 4K resident prototype fits only its declared surfaces and buffers (0.449375ms)\n✔ direct seven-surface float16 swap rejects without creating a resource (0.066166ms)\n✔ reservation identity, invalid counts and repeated cleanup cannot hide ownership (0.364208ms)\n✔ upload allowance stays below1MiB and is not hidden beside export readback (0.067917ms)\n✔ image plans reject malformed, oversized or unreviewed shapes (0.088125ms)\n✔ early failure certificates cannot turn an incomplete run into measured p95 (0.110875ms)\nℹ tests 14\nℹ suites 0\nℹ pass 14\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 35.667292\n",
+  "reference": {
+    "shaderReferenceCases": 40,
+    "bytes": 21601
+  },
+  "unauthorizedRunnerRejected": true,
+  "bundled": [
+    {
+      "fileName": "myrelith.js",
+      "bytes": 6487
+    },
+    {
+      "fileName": "assets/r3-worker-completed-BZce9MY6.js",
+      "bytes": 172833
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": "../../../src/domain/adjustmentItems.ts",
+      "sha256": "14f72972ff929bdb79b31005aa22cda38c8f5d07caa4a85beb044abc5b7c01ed"
+    },
+    {
+      "path": "../../../src/domain/analysisCache.ts",
+      "sha256": "61f667df79a26912481c40b7c263a35cd03d2cac161be8a606d2adbd2cec1321"
+    },
+    {
+      "path": "../../../src/domain/audioDsp.ts",
+      "sha256": "16fccfd2865a259a6bf42d70e7398b1472880c1b69ed3a4abeddafdc35f4ed15"
+    },
+    {
+      "path": "../../../src/domain/audioEffectBounds.ts",
+      "sha256": "70a79ceda2677f30cba6ba61a94fe24a747424c7cf87e7817f4fc28f435ee94e"
+    },
+    {
+      "path": "../../../src/domain/audioEffectPresets.ts",
+      "sha256": "ea97dca3efc36eba4d3b537c6805354d98d0ce2cb0c40dc7533bd273883247c2"
+    },
+    {
+      "path": "../../../src/domain/audioEffectStack.ts",
+      "sha256": "dccc150e4b5142b9c5886759ca37426344c73bf78f791fae0b71490ee7d17689"
+    },
+    {
+      "path": "../../../src/domain/audioLoudness.ts",
+      "sha256": "ee39e80cae24deeec4b5e8ea67436bc11277776cd39a945d7ada505ab1bcb355"
+    },
+    {
+      "path": "../../../src/domain/audioMixer.ts",
+      "sha256": "1f5062108e0b7e3761727ec6328790e70d2a57930e4256a2ca47b237c8a90563"
+    },
+    {
+      "path": "../../../src/domain/blendModes.ts",
+      "sha256": "fc28bb20eee9c3bddc69c5be576ca6a5e0fac1fda1129decb867630a77e5c380"
+    },
+    {
+      "path": "../../../src/domain/captions.ts",
+      "sha256": "6fb647a808db3eb418201e51fe043b563a3c4d947c5634ea6e97597c46c5c578"
+    },
+    {
+      "path": "../../../src/domain/clipAnimation.ts",
+      "sha256": "884f607f6021bbabc3a4866a34a34ea91a805915c41d38f87073f3182df49383"
+    },
+    {
+      "path": "../../../src/domain/clipInspector.ts",
+      "sha256": "e3422adc82634b4aae8dce4d5797b7ef81dfac740f4c5404186b9714697c0fa2"
+    },
+    {
+      "path": "../../../src/domain/colorChannels.ts",
+      "sha256": "b268548194c672fe9dfd9b662c47f8788d9930091ec8fab8ba1b996dad2b98b2"
+    },
+    {
+      "path": "../../../src/domain/colorCorrection.ts",
+      "sha256": "67079134ced61c85814bbd899da225c0484c21095e2551dadc3f2454f1c76b8f"
+    },
+    {
+      "path": "../../../src/domain/colorCurves.ts",
+      "sha256": "aec4ad4fd370602a85119d8428c6cb328ae0260a9d9eeaf1dea65d2f503044af"
+    },
+    {
+      "path": "../../../src/domain/colorGradingBudget.ts",
+      "sha256": "af1bab6dde510fa8a96fcbdc45143f2949dfa635b49b887cef76323b5ccaa233"
+    },
+    {
+      "path": "../../../src/domain/colorGradingEffects.ts",
+      "sha256": "9176bc50e04b3e52dad393f05b21f499f7649392a9d867122338f98a41636886"
+    },
+    {
+      "path": "../../../src/domain/colorLut.ts",
+      "sha256": "66bdcc6a5b483675383ab3ae9b3e0289af8b707f5aa184b0c4a068b5e713503c"
+    },
+    {
+      "path": "../../../src/domain/colorLutCatalog.ts",
+      "sha256": "71cdc0ee401b1f3ba9a9e23ed87fb13fa3e7eae7d60f61c250da444904fe6a73"
+    },
+    {
+      "path": "../../../src/domain/colorWheels.ts",
+      "sha256": "836b5c64a1a030bafa2c94e9b9918ff93f73ace908ab673ecaf3d07dc07187b8"
+    },
+    {
+      "path": "../../../src/domain/crossfadePlan.ts",
+      "sha256": "ebd17c925d76822c1e5c862e6129b1554d68a1bbe0747bf7a9b8e98906e71cc3"
+    },
+    {
+      "path": "../../../src/domain/documentMemory.ts",
+      "sha256": "29433f1e43f86605e95bea181469ed2025ac1638097794786569c0708025af50"
+    },
+    {
+      "path": "../../../src/domain/dynamicZoom.ts",
+      "sha256": "ae3467503574d3f3f54798cdd40fe5ac191aeb3f6dc1b7b8fa52e0be5af7574b"
+    },
+    {
+      "path": "../../../src/domain/effectBounds.ts",
+      "sha256": "82350096cfe7986676e59b80ce64630bb7158a9f7213f6afe558f739d69c9d2c"
+    },
+    {
+      "path": "../../../src/domain/effectPixels.ts",
+      "sha256": "d40e30b8a01eddf6cab882ae66677c7c9716587cd0ef73a4d33ba9415c3199a0"
+    },
+    {
+      "path": "../../../src/domain/effectStack.ts",
+      "sha256": "c23ebb4e2d732b7ae74abde29d7a6d002d29476dc7b027b1966b7734a9b2a76e"
+    },
+    {
+      "path": "../../../src/domain/frameIndex.ts",
+      "sha256": "60f0f196195cd7f0fc142ed5ac1592888bb6b20a8cefba20babcf9aa5c39cc79"
+    },
+    {
+      "path": "../../../src/domain/lensCorrection.ts",
+      "sha256": "758830ebbe634a6acc8fe13fce8ce39a2236b18db72462758c60b773b7888276"
+    },
+    {
+      "path": "../../../src/domain/localProjectBinding.ts",
+      "sha256": "6f43ff8f06cbb549b4a704e4c4275cf3566c5144593cbe148533c6f819c8959e"
+    },
+    {
+      "path": "../../../src/domain/maskPath.ts",
+      "sha256": "9f15caf6c7af6fe0d72555e29de888f3b89d1ec5fbbfed7d839510b3479e2a53"
+    },
+    {
+      "path": "../../../src/domain/mediaCollections.ts",
+      "sha256": "056f515e6a88e8ff8f6268807c9a75f00bfc168b56a22ad2376cc26122150b0e"
+    },
+    {
+      "path": "../../../src/domain/motionAnalysis.ts",
+      "sha256": "8680a84f1e750940c9f05df677f59939fb55536718bc40128f18831346e45fd7"
+    },
+    {
+      "path": "../../../src/domain/motionTracking.ts",
+      "sha256": "b7007af13c384b62c54fba013b8e06303ee70834e8085c282688b42554d6212c"
+    },
+    {
+      "path": "../../../src/domain/motionTrackingResearch.ts",
+      "sha256": "60f43fc41032d3b0e5af329f9e685e13039ea77b6cc3ec11ef837c2188aedf14"
+    },
+    {
+      "path": "../../../src/domain/multicamAlignment.ts",
+      "sha256": "244a47438fc0f554765bab331bdb634e6fe4fe7b6e1c0ea61009b187a0ce186f"
+    },
+    {
+      "path": "../../../src/domain/multicamAlignmentProvenance.ts",
+      "sha256": "a9eb778ca6e5a25bb9fa6aa824f96abee96421185dd6f2ede81b7b77209f9195"
+    },
+    {
+      "path": "../../../src/domain/operations.ts",
+      "sha256": "4088d9134bfd3d96fe7b3457a7181d1999f12cda8f0dd4c6e8cd43b281b43044"
+    },
+    {
+      "path": "../../../src/domain/operations/animation.ts",
+      "sha256": "96047d164d23faf91bb50f41f06a832b548972e07b235fe27fae0d6f1591fff9"
+    },
+    {
+      "path": "../../../src/domain/operations/audioEffects.ts",
+      "sha256": "0df629ad2c04005837b6de9e1d4d96a95090410e2f8783e21439d0ab461af4ff"
+    },
+    {
+      "path": "../../../src/domain/operations/audioText.ts",
+      "sha256": "d573dec291a3e6312df9e8ccedff6d586aae31c4eaaac85f192d6553e5c53f45"
+    },
+    {
+      "path": "../../../src/domain/operations/creation.ts",
+      "sha256": "1359f0d1370756cc901c5a053a0ce3352b2d00dc17c8f4dd2a1f2623897a2808"
+    },
+    {
+      "path": "../../../src/domain/operations/effects.ts",
+      "sha256": "8a92105aa837acdeae7938e2c5b3ffdc77ea58195fe487fa152fb39ae0d279e7"
+    },
+    {
+      "path": "../../../src/domain/operations/framing.ts",
+      "sha256": "cd9d21d366e4f8ff06bcc9cd0ebdb0335231f10f6dd1ea3153dcaa55085241b2"
+    },
+    {
+      "path": "../../../src/domain/operations/geometry.ts",
+      "sha256": "21f2cadb8051529b3adc85a15eff268e878fb990a5c3de4b00db471463b1ca1c"
+    },
+    {
+      "path": "../../../src/domain/operations/operationInternals.ts",
+      "sha256": "c66dfc94cd643294ee931de9466f9f436f9c9f1a9327363d019e79be3aaf31e5"
+    },
+    {
+      "path": "../../../src/domain/operations/tracks.ts",
+      "sha256": "868e058b1757e8d19e2bd873afcfafdeac4b609330cc6014de6fdeecbf2c14ab"
+    },
+    {
+      "path": "../../../src/domain/operations/transitions.ts",
+      "sha256": "5e7066b2940f294a52914d780a525de0bce77d64207a93c6164527d402f01ec8"
+    },
+    {
+      "path": "../../../src/domain/operations/visual.ts",
+      "sha256": "0cbac2e8e9daf5aa3823ce13ae22d3a281ecb6c5db85d6b4af236eaaca0cc90b"
+    },
+    {
+      "path": "../../../src/domain/pluginManifest.ts",
+      "sha256": "9312956e6a0f027c498fd615f8cc5cf7bbf1116149f833f8460c53295705aa48"
+    },
+    {
+      "path": "../../../src/domain/pluginVideoEffectStagePlan.ts",
+      "sha256": "3233c14dc3dc6e38fdda06602cb2bb68fb31ff183fe65dd2775d4e7b2da3a615"
+    },
+    {
+      "path": "../../../src/domain/projectFile/projectTypes.ts",
+      "sha256": "8564384977479ef54ebd228d6aed4e10f35ff4b908f9062b289e6c378def94fb"
+    },
+    {
+      "path": "../../../src/domain/projectLimits.ts",
+      "sha256": "8dd3ac29155aa78ffe83780b2503d93b1e8371e97ab5fd231712ce8dec3b9e67"
+    },
+    {
+      "path": "../../../src/domain/projectSettings.ts",
+      "sha256": "4131f96bde5fa940dfd67f50e4ef53527cbb17ec0ae3919314784b5b71803870"
+    },
+    {
+      "path": "../../../src/domain/renderSurfaceBudget.ts",
+      "sha256": "fba123821b6f226bf8b96fe232bc1f04cddec38ec118a4cf92e1c6fe2c94df3b"
+    },
+    {
+      "path": "../../../src/domain/selectors.ts",
+      "sha256": "84ae0c4f609f56cc13a60d8c13b717f894155b97e20c1cca71c0863b371823dc"
+    },
+    {
+      "path": "../../../src/domain/sequenceProjectLimits.ts",
+      "sha256": "11050a2f9d9545f4b240532b17954e664fec0a892d668e1ba825698a9872b9d4"
+    },
+    {
+      "path": "../../../src/domain/sourceBounds.ts",
+      "sha256": "4232baab69b381dd0bb2d6747e810481106348fdaf60a00679f9c984c5607517"
+    },
+    {
+      "path": "../../../src/domain/sourceTimeMap.ts",
+      "sha256": "9e7d4d230cfe76d6b2e35b4a56db736844d829c28c17a82000fb66a5882890cd"
+    },
+    {
+      "path": "../../../src/domain/spatialEffectDefinitions.ts",
+      "sha256": "c9909a3fcb1d7bff456271b254385515a5914cf1a3786ff3f31828a1b1dc4dbf"
+    },
+    {
+      "path": "../../../src/domain/spatialEffectPixels.ts",
+      "sha256": "a54829db5ea06b4ddd6fdd14c66ea0b1cc11efc16084cb1f8377a76d61cfb216"
+    },
+    {
+      "path": "../../../src/domain/textLayout.ts",
+      "sha256": "a70d5591dfef845417517854e012cd38f88db040cb0634df407b5d776a7592af"
+    },
+    {
+      "path": "../../../src/domain/textOverlay.ts",
+      "sha256": "378beb5b1ec2f31795a4e54ff184a7ac9358329d37e49c04bbced101a342fcba"
+    },
+    {
+      "path": "../../../src/domain/time.ts",
+      "sha256": "776a9c820f30a07acb43d70bbe7976d7098a27b6b77fbf9e5974575277303670"
+    },
+    {
+      "path": "../../../src/domain/timelineMarkers.ts",
+      "sha256": "48f16733a466b1dbb73d4d8244afda5902e4357346bedcf2b87994e088443e9e"
+    },
+    {
+      "path": "../../../src/domain/videoBusStage.ts",
+      "sha256": "10385bcb2606863541022aa79c40e1d9f879e4309ca703c6619a02d5c2accd24"
+    },
+    {
+      "path": "../../../src/domain/videoCompositionPlan.ts",
+      "sha256": "0ccacce09af05d30d02ceb9e0cf333fe6a62cc8680298f48ad85541d7699602a"
+    },
+    {
+      "path": "../../../src/domain/videoStabilization.ts",
+      "sha256": "2a943c8eeb26138e250d06dc4fe9098a14ab420f9e36c094a85a7d208163ae49"
+    },
+    {
+      "path": "../../../src/pipeline/blendModeCapabilities.ts",
+      "sha256": "f68b3f5ed8a367073227346aba9a41dfb48c4aee5391b15cb04411c0ce2c7f1e"
+    },
+    {
+      "path": "../../../src/pipeline/colorGradingRuntime.ts",
+      "sha256": "dfe50b9111a6c3fdce0eba5161b4e2762d07235c7837f93d9b903909b4aa3e81"
+    },
+    {
+      "path": "../../../src/pipeline/lensRemap.ts",
+      "sha256": "e68dcd4da75efd99ccfa426583fcd9370d22611b78c6cd8fa2669bc6c8ecf526"
+    },
+    {
+      "path": "../../../src/pipeline/render.ts",
+      "sha256": "cdd04a72693deb2e89d38fe460d2e6bc35ee50643c690abb01cb37b4f1fe6d83"
+    },
+    {
+      "path": "../../../src/pipeline/videoEffectStageExecution.ts",
+      "sha256": "a10609e685f13ec3b70c8715b5cba0f20c0734b6c29cfafb841185fd1508514c"
+    }
+  ],
+  "budgets": [
+    {
+      "kind": "candidate",
+      "width": 1920,
+      "height": 1080,
+      "phase": "preview",
+      "residentBytes": 58060800,
+      "setupExtraBytes": 491520,
+      "frameExtraBytes": 4,
+      "uniformBytes": 36,
+      "peakBytes": 58552356,
+      "limitBytes": 268435456,
+      "allowed": true
+    },
+    {
+      "kind": "candidate",
+      "width": 1920,
+      "height": 1080,
+      "phase": "export",
+      "residentBytes": 58060800,
+      "setupExtraBytes": 491520,
+      "frameExtraBytes": 8294400,
+      "uniformBytes": 36,
+      "peakBytes": 66355236,
+      "limitBytes": 268435456,
+      "allowed": true
+    },
+    {
+      "kind": "candidate",
+      "width": 3840,
+      "height": 2160,
+      "phase": "preview",
+      "residentBytes": 232243200,
+      "setupExtraBytes": 983040,
+      "frameExtraBytes": 4,
+      "uniformBytes": 36,
+      "peakBytes": 233226276,
+      "limitBytes": 268435456,
+      "allowed": true
+    },
+    {
+      "kind": "candidate",
+      "width": 3840,
+      "height": 2160,
+      "phase": "export",
+      "residentBytes": 232243200,
+      "setupExtraBytes": 983040,
+      "frameExtraBytes": 33177600,
+      "uniformBytes": 36,
+      "peakBytes": 265420836,
+      "limitBytes": 268435456,
+      "allowed": true
+    },
+    {
+      "kind": "baseline",
+      "width": 1920,
+      "height": 1080,
+      "phase": "preview",
+      "residentBytes": 41472000,
+      "setupExtraBytes": 8294400,
+      "frameExtraBytes": 4,
+      "uniformBytes": 0,
+      "peakBytes": 49766400,
+      "limitBytes": 268435456,
+      "allowed": true
+    },
+    {
+      "kind": "baseline",
+      "width": 1920,
+      "height": 1080,
+      "phase": "export",
+      "residentBytes": 41472000,
+      "setupExtraBytes": 8294400,
+      "frameExtraBytes": 8294400,
+      "uniformBytes": 0,
+      "peakBytes": 49766400,
+      "limitBytes": 268435456,
+      "allowed": true
+    },
+    {
+      "kind": "baseline",
+      "width": 3840,
+      "height": 2160,
+      "phase": "preview",
+      "residentBytes": 165888000,
+      "setupExtraBytes": 33177600,
+      "frameExtraBytes": 4,
+      "uniformBytes": 0,
+      "peakBytes": 199065600,
+      "limitBytes": 268435456,
+      "allowed": true
+    },
+    {
+      "kind": "baseline",
+      "width": 3840,
+      "height": 2160,
+      "phase": "export",
+      "residentBytes": 165888000,
+      "setupExtraBytes": 33177600,
+      "frameExtraBytes": 33177600,
+      "uniformBytes": 0,
+      "peakBytes": 199065600,
+      "limitBytes": 268435456,
+      "allowed": true
+    }
+  ]
+}

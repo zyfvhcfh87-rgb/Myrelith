@@ -1,6 +1,6 @@
 # Issue #202 — managed 10-bit and HDR research
 
-Status: **R1/bounded R2 accepted as partial evidence; R3 harness prepared for review; R4 open**.
+Status: **R1/bounded R2 accepted; R3 run 1 retained with preview limitation; narrow completion correction prepared; R4 open**.
 Baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue202`, inspected 2026-09-08. Scope comes from
 [#202](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/202) and the Milestone 9
@@ -16,8 +16,8 @@ On 2026-09-08 the orchestrator approved R0 commit `8ce3742` for the R1
 independent numerical oracle/candidate and bounded R2 capability/metadata
 experiments. The color model remains a research candidate. The original limits
 stand; substantial decode/encode, timings and full suites require an exclusive
-slot. Two bounded codec sessions have completed and released their slots;
-no R3 slot has been granted. Host identity supplied by the orchestrator is
+slot. Two bounded codec sessions and one R3 session have completed and released
+their slots; the completion correction has no execution grant. Host identity supplied by the orchestrator is
 recorded in the evidence inventory and does not qualify HDR presentation.
 
 The [R1/R2 evidence](evidence/issue202/r1-r2-results.md) records 118/118 scalar
@@ -26,7 +26,7 @@ scope-bin fixture failing after binary16 storage. The measured browser uses
 SwiftShader; P3 canvas drawing changes extended pixels and WebGPU has no adapter.
 The initial basic mux-tag inspection used synthetic header-only packets.
 These results do not promote the managed candidate or qualify a product HDR
-path. 1080p/4K timing remains unmeasured.
+path. Later 1080p/4K readback timing and its preview limitation are recorded below.
 
 The later [three-frame codec run](evidence/issue202/codec-run-1-results.md),
 explicitly granted after #198 released the slot, returned profile 2 ten-bit
@@ -42,17 +42,26 @@ copied luma ramp has 896 distinct values, 4,496/16,384 mismatches, maximum
 absolute error 1 and mean error -0.2509765625 code; neutral chroma is exact.
 All three diagnostics completed and all frames/decoders closed. This resolves
 the tested size-guard limitation; it is not a lossy-quality GO or independent
-codec/display/performance qualification. The second slot is released; no R3
-or further heavy extension has run.
+codec/display/performance qualification. The second codec slot was released
+before the separately reviewed R3 work below.
 
 The parent accepted the bounded R1/R2 evidence after independently reproducing
 the references, comparisons and retained scope failure. The
-[R3 harness preparation](evidence/issue202/r3-harness-preparation.md) now defines
+[R3 harness preparation](evidence/issue202/r3-harness-preparation.md) defined
 one paired resident dissolve at 1080p/4K with explicit ownership admission.
 Its 40 independent reference cases and protocol were committed at `d6f5c36`
 before shader authorship. Ten pure decision/admission tests and a static browser
-bundle check pass; no R3 shader, timing or native lifecycle test has run.
-Execution requires review of the committed harness and a fresh exclusive slot.
+bundle check passed before any R3 shader, timing or native lifecycle execution.
+That harness was reviewed and one exclusive run was granted. The
+[run 1 evidence](evidence/issue202/r3-run-1-results.md) is preserved with all
+2,880 timing rows, 40 + 40 tiny numerical cases and owned cleanup records.
+Candidate preview completion is unqualified because Chromium's version-pinned
+`finish()` implementation calls `Flush()`. Full readback timing remains separate.
+The slot was released after teardown. A
+[narrow completion correction](evidence/issue202/r3-completed-protocol.md)
+adds a charged one-pixel preview readback and completed setup boundary without
+changing models, topology, goldens or thresholds. Fourteen pure/static checks
+pass; corrected execution requires review and a fresh exclusive slot.
 
 ## Gates and deliverables
 
