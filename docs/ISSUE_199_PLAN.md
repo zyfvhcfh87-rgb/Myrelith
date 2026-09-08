@@ -1,6 +1,7 @@
 # Issue #199 — unified animation editor plan
 
-Status: Gate 0 proposal, awaiting the Milestone 9 orchestrator's review.
+Status: Gate 0 proposal incorporating initial orchestrator review; final
+shared-contract freeze and implementation approval remain pending.
 Product implementation has not started. This document does not approve its
 own contract, schema migration, or acceptance gates.
 
@@ -71,7 +72,10 @@ tracks. Sequence identity and project generation belong to the command/session
 envelope. Never use element order, labels, array indexes, or concatenated
 unescaped strings as identity. Keys are addressed by lane plus original local
 frame; stable key UUIDs are unnecessary. Successful edits return the resulting
-addresses for selection reconciliation.
+addresses for selection reconciliation. Version/kind fields are applicability
+guards, not extra independently competing targets. Enforce one persisted lane
+per semantic target: clip property, title element+property, or effect id+parameter.
+Current/future versions and scalar/path kinds cannot both own that same target.
 
 Each scalar catalog entry supplies label, units, min/max, editor step, static
 fallback, supported easing, applicability, and a structured unavailable reason.
@@ -95,7 +99,7 @@ payloads; they must never turn path strings into scalar tracks.
 | Tail trim | Do not destructively remove future keys; reopening the range preserves intent. |
 | Slip timed media | Keys retain their local frames; re-anchor source ticks by the canonical source delta, as today. |
 | Retime / speed points | Remap from durable source ticks through `sourceTimeMap`; reject the entire linked operation on duplicate/unsafe target frames. No destructive rounding or key dropping. |
-| Still/title clip | Preserve fixed procedural source semantics; Slip remains a no-op and retiming remains unavailable. Title split/trim follows the ordinary local-origin rule. |
+| Still/title clip | Preserve fixed source semantics; Slip remains a no-op and retiming remains unavailable. Title split/head trim shifts local frames, then re-anchors procedural ticks to `frame * SOURCE_TIME_TICKS_PER_FRAME` because its source map restarts at zero. Timed-media absolute ticks must not receive that title-specific reanchor. |
 | Move/add/paste key | Recompute destination source ticks; never copy the source clip's source-time ticks into a different destination map. |
 | Adjustment | Item-local integer frames only; no invented media source map or source ticks. |
 | Change project FPS | Extend the current project-rate conversion through every typed collection, preflight collisions across active and dormant sequences, and preserve all-or-nothing behavior. |
@@ -112,9 +116,12 @@ composition planner, Program geometry, tracking/stabilization projection, and
 export. Never resolve it only in Inspector or CSS.
 
 Proposed admission proof: partition each opposing pair at its key boundaries.
-On each interval the existing bounded easing makes each edge monotone, so its
-endpoint range encloses every interior value. Certify an interval when the sum
-of both upper bounds is at most 0.99; otherwise subdivide at exact integer
+First prove a monotone enclosure for the exact admitted Bézier/evaluator,
+including the fixed 24-step bisection error and floating-point evaluation.
+Mathematical cubic monotonicity alone is insufficient. Use conservative outward
+numeric error bounds for endpoint ranges and their sum. Certify an interval
+only when the proven sum of upper bounds is at most 0.99; otherwise subdivide
+at exact integer
 midpoints, test actual endpoints, and recurse only until neighboring integer
 frames. Bound proof work to a proposed 16,384 interval visits per clip edit or
 validation, plus a proposed 1,048,576-visit whole-project ceiling. An unsafe
@@ -123,8 +130,11 @@ reason before mutation. Include endpoint-held regions and the ranges needed
 for real crossfade handles. Keep this proof cached by immutable relevant
 animation/static fields rather than rerunning it per rendered frame.
 
-The review must approve/refine the proof bound and floating-point safety
-margin. Never silently clamp, normalize, or change another authored crop edge
+The initial orchestrator review accepts bounded rejection in principle and
+requires the proof above before implementation acceptance. Equality at 0.99
+must never use an unproved permissive epsilon: an uncertain enclosure must
+subdivide or reject, and a leaf tests the actual rendered integer-frame pair.
+Never silently clamp, normalize, or change another authored crop edge
 to conceal an invalid interpolated rectangle. Tests must cover opposing
 different-easing keys whose endpoints are valid but interior sum is unsafe,
 ordinary opposing moves that are safe, huge signed frame ranges, and equality
@@ -155,18 +165,40 @@ bounds, per-element-kind applicability, defaults and element-count budgets in
 its reviewed plan; #199 consumes those definitions instead of duplicating
 them. Roll/crawl authors ordinary position keys with one evaluator.
 
+The complete on-disk #200 proposal was subsequently read before the final
+Gate 0 handoff. Its offered table is: position/rotation ±1e9, scale [0,100],
+opacity [0,1], box width/height [16,65535], text font size [8,1024], outline
+width [0,64], text shadow blur [0,128], and text shadow offsets ±512. All
+geometry/style lengths are project pixels; values stay continuous. Text box
+dimensions must each exceed twice static padding at the base and every key.
+The same bounded easing keeps that per-element constraint valid between keys.
+Shapes do not expose font/shadow tracks. Anchor, element crop/flip, padding,
+content, fonts, colors, booleans and ordering remain static.
+
+Use #200's proposed 16 elements/title, 256 title tracks/clip, 128-character
+property names, 1 MiB title-plus-tracks size bound and 64 MiB retained title
+data allowance, together with the existing per-track and aggregate key limits.
+The shared key clipboard participates in both title and path retained-budget
+checks; separate allowances must never omit a shared payload. The general
+clipboard's 128-lane limit is intentionally below the title authoring maximum.
+
 #200 owns legacy text migration and its exact painter/layout parity, including
 its proposed move of transform/visual values into the single migrated element
 while clip opacity/effects/blend remain outside. #199 owns title scalar
 evaluation and common timing/batch editing; #200 composes the resolved elements
 through the shared title renderer. Outer clip animation applicability must be
-explicit so a title cannot acquire double transforms. #200 owns fresh element
+explicit so a title cannot acquire double transforms: outer clip opacity stays
+eligible, while outer transform/crop/audio properties are unavailable. Any
+title-level scalar effect eligibility needs the joint Gate 1 contract; path
+animation on text remains unavailable unless #198/#200 explicitly agree it.
+#200 owns fresh element
 identity remapping for templates; #199 provides corresponding track remapping.
 
 No title implementation starts until both plans agree and the orchestrator
 assigns the migration/foundation order. The proposal received in-task on
-2026-09-08 is incorporated here; the forthcoming committed #200 plan still
-needs review for the exact bounds and migration behavior.
+2026-09-08 and its complete on-disk plan are incorporated here. Both remain
+proposals pending the orchestrator's exact-commit review. #200's fixed-local
+source tick rule is a required shared-helper branch, not the timed-media rule.
 
 ### #198 — hold-only mask paths
 
@@ -220,8 +252,8 @@ Proposed clip-scalar wire extension: keep the existing `tracks` collection,
 add `propertyVersion` (v1 for migrated existing tracks), and permit a bounded
 nonempty property string in portable parsing. Unknown names/positive versions
 retain ordinary finite scalar keys within the same signed-frame/value/easing
-bounds; there is at most one `(propertyVersion, property)` lane, and a future
-lane cannot compete with the executable v1 lane. Known editing APIs keep a
+bounds; there is at most one lane per semantic `property`, so a future
+version cannot compete with the executable v1 lane. Known editing APIs keep a
 narrow `ClipAnimationProperty` type and require an exact version match before
 reading/applying a field. This widens durable intent, not executable behavior.
 Propose at most 64 clip scalar lanes (including the 12 known visual/audio/crop
