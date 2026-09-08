@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { expect } from '@playwright/test'
+import { relinkGestureAudio } from './playback-setup.mjs'
 
 export const continuationProductSource = '75b89ef6b70460a03ea99ca44d888b5ec06373ec'
 const digest = (value) => createHash('sha256').update(value).digest('hex')
@@ -202,11 +203,13 @@ function helpers(h) {
 
 export async function prepareAnimationContinuation(h) {
   const q = helpers(h)
-  await q.openFixture(join(h.fixtureRoot, 'mixed.myrelith'), 2)
+  const fixture = h.report.segment === 'gestures' ? 'playback/mixed-playback.myrelith' : 'mixed.myrelith'
+  await q.openFixture(join(h.fixtureRoot, fixture), 2)
+  const playback = h.report.segment === 'gestures' ? await relinkGestureAudio(q) : undefined
   await h.page.getByTestId('clip-root-text').click(); await h.settled()
   const selected = await h.page.evaluate(() => window.__animationQA.transport.getState().selectedClipIds)
   assert.deepEqual(selected, ['root-text'])
-  return { fixture: 'mixed.myrelith', nativeClipSelection: selected }
+  return { fixture, ...(playback ? { playback } : {}), nativeClipSelection: selected }
 }
 
 export async function runAnimationGestures(h) {

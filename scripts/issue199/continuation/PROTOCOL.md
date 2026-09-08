@@ -1,6 +1,6 @@
 # Issue 199 — bounded Animation continuation
 
-Status: **current source accepted; one gestures-only run authorized after the mechanical repin is committed and verified.**
+Status: **source-only playback fixture correction; root review and a new explicit native grant are required.**
 The supervisor accepted `095e6d9463580e3502ba7c210d3982bed548a52f` as the
 six-checkpoint early pass, not all of Gate 3. The early runner and its attempt
 evidence remain unchanged. This protocol implements the remaining scope in
@@ -40,7 +40,45 @@ scalar/effect keys, expanded-title element opacity, held mask paths, future
 property versions, and orphan effect intent. Its media keyframes carry exact
 `sourceTimeTicks`, including -150,000,000 at local frame -150 and 200,000,000 at
 local frame 200. Its media source map retains a 60,000,000-tick span. Source
-assets remain intentionally offline; Chromium is muted.
+assets remain intentionally offline in the original portable files; Chromium is muted.
+
+For the gestures segment only, `../prepare-playback-fixture.mjs` generates the
+supplemental `../fixtures/playback/mixed-playback.myrelith` and a local PCM WAV.
+The original audio descriptor has `size: 1`; canonical Relink requires exact byte
+size, so the supplemental file changes only `audio-asset.size` to 5,760,044.
+Canonical comparison restores that one field and requires full equality with
+the original. All sequences, clips, animation, mute/enabled settings, history
+expectations and the four original portable byte hashes are preserved.
+
+The WAV is exactly 30 seconds, 48 kHz, stereo, signed 16-bit little-endian PCM:
+1,440,000 sample frames, a 44-byte header and 5,760,000 data bytes. Its non-silent
+250 Hz integer triangle has opposite stereo channels and peak 1536/32768.
+SHA-256: `f674326cc658930dc9eb01b1388aca7e7f9a0e7bedc3fb58b49803f01a133859`.
+The playback portable copy is 13,385 bytes, SHA-256
+`8a067088cd5c007ea701d3af702626dc15aa880086e359a56c1629868dc8ae6b`.
+The separate playback manifest records the exact generator, data hash, metadata
+probe and canonical checks. Host demux/metadata validation is not native playback
+or a PCM output oracle.
+
+Setup opens that supplemental file through the existing Open UI, then supplies
+the WAV to the existing audio row's actual **Relink once** file input. This invokes
+`connectActiveAssetMedia` and its canonical browser inspection/matching path.
+There is no direct store connection or document mutation API in browser setup.
+Require the row online, one connected source, exact audio metadata, the original
+enabled clip/gain, zero history, and unchanged project/history/clipboard references
+across relink. This precedes the gesture history checkpoints. Native Play/Pause
+and every cancellation/immutability assertion remain unchanged. The final project
+departure still reopens the original two-offline file, with no later playback.
+Editing and large segments retain their original setup and separate gates.
+
+The canonical project audio plan contains only `ordinary-audio` / `audio-asset`
+on root frames [0,60); the dormant sequence has no audio dependency. Both titles
+are procedural. The other offline asset, `fixture.mp4`, has no audio and its clip
+begins at frame 120. Each playback cancellation is positioned at frame 1. The
+existing preview path skips absent video source keys and reports offline visual
+status if that later clip is reached; no audio resolver needs it. No additional
+source is removed or muted. The strict warning/page-error gate still applies,
+including to relink inspection, waveform generation and real transport startup.
 
 ## Three independently selectable runs
 
