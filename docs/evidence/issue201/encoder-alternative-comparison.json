@@ -1,0 +1,1616 @@
+{
+  "qualification": "Published bytes and metadata only. Reads bounded int64 shape constants; no weight decoding, graph patching or inference. View-normalized structural comparison is not numerical execution proof.",
+  "currentRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+  "historicalRevision": "ce70c25689c3694faf5ec8206517cd53f0cfb03f",
+  "models": {
+    "current": {
+      "bytes": 10124910,
+      "sha256": "fd9d995b9dcb0520f0dbf6cf68651af639fc385f594d9d876e69ca2802dc438e",
+      "ir": 6,
+      "producer": "onnx.quantize",
+      "producerVersion": "0.1.0",
+      "opsets": [
+        {
+          "domain": "",
+          "version": 11
+        }
+      ],
+      "graph": {
+        "scope": "root",
+        "name": "torch_jit",
+        "nodes": 607,
+        "operators": {
+          "Constant": 128,
+          "Reshape": 42,
+          "DynamicQuantizeLinear": 18,
+          "Mul": 81,
+          "ConvInteger": 2,
+          "Cast": 26,
+          "Add": 55,
+          "Div": 15,
+          "Erf": 6,
+          "Transpose": 21,
+          "ReduceMean": 18,
+          "Sub": 9,
+          "Pow": 9,
+          "Sqrt": 9,
+          "Shape": 12,
+          "Gather": 12,
+          "MatMulInteger": 24,
+          "Unsqueeze": 68,
+          "Concat": 40,
+          "MatMul": 8,
+          "Softmax": 4
+        },
+        "initializerCount": 121,
+        "inputs": [
+          {
+            "name": "input_features",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              "feature_size",
+              "encoder_sequence_length"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "last_hidden_state",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              "encoder_sequence_length / 2",
+              384
+            ]
+          },
+          {
+            "name": "encoder_attentions.0",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              6,
+              1500,
+              1500
+            ]
+          },
+          {
+            "name": "encoder_attentions.1",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              6,
+              1500,
+              1500
+            ]
+          },
+          {
+            "name": "encoder_attentions.2",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              6,
+              1500,
+              1500
+            ]
+          },
+          {
+            "name": "encoder_attentions.3",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              6,
+              1500,
+              1500
+            ]
+          }
+        ],
+        "scaleLocations": [],
+        "subgraphs": []
+      }
+    },
+    "uint8": {
+      "bytes": 10079602,
+      "sha256": "40df112bf7fa198a05f802c67a1b98e19b9287cf008de4496df51338e3f2cb47",
+      "ir": 6,
+      "producer": "onnx.quantize",
+      "producerVersion": "0.1.0",
+      "opsets": [
+        {
+          "domain": "",
+          "version": 11
+        }
+      ],
+      "graph": {
+        "scope": "root",
+        "name": "torch_jit",
+        "nodes": 343,
+        "operators": {
+          "DynamicQuantizeLinear": 18,
+          "ConvInteger": 2,
+          "Cast": 26,
+          "Mul": 77,
+          "Reshape": 42,
+          "Add": 55,
+          "Div": 15,
+          "Erf": 6,
+          "Transpose": 21,
+          "ReduceMean": 18,
+          "Sub": 9,
+          "Pow": 9,
+          "Sqrt": 9,
+          "MatMulInteger": 24,
+          "MatMul": 8,
+          "Softmax": 4
+        },
+        "initializerCount": 133,
+        "inputs": [
+          {
+            "name": "input_features",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              "feature_size",
+              "encoder_sequence_length"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "last_hidden_state",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              1500,
+              384
+            ]
+          },
+          {
+            "name": "encoder_attentions.0",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              6,
+              1500,
+              1500
+            ]
+          },
+          {
+            "name": "encoder_attentions.1",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              6,
+              1500,
+              1500
+            ]
+          },
+          {
+            "name": "encoder_attentions.2",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              6,
+              1500,
+              1500
+            ]
+          },
+          {
+            "name": "encoder_attentions.3",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              6,
+              1500,
+              1500
+            ]
+          }
+        ],
+        "scaleLocations": [],
+        "subgraphs": []
+      }
+    },
+    "july2023": {
+      "bytes": 10113248,
+      "sha256": "ca9d7bb2836193704b7e2435e3bbadbed985ac3a79ab7406b244b8865ab1a5c0",
+      "ir": 6,
+      "producer": "onnx.quantize",
+      "producerVersion": "0.1.0",
+      "opsets": [
+        {
+          "domain": "",
+          "version": 11
+        }
+      ],
+      "graph": {
+        "scope": "root",
+        "name": "torch_jit",
+        "nodes": 551,
+        "operators": {
+          "Constant": 120,
+          "Reshape": 34,
+          "DynamicQuantizeLinear": 18,
+          "Mul": 81,
+          "ConvInteger": 2,
+          "Cast": 26,
+          "Add": 55,
+          "Div": 15,
+          "Erf": 6,
+          "Transpose": 21,
+          "ReduceMean": 18,
+          "Sub": 9,
+          "Pow": 9,
+          "Sqrt": 9,
+          "Shape": 8,
+          "Gather": 8,
+          "MatMulInteger": 24,
+          "Unsqueeze": 44,
+          "Concat": 32,
+          "MatMul": 8,
+          "Softmax": 4
+        },
+        "initializerCount": 121,
+        "inputs": [
+          {
+            "name": "input_features",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              "feature_size",
+              "encoder_sequence_length"
+            ]
+          }
+        ],
+        "outputs": [
+          {
+            "name": "last_hidden_state",
+            "type": 1,
+            "shape": [
+              "batch_size",
+              "encoder_sequence_length / 2",
+              384
+            ]
+          }
+        ],
+        "scaleLocations": [],
+        "subgraphs": []
+      }
+    }
+  },
+  "comparison": {
+    "identicalInitializerContentMultisets": true,
+    "oldInitializerCount": 121,
+    "currentInitializerCount": 121,
+    "oldUnmatched": [],
+    "currentUnmatched": [],
+    "equalNamedInputRoles": 119,
+    "differentNamedInputRoles": [],
+    "roleOccurrences": 121,
+    "roleContentHashes": {
+      "/Add_2|Add|input1": [
+        "417d2e52454cf74e2470dd007ee8c043589ba7bba3251304b8c3114d7dcecf5e"
+      ],
+      "/conv1/Conv_quant_scales_mul|Mul|input1": [
+        "e0c14ca5643bdaffcc414b3028526558b7ccf7d0d6f9655d042b546e76754fe0"
+      ],
+      "/conv1/Conv_quant|ConvInteger|input1": [
+        "bae4fbc89ebf048fdfe4cb8bbe8b219a21a831867366bfd59112f6ec86fe07b6"
+      ],
+      "/conv1/Conv_quant|ConvInteger|input3": [
+        "f27d83cc362fb1dfc4f6c4ba39251b56de3f0c00a358784c6d99ad57b2a962a0"
+      ],
+      "/conv2/Conv_quant_scales_mul|Mul|input1": [
+        "84079b5f9a587e4512f9ab015565c7f9fedc774b4c90c781d016da7f0e6ad170"
+      ],
+      "/conv2/Conv_quant|ConvInteger|input1": [
+        "00c761619f5f7fb145cd1b14e52649b32c6143ec17171d3e69deb95e2a5273dc"
+      ],
+      "/conv2/Conv_quant|ConvInteger|input3": [
+        "aa1948b47add54b449d53b4ae8f9c5448e10b12f3cb234ac65177e01a06e1bfb"
+      ],
+      "/layer_norm/Add_1|Add|input1": [
+        "4b897fca67ef8535c23911ddeb265ab00cc3a7de2a01d46f409447306131a62b"
+      ],
+      "/layer_norm/Mul|Mul|input1": [
+        "ead248e15146b10b76ba3c56a0cdb1986bf64101bc6e666505cb828c6edea03a"
+      ],
+      "/layers.0/fc1/Add|Add|input0": [
+        "91924d75fd615c8e55d3f1753fcbf317229d8dacd5ec5b444d52cdc0517b88e0"
+      ],
+      "/layers.0/fc1/MatMul_quant_scales_mul|Mul|input1": [
+        "4891e06651364a65074731cc4abb39e4e1c64bafb27c91bbb0e76007ce12c7cc"
+      ],
+      "/layers.0/fc1/MatMul_quant|MatMulInteger|input1": [
+        "68b89dd7767279eba16cf3cef5e7ed5f4dabccc2b114341f558259cdc6c3a457"
+      ],
+      "/layers.0/fc1/MatMul_quant|MatMulInteger|input3": [
+        "22883b0fbd4417c684c8b21b4cefef771f78fb8bf068befaf6dfb48d155cbb04"
+      ],
+      "/layers.0/fc2/Add|Add|input0": [
+        "1b0a0c086f4aa31d491088100c5790cb15e50e781a3765f75da9b56752658d97"
+      ],
+      "/layers.0/fc2/MatMul_quant_scales_mul|Mul|input1": [
+        "dace33faa534a9368e19a4174054466b0ab2e9bef8b71c99eec5dbcdad7d9fc3"
+      ],
+      "/layers.0/fc2/MatMul_quant|MatMulInteger|input1": [
+        "dbe53476547f62a0dd6d46d9b7de31b112b9a3d79620c866637168b59964a7f2"
+      ],
+      "/layers.0/fc2/MatMul_quant|MatMulInteger|input3": [
+        "b29ace21a403b408f13193d8153920eb93f36120bdc3ede2822881b1112029a1"
+      ],
+      "/layers.0/final_layer_norm/Add_1|Add|input1": [
+        "ed61ceab8bb9575405fb9b2abcc960431b1f51a4bc7bbd4673106ad72b418424"
+      ],
+      "/layers.0/final_layer_norm/Mul|Mul|input1": [
+        "4e4971d88b0f12ca93b7ac4b4f2be809a8d174b8b5d8ef50189025e0baf18f7a"
+      ],
+      "/layers.0/self_attn/k_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "238677d02bddef450215c412ffaee1c344e1bcccc91b23fcaabb16c81b05b6b6"
+      ],
+      "/layers.0/self_attn/k_proj/MatMul_quant|MatMulInteger|input1": [
+        "3b0296dd816de2018ec28129a4cbe53b4fd95b5aa812a214bfcc0886178d7e33"
+      ],
+      "/layers.0/self_attn/k_proj/MatMul_quant|MatMulInteger|input3": [
+        "22883b0fbd4417c684c8b21b4cefef771f78fb8bf068befaf6dfb48d155cbb04"
+      ],
+      "/layers.0/self_attn/out_proj/Add|Add|input0": [
+        "ca68b9fb5996e27e02f49818a282cf3eb63b5c4b7ce83994089df28dd91f235d"
+      ],
+      "/layers.0/self_attn/out_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "388b8ad28f80a3c6cc6f0320878bbbf528564ad4fdb8c2c6699d31fc8b168e20"
+      ],
+      "/layers.0/self_attn/out_proj/MatMul_quant|MatMulInteger|input1": [
+        "411790e904ea35630593c3df93ff8de5f5584819355413754852dc4ff36f68de"
+      ],
+      "/layers.0/self_attn/out_proj/MatMul_quant|MatMulInteger|input3": [
+        "fd04eca73cfd42a0bbb435fd57bca557b7f0f3a5e488b6a1617bd49312535580"
+      ],
+      "/layers.0/self_attn/q_proj/Add|Add|input0": [
+        "a336df3a938597a383b807d880aa158be9d1e4ecf48016d465b8899e63fa7f37"
+      ],
+      "/layers.0/self_attn/q_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "11b0bcc7ae1032ed230b631d9ad2ee81e75b1ce4822fb9a34efa5e242bed031d"
+      ],
+      "/layers.0/self_attn/q_proj/MatMul_quant|MatMulInteger|input1": [
+        "6db1ec151561d2ae6415aae42bc24f7512b8be4c7c1cd1413012b6b8ea97a87f"
+      ],
+      "/layers.0/self_attn/q_proj/MatMul_quant|MatMulInteger|input3": [
+        "f27d83cc362fb1dfc4f6c4ba39251b56de3f0c00a358784c6d99ad57b2a962a0"
+      ],
+      "/layers.0/self_attn/v_proj/Add|Add|input0": [
+        "bb7adb3aa50399f6a56de9a852cdf6f0a4f7ce37655331ad571291f06cd17928"
+      ],
+      "/layers.0/self_attn/v_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "d2519a2f1618e78dd8cb91177074693fc89c082035a06972fc31f03987acb660"
+      ],
+      "/layers.0/self_attn/v_proj/MatMul_quant|MatMulInteger|input1": [
+        "f3a23f2898fb05d98eec8dc998acec859fff55bbdcfed7d666e12c49ee451386"
+      ],
+      "/layers.0/self_attn/v_proj/MatMul_quant|MatMulInteger|input3": [
+        "ef09bc01f592989166ef8abf29ab890d1a43625450c6220af8bbedc8890380b1"
+      ],
+      "/layers.0/self_attn_layer_norm/Add_1|Add|input1": [
+        "cb7d5c6b7a5ec4cf6eb4a06f44c3b0e00cbbd6206b55335af8bb633e0860d58c"
+      ],
+      "/layers.0/self_attn_layer_norm/Mul|Mul|input1": [
+        "be396aabd62cf92bf01cb255c7959c0abd53cec66cd693a5922d13833f7aeda6"
+      ],
+      "/layers.1/fc1/Add|Add|input0": [
+        "7a6b74c9d18591ed6219aa75ef5cc0faf9b54c507cfeb320948c816cfc7017d8"
+      ],
+      "/layers.1/fc1/MatMul_quant_scales_mul|Mul|input1": [
+        "e90d5d8c16e5da7824606ac3d8b42010f8d7e932b2b9d9791da3f2512cd7ec25"
+      ],
+      "/layers.1/fc1/MatMul_quant|MatMulInteger|input1": [
+        "bc4bda0c0fc081a97f582a55be7fc78616366064575f97051ca64bdf8d5286ad"
+      ],
+      "/layers.1/fc1/MatMul_quant|MatMulInteger|input3": [
+        "0d6ead92093822a5b0512f27a0b3e4c98ea0f7ff9288c19c459191b639ffe951"
+      ],
+      "/layers.1/fc2/Add|Add|input0": [
+        "11de51e525bb933fb3e0e2f9813517acea3672a53b17020065e9d4e61bb7fb00"
+      ],
+      "/layers.1/fc2/MatMul_quant_scales_mul|Mul|input1": [
+        "e509374fb549075ecc7c33564adfa0439b07361bb7071db6275979daa183303e"
+      ],
+      "/layers.1/fc2/MatMul_quant|MatMulInteger|input1": [
+        "9bb70b52ce440b8b1507e838ad2dc916bd73528d5b21d12c5cebd4220b3328ef"
+      ],
+      "/layers.1/fc2/MatMul_quant|MatMulInteger|input3": [
+        "b075239c70fcbe120f9d6fd1bf8cb5d9ba7a6e7be5237e35be45b566ee59bb1e"
+      ],
+      "/layers.1/final_layer_norm/Add_1|Add|input1": [
+        "905a878769e27279e84783d38a9849274461fe3b66fc0354ab964c1fb89bf2c7"
+      ],
+      "/layers.1/final_layer_norm/Mul|Mul|input1": [
+        "c8b9569394d9a91268f75893b39178ab22341b4913a52b1093e1acb8c6b2f0fa"
+      ],
+      "/layers.1/self_attn/k_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "055a3ed180821b3ad9d942d863c9fe2e2092fde2d8435245bd46348f9becc1e4"
+      ],
+      "/layers.1/self_attn/k_proj/MatMul_quant|MatMulInteger|input1": [
+        "5069107cf0cb6d728da9032e2afb0c0a3bccd8cf7d3e1786c6d3104993dc9a9d"
+      ],
+      "/layers.1/self_attn/k_proj/MatMul_quant|MatMulInteger|input3": [
+        "ef09bc01f592989166ef8abf29ab890d1a43625450c6220af8bbedc8890380b1"
+      ],
+      "/layers.1/self_attn/out_proj/Add|Add|input0": [
+        "81d997a2cd0dfba2807b1140dfc4885cd76cd9adecfa7a6a24ea433c85829ca3"
+      ],
+      "/layers.1/self_attn/out_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "ea28594ceeb5879d6c878b3b9ab17f768b98bcb71e4f4d5afa556d20d1e0e2f8"
+      ],
+      "/layers.1/self_attn/out_proj/MatMul_quant|MatMulInteger|input1": [
+        "e335539e7c5b1eec76b8dc42c6ed84da30fddcfc22cd13790ffcb5976232d21e"
+      ],
+      "/layers.1/self_attn/out_proj/MatMul_quant|MatMulInteger|input3": [
+        "58a07098b6db0a564ffd40ae1fdf7805e40c1062abc8fa35f11b20ff872cd073"
+      ],
+      "/layers.1/self_attn/q_proj/Add|Add|input0": [
+        "b1e45d00ea4b2899196e550e3f4d6e785e406ea1576c7a4a6494190ee335f66c"
+      ],
+      "/layers.1/self_attn/q_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "cc9872cbf78c163e5c669612dcf2fe3167948d5bcfa461a2a76553f9d6738c0a"
+      ],
+      "/layers.1/self_attn/q_proj/MatMul_quant|MatMulInteger|input1": [
+        "47492fc9b3b1dfe0d739cc6a29c4f582b81ae97e9bfcff529e95f6b73561983e"
+      ],
+      "/layers.1/self_attn/q_proj/MatMul_quant|MatMulInteger|input3": [
+        "ef09bc01f592989166ef8abf29ab890d1a43625450c6220af8bbedc8890380b1"
+      ],
+      "/layers.1/self_attn/v_proj/Add|Add|input0": [
+        "7acb3b4f9524c267e18b1ca5a1b084e04814eb3982dcc5977f013d9e52adda7d"
+      ],
+      "/layers.1/self_attn/v_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "339274b078c39c499fd54a29551f3d5a5bd7a4257315eb96f6ffbbd10bf24381"
+      ],
+      "/layers.1/self_attn/v_proj/MatMul_quant|MatMulInteger|input1": [
+        "e9734d9da218ceb48954dcd62a5fdd6d0d4ed2d5522c21fe8d9fd85f0ed39e3e"
+      ],
+      "/layers.1/self_attn/v_proj/MatMul_quant|MatMulInteger|input3": [
+        "b29ace21a403b408f13193d8153920eb93f36120bdc3ede2822881b1112029a1"
+      ],
+      "/layers.1/self_attn_layer_norm/Add_1|Add|input1": [
+        "389a4993ab74b1866031311e1e0e86d51a61c0fa35b1fa16c5664004e0324a7a"
+      ],
+      "/layers.1/self_attn_layer_norm/Mul|Mul|input1": [
+        "df6d49e8b5b8019b02112a5667ac52274ac5686cfd7a4abe3629b87621c93a8a"
+      ],
+      "/layers.2/fc1/Add|Add|input0": [
+        "0925105b5d80f181057a230bcc8424377dbc613a9d05bf3e891495e586b8a668"
+      ],
+      "/layers.2/fc1/MatMul_quant_scales_mul|Mul|input1": [
+        "d8a3fbda65bdbd63d2a18a9ecd0fafa0f9a461d7e741f6395ffd95346e7b2e9f"
+      ],
+      "/layers.2/fc1/MatMul_quant|MatMulInteger|input1": [
+        "d200f64617ba7405fb18f0d7b6125757d8b2a298b2734bda89bcc84cc5c5bb11"
+      ],
+      "/layers.2/fc1/MatMul_quant|MatMulInteger|input3": [
+        "c1fcd12f7cc32e3fc3fcac6c0c3ba86ed2feb066d9b52aee426fd887dff257c8"
+      ],
+      "/layers.2/fc2/Add|Add|input0": [
+        "c20109600b3400365a67ec26b20a7873a0ae419601de5896a70fb4f33732ff6d"
+      ],
+      "/layers.2/fc2/MatMul_quant_scales_mul|Mul|input1": [
+        "e9b0a8d3d8ba5972b6309bba0e25feb5c6a603516726fdf8657644e7cf05e0e2"
+      ],
+      "/layers.2/fc2/MatMul_quant|MatMulInteger|input1": [
+        "cece5f722573333a3005b2d9dd8d556a5a26b52d514ed8c991e9a72c601d8301"
+      ],
+      "/layers.2/fc2/MatMul_quant|MatMulInteger|input3": [
+        "ae57a0da47980828fd18b9df3b5826fa23dd8325f7b4501d3f84736f8df4a18e"
+      ],
+      "/layers.2/final_layer_norm/Add_1|Add|input1": [
+        "f89c63d340fd2a519419b42534858eb0730bc01a158f16bb4e900958a8a7f7a0"
+      ],
+      "/layers.2/final_layer_norm/Mul|Mul|input1": [
+        "c8d9fa4322b8ebbe989995edc8e5380c2716716789ce5c147230e4ec4d956e83"
+      ],
+      "/layers.2/self_attn/k_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "13ae83ff2ae770784fa3287cdc70d3d104fdb441c7cdd2404a1ce0ac4ff4e8ee"
+      ],
+      "/layers.2/self_attn/k_proj/MatMul_quant|MatMulInteger|input1": [
+        "63d1e0b5ce27e302ae477fcacd2ba8531eac7fe69c48a5d87e9c724defd36436"
+      ],
+      "/layers.2/self_attn/k_proj/MatMul_quant|MatMulInteger|input3": [
+        "f41d5f977ff7633bb4f96c4b95ad911dec94f682dbc3f830d654eb9a6f3320d8"
+      ],
+      "/layers.2/self_attn/out_proj/Add|Add|input0": [
+        "ed4172edd1105bf99400ba366f10ae79dc49098ea93c5ba9a7ce8b52e1023c62"
+      ],
+      "/layers.2/self_attn/out_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "ceb30631b3979454b7f5dbbcbd1601aed8a5a16345c07597f67b65f681e287d0"
+      ],
+      "/layers.2/self_attn/out_proj/MatMul_quant|MatMulInteger|input1": [
+        "6985185338bfa38d37003909ac582792bb4cffcb3b48b47f7169be41bbe13b12"
+      ],
+      "/layers.2/self_attn/out_proj/MatMul_quant|MatMulInteger|input3": [
+        "e23c94a3d83d477698861ab1a4927e01dfba6f1a4f6766ae8d1921df08c0d160"
+      ],
+      "/layers.2/self_attn/q_proj/Add|Add|input0": [
+        "a195153ee086655e7d06921d54347cfb7148a6b027cc7b09fd4bc60f6bbd5b3c"
+      ],
+      "/layers.2/self_attn/q_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "a5c08e7c40a5a693b524aa6e3a4505639d34eb03fa4a83f6fc71f2c0c742cc2a"
+      ],
+      "/layers.2/self_attn/q_proj/MatMul_quant|MatMulInteger|input1": [
+        "129bdac5e5f2f2507558459d7c7756df41907e13ce8849a945683fee1bf53ec5"
+      ],
+      "/layers.2/self_attn/q_proj/MatMul_quant|MatMulInteger|input3": [
+        "fd04eca73cfd42a0bbb435fd57bca557b7f0f3a5e488b6a1617bd49312535580"
+      ],
+      "/layers.2/self_attn/v_proj/Add|Add|input0": [
+        "c4c417655b645811e7175f42fb4d20a32d4960a9bb43f73b84a5ca531a962db3"
+      ],
+      "/layers.2/self_attn/v_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "42c6aa48807758545652bada87d661b06fb8585f7a2f5ee8d00a414ebd38352c"
+      ],
+      "/layers.2/self_attn/v_proj/MatMul_quant|MatMulInteger|input1": [
+        "04ac0733a5ea978404b19060886ea881d04b95c48ae8de2aa1414ed3ad92b64c"
+      ],
+      "/layers.2/self_attn/v_proj/MatMul_quant|MatMulInteger|input3": [
+        "dca2e9933e5d6fb50903a3c7ffc7d6d00ab2441847d9c36023bdde2dc225a1a1"
+      ],
+      "/layers.2/self_attn_layer_norm/Add_1|Add|input1": [
+        "8dc3c39e2b80577c4cbcd56606cc806eb508bd637c9e97c65d94f598c0821441"
+      ],
+      "/layers.2/self_attn_layer_norm/Mul|Mul|input1": [
+        "2352311c4feeaf10efdabc843f2e929124670ea1ba91c2dc92592db39d981ee9"
+      ],
+      "/layers.3/fc1/Add|Add|input0": [
+        "9152504192ae4af49dcebca615554f9e6046d14fd232601dd8f15974f1bf4a80"
+      ],
+      "/layers.3/fc1/MatMul_quant_scales_mul|Mul|input1": [
+        "f18f9e7e7ead19f2db69e89f70c19c06dc29783a27370b39dc06f4994283d630"
+      ],
+      "/layers.3/fc1/MatMul_quant|MatMulInteger|input1": [
+        "0b7ac44085d46785e1f924dffa4e4eff73e06c3d78a5d5c2c1113ef01a702e34"
+      ],
+      "/layers.3/fc1/MatMul_quant|MatMulInteger|input3": [
+        "135a430e4ba3eacd90b007f2774df6cdf597a8160c1ba92ad236462a39a07c7e"
+      ],
+      "/layers.3/fc2/Add|Add|input0": [
+        "035c3536e302433fed583e6ad6e95997fb97766b42374cc8a1ff5241a55137b9"
+      ],
+      "/layers.3/fc2/MatMul_quant_scales_mul|Mul|input1": [
+        "36cecf6712202f3718673edb0b656298f556b73ebd4e5d13ff3717b4dff383b1"
+      ],
+      "/layers.3/fc2/MatMul_quant|MatMulInteger|input1": [
+        "85252cc6c1eb2cea9f2ea805d2a5fbce3c50feb20e90ca7852be205dfe1090b2"
+      ],
+      "/layers.3/fc2/MatMul_quant|MatMulInteger|input3": [
+        "9bb2e835a50378cf5dbdd14e4bda0ed147202061a0ef18d11cff9d8fc06599aa"
+      ],
+      "/layers.3/final_layer_norm/Add_1|Add|input1": [
+        "0c365fd91f7b351d6e42d7e487d476bd647ee492ac428d16635703648e44ab6d"
+      ],
+      "/layers.3/final_layer_norm/Mul|Mul|input1": [
+        "4dedcb1135a299d1dcd14ff7d45b1e3f678d1737b6602e6a24adbdd4cac21913"
+      ],
+      "/layers.3/self_attn/k_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "220f9f2a37d9450212e4d82757eeb44f98610f84d381b1732f3993ea3603f87d"
+      ],
+      "/layers.3/self_attn/k_proj/MatMul_quant|MatMulInteger|input1": [
+        "533c59e6d0e9bde9b55afac78164aaed2d62473e12c2676353f7e6291d871121"
+      ],
+      "/layers.3/self_attn/k_proj/MatMul_quant|MatMulInteger|input3": [
+        "1f9716935ac240e16c5ad7fc1aaf9208de725ca58757bc624b44abb6162e0dff"
+      ],
+      "/layers.3/self_attn/out_proj/Add|Add|input0": [
+        "614b2a1f6b3382c2643ba96fe1b085c6e13320f88a02cdc0ef4cc44e0127a39f"
+      ],
+      "/layers.3/self_attn/out_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "d5354544ed7102b7d84c25e69a6c1eac24457a2fc2bac39453c8d57927f4eb25"
+      ],
+      "/layers.3/self_attn/out_proj/MatMul_quant|MatMulInteger|input1": [
+        "e2223c3382834f4181c58aa230f6f3c40530434d85d9b06d872c73ad9a77e556"
+      ],
+      "/layers.3/self_attn/out_proj/MatMul_quant|MatMulInteger|input3": [
+        "2c2b2e25c44e39c70877373399e5f51aa94bcde8731359e622e24a017c4257fc"
+      ],
+      "/layers.3/self_attn/q_proj/Add|Add|input0": [
+        "5ae4399351d932eb53d075237e2b9cd41a77363b2aa66b60f3d9ebb1fb421eac"
+      ],
+      "/layers.3/self_attn/q_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "1ba5658848b9aaa3da708c0813f2bf3060b140b27624965caec2f7bf0ae9de51"
+      ],
+      "/layers.3/self_attn/q_proj/MatMul_quant|MatMulInteger|input1": [
+        "08b4e7a180953b0967032d782607f375d508acd42b1f7cb163d5ae95d833fea0"
+      ],
+      "/layers.3/self_attn/q_proj/MatMul_quant|MatMulInteger|input3": [
+        "0b72d1e9811fed0fd4b03c7f28e9a1f7be64e74895ae4346a303c3d4dce88e34"
+      ],
+      "/layers.3/self_attn/v_proj/Add|Add|input0": [
+        "ac65e717b50f469f61c60d6ea94912f2a2cde44f81d8bd71ae1244de6a23f2e0"
+      ],
+      "/layers.3/self_attn/v_proj/MatMul_quant_scales_mul|Mul|input1": [
+        "0aecfe7f9f040711c429fb8e20c1d3ae8723ed19c0f6a4fb9d82b46d21df8cb4"
+      ],
+      "/layers.3/self_attn/v_proj/MatMul_quant|MatMulInteger|input1": [
+        "e75a2d755552ca0ae37752729b837828f2a36d538b54b66883203e6072da3082"
+      ],
+      "/layers.3/self_attn/v_proj/MatMul_quant|MatMulInteger|input3": [
+        "19701d1c3bdfcc0439084224fc194645faaf3a0ef09e77678b14f4120eee05df"
+      ],
+      "/layers.3/self_attn_layer_norm/Add_1|Add|input1": [
+        "f4d32e8f184c8bc06269d27d26497a73f0b04fb853e2de6236e699776765e299"
+      ],
+      "/layers.3/self_attn_layer_norm/Mul|Mul|input1": [
+        "156aca897ce49caf88666404907f16f99e22ecb6d0bdd78cdeb86dcffb6ac280"
+      ],
+      "|Reshape|input0": [
+        "44b55512bca1ce3f569351f78022f964a49356d15b313f37378e45e7de3c07c3",
+        "b9bb4accda4a6a1a5d6acd06cb0c569d287ca93085aa4e40e7d7e4b0b420a657"
+      ],
+      "|Reshape|input1": [
+        "7748d776f5ddede584283b8f077713f153b85fb78456049e583405f9d25d1a36",
+        "7748d776f5ddede584283b8f077713f153b85fb78456049e583405f9d25d1a36"
+      ]
+    }
+  },
+  "coreWiringComparison": {
+    "equalAfterDocumentedViewNormalization": true,
+    "coreOperators": 305,
+    "ignoredCurrentViews": 8,
+    "originalViewTargetsAndInputsEqual": 34,
+    "qualification": "Only current self_attn Reshape_6/_7 views are bypassed. Old downstream Reshape_6/_7 names map to current _8/_9. All original views, transposes, core attributes, quantizer output slots and initializer contents remain in comparison."
+  },
+  "addedCurrentViewShapeMetadata": [
+    {
+      "name": "/layers.0/self_attn/Reshape_6",
+      "dataInput": "/layers.0/self_attn/Softmax_output_0",
+      "shape": {
+        "op": "Concat",
+        "name": "/layers.0/self_attn/Concat_6",
+        "attributesHex": [
+          "0a04617869731800a00102"
+        ],
+        "inputs": [
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.0/self_attn/Unsqueeze_7",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.0/self_attn/Gather",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.0/self_attn/Shape",
+                    "shapeOf": [
+                      "/layers.0/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.0/self_attn/Constant",
+                    "int64ShapeConstant": [
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Constant",
+            "name": "/layers.0/self_attn/Constant_19",
+            "int64ShapeConstant": [
+              6
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.0/self_attn/Unsqueeze_8",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.0/self_attn/Gather_1",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.0/self_attn/Shape_1",
+                    "shapeOf": [
+                      "/layers.0/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.0/self_attn/Constant_1",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.0/self_attn/Unsqueeze_9",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.0/self_attn/Gather_2",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.0/self_attn/Shape_2",
+                    "shapeOf": [
+                      "/layers.0/self_attn/Reshape_4_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.0/self_attn/Constant_18",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "/layers.0/self_attn/Reshape_7",
+      "dataInput": "encoder_attentions.0",
+      "shape": {
+        "op": "Concat",
+        "name": "/layers.0/self_attn/Concat_7",
+        "attributesHex": [
+          "0a04617869731800a00102"
+        ],
+        "inputs": [
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.0/self_attn/Unsqueeze_10",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Mul",
+                "name": "/layers.0/self_attn/Mul_1",
+                "attributesHex": [],
+                "inputs": [
+                  {
+                    "op": "Gather",
+                    "name": "/layers.0/self_attn/Gather",
+                    "attributesHex": [
+                      "0a04617869731800a00102"
+                    ],
+                    "inputs": [
+                      {
+                        "op": "Shape",
+                        "name": "/layers.0/self_attn/Shape",
+                        "shapeOf": [
+                          "/layers.0/self_attn_layer_norm/Add_1_output_0"
+                        ]
+                      },
+                      {
+                        "op": "Constant",
+                        "name": "/layers.0/self_attn/Constant",
+                        "int64ShapeConstant": [
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.0/self_attn/Constant_9",
+                    "int64ShapeConstant": [
+                      6
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.0/self_attn/Unsqueeze_11",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.0/self_attn/Gather_1",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.0/self_attn/Shape_1",
+                    "shapeOf": [
+                      "/layers.0/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.0/self_attn/Constant_1",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.0/self_attn/Unsqueeze_12",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.0/self_attn/Gather_2",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.0/self_attn/Shape_2",
+                    "shapeOf": [
+                      "/layers.0/self_attn/Reshape_4_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.0/self_attn/Constant_18",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "/layers.1/self_attn/Reshape_6",
+      "dataInput": "/layers.1/self_attn/Softmax_output_0",
+      "shape": {
+        "op": "Concat",
+        "name": "/layers.1/self_attn/Concat_6",
+        "attributesHex": [
+          "0a04617869731800a00102"
+        ],
+        "inputs": [
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.1/self_attn/Unsqueeze_7",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.1/self_attn/Gather",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.1/self_attn/Shape",
+                    "shapeOf": [
+                      "/layers.1/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.1/self_attn/Constant",
+                    "int64ShapeConstant": [
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Constant",
+            "name": "/layers.1/self_attn/Constant_19",
+            "int64ShapeConstant": [
+              6
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.1/self_attn/Unsqueeze_8",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.1/self_attn/Gather_1",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.1/self_attn/Shape_1",
+                    "shapeOf": [
+                      "/layers.1/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.1/self_attn/Constant_1",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.1/self_attn/Unsqueeze_9",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.1/self_attn/Gather_2",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.1/self_attn/Shape_2",
+                    "shapeOf": [
+                      "/layers.1/self_attn/Reshape_4_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.1/self_attn/Constant_18",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "/layers.1/self_attn/Reshape_7",
+      "dataInput": "encoder_attentions.1",
+      "shape": {
+        "op": "Concat",
+        "name": "/layers.1/self_attn/Concat_7",
+        "attributesHex": [
+          "0a04617869731800a00102"
+        ],
+        "inputs": [
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.1/self_attn/Unsqueeze_10",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Mul",
+                "name": "/layers.1/self_attn/Mul_1",
+                "attributesHex": [],
+                "inputs": [
+                  {
+                    "op": "Gather",
+                    "name": "/layers.1/self_attn/Gather",
+                    "attributesHex": [
+                      "0a04617869731800a00102"
+                    ],
+                    "inputs": [
+                      {
+                        "op": "Shape",
+                        "name": "/layers.1/self_attn/Shape",
+                        "shapeOf": [
+                          "/layers.1/self_attn_layer_norm/Add_1_output_0"
+                        ]
+                      },
+                      {
+                        "op": "Constant",
+                        "name": "/layers.1/self_attn/Constant",
+                        "int64ShapeConstant": [
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.1/self_attn/Constant_9",
+                    "int64ShapeConstant": [
+                      6
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.1/self_attn/Unsqueeze_11",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.1/self_attn/Gather_1",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.1/self_attn/Shape_1",
+                    "shapeOf": [
+                      "/layers.1/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.1/self_attn/Constant_1",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.1/self_attn/Unsqueeze_12",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.1/self_attn/Gather_2",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.1/self_attn/Shape_2",
+                    "shapeOf": [
+                      "/layers.1/self_attn/Reshape_4_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.1/self_attn/Constant_18",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "/layers.2/self_attn/Reshape_6",
+      "dataInput": "/layers.2/self_attn/Softmax_output_0",
+      "shape": {
+        "op": "Concat",
+        "name": "/layers.2/self_attn/Concat_6",
+        "attributesHex": [
+          "0a04617869731800a00102"
+        ],
+        "inputs": [
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.2/self_attn/Unsqueeze_7",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.2/self_attn/Gather",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.2/self_attn/Shape",
+                    "shapeOf": [
+                      "/layers.2/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.2/self_attn/Constant",
+                    "int64ShapeConstant": [
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Constant",
+            "name": "/layers.2/self_attn/Constant_19",
+            "int64ShapeConstant": [
+              6
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.2/self_attn/Unsqueeze_8",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.2/self_attn/Gather_1",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.2/self_attn/Shape_1",
+                    "shapeOf": [
+                      "/layers.2/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.2/self_attn/Constant_1",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.2/self_attn/Unsqueeze_9",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.2/self_attn/Gather_2",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.2/self_attn/Shape_2",
+                    "shapeOf": [
+                      "/layers.2/self_attn/Reshape_4_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.2/self_attn/Constant_18",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "/layers.2/self_attn/Reshape_7",
+      "dataInput": "encoder_attentions.2",
+      "shape": {
+        "op": "Concat",
+        "name": "/layers.2/self_attn/Concat_7",
+        "attributesHex": [
+          "0a04617869731800a00102"
+        ],
+        "inputs": [
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.2/self_attn/Unsqueeze_10",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Mul",
+                "name": "/layers.2/self_attn/Mul_1",
+                "attributesHex": [],
+                "inputs": [
+                  {
+                    "op": "Gather",
+                    "name": "/layers.2/self_attn/Gather",
+                    "attributesHex": [
+                      "0a04617869731800a00102"
+                    ],
+                    "inputs": [
+                      {
+                        "op": "Shape",
+                        "name": "/layers.2/self_attn/Shape",
+                        "shapeOf": [
+                          "/layers.2/self_attn_layer_norm/Add_1_output_0"
+                        ]
+                      },
+                      {
+                        "op": "Constant",
+                        "name": "/layers.2/self_attn/Constant",
+                        "int64ShapeConstant": [
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.2/self_attn/Constant_9",
+                    "int64ShapeConstant": [
+                      6
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.2/self_attn/Unsqueeze_11",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.2/self_attn/Gather_1",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.2/self_attn/Shape_1",
+                    "shapeOf": [
+                      "/layers.2/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.2/self_attn/Constant_1",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.2/self_attn/Unsqueeze_12",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.2/self_attn/Gather_2",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.2/self_attn/Shape_2",
+                    "shapeOf": [
+                      "/layers.2/self_attn/Reshape_4_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.2/self_attn/Constant_18",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "/layers.3/self_attn/Reshape_6",
+      "dataInput": "/layers.3/self_attn/Softmax_output_0",
+      "shape": {
+        "op": "Concat",
+        "name": "/layers.3/self_attn/Concat_6",
+        "attributesHex": [
+          "0a04617869731800a00102"
+        ],
+        "inputs": [
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.3/self_attn/Unsqueeze_7",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.3/self_attn/Gather",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.3/self_attn/Shape",
+                    "shapeOf": [
+                      "/layers.3/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.3/self_attn/Constant",
+                    "int64ShapeConstant": [
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Constant",
+            "name": "/layers.3/self_attn/Constant_19",
+            "int64ShapeConstant": [
+              6
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.3/self_attn/Unsqueeze_8",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.3/self_attn/Gather_1",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.3/self_attn/Shape_1",
+                    "shapeOf": [
+                      "/layers.3/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.3/self_attn/Constant_1",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.3/self_attn/Unsqueeze_9",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.3/self_attn/Gather_2",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.3/self_attn/Shape_2",
+                    "shapeOf": [
+                      "/layers.3/self_attn/Reshape_4_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.3/self_attn/Constant_18",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "/layers.3/self_attn/Reshape_7",
+      "dataInput": "encoder_attentions.3",
+      "shape": {
+        "op": "Concat",
+        "name": "/layers.3/self_attn/Concat_7",
+        "attributesHex": [
+          "0a04617869731800a00102"
+        ],
+        "inputs": [
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.3/self_attn/Unsqueeze_10",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Mul",
+                "name": "/layers.3/self_attn/Mul_1",
+                "attributesHex": [],
+                "inputs": [
+                  {
+                    "op": "Gather",
+                    "name": "/layers.3/self_attn/Gather",
+                    "attributesHex": [
+                      "0a04617869731800a00102"
+                    ],
+                    "inputs": [
+                      {
+                        "op": "Shape",
+                        "name": "/layers.3/self_attn/Shape",
+                        "shapeOf": [
+                          "/layers.3/self_attn_layer_norm/Add_1_output_0"
+                        ]
+                      },
+                      {
+                        "op": "Constant",
+                        "name": "/layers.3/self_attn/Constant",
+                        "int64ShapeConstant": [
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.3/self_attn/Constant_9",
+                    "int64ShapeConstant": [
+                      6
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.3/self_attn/Unsqueeze_11",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.3/self_attn/Gather_1",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.3/self_attn/Shape_1",
+                    "shapeOf": [
+                      "/layers.3/self_attn_layer_norm/Add_1_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.3/self_attn/Constant_1",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "Unsqueeze",
+            "name": "/layers.3/self_attn/Unsqueeze_12",
+            "attributesHex": [
+              "0a04617865734000a00107"
+            ],
+            "inputs": [
+              {
+                "op": "Gather",
+                "name": "/layers.3/self_attn/Gather_2",
+                "attributesHex": [
+                  "0a04617869731800a00102"
+                ],
+                "inputs": [
+                  {
+                    "op": "Shape",
+                    "name": "/layers.3/self_attn/Shape_2",
+                    "shapeOf": [
+                      "/layers.3/self_attn/Reshape_4_output_0"
+                    ]
+                  },
+                  {
+                    "op": "Constant",
+                    "name": "/layers.3/self_attn/Constant_18",
+                    "int64ShapeConstant": [
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -49,19 +49,24 @@ def graph(b,label,parents=()):
     result['subgraphs'].append(graph(sub,f'{label}/{i}:{text(one(node,4))}/{text(one(attr,1))}/{j}',parents+(initializers,)))
  return result
 
-manifest = json.loads((ROOT/'docs/evidence/issue201/replacement-manifest.json').read_text())
-assert manifest['model']['id'] == 'Xenova/whisper-tiny'
-assert manifest['model']['revision'] == '5332fcc35e32a33b86612b9a57a89be7906102b1'
-selected = [f for f in manifest['model']['files'] if f['path'] in [
- 'onnx/encoder_model_quantized.onnx', 'onnx/decoder_model_merged_quantized.onnx']]
-assert len(selected) == 2
-out=[]
-for entry in selected:
- p=ROOT/'.tmp/issue201-package-probe/model'/entry['path']
- assert p.stat().st_size == entry['bytes'] < 40000000
- b=p.read_bytes(); digest=hashlib.sha256(b).hexdigest(); assert digest == entry['sha256']
- out.append({'file':p.name,'bytes':len(b),'sha256':digest,'graph':graph(one(b,7),'root')})
-destination=ROOT/'.tmp/issue201-memory-source/model-graph-metadata.json'
-destination.parent.mkdir(parents=True,exist_ok=True)
-destination.write_text(json.dumps(out,indent=2)+'\n')
-print(json.dumps({'output':str(destination),'models':len(out),'qualification':'Pinned metadata only; no raw tensor decoding or model execution'}))
+
+def main():
+ manifest = json.loads((ROOT/'docs/evidence/issue201/replacement-manifest.json').read_text())
+ assert manifest['model']['id'] == 'Xenova/whisper-tiny'
+ assert manifest['model']['revision'] == '5332fcc35e32a33b86612b9a57a89be7906102b1'
+ selected = [f for f in manifest['model']['files'] if f['path'] in [
+  'onnx/encoder_model_quantized.onnx', 'onnx/decoder_model_merged_quantized.onnx']]
+ assert len(selected) == 2
+ out=[]
+ for entry in selected:
+  p=ROOT/'.tmp/issue201-package-probe/model'/entry['path']
+  assert p.stat().st_size == entry['bytes'] < 40000000
+  b=p.read_bytes(); digest=hashlib.sha256(b).hexdigest(); assert digest == entry['sha256']
+  out.append({'file':p.name,'bytes':len(b),'sha256':digest,'graph':graph(one(b,7),'root')})
+ destination=ROOT/'.tmp/issue201-memory-source/model-graph-metadata.json'
+ destination.parent.mkdir(parents=True,exist_ok=True)
+ destination.write_text(json.dumps(out,indent=2)+'\n')
+ print(json.dumps({'output':str(destination),'models':len(out),'qualification':'Pinned metadata only; no raw tensor decoding or model execution'}))
+
+if __name__ == '__main__':
+ main()
