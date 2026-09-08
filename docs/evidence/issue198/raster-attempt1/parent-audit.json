@@ -1,0 +1,10 @@
+{
+  "rawFiles": 2559,
+  "rawBytes": 11764177,
+  "cells": 180,
+  "trials": 1080,
+  "parity": 540,
+  "comparedBytes": 8128512000,
+  "resolverP95": 0.10000000894069672,
+  "manifestSha256": "7269effa6878ab748d3e17c6cb0f75ccbf5a0c896b9ca9e6e5dab7ec937eb7fb"
+}

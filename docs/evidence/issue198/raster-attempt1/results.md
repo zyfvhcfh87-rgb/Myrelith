@@ -1,6 +1,6 @@
 # Issue 198 raster segment result
 
-PASS for the single preregistered raster and canonical held-selection segment. Parent acceptance of this result is pending; parent independently confirmed process/port release at 19:39:37.930Z. Production export and native renderer admission remain separate gates.
+PASS for the single preregistered raster and canonical held-selection segment. The parent accepted this scoped result after independently auditing all raw files, matrix/trials/parity, selections, resolver timings, RSS sums and review hashes. Parent independently confirmed process/port release at 19:39:37.930Z. Production export and native renderer admission remain separate gates.
 
 Tested clean source: `52a64ba78c72e0e3a077c63c8d9b0c3c33e11245`. Product source remains accepted `d9759917d202c39b1faa0df91ea90adad3603218`. One attempt, no retries, no source/protocol changes. Run from 2026-09-08T19:31:04.856Z to 2026-09-08T19:34:34.218Z (209.362 seconds), command/session 6485 exit 0.
 
@@ -38,7 +38,7 @@ Manifest: 343,701 bytes; SHA-256 `7269effa6878ab748d3e17c6cb0f75ccbf5a0c896b9ca9
 
 - run-teardown 02557.json: all four owners closed, no alive PIDs, port false, no problems. evidence-closed 02558.json: no partial binaries.
 - Independent worker check 2026-09-08T19:35:25.660665Z: runner 11230, scoped awake 11259 and browser 11260/11261/11262/11264 all absent by kill(pid,0) and ps. Port 5198 refused connection error 61. Session 6485 exited 0.
-- Exclusive slot explicitly released to parent. Parent independently rechecked all six PIDs and port 5198 at 19:39:37.930Z; receipt is [parent-cleanup.json](parent-cleanup.json). Result acceptance remains pending.
+- Exclusive slot explicitly released to parent. Parent independently rechecked all six PIDs and port 5198 at 19:39:37.930Z; receipt is [parent-cleanup.json](parent-cleanup.json). The scoped raster result is accepted; [parent-audit.json](parent-audit.json) records the independent audit.
 - Audit JSON: issue198-52a64ba-raster-attempt1-audit.json; cleanup JSON: issue198-52a64ba-raster-attempt1-cleanup.json; original command log: issue198-52a64ba-raster-attempt1.log.
 - Reproducible read-only artifact audit: issue198-raster-audit.py. Initial postprocessing hit an older Python fromisoformat limitation on Z timestamps after hash/count/parity checks; UTC parsing was corrected and the artifact audit passed. No native rerun occurred.
 
