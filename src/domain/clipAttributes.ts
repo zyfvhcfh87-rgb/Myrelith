@@ -1,3 +1,4 @@
+import { colorLutCatalogError, colorLutsForEffects, mergeColorLuts, remapColorLutEffects, type PortableColorLut } from './colorLutCatalog'
 /** Resource-free attribute snapshots and atomic project-wide batch edits. */
 import type {
   Clip, ClipAnimation, ClipAnimationProperty, ClipAudioSettings,
@@ -46,6 +47,7 @@ type AttributeValue =
 
 export interface ClipAttributeTemplate {
   readonly version: 1
+  readonly colorLuts?: readonly PortableColorLut[]
   readonly attributes: readonly AttributeValue[]
   readonly animation: ClipAnimation
 }
@@ -80,6 +82,8 @@ function validateTemplate(template: ClipAttributeTemplate): void {
   if (template.version !== 1 || template.attributes.length > 6) {
     throw new Error('Unsupported attribute template.')
   }
+  const lutError = colorLutCatalogError(template.colorLuts ?? [], true)
+  if (lutError) throw new Error(lutError)
   const kinds = new Set<string>()
   for (const attribute of template.attributes) {
     if (kinds.has(attribute.kind)) throw new Error('Duplicate attribute group.')
@@ -132,6 +136,7 @@ export function captureClipAttributes(
   kind: TrackKind,
   groups: readonly ClipAttributeGroup[] = supportedClipAttributeGroups(kind),
   selectedEffectIds?: readonly string[],
+  catalog: readonly PortableColorLut[] = [],
 ): AttributeTemplateResult {
   try {
     if (groups.length === 0 || new Set(groups).size !== groups.length
@@ -164,7 +169,9 @@ export function captureClipAttributes(
     animation.effectTracks = effectAnimationTracks(animation).filter((track) => (
       groups.includes('effects') && (!selected || selected.has(track.effectId))
     ))
-    const template: ClipAttributeTemplate = { version: 1, attributes, animation }
+    const effects = attributes.find((attribute) => attribute.kind === 'effects')?.value ?? []
+    const tables = colorLutsForEffects(effects, catalog)
+    const template: ClipAttributeTemplate = { version: 1, attributes, animation, ...(tables.length ? { colorLuts: tables } : {}) }
     validateTemplate(template)
     return { ok: true, template }
   } catch (cause) {
@@ -244,6 +251,12 @@ export function pasteClipAttributes(
       || !['append', 'replace'].includes(options.effectsMode)
       || options.groups.some((group) => !template.attributes.some((attribute) => attribute.kind === group))) {
       throw new Error('The paste options do not match the copied attributes.')
+    }
+    if (options.groups.includes('effects') && template.colorLuts?.length) {
+      const merged = mergeColorLuts(project.colorLuts ?? [], template.colorLuts, () => factory('effect'))
+      project = merged.catalog === project.colorLuts ? project : { ...project, colorLuts: merged.catalog }
+      template = { ...template, attributes: template.attributes.map((attribute) => attribute.kind === 'effects'
+        ? { ...attribute, value: remapColorLutEffects(attribute.value, merged.ids) } : attribute) }
     }
     const sourceEffects = template.attributes.find((attribute) => attribute.kind === 'effects')?.value ?? []
     const allocate = createProjectEffectIdAllocator(project, factory, [

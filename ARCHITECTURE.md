@@ -92,7 +92,9 @@ non-negotiable rules. Re-read it at the start of every coding session.
     `workers/renderWorker/core.ts` may import `pipeline/render.ts` (the pure
     compositing core: imports domain/ only, no browser I/O — the render worker
     is its runtime host, as `export.ts` is the finite export host),
-    `pipeline/lensRemap.ts` and `pipeline/lensRemapWebgl.ts` (the bounded
+    `pipeline/colorGradingRuntime.ts` (one bounded lookup cache and disposable
+    task queue, shared with finite export; replacement waits for the serial
+    composite chain), `pipeline/lensRemap.ts` and `pipeline/lensRemapWebgl.ts` (the bounded
     source-space WebGL2 contract/backend owned by that worker),
     `pipeline/static-image.ts` (the bounded browser/worker-safe still-image
     inspection + decode boundary). The focused
@@ -135,6 +137,26 @@ non-negotiable rules. Re-read it at the start of every coding session.
 Changes may span multiple modules or layers when that is the smallest complete
 solution. The dependency direction above and all ownership/timing rules remain
 binding across the whole change.
+
+## Portable color grading
+
+Project format 8 owns one immutable `SequenceProject.colorLuts` catalog; timeline
+schema 21 keeps primitive versioned effect descriptors. Files and parser workers
+belong to `app/colorLutController.ts`. Import validates before one table-plus-effect
+commit, and full-file/history/clipboard bounds are checked before clearing redo.
+Ordinary history and sequence edits share table records; missing or future intent
+is preserved and visibly unavailable. Preset library version 2 copies exact
+referenced tables into the receiving project, independently of library deletion.
+
+`pipeline/colorGradingRuntime.ts` owns a serialized 2 MiB/256-entry derived cache
+and disposable task queue for each render owner. Clip, adjustment, track/master,
+expanded child composition and trusted-plugin stages use the same evaluator.
+Replacement and disposal wait for borrowed work; new grading yields every 4,096
+pixels and enters the aggregate frame/surface budget. Enabled unavailable grading
+blocks export. Preview bypass reports its reason without rewriting descriptors.
+App-owned gestures publish temporary data-only documents through transport state,
+then commit one validated edit. See [the grading contract](docs/COLOR_GRADING.md)
+for exact math, supported LUTs, limits and qualification evidence.
 
 ## Optional multicam monitoring
 

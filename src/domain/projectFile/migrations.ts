@@ -691,6 +691,7 @@ export function migrateProjectFile(value: unknown): unknown {
     brandedProject.formatVersion < 7
     && Object.prototype.hasOwnProperty.call(brandedProject, 'multicams')
   ) fail('$.multicams', 'unknown field for this project format')
+  if (brandedProject.formatVersion < 8 && Object.hasOwn(brandedProject, 'colorLuts')) fail('$.colorLuts', 'unknown field for this project format')
   switch (brandedProject.formatVersion) {
     case 1:
     case 2:
@@ -706,6 +707,7 @@ export function migrateProjectFile(value: unknown): unknown {
         rootSequenceId: document.id,
         sequences: [document],
         multicams: [],
+        colorLuts: [],
         assets,
         collections: [],
       }
@@ -724,6 +726,7 @@ export function migrateProjectFile(value: unknown): unknown {
         rootSequenceId: document.id,
         sequences: [document],
         multicams: [],
+        colorLuts: [],
         collections: [],
       }
     }
@@ -741,6 +744,7 @@ export function migrateProjectFile(value: unknown): unknown {
         rootSequenceId: document.id,
         sequences: [document],
         multicams: [],
+        colorLuts: [],
       }
     }
     case 6:
@@ -753,9 +757,15 @@ export function migrateProjectFile(value: unknown): unknown {
         ...brandedProject,
         formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
         multicams: [],
+        colorLuts: [],
         sequences: brandedProject.sequences.map((sequence) => (
           migrateTimelineDocument(sequence, brandedProject.assets)
         )),
+      }
+    case 7:
+      boundedArray(brandedProject.sequences, '$.sequences', PROJECT_FILE_LIMITS.maxSequences)
+      return { ...brandedProject, formatVersion: CURRENT_PROJECT_FORMAT_VERSION, colorLuts: [],
+        sequences: brandedProject.sequences.map((sequence) => migrateTimelineDocument(sequence, brandedProject.assets)),
       }
     case CURRENT_PROJECT_FORMAT_VERSION:
       boundedArray(

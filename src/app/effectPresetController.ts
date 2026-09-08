@@ -1,3 +1,4 @@
+import { colorLutContext, type PortableColorLut } from '../domain/colorLutCatalog'
 import { captureEffectPreset, presetAttributeTemplate, type EffectPreset, type PresetLibraryMutation } from '../domain/effectPresets'
 import { effectRegistration, registeredEffects, resolveEffectStack, type EffectCapability } from '../domain/effectStack'
 import type { EffectDescriptor } from '../domain/schema'
@@ -16,7 +17,7 @@ export function openPresetSave(clipId: string): PresetSaveSession {
   if (!clip || track?.kind !== 'video') throw new Error('Select a video clip to save its effects.')
   const frame = useTransportStore.getState().playheadFrame
   return { generation: state.projectGeneration, sourceName: clip.name, frame,
-    preset: captureEffectPreset(clip, frame, crypto.randomUUID(), 'Untitled preset') }
+    preset: captureEffectPreset(clip, frame, crypto.randomUUID(), 'Untitled preset', state.project.colorLuts) }
 }
 
 export function createEffectPresetController(repository: EffectPresetRepository) {
@@ -43,8 +44,8 @@ export function createEffectPresetController(repository: EffectPresetRepository)
 }
 export const effectPresetController = createEffectPresetController(localEffectPresetStorage)
 
-export function applyEffectTemplate(session: AttributeEditSession, effects: readonly EffectDescriptor[], mode: 'append' | 'replace'): string | null {
-  return applyAttributeEdit({ ...session, groups: ['effects'], template: presetAttributeTemplate(effects) }, 'paste',
+export function applyEffectTemplate(session: AttributeEditSession, effects: readonly EffectDescriptor[], mode: 'append' | 'replace', colorLuts: readonly PortableColorLut[] = []): string | null {
+  return applyAttributeEdit({ ...session, groups: ['effects'], template: presetAttributeTemplate(effects, colorLuts) }, 'paste',
     { groups: ['effects'], includeAnimation: false, effectsMode: mode })
 }
 const descriptions: Record<string, string> = {
@@ -74,15 +75,17 @@ export function presetEffectAvailability(preset: EffectPreset): string[] {
   }))]
 }
 
-export function effectTemplatePreview(effects: readonly EffectDescriptor[], capabilities: PreviewRendererCapabilities | null): string[] {
+export function effectTemplatePreview(effects: readonly EffectDescriptor[], capabilities: PreviewRendererCapabilities | null, colorLuts: readonly PortableColorLut[] = []): string[] {
   if (!capabilities) return ['Preview capabilities are still being checked. Export checks its own rendering context.']
   const available = new Set<EffectCapability>()
   if (capabilities.canvasFilter) available.add('canvas2d-filter')
   if (capabilities.canvasPixelAccess) available.add('canvas2d-pixel-access')
-  return resolveEffectStack(effects.filter((effect) => !effect.type.startsWith('plugin:')), available)
+  return resolveEffectStack(effects.filter((effect) => !effect.type.startsWith('plugin:')), available, colorLutContext(colorLuts))
     .map((result) => `${result.label}: ${result.status}. ${result.detail}`)
 }
 
 export function resetEffectGeometry(session: AttributeEditSession, group: 'transform' | 'crop-and-flip'): string | null {
   return applyAttributeEdit(session, 'reset', { groups: [group], includeAnimation: false, effectsMode: 'append' })
 }
+
+export { COLOR_GRADING_RECIPES } from '../domain/colorGradingRecipes'

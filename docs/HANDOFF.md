@@ -5640,3 +5640,63 @@ and repairs preserved invalid parameters through Reset. Native checks cover
 pixels/history/rejection, narrow layout and actual recovery. Presets remain
 browser-local/static; source-only stages stay on clips and bus parameters are
 static. Work is committed locally on codex/issue197; publication is separate.
+
+## Post-MVP issue #196 - LUTs, curves and color wheels
+
+**IMPLEMENTATION AND LOCAL ACCEPTANCE COMPLETE (2026-09-08).**
+
+Start with [COLOR_GRADING.md](COLOR_GRADING.md) and
+[final acceptance](evidence/issue196-acceptance.md). The user approved all six
+gates on 2026-09-08. `codex/issue196` starts at merged master `368bd43`, including
+#197 through PR #224. Publication remains separate from this local delivery.
+
+Project format 8 embeds immutable LUT data once per project; timeline schema 21
+and primitive versioned descriptors remain. Supported local `.cube` files contain
+one 1D table of 2–4,096 rows or one 3D table of edge 2–33, with fixed linear or
+tetrahedral interpolation. Master/RGB curves use the declared PCHIP contract;
+lift/gamma/gain uses explicit SDR math. Old five-control and identity paths retain
+their pixels. Missing or future data remains preserved and visibly unavailable;
+enabled unavailable grading blocks export until repaired or explicitly bypassed.
+
+All scopes use the shared serialized runtime, with a 2 MiB/256-entry lookup cache,
+task yields and aggregate render/work admission. Import, whole-project history,
+clipboard and file budgets are distinct. The app owns parser workers and stale
+gesture guards; Inspector controls provide pointer, keyboard and numeric editing.
+LUT/curve strength and wheel scalars animate on media clips/adjustments; text and
+buses stay static. Full keyframe lanes reject a whole gesture and preserve redo.
+
+Local preset version 2 bundles exactly referenced tables, with 2 MiB per preset
+and 8 MiB per library. Valid v1 entries migrate in one IndexedDB transaction;
+corrupt siblings stay raw and future envelopes remain read-only. Apply validates,
+deduplicates/remaps and commits once; deletion leaves applied copies independent.
+Gentle contrast, Lifted shadows and Warm balance are first-party numeric recipes.
+
+The optional RGB parade failed its final repeated presentation timing gate
+(+4.0 ms p95 against 2.0 ms allowed). It was removed from production; existing
+scopes remain unchanged. Both measurements and the reproducible removed prototype
+are retained. The earlier passing run does not override the later failure.
+
+Initial Gate 6 validation passes 4,200 Vitest tests in 304 files, all 17 runner checks,
+build/typecheck, lint and the zero-vulnerability production audit. All nine issue
+functional Chromium cases pass; four preset flows pass again after final migration
+hardening. Gate 3's 45 CPU cells retain exact evaluator source hashes. Real tests
+cover save/reopen, native-33 data, IDB recovery, original-media relink, nested order,
+VP9 export and cancellation. In-app text grading was visually checked at 1280×720.
+
+Broader Chromium reports 41 passed / eight failed / three opt-in skips. All eight
+failures reproduce at unchanged `368bd43`: one small command target, one audio
+duration mismatch, one fixture blocked by missing ffmpeg and five scroll checks.
+The broader suite is not green. Headless CPU measurements and injected Canvas
+loss do not qualify other browsers/hardware, real-time 4K or native GPU resets.
+Use `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for Git/test runners and
+`NODE_OPTIONS=--no-experimental-webstorage` for Node 26 Vitest; no Xcode agreement
+was accepted. See final acceptance for commands and the in-app upload limitation.
+
+PR #225's [review follow-up](evidence/issue196-review.md) fixes transactional
+runtime catalog replacement: failed/cancelled candidates discard derived buffers
+while preserving the published tables/facts for lazy rebuild. Disposal stays
+terminal. The second same-LUT report is disproved by four target-scope regressions;
+no-op reuse already preserves history and redo. The final review tree passes
+4,207 Vitest cases + 17 runner checks, build/lint/audit, all nine grading Chromium
+flows and a fresh 45-cell CPU timing run within the original ceilings. The initial
+acceptance manifest remains historical; the review evidence pins current sources.

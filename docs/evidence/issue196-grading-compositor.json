@@ -1,0 +1,288 @@
+{
+  "nested": {
+    "lensUnavailable": null,
+    "maxDifference": 0,
+    "failure": "VideoEffectStageExecutionError: Video-bus pixel processing failed.",
+    "cleared": true,
+    "scopes": [
+      {
+        "kind": "video-bus",
+        "target": "master",
+        "trackId": "",
+        "sequenceId": "child",
+        "frame": 2,
+        "instancePath": [
+          "child-use"
+        ],
+        "effects": [
+          {
+            "id": "child-master",
+            "version": 1,
+            "enabled": true,
+            "type": "builtin.lift-gamma-gain",
+            "params": {
+              "liftR": 0.1,
+              "liftG": 0,
+              "liftB": 0,
+              "gammaR": 1,
+              "gammaG": 1,
+              "gammaB": 1,
+              "gainR": 1,
+              "gainG": 1,
+              "gainB": 0.8,
+              "strength": 1
+            }
+          }
+        ]
+      },
+      {
+        "kind": "video-bus",
+        "target": "track",
+        "trackId": "parent-child",
+        "sequenceId": "root",
+        "frame": 2,
+        "instancePath": [],
+        "effects": [
+          {
+            "id": "parent-track-blur",
+            "type": "builtin.box-blur",
+            "version": 1,
+            "enabled": true,
+            "params": {
+              "radius": 2
+            }
+          }
+        ]
+      },
+      {
+        "kind": "video-bus",
+        "target": "master",
+        "trackId": "",
+        "sequenceId": "root",
+        "frame": 2,
+        "instancePath": [],
+        "effects": [
+          {
+            "id": "root-master",
+            "version": 1,
+            "enabled": true,
+            "type": "builtin.rgb-curves",
+            "params": {
+              "master": "[[0,0],[1,1]]",
+              "red": "[[0,0],[0.4,0.6],[1,1]]",
+              "green": "[[0,0],[1,1]]",
+              "blue": "[[0,0],[1,1]]",
+              "strength": 1
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "exports": [
+    {
+      "pixel": [
+        190,
+        64,
+        95,
+        255
+      ],
+      "bytes": 1207,
+      "cancelled": true,
+      "unchanged": true,
+      "missingError": "ColorGradingExecutionError: LUT: Embedded LUT \u201cred-invert\u201d is missing. The effect is preserved and bypassed.",
+      "initialAdmission": {
+        "essentialOwners": 1,
+        "decoderSlots": 4,
+        "surfaceBytes": 42647552,
+        "monitorOwners": 0,
+        "blockers": [],
+        "programReady": true
+      },
+      "finalAdmission": {
+        "essentialOwners": 1,
+        "decoderSlots": 4,
+        "surfaceBytes": 42647552,
+        "monitorOwners": 0,
+        "blockers": [],
+        "programReady": true
+      },
+      "timings": {
+        "parseMs": [
+          8.399999998509884,
+          8.100000001490116,
+          8.599999994039536,
+          7.9000000059604645,
+          6.799999997019768,
+          6.799999997019768,
+          7,
+          6.600000001490116,
+          6.800000004470348,
+          6.799999997019768
+        ],
+        "readback": [
+          {
+            "size": "1280x720",
+            "samplesMs": [
+              0.6999999955296516,
+              0.5,
+              0.7000000029802322,
+              0.5,
+              0.6000000014901161,
+              0.6999999955296516,
+              0.6000000014901161,
+              0.6000000014901161,
+              0.7000000029802322,
+              0.5
+            ]
+          },
+          {
+            "size": "1920x1080",
+            "samplesMs": [
+              1.3000000044703484,
+              1.3999999985098839,
+              1.5,
+              1.3999999985098839,
+              1.5,
+              1.3999999985098839,
+              1.5,
+              1.4000000059604645,
+              1.3999999985098839,
+              1.2999999970197678
+            ]
+          },
+          {
+            "size": "3840x2160",
+            "samplesMs": [
+              5.5999999940395355,
+              5.5,
+              5.5,
+              5.600000001490116,
+              5.300000004470348,
+              5.399999998509884,
+              5.5,
+              5.199999995529652,
+              7.700000002980232,
+              5.799999997019768
+            ]
+          }
+        ],
+        "programRenderMs": [
+          27.100000001490116,
+          26.80000000447035,
+          26.399999998509884,
+          27.5,
+          26.299999997019768,
+          26.80000000447035,
+          26.5,
+          26,
+          26.5,
+          26.69999999552965
+        ]
+      },
+      "problems": []
+    },
+    {
+      "pixel": [
+        64,
+        64,
+        32,
+        255
+      ],
+      "bytes": 1227,
+      "cancelled": true,
+      "unchanged": true,
+      "missingError": "ColorGradingExecutionError: LUT: Embedded LUT \u201cred-invert\u201d is missing. The effect is preserved and bypassed.",
+      "initialAdmission": {
+        "essentialOwners": 1,
+        "decoderSlots": 4,
+        "surfaceBytes": 53706752,
+        "monitorOwners": 0,
+        "blockers": [],
+        "programReady": true
+      },
+      "finalAdmission": {
+        "essentialOwners": 1,
+        "decoderSlots": 4,
+        "surfaceBytes": 53706752,
+        "monitorOwners": 0,
+        "blockers": [],
+        "programReady": true
+      },
+      "timings": {
+        "parseMs": [
+          8.299999997019768,
+          7.700000002980232,
+          6.899999998509884,
+          6.799999997019768,
+          6.899999998509884,
+          6.800000004470348,
+          7,
+          6.600000001490116,
+          6.899999998509884,
+          7
+        ],
+        "readback": [
+          {
+            "size": "1280x720",
+            "samplesMs": [
+              0.5999999940395355,
+              0.6000000014901161,
+              0.7000000029802322,
+              0.5,
+              0.6000000014901161,
+              0.5999999940395355,
+              0.6000000014901161,
+              0.7000000029802322,
+              0.6000000014901161,
+              0.7999999970197678
+            ]
+          },
+          {
+            "size": "1920x1080",
+            "samplesMs": [
+              1.3999999985098839,
+              1.3999999985098839,
+              1.2999999970197678,
+              1.5,
+              1.3000000044703484,
+              1.3999999985098839,
+              1.3999999985098839,
+              1.3000000044703484,
+              1.3999999985098839,
+              4.5
+            ]
+          },
+          {
+            "size": "3840x2160",
+            "samplesMs": [
+              5.600000001490116,
+              5.799999997019768,
+              5.600000001490116,
+              5.299999997019768,
+              5.5,
+              8,
+              5.700000002980232,
+              5.600000001490116,
+              5.199999995529652,
+              5.600000001490116
+            ]
+          }
+        ],
+        "programRenderMs": [
+          30.200000002980232,
+          30.600000001490116,
+          30.19999999552965,
+          30.30000000447035,
+          31.100000001490116,
+          31.200000002980232,
+          30.5,
+          30.30000000447035,
+          30.80000000447035,
+          30.599999994039536
+        ]
+      },
+      "problems": []
+    }
+  ]
+}

@@ -1,3 +1,7 @@
+import { ColorGradingRuntime, ColorGradingExecutionError, type ColorGradingFrame } from './colorGradingRuntime'
+import { COLOR_LUT_TYPE, parseCube, portableColorLut } from '../domain/colorLut'
+import { COLOR_CURVES_TYPE, DEFAULT_COLOR_CURVES } from '../domain/colorCurves'
+import { COLOR_WHEELS_TYPE, DEFAULT_COLOR_WHEELS } from '../domain/colorWheels'
 /**
  * Pixel-golden tests for the shared preview/export compositor.
  *
@@ -633,6 +637,7 @@ async function render(
   frames: Record<string, RenderFrameSource | null>,
   pluginContributions?: PluginVideoEffectContributionSnapshot,
   videoEffectStageExecutor?: VideoEffectStageExecutor | null,
+  grading?: ColorGradingFrame,
 ) {
   const output = new PixelCanvas(doc.width, doc.height)
   const surfaces = makeProvider(doc.width, doc.height)
@@ -658,6 +663,7 @@ async function render(
     undefined,
     undefined,
     videoEffectStageExecutor,
+    grading,
   )
   return { output, surfaces, requests: source.requests, result }
 }
@@ -1189,4 +1195,63 @@ test('an awaited source plugin completes before track and master effects and lea
     },
   })
   expect(result.output.rgbaAt(0, 0)).toEqual([40, 60, 80, 255])
+})
+
+function gradingFixture() {
+  const runtime = new ColorGradingRuntime(async () => {})
+  runtime.setCatalog([portableColorLut('invert-red', 'Invert red', parseCube('LUT_1D_SIZE 2\n1 0 0\n0 1 1'))])
+  const lut: EffectDescriptor = { id: 'lut', type: COLOR_LUT_TYPE, version: 1, enabled: true, params: { lutId: 'invert-red', strength: 1 } }
+  const curve: EffectDescriptor = { id: 'curve', type: COLOR_CURVES_TYPE, version: 1, enabled: true, params: { ...DEFAULT_COLOR_CURVES, master: '[[0,0],[1,0.5]]' } }
+  const wheel: EffectDescriptor = { id: 'wheel', type: COLOR_WHEELS_TYPE, version: 1, enabled: true, params: { ...DEFAULT_COLOR_WHEELS, gainR: 2 } }
+  const grading: ColorGradingFrame = { runtime, context: runtime.context, check: () => {}, policy: 'fail' }
+  return { runtime, grading, lut, curve, wheel }
+}
+
+test('LUT, curves and wheels retain clip/track/master order and exact preview/export bytes', async () => {
+  const { runtime, grading, lut, curve, wheel } = gradingFixture()
+  try {
+    const clip = makeClip('clip', 'plate', 0, 10); clip.effects = [lut]
+    const track = makeTrack('video', [clip]); track.videoEffects = [curve]
+    const doc = makeDoc([track]); doc.masterVideoEffects = [wheel]
+    const frames = { plate: solid(5, 5, [64, 128, 192, 255]) }
+    const preview = await render(doc, 0, frames, undefined, undefined, { ...grading, policy: 'bypass' })
+    const exported = await render(doc, 0, frames, undefined, undefined, grading)
+    expect(preview.output.rgbaAt(2, 2)).toEqual([192, 64, 96, 255])
+    expect(exported.output.premultiplied).toEqual(preview.output.premultiplied)
+    expect(exported.result.missing).toEqual([])
+  } finally { runtime.dispose() }
+})
+
+test('grading and awaited plugins share exact authored order before the static buses', async () => {
+  const { runtime, grading, lut, curve, wheel } = gradingFixture()
+  try {
+    const clip = makeClip('clip', 'plate', 0, 10); clip.effects = [lut, pluginEffect(), curve]
+    const track = makeTrack('video', [clip]); track.videoEffects = [wheel]
+    const doc = makeDoc([track]); doc.masterVideoEffects = [{ ...lut, id: 'master-lut' }]
+    const executor: VideoEffectStageExecutor = { bypassPolicy: 'fail', applyPluginEffect: async ({ rgba }) => {
+      await Promise.resolve()
+      for (let i = 0; i < rgba.length; i += 4) { const red = rgba[i]; rgba[i] = rgba[i + 1]; rgba[i + 1] = rgba[i + 2]; rgba[i + 2] = red }
+      return { status: 'applied', rgba }
+    } }
+    const result = await render(doc, 0, { plate: solid(5, 5, [64, 128, 192, 255]) }, pluginSnapshot(), executor, grading)
+    expect(result.output.rgbaAt(2, 2)).toEqual([127, 96, 96, 255])
+    expect(result.result.missing).toEqual([])
+  } finally { runtime.dispose() }
+})
+
+test('readback failure and context loss reject grading before any result can be published', async () => {
+  const { runtime, grading, wheel } = gradingFixture()
+  try {
+    const clip = makeClip('clip', 'plate', 0, 10); clip.effects = [wheel]
+    const doc = makeDoc([makeTrack('video', [clip])])
+    for (const failure of ['throw', 'lost', 'missing'] as const) {
+      const output = new PixelCanvas(5, 5), surfaces = makeProvider(5, 5)
+      if (failure === 'throw') surfaces.leg.context.getImageData = () => { throw new Error('readback failed') }
+      if (failure === 'lost') surfaces.leg.context.isContextLost = () => true
+      if (failure === 'missing') delete surfaces.leg.context.getImageData
+      const source = makeSource({ plate: solid(5, 5, [64, 128, 192, 255]) })
+      await expect(compositeFrame(doc, videoCompositionPlanAtFrame(doc, 0, new Map()), output.context, source.source, surfaces.provider, undefined, undefined, undefined, grading)).rejects.toBeInstanceOf(ColorGradingExecutionError)
+      if (failure === 'missing') expect(source.requests).toEqual([])
+    }
+  } finally { runtime.dispose() }
 })

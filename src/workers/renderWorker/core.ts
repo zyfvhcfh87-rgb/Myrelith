@@ -1,3 +1,5 @@
+import { ColorGradingRuntime, ColorGradingCancelledError, ColorGradingExecutionError, type ColorGradingFrame } from '../../pipeline/colorGradingRuntime'
+import type { PortableColorLut } from '../../domain/colorLutCatalog'
 /**
  * Single render-worker resource owner.
  *
@@ -60,6 +62,14 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   /** Bumped by every composite/setDoc/configureAsset/releaseAsset/close;
    * stale composites and parked feed loops check it and unwind. */
   let generation = 0
+  let colorLuts: readonly PortableColorLut[] = []
+  let gradingRuntime: ColorGradingRuntime | null = null
+  function gradingFrame(myGen: number): ColorGradingFrame {
+    const check = () => { if (generation !== myGen) throw new ColorGradingCancelledError() }
+    gradingRuntime ??= new ColorGradingRuntime()
+    gradingRuntime.setCatalog(colorLuts, check)
+    return { runtime: gradingRuntime, context: gradingRuntime.context, check, policy: 'bypass' }
+  }
   let nextPluginEffectRequestId = 1
   const pendingPluginEffects = new Map<number, PendingPluginEffect>()
   /** Composites run strictly one at a time (stale ones exit immediately). */
@@ -176,6 +186,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     )
     return {
       enabled: runtimeTelemetryEnabled,
+      colorGrading: gradingRuntime?.ledger() ?? { bytes: 0, peakBytes: 0, entries: 0, pendingTasks: 0, active: false, ports: 0 },
       active: {
         videoSources: streamingAssets.size,
         videoDecoders,
@@ -695,6 +706,8 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         transitionSurfaceProvider,
         currentPresentationProfile() ?? undefined,
         lensRemapProvider,
+        undefined,
+        gradingFrame(generation),
       )
     },
     present: () => {
@@ -1927,6 +1940,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
             myGen,
             returnedPluginEffectBuffers,
           ),
+          gradingFrame(myGen),
         )
       } finally {
         for (const loan of loans) loan.settle()
@@ -1956,6 +1970,8 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     enterRenderQueue()
     compositeChain = compositeChain.then(() =>
       run().catch((error) => {
+        if (error instanceof ColorGradingCancelledError) { postSuperseded(msg.requestId); return }
+        if (error instanceof ColorGradingExecutionError) { gradingRuntime?.dispose(); gradingRuntime = null }
         if (error instanceof LensRemapUnavailableError) failLensOwner(error)
         env.post({
           type: 'error',
@@ -1989,6 +2005,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         syncCanvases()
         break
       }
+      case 'setColorLuts': { supersede(); colorLuts = msg.catalog; break }
       case 'setDoc': {
         const previousDoc = doc
         invalidatePlaybackPolicyForDoc(previousDoc, msg.doc)
@@ -2076,6 +2093,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
             ...pendingImageOpens.map((pending) => pending.done),
           ],
         )
+        gradingRuntime?.dispose(); gradingRuntime = null; colorLuts = []
         const errors = results
           .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
           .map((result) => result.reason)

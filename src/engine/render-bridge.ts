@@ -1,3 +1,4 @@
+import type { PortableColorLut } from '../domain/colorLutCatalog'
 /**
  * engine/render-bridge.ts — Main-thread facade over the render worker.
  * Phase 4.1c.
@@ -215,6 +216,8 @@ export class RenderWorkerBridge {
   /** The doc snapshot last posted via setDoc — composites are built from
    * THIS, never from a fresher store read (protocol ordering contract). */
   private doc: TimelineDoc | null = null
+  private colorLuts: readonly PortableColorLut[] | undefined
+  private colorLutGeneration = -1
   private readonly sources = new Map<AssetId, AssetSource>()
   /** Invalidates legacy chunk reads when any source is replaced or removed. */
   private sourceRevision = 0
@@ -289,6 +292,13 @@ export class RenderWorkerBridge {
   init(canvas: OffscreenCanvas): void {
     if (this.disposed) return
     this.send({ type: 'init', canvas }, [canvas])
+  }
+
+  setColorLuts(catalog: readonly PortableColorLut[] | undefined, generation: number): void {
+    if (this.disposed || (catalog === this.colorLuts && generation === this.colorLutGeneration)) return
+    this.send({ type: 'setColorLuts', catalog: catalog ?? [] }, [])
+    this.colorLuts = catalog; this.colorLutGeneration = generation
+    this.abortPluginEffectCalls(); this.settlePendingAsSuperseded()
   }
 
   /** Post a new doc snapshot; subsequent composites are built from it. */
@@ -589,6 +599,7 @@ export class RenderWorkerBridge {
       this.rejectClose = reject
     })
     this.disposed = true
+    this.colorLuts = undefined
     this.sourceRevision++
     this.abortPluginEffectCalls()
     this.settlePendingAsSuperseded()

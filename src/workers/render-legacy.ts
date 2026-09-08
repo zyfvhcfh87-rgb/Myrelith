@@ -392,6 +392,7 @@ export function createLegacyRenderWorkerCompatibility(
     }
 
     return host.enqueueComposite(() => run().catch((error) => {
+      if (!host.generationIsCurrent(generation)) { postSuperseded(message.requestId); return }
       env.post({
         type: 'error',
         requestId: message.requestId,

@@ -1,3 +1,6 @@
+import { ColorGradingExecutionError, ColorGradingCancelledError, type ColorGradingFrame } from './colorGradingRuntime'
+import { colorGradingPlanError, colorGradingPlanNeedsPixels } from '../domain/colorGradingBudget'
+import { EMPTY_COLOR_GRADING_CONTEXT, isColorGradingPixel, isColorGradingType } from '../domain/colorGradingEffects'
 /**
  * pipeline/render.ts — compositeFrame(doc, frame): draw one timeline frame.
  * Phase 4.1.
@@ -120,6 +123,7 @@ export interface Composite2D {
   globalCompositeOperation: GlobalCompositeOperation
   /** Optional on test fakes; present on modern Canvas2D/OffscreenCanvas contexts. */
   filter?: string
+  isContextLost?(): boolean
   getImageData?(sx: number, sy: number, sw: number, sh: number): ImageData
   putImageData?(imageData: ImageData, dx: number, dy: number): void
   fillStyle: string | CanvasGradient | CanvasPattern
@@ -242,7 +246,7 @@ function correctedSourceForClip(
 }
 
 function rethrowVideoEffectStageExecutionError(error: unknown): void {
-  if (error instanceof VideoEffectStageExecutionError) throw error
+  if (error instanceof VideoEffectStageExecutionError || error instanceof ColorGradingExecutionError || error instanceof ColorGradingCancelledError) throw error
 }
 
 /** Null selects the visible legacy built-in path without calling the plugin. */
@@ -270,10 +274,18 @@ export async function compositeFrame(
   presentation?: PresentationProfile,
   lensRemapProvider?: LensRemapProvider | null,
   videoEffectStageExecutor?: VideoEffectStageExecutor | null,
+  grading?: ColorGradingFrame,
 ): Promise<CompositeResult> {
+  grading?.check()
+  const gradingContext = grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT
+  const gradingPixels = colorGradingPlanNeedsPixels(plan, gradingContext)
+  const gradingError = colorGradingPlanError(plan, presentation?.outputWidth ?? doc.width, presentation?.outputHeight ?? doc.height,
+    gradingContext, grading?.policy ?? 'fail', !gradingPixels || supportsCanvasEffectPixels(transitionSurfaceProvider.get().leg.ctx), doc.width, doc.height)
+  if (gradingError) throw new ColorGradingExecutionError(gradingError)
+  if (!gradingPixels) { grading?.runtime.clearCache(); grading = undefined }
   const hasBuses = plan.items.some((item) => item.kind === 'video-bus'
-    ? resolveVideoBusEffects(item.effects, true).pixelEffects.length > 0
-    : 'trackEffects' in item && resolveVideoBusEffects(item.trackEffects ?? [], true).pixelEffects.length > 0)
+    ? resolveVideoBusEffects(item.effects, true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT).pixelEffects.length > 0
+    : 'trackEffects' in item && resolveVideoBusEffects(item.trackEffects ?? [], true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT).pixelEffects.length > 0)
   if (hasBuses) {
     const error = videoBusRenderBudgetError(presentation?.outputWidth ?? doc.width, presentation?.outputHeight ?? doc.height, doc.width, doc.height)
     if (error) throw new VideoEffectStageExecutionError(error)
@@ -320,8 +332,9 @@ export async function compositeFrame(
     ctx.fillRect(0, 0, doc.width, doc.height)
 
     for (const item of plan.items) {
+      grading?.check()
       if (item.kind === 'video-bus') {
-        compositeOpaqueVideoBus(doc, ctx, transitionSurfaceProvider, item.effects, presentationScale)
+        await compositeOpaqueVideoBus(doc, ctx, transitionSurfaceProvider, item.effects, presentationScale, grading)
         continue
       }
       if (
@@ -341,14 +354,16 @@ export async function compositeFrame(
       }
       if (item.kind === 'adjustment') {
         try {
-          compositePostCompositeAdjustment(
+          await compositePostCompositeAdjustment(
             doc,
             ctx,
             transitionSurfaceProvider,
             item.adjustment,
             presentationScale,
+            grading,
           )
         } catch (e) {
+          rethrowVideoEffectStageExecutionError(e)
           console.warn(
             `[render] applying adjustment "${item.adjustment.id}" failed:`,
             e instanceof Error ? e.message : e,
@@ -372,6 +387,7 @@ export async function compositeFrame(
           videoEffectStageExecutor,
           item.frame,
           item.trackEffects,
+          grading,
         )
         continue
       }
@@ -390,8 +406,9 @@ export async function compositeFrame(
               item.effectStagePlan,
               videoEffectStageExecutor,
               item.frame,
+              grading,
             )
-          })
+          }, grading)
           drawn.push(item.clip.id)
         } catch (e) {
           rethrowVideoEffectStageExecutionError(e)
@@ -452,6 +469,7 @@ export async function compositeFrame(
               effectStagePlan,
               videoEffectStageExecutor,
               item.frame,
+              grading,
             )
           } else if (
             effectStagePlan?.requiresOrderedPixelPath
@@ -460,8 +478,8 @@ export async function compositeFrame(
             throw new VideoEffectStageExecutionError(
               'Canvas pixel access is unavailable for fail-closed plugin composition',
             )
-          } else if (requiresPixelEffects(target, clip)) {
-            compositePixelCorrectedMediaLayer(
+          } else if (requiresPixelEffects(gradingPixels ? transitionSurfaceProvider.get().leg.ctx : target, clip, grading)) {
+            await compositePixelCorrectedMediaLayer(
               doc,
               target,
               transitionSurfaceProvider,
@@ -469,11 +487,12 @@ export async function compositeFrame(
               correctedImage,
               blend,
               presentationScale,
+              grading,
             )
           } else {
             drawClip(target, doc, request, correctedImage, blend)
           }
-        })
+        }, grading)
         drawn.push(clip.id)
       } catch (e) {
         rethrowLensRemapUnavailable(e)
@@ -666,6 +685,7 @@ async function compositeTransitionGroup(
   videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
   timelineFrame: number,
   trackEffects: readonly EffectDescriptor[] = [],
+  grading?: ColorGradingFrame,
 ): Promise<void> {
   const ready: ClipId[] = []
   const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
@@ -705,7 +725,7 @@ async function compositeTransitionGroup(
           )
         }
         const pixelEffects = orderedPixelPath
-          || requiresPixelEffects(surfaces.leg.ctx, request.clip)
+          || requiresPixelEffects(surfaces.leg.ctx, request.clip, grading)
         inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
           clearSurface(surfaces.leg.ctx, doc)
           drawClip(
@@ -727,14 +747,16 @@ async function compositeTransitionGroup(
             surfaceHeight,
             doc,
             timelineFrame,
+            grading,
           )
         } else {
-          applyPixelEffectsToSurface(
+          await applyPixelEffectsToSurface(
             surfaces.leg.ctx,
             request.clip,
             surfaceWidth,
             surfaceHeight,
             doc,
+            grading,
           )
         }
 
@@ -767,7 +789,7 @@ async function compositeTransitionGroup(
     }
 
     if (ready.length === 0) return
-    applyVideoBusToSurface(surfaces.group.ctx, trackEffects, doc, presentationScale)
+    await applyVideoBusToSurface(surfaces.group.ctx, trackEffects, doc, presentationScale, grading)
 
     destination.save()
     try {
@@ -922,7 +944,7 @@ function drawClip(
   }
 }
 
-function compositePixelCorrectedMediaLayer(
+async function compositePixelCorrectedMediaLayer(
   doc: TimelineDoc,
   destination: Composite2D,
   surfaceProvider: TransitionSurfaceProvider,
@@ -930,7 +952,8 @@ function compositePixelCorrectedMediaLayer(
   image: CanvasImageSource,
   blendMode: BlendModeResolution,
   presentationScale: { readonly x: number; readonly y: number },
-): void {
+  grading?: ColorGradingFrame,
+): Promise<void> {
   const surfaces = surfaceProvider.get()
   const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
   const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
@@ -947,12 +970,13 @@ function compositePixelCorrectedMediaLayer(
         1,
       )
     })
-    applyPixelEffectsToSurface(
+    await applyPixelEffectsToSurface(
       surfaces.leg.ctx,
       request.clip,
       surfaceWidth,
       surfaceHeight,
       doc,
+      grading,
     )
     destination.save()
     try {
@@ -989,6 +1013,7 @@ async function compositeOrderedPixelMediaLayer(
   effectStagePlan: VideoEffectStagePlan,
   videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
   timelineFrame: number,
+  grading?: ColorGradingFrame,
 ): Promise<void> {
   const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
   const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
@@ -1013,6 +1038,7 @@ async function compositeOrderedPixelMediaLayer(
       surfaceHeight,
       doc,
       timelineFrame,
+      grading,
     )
     destination.save()
     try {
@@ -1062,6 +1088,7 @@ async function compositeTextLayer(
   effectStagePlan: VideoEffectStagePlan | undefined,
   videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
   timelineFrame: number,
+  grading?: ColorGradingFrame,
 ): Promise<void> {
   const surfaces = surfaceProvider.get()
   const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
@@ -1083,7 +1110,7 @@ async function compositeTextLayer(
         'Canvas pixel access is unavailable for fail-closed plugin text composition',
       )
     }
-    const pixelCorrection = orderedPixelPath || requiresPixelEffects(surfaces.leg.ctx, clip)
+    const pixelCorrection = orderedPixelPath || requiresPixelEffects(surfaces.leg.ctx, clip, grading)
     if (orderedPixelPath) {
       await applyPlannedEffectsToSurface(
         surfaces.leg.ctx,
@@ -1093,14 +1120,16 @@ async function compositeTextLayer(
         surfaceHeight,
         doc,
         timelineFrame,
+        grading,
       )
     } else if (pixelCorrection) {
-      applyPixelEffectsToSurface(
+      await applyPixelEffectsToSurface(
         surfaces.leg.ctx,
         clip,
         surfaceWidth,
         surfaceHeight,
         doc,
+        grading,
       )
     }
 
@@ -1147,18 +1176,19 @@ function applyCanvasBlendMode(
 function applyCanvasEffectStack(ctx: Composite2D, clip: Clip): void {
   const supportsCanvasFilter = supportsCanvasEffectFilter(ctx)
   const resolution = resolveCanvasEffectStack(
-    clip.effects,
+    clip.effects.filter((effect) => !isColorGradingType(effect.type)),
     supportsCanvasFilter,
     supportsCanvasEffectPixels(ctx),
   )
   if (resolution.filter !== null && supportsCanvasFilter) ctx.filter = resolution.filter
 }
 
-function requiresPixelEffects(ctx: Composite2D, clip: Clip): boolean {
+function requiresPixelEffects(ctx: Composite2D, clip: Clip, grading?: ColorGradingFrame): boolean {
   return resolveCanvasEffectStack(
     clip.effects,
     supportsCanvasEffectFilter(ctx),
     supportsCanvasEffectPixels(ctx),
+    grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT,
   ).pixelEffects.length > 0
 }
 
@@ -1170,6 +1200,7 @@ async function applyPlannedEffectsToSurface(
   height: number,
   doc: Pick<TimelineDoc, 'width' | 'height' | 'frameRate'>,
   timelineFrame: number,
+  grading?: ColorGradingFrame,
 ): Promise<void> {
   if (
     !supportsCanvasEffectPixels(ctx)
@@ -1178,7 +1209,8 @@ async function applyPlannedEffectsToSurface(
   ) {
     throw new Error('Canvas pixel access is unavailable for ordered effect composition')
   }
-  const imageData = ctx.getImageData(0, 0, width, height)
+  const pixelGrading = plan.stages.some((stage) => stage.kind === 'builtin' && stage.effect.enabled && isColorGradingType(stage.effect.type)) ? grading : undefined
+  const imageData = readEffectPixels(ctx, width, height, pixelGrading)
   await applyVideoEffectStagePlanToRgba(imageData.data, plan, executor, {
     timelineFrame,
     frameRate: doc.frameRate,
@@ -1186,23 +1218,27 @@ async function applyPlannedEffectsToSurface(
     surfaceHeight: height,
     projectWidth: doc.width,
     projectHeight: doc.height,
-  })
-  ctx.putImageData(imageData, 0, 0)
+  }, grading)
+  grading?.check()
+  writeEffectPixels(ctx, imageData, pixelGrading)
 }
 
-function applyPixelEffectsToSurface(
+async function applyPixelEffectsToSurface(
   ctx: Composite2D,
   clip: Clip,
   width: number,
   height: number,
   doc: Pick<TimelineDoc, 'width' | 'height'>,
-): void {
+  grading?: ColorGradingFrame,
+): Promise<void> {
   const resolution = resolveCanvasEffectStack(
     clip.effects,
     supportsCanvasEffectFilter(ctx),
     supportsCanvasEffectPixels(ctx),
+    grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT,
   )
   if (resolution.pixelEffects.length === 0) return
+  const pixelGrading = resolution.pixelEffects.some(isColorGradingPixel) ? grading : undefined
   if (
     !supportsCanvasEffectPixels(ctx)
     || !ctx.getImageData
@@ -1210,14 +1246,15 @@ function applyPixelEffectsToSurface(
   ) {
     throw new Error('Canvas pixel access became unavailable during effect composition')
   }
-  const imageData = ctx.getImageData(0, 0, width, height)
-  applyOrderedPixelEffectsToRgba(imageData.data, resolution.pixelEffects, {
+  const imageData = readEffectPixels(ctx, width, height, pixelGrading)
+  await applySurfacePixelEffects(imageData.data, resolution.pixelEffects, {
     surfaceWidth: width,
     surfaceHeight: height,
     projectWidth: doc.width,
     projectHeight: doc.height,
-  })
-  ctx.putImageData(imageData, 0, 0)
+  }, grading)
+  grading?.check()
+  writeEffectPixels(ctx, imageData, pixelGrading)
 }
 
 /**
@@ -1225,19 +1262,22 @@ function applyPixelEffectsToSurface(
  * This adds no persistent 4K allocation: the same scratch surface already
  * owned by transition, text, lens, and ordered-effect composition is reused.
  */
-function compositePostCompositeAdjustment(
+async function compositePostCompositeAdjustment(
   doc: TimelineDoc,
   destination: Composite2D,
   surfaceProvider: TransitionSurfaceProvider,
   adjustment: AdjustmentItem,
   presentationScale: { readonly x: number; readonly y: number },
-): void {
+  grading?: ColorGradingFrame,
+): Promise<void> {
   const surfaces = surfaceProvider.get()
   const resolution = resolvePostCompositeEffectStack(
     adjustment.effects,
     supportsCanvasEffectPixels(surfaces.leg.ctx),
+    grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT,
   )
   if (resolution.pixelEffects.length === 0) return
+  const pixelGrading = resolution.pixelEffects.some(isColorGradingPixel) ? grading : undefined
   if (!destination.canvas) {
     throw new Error('destination canvas access is unavailable')
   }
@@ -1270,19 +1310,14 @@ function compositePostCompositeAdjustment(
       surfaces.leg.ctx.restore()
     }
 
-    const imageData = surfaces.leg.ctx.getImageData(
-      0,
-      0,
-      surfaceWidth,
-      surfaceHeight,
-    )
-    applyOrderedPixelEffectsToRgba(imageData.data, resolution.pixelEffects, {
+    const imageData = readEffectPixels(surfaces.leg.ctx, surfaceWidth, surfaceHeight, pixelGrading)
+    await applySurfacePixelEffects(imageData.data, resolution.pixelEffects, {
       surfaceWidth,
       surfaceHeight,
       projectWidth: doc.width,
       projectHeight: doc.height,
-    })
-    surfaces.leg.ctx.putImageData(imageData, 0, 0)
+    }, grading)
+    writeEffectPixels(surfaces.leg.ctx, imageData, pixelGrading)
 
     destination.save()
     try {
@@ -1307,17 +1342,18 @@ function compositePostCompositeAdjustment(
   }
 }
 
-/** One readback after source/plugin completion; never retains pixels across an await. */
-function applyVideoBusToSurface(ctx: Composite2D, effects: readonly EffectDescriptor[], doc: TimelineDoc, scale: { readonly x: number; readonly y: number }): void {
-  const resolution = resolveVideoBusEffects(effects, true)
+/** One readback after source/plugin completion, borrowed until grading settles. */
+async function applyVideoBusToSurface(ctx: Composite2D, effects: readonly EffectDescriptor[], doc: TimelineDoc, scale: { readonly x: number; readonly y: number }, grading?: ColorGradingFrame): Promise<void> {
+  const resolution = resolveVideoBusEffects(effects, true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT)
   if (resolution.pixelEffects.length === 0) return
+  const pixelGrading = resolution.pixelEffects.some(isColorGradingPixel) ? grading : undefined
   if (!ctx.getImageData || !ctx.putImageData) throw new VideoEffectStageExecutionError('Canvas pixel access is unavailable for video-bus effects.')
   const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
   try {
-    const data = ctx.getImageData(0, 0, width, height)
-    applyOrderedPixelEffectsToRgba(data.data, resolution.pixelEffects, { surfaceWidth: width, surfaceHeight: height, projectWidth: doc.width, projectHeight: doc.height })
-    ctx.putImageData(data, 0, 0)
-  } catch (cause) { throw new VideoEffectStageExecutionError('Video-bus pixel processing failed.', cause) }
+    const data = readEffectPixels(ctx, width, height, pixelGrading)
+    await applySurfacePixelEffects(data.data, resolution.pixelEffects, { surfaceWidth: width, surfaceHeight: height, projectWidth: doc.width, projectHeight: doc.height }, grading)
+    writeEffectPixels(ctx, data, pixelGrading)
+  } catch (cause) { rethrowVideoEffectStageExecutionError(cause); throw new VideoEffectStageExecutionError('Video-bus pixel processing failed.', cause) }
 }
 
 /** Leg/source helpers settle before this owner processes the opacity-complete group. */
@@ -1326,8 +1362,9 @@ async function compositeVideoTrackBus(
   effects: readonly EffectDescriptor[] | undefined, blend: BlendModeResolution,
   scale: { readonly x: number; readonly y: number },
   paint: (target: Composite2D, blend: BlendModeResolution) => Promise<void>,
+  grading?: ColorGradingFrame,
 ): Promise<void> {
-  if (!effects?.length || resolveVideoBusEffects(effects, true).pixelEffects.length === 0) { await paint(destination, blend); return }
+  if (!effects?.length || resolveVideoBusEffects(effects, true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT).pixelEffects.length === 0) { await paint(destination, blend); return }
   const { group } = provider.get()
   const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
   try {
@@ -1337,7 +1374,7 @@ async function compositeVideoTrackBus(
       clearSurface(group.ctx, doc)
       await paint(group.ctx, NORMAL_BLEND_MODE)
     } finally { group.ctx.restore() }
-    applyVideoBusToSurface(group.ctx, effects, doc, scale)
+    await applyVideoBusToSurface(group.ctx, effects, doc, scale, grading)
     destination.save()
     try {
       destination.globalAlpha = 1
@@ -1348,8 +1385,8 @@ async function compositeVideoTrackBus(
 }
 
 /** Opaque sequence/instance results borrow the existing readback-friendly leg. */
-function compositeOpaqueVideoBus(doc: TimelineDoc, destination: Composite2D, provider: TransitionSurfaceProvider, effects: readonly EffectDescriptor[], scale: { readonly x: number; readonly y: number }): void {
-  if (resolveVideoBusEffects(effects, true).pixelEffects.length === 0) return
+async function compositeOpaqueVideoBus(doc: TimelineDoc, destination: Composite2D, provider: TransitionSurfaceProvider, effects: readonly EffectDescriptor[], scale: { readonly x: number; readonly y: number }, grading?: ColorGradingFrame): Promise<void> {
+  if (resolveVideoBusEffects(effects, true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT).pixelEffects.length === 0) return
   if (!destination.canvas) throw new VideoEffectStageExecutionError('Canvas source access is unavailable for video-bus effects.')
   const { leg } = provider.get()
   const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
@@ -1360,9 +1397,34 @@ function compositeOpaqueVideoBus(doc: TimelineDoc, destination: Composite2D, pro
       leg.ctx.clearRect(0, 0, width, height)
       leg.ctx.drawImage(destination.canvas, 0, 0, width, height, 0, 0, width, height)
     } finally { leg.ctx.restore() }
-    applyVideoBusToSurface(leg.ctx, effects, doc, scale)
+    await applyVideoBusToSurface(leg.ctx, effects, doc, scale, grading)
     destination.save()
     try { destination.globalAlpha = 1; destination.globalCompositeOperation = 'source-over'; destination.drawImage(leg.canvas, 0, 0, width, height, 0, 0, doc.width, doc.height) }
     finally { destination.restore() }
   } finally { releaseSurfacePixels(leg.ctx, doc, scale) }
+}
+
+async function applySurfacePixelEffects(pixels: Uint8ClampedArray, effects: readonly import('../domain/effectStack').CanvasPixelEffect[], geometry: import('../domain/effectPixels').PixelEffectGeometry, grading?: ColorGradingFrame): Promise<void> {
+  if (effects.some(isColorGradingPixel)) {
+    if (!grading) throw new ColorGradingExecutionError('Color grading has no active render owner.')
+    await grading.runtime.apply(pixels, effects, geometry, grading.check)
+  } else applyOrderedPixelEffectsToRgba(pixels, effects, geometry)
+  grading?.check()
+}
+
+function readEffectPixels(ctx: Composite2D, width: number, height: number, grading?: ColorGradingFrame): ImageData {
+  try {
+    grading?.check()
+    if (grading && ctx.isContextLost?.()) throw new Error('Canvas context was lost.')
+    if (!ctx.getImageData) throw new Error('Canvas pixel readback is unavailable.')
+    return ctx.getImageData(0, 0, width, height)
+  } catch (cause) { if (cause instanceof ColorGradingCancelledError) throw cause; if (grading) throw new ColorGradingExecutionError('Color grading cannot read Canvas pixels.', cause); throw cause }
+}
+function writeEffectPixels(ctx: Composite2D, data: ImageData, grading?: ColorGradingFrame): void {
+  try {
+    grading?.check()
+    if (grading && ctx.isContextLost?.()) throw new Error('Canvas context was lost.')
+    if (!ctx.putImageData) throw new Error('Canvas pixel writeback is unavailable.')
+    ctx.putImageData(data, 0, 0)
+  } catch (cause) { if (cause instanceof ColorGradingCancelledError) throw cause; if (grading) throw new ColorGradingExecutionError('Color grading cannot publish Canvas pixels.', cause); throw cause }
 }

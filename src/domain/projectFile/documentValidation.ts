@@ -1,3 +1,4 @@
+import { colorLutCatalogError } from '../colorLutCatalog'
 import type { AdjustmentAnimationKeyframe, AdjustmentItem, CaptionItem, CaptionTrack, Clip, MasterAudioSettings, MulticamDefinition, MulticamInstance, SequenceInstance, TimelineDoc, TimelineMarker, Track } from '../schema';
 import { adjustmentAnimationValidationError, adjustmentItemValidationError } from '../adjustmentItems';
 import { MAX_ANIMATED_FINITE_MAGNITUDE, MAX_KEYFRAME_FRAME, MAX_KEYFRAMES_PER_TRACK } from '../clipAnimation';
@@ -679,6 +680,7 @@ export function validateProjectFile(value: unknown): ProjectFile {
       'rootSequenceId',
       'sequences',
       'multicams',
+      'colorLuts',
       'assets',
       'collections',
     ],
@@ -695,6 +697,8 @@ export function validateProjectFile(value: unknown): ProjectFile {
   if (project.formatVersion !== CURRENT_PROJECT_FORMAT_VERSION) {
     fail('$.formatVersion', `unsupported project format ${project.formatVersion}`)
   }
+  const lutError = colorLutCatalogError(project.colorLuts, true)
+  if (lutError) fail('$.colorLuts', lutError)
   stringValue(project.id, '$.id', PROJECT_FILE_LIMITS.maxIdCharacters)
   stringValue(project.name, '$.name', PROJECT_FILE_LIMITS.maxNameCharacters)
   stringValue(

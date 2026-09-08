@@ -5106,3 +5106,40 @@ The contract and acceptance sequence are in
   4,093 tests + 17 runner checks and all 13 issue Chromium cases pass. Broader
   Chromium: 32 pass / 8 baseline-reproduced failures / 3 opt-in skips. See
   [Gate 6](evidence/issue197/gate-6.md); the broader suite is not wholly green.
+
+## Post-MVP issue #196 - local SDR LUTs, curves and wheels
+
+**IMPLEMENTED AND ACCEPTED LOCALLY (2026-09-08).**
+
+Contract and gate evidence: [COLOR_GRADING.md](COLOR_GRADING.md).
+
+- [x] Read #196, verify merged #197 base `368bd43`, and trace effects, presets,
+  project/history budgets, shared rendering and post-presentation scopes.
+- [x] Compare portable LUT representations and prepare the six-gate plan on
+  `codex/issue196`, without product changes.
+- [x] Check the base with 70 focused Vitest tests, 17 runner checks, production
+  build/typecheck and lint; retain the initial host-tooling failure in the plan.
+- [x] User approved the plan on 2026-09-08, including project-owned embedded LUT data and
+  the bounded preset migration.
+- [x] Gate 1: pure LUT/curve/wheel contracts and reference proof; 61 grading
+  cases, seven architecture cases, 17 runner checks, build/typecheck and lint.
+- [x] Gate 2: portable LUT ownership, import, history and migrations; 274 focused
+  tests, 17 runner checks, build/lint and real Chromium save/reopen/recovery.
+- [x] Gate 3: shared execution, cancellation, resource and timing proof; 381 focused
+  tests, 17 runner checks, build/lint, 45 timing cells and three Chromium flows.
+- [x] Gate 4: keyboard-accessible import, curves, wheels and safe animation;
+  171 focused tests, 17 runner checks, build/lint and two Chromium UI flows.
+- [x] Gate 5: portable correction presets and numeric recipes; 56 focused tests,
+  17 runner checks, build/lint and two Chromium flows. Optional parade deferred
+  after its repeated presentation timing exceeded the approved ceiling; existing
+  scopes stay unchanged. Both runs and the removed prototype are recorded.
+- [x] Gate 6: complete tests/build/lint/audit, Chromium acceptance and evidence.
+  4,200 Vitest tests + 17 runner checks pass, with all nine issue functional
+  Chromium cases and a final four-case preset regression rerun. The 45-cell
+  grading proof retains matching source hashes. Broader Chromium: 41 pass /
+  eight failures reproduced on unchanged `368bd43` / three opt-in skips. See
+  [final acceptance](evidence/issue196-acceptance.md) for scope and limitations.
+- [x] PR #225 review: preserve the published catalog on failed/cancelled refresh;
+  prove existing same-LUT no-op behavior across all targets. Final review checks
+  pass 4,207 tests + 17 runner checks, build/lint/audit, nine Chromium flows and
+  all 45 freshly measured grading cells. See [review evidence](evidence/issue196-review.md).

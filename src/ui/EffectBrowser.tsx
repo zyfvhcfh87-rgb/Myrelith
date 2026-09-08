@@ -1,7 +1,9 @@
-import { applyVideoBusEdit, openVideoBusEdit, openVideoBusPresetSave, videoBusEffectIneligibility, videoBusOwner, videoBusRenderBudgetError, type VideoBusTarget } from '../app/videoBusController'
+import ColorLutPicker from './ColorLutPicker'
+import { COLOR_LUT_TYPE } from '../state/editorUi'
+import { applyVideoBusPreset, applyVideoBusEdit, openVideoBusEdit, openVideoBusPresetSave, videoBusEffectIneligibility, videoBusOwner, videoBusRenderBudgetError, type VideoBusTarget } from '../app/videoBusController'
 import { useEffect, useId, useRef, useState } from 'react'
 import { openAttributeEdit } from '../app/clipAttributeController'
-import { applyEffectTemplate, builtInEffectChoices, effectPresetController, openPresetSave, presetEffectAvailability, effectTemplatePreview, resetEffectGeometry, type PresetSaveSession } from '../app/effectPresetController'
+import { COLOR_GRADING_RECIPES, applyEffectTemplate, builtInEffectChoices, effectPresetController, openPresetSave, presetEffectAvailability, effectTemplatePreview, resetEffectGeometry, type PresetSaveSession } from '../app/effectPresetController'
 import { useEffectPresetStore } from '../state/effectPresetStore'
 import { useDocumentStore } from '../state/documentStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
@@ -45,8 +47,8 @@ function BrowserDialog({ clipId, busTarget, saving, onClose }: { clipId?: string
   }, [])
   const matches = (...parts: string[]) => parts.join(' ').toLowerCase().includes(query.toLowerCase().trim())
   const canWrite = library.loaded && !library.busy && !library.readOnlyReason
-  const apply = (effects: Parameters<typeof applyEffectTemplate>[1]) => {
-    const failure = busSession ? applyVideoBusEdit(busSession, { kind: 'apply', effects, mode }) : applyEffectTemplate(session, effects, mode)
+  const apply = (effects: Parameters<typeof applyEffectTemplate>[1], preset?: import('../domain/effectPresets').EffectPreset) => {
+    const failure = busSession ? preset ? applyVideoBusPreset(busSession, preset, mode) : applyVideoBusEdit(busSession, { kind: 'apply', effects, mode }) : applyEffectTemplate(session, effects, mode, preset?.colorLuts)
     if (failure) setError(failure)
     else onClose()
   }
@@ -57,6 +59,7 @@ function BrowserDialog({ clipId, busTarget, saving, onClose }: { clipId?: string
       ?? (owner ? videoBusRenderBudgetError(owner.sequence.width, owner.sequence.height) : 'The video bus no longer exists.')
   }
   const builtins = builtInEffectChoices().filter((entry) => matches(entry.label, entry.description, entry.effect.type))
+  const recipes = COLOR_GRADING_RECIPES.filter((entry) => matches(entry.name, entry.description, 'color grading correction'))
   const presets = library.presets.filter((preset) => matches(preset.name, ...preset.effects.map((effect) => effect.type)))
   const contributions = plugins?.contributions.filter((entry) => matches(entry.contributionName, entry.effectType, entry.detail, entry.pluginName)) ?? []
   return <dialog ref={ref} className="text-overlay-dialog attribute-dialog effect-browser" aria-labelledby={titleId}
@@ -94,22 +97,28 @@ function BrowserDialog({ clipId, busTarget, saving, onClose }: { clipId?: string
       <ul className="effect-browser-list" aria-label="Matching effects">
         {(filter === 'all' || filter === 'builtins') && builtins.map((entry) => <li key={entry.effect.type}>
           <strong>{entry.label}</strong><span>Built-in · {entry.surfaces.includes('post-composite') ? 'Clips and composites' : 'Clips only'}</span><p>{entry.description}</p>
-          {!busReason([entry.effect]) && effectTemplatePreview([entry.effect], capabilities).map((detail) => <p key={detail}>{detail}</p>)}
+          {entry.effect.type !== COLOR_LUT_TYPE && !busReason([entry.effect]) && effectTemplatePreview([entry.effect], capabilities).map((detail) => <p key={detail}>{detail}</p>)}
           <p>{busReason([entry.effect])}</p>
-          <button type="button" disabled={!!busReason([entry.effect])} onClick={() => apply([entry.effect])}>Apply {entry.label}</button>
+          {entry.effect.type === COLOR_LUT_TYPE
+            ? <ColorLutPicker target={busTarget ?? { kind: 'clip', sequenceId: session.project.sequences.find((sequence) => sequence.tracks.some((track) => track.clips.some((clip) => clip.id === session.targetIds[0])))?.id ?? '', clipId: session.targetIds[0] ?? '' }} disabled={!busTarget && session.targetIds.length !== 1} />
+            : <button type="button" disabled={!!busReason([entry.effect])} onClick={() => apply([entry.effect])}>Apply {entry.label}</button>}
+        </li>)}
+        {(filter === 'all' || filter === 'builtins') && recipes.map((recipe) => <li key={recipe.id}>
+          <strong>{recipe.name}</strong><span>Correction recipe · numeric values</span><p>{recipe.description}</p>
+          <button type="button" disabled={!!busReason(recipe.effects)} onClick={() => apply(recipe.effects)}>Apply {recipe.name}</button>
         </li>)}
         {(filter === 'all' || filter === 'presets') && presets.map((preset) => <li key={preset.id}>
           <strong>{preset.name}</strong><span>Local preset · {preset.effects.length} effects · static values</span>
           <p>{preset.effects.map((effect) => effect.type).join(' → ')}</p>
           {presetEffectAvailability(preset).map((reason) => <p key={reason}>{reason}</p>)}
-          {!busReason(preset.effects) && effectTemplatePreview(preset.effects, capabilities).map((detail) => <p key={detail}>{detail}</p>)}
+          {!busReason(preset.effects) && effectTemplatePreview(preset.effects, capabilities, preset.colorLuts).map((detail) => <p key={detail}>{detail}</p>)}
           {!busSession && preset.effects.filter((effect) => effect.type.startsWith('plugin:')).map((effect) => {
             const contribution = plugins?.contributions.find((entry) => entry.effectType === effect.type)
             return <p key={effect.id}>{effect.type}: {contribution ? `${contribution.status}. ${contribution.detail}` : 'Plugin is missing; the effect stays preserved and unavailable.'}</p>
           })}
           <div className="inspector-effect-actions">
             <p>{busReason(preset.effects)}</p>
-            <button type="button" disabled={!!busReason(preset.effects)} onClick={() => apply(preset.effects)}>Apply preset {preset.name}</button>
+            <button type="button" disabled={!!busReason(preset.effects)} onClick={() => apply(preset.effects, preset)}>Apply preset {preset.name}</button>
             <button type="button" disabled={!canWrite} onClick={() => setRename({ id: preset.id, name: preset.name })}>Rename {preset.name}</button>
             <button type="button" disabled={!canWrite} onClick={() => { void effectPresetController.edit({ kind: 'delete', id: preset.id }) }}>Delete {preset.name}</button>
           </div>
@@ -136,7 +145,7 @@ function BrowserDialog({ clipId, busTarget, saving, onClose }: { clipId?: string
         </li>)}
       </ul>
       {(filter === 'all' || filter === 'presets') && library.unavailable.map((entry) => <p key={entry.index}>Unavailable preset {entry.index + 1}: {entry.reason}</p>)}
-      {!((filter === 'all' || filter === 'builtins') && builtins.length) && !((filter === 'all' || filter === 'presets') && presets.length) && !((filter === 'all' || filter === 'plugins') && contributions.length) && !(!busSession && (filter === 'all' || filter === 'builtins') && (matches('Reset transform geometry position scale rotation anchor') || matches('Reset crop flips geometry'))) && <p>No matching effects.</p>}
+      {!((filter === 'all' || filter === 'builtins') && (builtins.length || recipes.length)) && !((filter === 'all' || filter === 'presets') && presets.length) && !((filter === 'all' || filter === 'plugins') && contributions.length) && !(!busSession && (filter === 'all' || filter === 'builtins') && (matches('Reset transform geometry position scale rotation anchor') || matches('Reset crop flips geometry'))) && <p>No matching effects.</p>}
       <footer className="text-overlay-dialog-actions"><button type="button" className="text-overlay-dialog-cancel" onClick={onClose}>Close</button></footer>
     </div>
   </dialog>

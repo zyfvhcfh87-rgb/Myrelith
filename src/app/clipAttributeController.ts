@@ -1,3 +1,5 @@
+import { pasteClipAttributes } from '../domain/clipAttributes'
+import { commitPortableColorEdit } from './colorLutController'
 import {
   captureClipAttributes, supportedClipAttributeGroups, CLIP_ATTRIBUTE_LABELS,
   type AttributePasteOptions, type ClipAttributeGroup, type ClipAttributeTemplate,
@@ -15,6 +17,7 @@ let clipboard: Clipboard | null = null
 
 function report(message: string): void { useClipAttributeStore.setState({ message }) }
 function clear(): void {
+  useDocumentStore.setState({ retainedClipboardColorLuts: [] })
   clipboard = null
   useClipAttributeStore.setState({ sourceName: null, groups: [], message: '' })
 }
@@ -32,8 +35,9 @@ export function copyClipAttributes(clipId: string, effectIds?: readonly string[]
   const clip = track?.clips.find((clip) => clip.id === clipId)
   if (!track || !clip) { report('The source clip no longer exists.'); return }
   const groups = effectIds === undefined ? supportedClipAttributeGroups(track.kind) : ['effects'] as const
-  const result = captureClipAttributes(clip, track.kind, groups, effectIds)
+  const result = captureClipAttributes(clip, track.kind, groups, effectIds, state.project.colorLuts)
   if (!result.ok) { report(result.reason); return }
+  useDocumentStore.setState({ retainedClipboardColorLuts: result.template.colorLuts ?? [] })
   clipboard = { generation: state.projectGeneration, template: result.template }
   useClipAttributeStore.setState({ sourceName: clip.name, groups, message: `Copied ${effectIds === undefined ? 'attributes' : 'effects'} from ${clip.name}.` })
 }
@@ -44,8 +48,9 @@ export function copyClipEffectStack(clipId: string): void {
   const track = state.doc.tracks.find((track) => track.clips.some((clip) => clip.id === clipId))
   const clip = track?.clips.find((clip) => clip.id === clipId)
   if (!track || !clip) { report('The source clip no longer exists.'); return }
-  const result = captureClipAttributes(clip, track.kind, ['effects'])
+  const result = captureClipAttributes(clip, track.kind, ['effects'], undefined, state.project.colorLuts)
   if (!result.ok) { report(result.reason); return }
+  useDocumentStore.setState({ retainedClipboardColorLuts: result.template.colorLuts ?? [] })
   clipboard = { generation: state.projectGeneration, template: result.template }
   useClipAttributeStore.setState({ sourceName: clip.name, groups: ['effects'], message: `Copied the effect stack from ${clip.name}.` })
 }
@@ -91,6 +96,13 @@ export function applyAttributeEdit(
     return 'The project or selection changed. Reopen the attribute dialog.'
   }
   if (mode === 'paste' && !session.template) return 'Copy attributes or effects first.'
+  if (mode === 'paste' && session.template?.colorLuts?.length) {
+    const result = pasteClipAttributes(state.project, session.sequenceId, session.targetIds, session.template, options, () => crypto.randomUUID())
+    if (!result.ok) return result.reason
+    const error = commitPortableColorEdit(state.project, session.generation, result.project)
+    if (!error) report('Pasted attributes and embedded LUTs.')
+    return error
+  }
   const error = state.applyClipAttributes(session.project, session.sequenceId,
     mode === 'paste' && session.template
       ? { kind: 'paste', targetIds: session.targetIds, template: session.template, options }

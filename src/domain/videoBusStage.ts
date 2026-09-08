@@ -1,3 +1,4 @@
+import type { ColorGradingContext } from './colorGradingEffects'
 /** Static video bus stage traits and dimension-dependent allocation authority. */
 import type { EffectDescriptor, TimelineDoc } from './schema'
 import { effectDescriptorBoundsError, EFFECT_STACK_LIMITS } from './effectBounds'
@@ -25,10 +26,10 @@ export function videoBusStackBoundsError(effects: readonly EffectDescriptor[]): 
   }
   return null
 }
-export function resolveVideoBusEffects(effects: readonly EffectDescriptor[], pixelsAvailable: boolean) {
+export function resolveVideoBusEffects(effects: readonly EffectDescriptor[], pixelsAvailable: boolean, context?: ColorGradingContext) {
   const supported = effects.filter((effect) => !videoBusEffectIneligibility(effect))
-  const executable = resolvePostCompositeEffectStack(supported, pixelsAvailable)
-  const all = resolvePostCompositeEffectStack(effects, pixelsAvailable)
+  const executable = resolvePostCompositeEffectStack(supported, pixelsAvailable, context)
+  const all = resolvePostCompositeEffectStack(effects, pixelsAvailable, context)
   return { ...executable, effects: all.effects.map((resolution) => {
     const reason = videoBusStageIneligibility(resolution.effect)
       ?? (!pixelsAvailable && resolution.status !== 'invalid' && resolution.effect.enabled && effectRegistration(resolution.effect.type)?.pixelEffect(resolution.effect)

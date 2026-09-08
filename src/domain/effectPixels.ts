@@ -1,3 +1,4 @@
+import { isColorGradingPixel } from './colorGradingEffects'
 /** Pure ordered pixel-effect executor shared by preview and export composition. */
 
 import { applySpatialEffect } from './spatialEffectPixels'
@@ -603,7 +604,9 @@ export function applyOrderedPixelEffectsToRgba(
     polygonDistances: new Float32Array(0),
   }
   for (const effect of effects) {
-    if (effect.kind === 'color-adjust') {
+    if (isColorGradingPixel(effect)) {
+      throw new Error('Color grading requires the bounded asynchronous grading owner.')
+    } else if (effect.kind === 'color-adjust') {
       applyColorCorrectionsToRgba(rgba, [effect.params])
     } else if (effect.kind === 'chroma-key') {
       applyChromaKey(rgba, effect.params)

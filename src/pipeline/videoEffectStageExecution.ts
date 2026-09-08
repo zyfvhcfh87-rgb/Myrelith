@@ -1,3 +1,6 @@
+import { isColorGradingType } from '../domain/colorGradingEffects'
+import { effectRegistration, resolveEffectStack } from '../domain/effectStack'
+import type { ColorGradingFrame } from './colorGradingRuntime'
 /** Context-neutral execution of one declarative, authored-order effect plan. */
 
 import type { FrameRate } from '../domain/schema'
@@ -106,13 +109,25 @@ export async function applyVideoEffectStagePlanToRgba(
   plan: VideoEffectStagePlan,
   executor: VideoEffectStageExecutor | null | undefined,
   context: VideoEffectStageExecutionContext,
+  grading?: ColorGradingFrame,
 ): Promise<void> {
   if (!plan.requiresOrderedPixelPath) return
   const expectedLength = checkedContext(pixels, context)
   const working = new Uint8ClampedArray(pixels)
 
   for (const stage of plan.stages) {
+    grading?.check()
     if (stage.kind === 'builtin') {
+      if (grading && isColorGradingType(stage.effect.type)) {
+        const resolved = resolveEffectStack([stage.effect], new Set(['canvas2d-filter', 'canvas2d-pixel-access']), grading.context)[0]
+        if (resolved.status !== 'ready') {
+          if (stage.effect.enabled && grading.policy === 'fail') throw new VideoEffectStageExecutionError(`${resolved.label}: ${resolved.detail}`)
+          continue
+        }
+        const pixel = effectRegistration(stage.effect.type)?.pixelEffect(stage.effect, grading.context)
+        if (pixel) await grading.runtime.apply(working, [pixel], context, grading.check)
+        continue
+      }
       if (stage.status !== 'ready' || stage.pixelEffect === null) continue
       applyOrderedPixelEffectsToRgba(working, [stage.pixelEffect], {
         surfaceWidth: context.surfaceWidth,
@@ -149,6 +164,7 @@ export async function applyVideoEffectStagePlanToRgba(
         cause,
       )
     }
+    grading?.check()
     if (result.status === 'bypassed') {
       if (executor.bypassPolicy === 'fail') {
         throw new VideoEffectStageExecutionError(
@@ -165,5 +181,6 @@ export async function applyVideoEffectStagePlanToRgba(
     working.set(result.rgba)
   }
 
+  grading?.check()
   pixels.set(working)
 }

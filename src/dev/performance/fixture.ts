@@ -467,6 +467,7 @@ export function createPerformanceFixture(): PerformanceFixture {
     rootSequenceId: document.id,
     sequences: [document],
     multicams: [],
+    colorLuts: [],
     assets: [...videoAssets, ...audioAssets, ...imageAssets],
     collections: [],
   }

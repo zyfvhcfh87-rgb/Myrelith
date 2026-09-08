@@ -1,0 +1,293 @@
+[WebServer] (node:40102) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:40103) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium] › tests/browser/command-palette-accessibility.spec.ts:20:1 › discovers only real commands, contains focus, and keeps measured editor targets (3.5s)
+(node:40119) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [chromium] › tests/browser/issue-188-ramped-audio.spec.ts:14:1 › ramped speech and music share real playback/export ownership (3.2s)
+(node:40134) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [chromium] › tests/browser/media-file-drop.spec.ts:200:1 › OS file drops stay in the editor and finish Media Pool and timeline import (0ms)
+(node:40162) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  4 [chromium] › tests/browser/project-setup-overflow.spec.ts:111:1 › new-project setup can reach Create at 1440x900 (1.5s)
+(node:40175) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  5 [chromium] › tests/browser/project-setup-overflow.spec.ts:122:3 › new-project setup stays horizontally contained at 1050px wide (1.4s)
+(node:40188) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  6 [chromium] › tests/browser/project-setup-overflow.spec.ts:122:3 › new-project setup stays horizontally contained at 1051px wide (1.5s)
+(node:40201) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  7 [chromium] › tests/browser/project-setup-overflow.spec.ts:122:3 › new-project setup stays horizontally contained at 1100px wide (1.5s)
+(node:40214) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  8 [chromium] › tests/browser/project-setup-overflow.spec.ts:133:1 › new-project setup can reach Create at 390x720 (1.4s)
+
+
+  1) [chromium] › tests/browser/command-palette-accessibility.spec.ts:20:1 › discovers only real commands, contains focus, and keeps measured editor targets
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 7
+
+    - Array []
+    + Array [
+    +   Object {
+    +     "height": 23,
+    +     "name": "Import at least two video sources first",
+    +     "width": 90.125,
+    +   },
+    + ]
+
+      128 |     }]
+      129 |   }))
+    > 130 |   expect(undersizedTargets).toEqual([])
+          |                             ^
+      131 |
+      132 |   await testInfo.attach('active-inspector-targets', {
+      133 |     body: await page.screenshot(),
+        at /private/tmp/myrelith-196-baseline/tests/browser/command-palette-accessibility.spec.ts:130:29
+
+    attachment #3: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .tmp/playwright/command-palette-accessibil-32771-eps-measured-editor-targets-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .tmp/playwright/command-palette-accessibil-32771-eps-measured-editor-targets-chromium/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    .tmp/playwright/command-palette-accessibil-32771-eps-measured-editor-targets-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace .tmp/playwright/command-palette-accessibil-32771-eps-measured-editor-targets-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests/browser/issue-188-ramped-audio.spec.ts:14:1 › ramped speech and music share real playback/export ownership
+
+    Error: expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 1.0010000000000001
+    Received: 1.0453333333333332
+
+    Expected precision:    3
+    Expected difference: < 0.0005
+    Received difference:   0.044333333333333114
+
+      536 |   })
+      537 |   expect(result.exportBytes).toBeGreaterThan(1_000)
+    > 538 |   expect(result.duration).toBeCloseTo(result.expectedDuration, 3)
+          |                           ^
+      539 |   expect(result.videoDuration).toBeCloseTo(result.expectedDuration, 3)
+      540 |   expect(result.audioDuration).toBeCloseTo(result.expectedDuration, 3)
+      541 |   expect(result.decodedThroughSample).toBe(result.expectedSamples)
+        at /private/tmp/myrelith-196-baseline/tests/browser/issue-188-ramped-audio.spec.ts:538:27
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .tmp/playwright/issue-188-ramped-audio-ram-ff5ec-l-playback-export-ownership-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .tmp/playwright/issue-188-ramped-audio-ram-ff5ec-l-playback-export-ownership-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .tmp/playwright/issue-188-ramped-audio-ram-ff5ec-l-playback-export-ownership-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace .tmp/playwright/issue-188-ramped-audio-ram-ff5ec-l-playback-export-ownership-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium] › tests/browser/media-file-drop.spec.ts:200:1 › OS file drops stay in the editor and finish Media Pool and timeline import
+
+    Error: ffmpeg could not start: spawnSync ffmpeg ENOENT
+
+      67 |   })
+      68 |   if (result.error) {
+    > 69 |     throw new Error(`ffmpeg could not start: ${result.error.message}`)
+         |           ^
+      70 |   }
+      71 |   if (result.status !== 0) {
+      72 |     throw new Error(
+        at runFfmpeg (/private/tmp/myrelith-196-baseline/tests/browser/media-file-drop.spec.ts:69:11)
+        at generateSourceBoundFixtures (/private/tmp/myrelith-196-baseline/tests/browser/media-file-drop.spec.ts:80:3)
+        at /private/tmp/myrelith-196-baseline/tests/browser/media-file-drop.spec.ts:197:3
+
+    Error Context: .tmp/playwright/media-file-drop-OS-file-dr-0618b-ia-Pool-and-timeline-import-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .tmp/playwright/media-file-drop-OS-file-dr-0618b-ia-Pool-and-timeline-import-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace .tmp/playwright/media-file-drop-OS-file-dr-0618b-ia-Pool-and-timeline-import-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium] › tests/browser/project-setup-overflow.spec.ts:111:1 › new-project setup can reach Create at 1440x900
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      63 |     await frame.hover()
+      64 |     await page.mouse.wheel(0, 2400)
+    > 65 |     expect(await frame.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+         |                                                                  ^
+      66 |   }
+      67 |
+      68 |   await frame.evaluate((element) => {
+        at expectCreateReachable (/private/tmp/myrelith-196-baseline/tests/browser/project-setup-overflow.spec.ts:65:66)
+        at /private/tmp/myrelith-196-baseline/tests/browser/project-setup-overflow.spec.ts:117:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .tmp/playwright/project-setup-overflow-new-a7bdb-an-reach-Create-at-1440x900-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .tmp/playwright/project-setup-overflow-new-a7bdb-an-reach-Create-at-1440x900-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .tmp/playwright/project-setup-overflow-new-a7bdb-an-reach-Create-at-1440x900-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace .tmp/playwright/project-setup-overflow-new-a7bdb-an-reach-Create-at-1440x900-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium] › tests/browser/project-setup-overflow.spec.ts:122:3 › new-project setup stays horizontally contained at 1050px wide
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      63 |     await frame.hover()
+      64 |     await page.mouse.wheel(0, 2400)
+    > 65 |     expect(await frame.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+         |                                                                  ^
+      66 |   }
+      67 |
+      68 |   await frame.evaluate((element) => {
+        at expectCreateReachable (/private/tmp/myrelith-196-baseline/tests/browser/project-setup-overflow.spec.ts:65:66)
+        at /private/tmp/myrelith-196-baseline/tests/browser/project-setup-overflow.spec.ts:128:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .tmp/playwright/project-setup-overflow-new-9a4ce-ly-contained-at-1050px-wide-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .tmp/playwright/project-setup-overflow-new-9a4ce-ly-contained-at-1050px-wide-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .tmp/playwright/project-setup-overflow-new-9a4ce-ly-contained-at-1050px-wide-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace .tmp/playwright/project-setup-overflow-new-9a4ce-ly-contained-at-1050px-wide-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium] › tests/browser/project-setup-overflow.spec.ts:122:3 › new-project setup stays horizontally contained at 1051px wide
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      63 |     await frame.hover()
+      64 |     await page.mouse.wheel(0, 2400)
+    > 65 |     expect(await frame.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+         |                                                                  ^
+      66 |   }
+      67 |
+      68 |   await frame.evaluate((element) => {
+        at expectCreateReachable (/private/tmp/myrelith-196-baseline/tests/browser/project-setup-overflow.spec.ts:65:66)
+        at /private/tmp/myrelith-196-baseline/tests/browser/project-setup-overflow.spec.ts:128:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .tmp/playwright/project-setup-overflow-new-e5f89-ly-contained-at-1051px-wide-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .tmp/playwright/project-setup-overflow-new-e5f89-ly-contained-at-1051px-wide-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .tmp/playwright/project-setup-overflow-new-e5f89-ly-contained-at-1051px-wide-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace .tmp/playwright/project-setup-overflow-new-e5f89-ly-contained-at-1051px-wide-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium] › tests/browser/project-setup-overflow.spec.ts:122:3 › new-project setup stays horizontally contained at 1100px wide
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      63 |     await frame.hover()
+      64 |     await page.mouse.wheel(0, 2400)
+    > 65 |     expect(await frame.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+         |                                                                  ^
+      66 |   }
+      67 |
+      68 |   await frame.evaluate((element) => {
+        at expectCreateReachable (/private/tmp/myrelith-196-baseline/tests/browser/project-setup-overflow.spec.ts:65:66)
+        at /private/tmp/myrelith-196-baseline/tests/browser/project-setup-overflow.spec.ts:128:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .tmp/playwright/project-setup-overflow-new-a7a2f-ly-contained-at-1100px-wide-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .tmp/playwright/project-setup-overflow-new-a7a2f-ly-contained-at-1100px-wide-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .tmp/playwright/project-setup-overflow-new-a7a2f-ly-contained-at-1100px-wide-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace .tmp/playwright/project-setup-overflow-new-a7a2f-ly-contained-at-1100px-wide-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium] › tests/browser/project-setup-overflow.spec.ts:133:1 › new-project setup can reach Create at 390x720
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      63 |     await frame.hover()
+      64 |     await page.mouse.wheel(0, 2400)
+    > 65 |     expect(await frame.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+         |                                                                  ^
+      66 |   }
+      67 |
+      68 |   await frame.evaluate((element) => {
+        at expectCreateReachable (/private/tmp/myrelith-196-baseline/tests/browser/project-setup-overflow.spec.ts:65:66)
+        at /private/tmp/myrelith-196-baseline/tests/browser/project-setup-overflow.spec.ts:139:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    .tmp/playwright/project-setup-overflow-new-0140e-can-reach-Create-at-390x720-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .tmp/playwright/project-setup-overflow-new-0140e-can-reach-Create-at-390x720-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .tmp/playwright/project-setup-overflow-new-0140e-can-reach-Create-at-390x720-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace .tmp/playwright/project-setup-overflow-new-0140e-can-reach-Create-at-390x720-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8 failed
+    [chromium] › tests/browser/command-palette-accessibility.spec.ts:20:1 › discovers only real commands, contains focus, and keeps measured editor targets
+    [chromium] › tests/browser/issue-188-ramped-audio.spec.ts:14:1 › ramped speech and music share real playback/export ownership
+    [chromium] › tests/browser/media-file-drop.spec.ts:200:1 › OS file drops stay in the editor and finish Media Pool and timeline import
+    [chromium] › tests/browser/project-setup-overflow.spec.ts:111:1 › new-project setup can reach Create at 1440x900
+    [chromium] › tests/browser/project-setup-overflow.spec.ts:122:3 › new-project setup stays horizontally contained at 1050px wide
+    [chromium] › tests/browser/project-setup-overflow.spec.ts:122:3 › new-project setup stays horizontally contained at 1051px wide
+    [chromium] › tests/browser/project-setup-overflow.spec.ts:122:3 › new-project setup stays horizontally contained at 1100px wide
+    [chromium] › tests/browser/project-setup-overflow.spec.ts:133:1 › new-project setup can reach Create at 390x720

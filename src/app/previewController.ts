@@ -1,3 +1,6 @@
+import type { PortableColorLut } from '../domain/colorLutCatalog'
+import { colorGradingAdditionalBytes, documentGradingEffects } from '../domain/colorGradingBudget'
+import { currentColorGradingContext } from './colorLutController'
 /**
  * app/previewController.ts — Composition root for the preview pipeline.
  * Phase 3.4; swapped to the timeline compositor in Phase 4.1c.
@@ -114,6 +117,7 @@ import { mediaResourceAdmission, type MediaResourceLease } from './mediaResource
 
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
+  setColorLuts?(catalog: readonly PortableColorLut[] | undefined, generation: number): void
   setDoc(doc: TimelineDoc): void
   setPresentationProfile(profile: PresentationProfile): void
   openAsset(
@@ -565,7 +569,7 @@ function currentPreviewDocument(): TimelineDoc {
   const transport = useTransportStore.getState()
   return documentWithClipVisualPreview(
     documentWithTextOverlayPreview(
-      useDocumentStore.getState().doc,
+      transport.colorGradingPreview?.sequenceId === useDocumentStore.getState().activeSequenceId ? transport.colorGradingPreview.document : useDocumentStore.getState().doc,
       transport.textOverlayPreview,
     ),
     transport.clipVisualPreview,
@@ -606,14 +610,14 @@ function publishPreviewEffectStatuses(
 ): void {
   const index = state.effectStatusIndex
   if (!index) return
-  const indexed = projectIndexedPreviewEffectStatuses(index, capabilities, timelineFrame)
+  const indexed = projectIndexedPreviewEffectStatuses(index, capabilities, timelineFrame, currentColorGradingContext())
   const hasInstances = useDocumentStore.getState().doc.tracks.some(
     (track) => sequenceInstances(track).length > 0,
   )
   const plan = hasInstances ? state.visualPlanner?.planFrame(timelineFrame) : null
   usePreviewStatusStore.getState().setEffectProjection(
     capabilities,
-    plan ? projectPlannedPreviewEffectStatuses(plan, capabilities, indexed) : indexed,
+    plan ? projectPlannedPreviewEffectStatuses(plan, capabilities, indexed, currentColorGradingContext()) : indexed,
   )
 }
 
@@ -623,8 +627,9 @@ function rebuildPreviewEffectStatusIndex(doc: TimelineDoc): void {
 }
 
 function reserveVideoBusWork(doc: TimelineDoc): void {
-  if (!hasVideoBusEffects(doc)) return
-  state.maxVideoBusBytes = Math.max(state.maxVideoBusBytes, videoBusAdditionalBytes(doc.width, doc.height))
+  const bytes = Math.max(hasVideoBusEffects(doc) ? videoBusAdditionalBytes(doc.width, doc.height) : 0, colorGradingAdditionalBytes(documentGradingEffects(doc), doc.width, doc.height))
+  if (!bytes) return
+  state.maxVideoBusBytes = Math.max(state.maxVideoBusBytes, bytes)
   state.resourceLease?.update({ kind: 'program', decoderSlots: state.maxVideoRequests * 2 + 2,
     surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4 + state.maxVideoBusBytes,
     // Reserving bus bytes during initialization does not make Program ready.
@@ -637,6 +642,7 @@ function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {
   const renderDoc = currentPreviewRenderDocument(doc)
   state.visualPlanner = createCurrentVisualPlanner(deps, doc)
   reserveVideoBusWork(renderDoc)
+  bridge.setColorLuts?.(useDocumentStore.getState().project.colorLuts, useDocumentStore.getState().projectGeneration)
   bridge.setDoc(renderDoc)
   rebuildPreviewEffectStatusIndex(renderDoc)
   syncPresentationProfile(bridge, doc)
@@ -667,6 +673,8 @@ function scheduleRender(deps: PreviewDeps): void {
         previewStatus.rendererCapabilities,
         transport.playheadFrame,
         effectStatuses,
+        undefined,
+        currentColorGradingContext(),
       )
     }
     const media = useMediaStore.getState()
@@ -696,6 +704,7 @@ function scheduleRender(deps: PreviewDeps): void {
       visualPlan,
       previewStatus.rendererCapabilities,
       effectStatuses,
+      currentColorGradingContext(),
     )
     if (effectStatuses !== previewStatus.effectStatuses) {
       previewStatus.setEffectProjection(previewStatus.rendererCapabilities, effectStatuses)
@@ -1111,6 +1120,7 @@ export function initPreview(
   state.visualPlanner = createCurrentVisualPlanner(deps, initialDoc, initialBounds)
   state.effectStatusIndex = createPreviewEffectStatusIndex(initialRenderDoc)
   reserveVideoBusWork(initialRenderDoc)
+  bridge.setColorLuts?.(useDocumentStore.getState().project.colorLuts, useDocumentStore.getState().projectGeneration)
   bridge.setDoc(initialRenderDoc)
   publishPreviewEffectStatuses(null)
   syncPresentationProfile(bridge, initialDoc)
@@ -1133,6 +1143,7 @@ export function initPreview(
       if (
         s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
+        || s.colorGradingPreview !== prev.colorGradingPreview
       ) {
         syncPreviewDocument(bridge, deps)
       }
@@ -1146,6 +1157,7 @@ export function initPreview(
         || modeForTransport(s) !== modeForTransport(prev)
         || s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
+        || s.colorGradingPreview !== prev.colorGradingPreview
       ) scheduleRender(deps)
     }),
     useMediaStore.subscribe(() => {

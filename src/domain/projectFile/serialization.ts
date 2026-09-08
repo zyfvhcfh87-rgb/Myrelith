@@ -1,3 +1,4 @@
+import { immutableColorLuts } from '../colorLutCatalog'
 import type { Effect, TimelineDoc } from '../schema';
 import { masterAudioSettings, trackBalance, trackVolume } from '../audioMixer';
 import { compareTimelineMarkers } from '../timelineMarkers';
@@ -219,6 +220,7 @@ function portableProjectSnapshot(project: ProjectFile): ProjectFile {
     name: project.name,
     rootSequenceId: project.rootSequenceId,
     sequences: project.sequences.map(portableTimelineSnapshot),
+    colorLuts: immutableColorLuts(project.colorLuts),
     multicams: project.multicams.map((definition) => ({
       id: definition.id,
       name: definition.name,
@@ -285,6 +287,7 @@ export function createProjectFileSnapshot(
         : document
     )),
     multicams: sequenceProject.multicams ?? [],
+    colorLuts: sequenceProject.colorLuts ?? [],
     assets,
     collections: cloneMediaCollections(collections),
   }
@@ -361,5 +364,6 @@ export function parseProjectFile(serialized: string): ProjectFile {
   } catch {
     fail('$', 'invalid JSON')
   }
-  return validateProjectFile(migrateProjectFile(parsed))
+  const project = validateProjectFile(migrateProjectFile(parsed))
+  return { ...project, colorLuts: immutableColorLuts(project.colorLuts) }
 }

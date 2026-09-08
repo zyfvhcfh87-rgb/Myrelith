@@ -13,6 +13,8 @@
 import { create } from 'zustand'
 import type {
   AdjustmentItemId,
+  TimelineDoc,
+  EffectParamValue,
   ClipId,
   ClipVisualSettings,
   TextProps,
@@ -138,7 +140,16 @@ export interface ClipVisualPreview {
   visual: ClipVisualSettings
 }
 
+export interface ColorGradingPreview {
+  readonly sequenceId: string
+  readonly effectId: string
+  readonly params: Readonly<Record<string, EffectParamValue>>
+  readonly document: TimelineDoc
+}
+
 export interface TransportState {
+  colorGradingPreview: ColorGradingPreview | null
+  setColorGradingPreview(preview: ColorGradingPreview | null): void
   /** Current playhead position, integer frames at the document rate. */
   playheadFrame: number
   /** True while the playback engine is running (Phase 2 drives this). */
@@ -352,6 +363,7 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   snapGuide: null,
   textOverlayPreview: null,
   clipVisualPreview: null,
+  colorGradingPreview: null,
   mediaPlacementPreview: null,
   mediaPlacementStatus: '',
 })
@@ -775,6 +787,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
           }
         : null,
     }),
+  setColorGradingPreview: (colorGradingPreview) => set({ colorGradingPreview }),
   setClipVisualPreview: (clipVisualPreview) => {
     clearOwnedClipVisualPreviews()
     set({ clipVisualPreview: cloneClipVisualPreview(clipVisualPreview) })
