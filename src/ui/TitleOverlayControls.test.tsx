@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import TitleOverlayControls from './TitleOverlayControls'
-import { expandedTitleProject } from '../test/titleOwnerFixtures'
+import { expandedTitleProject, replaceFirstTitleClip } from '../test/titleOwnerFixtures'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -16,9 +16,18 @@ function mount() {
   const canvasRef = createRef<HTMLCanvasElement>(), panelRef = createRef<HTMLDivElement>(); canvasRef.current = canvas; panelRef.current = panel
   return render(<TitleOverlayControls canvasRef={canvasRef} panelRef={panelRef} />)
 }
-function pointer(target: Element | Window, type: string, x: number, y: number) {
+function pointer(target: Element | Window, type: string, x: number, y: number, pointerId = 7) {
   const event = new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 })
-  Object.defineProperty(event, 'pointerId', { value: 7 }); fireEvent(target, event)
+  Object.defineProperty(event, 'pointerId', { value: pointerId }); fireEvent(target, event)
+}
+function animated(mode: 'Move' | 'Resize') {
+  const properties = mode === 'Move' ? ['position-x', 'position-y'] : ['box-width', 'box-height']
+  const project = replaceFirstTitleClip(expandedTitleProject(), (clip) => ({ ...clip, animation: { tracks: [], titleTracks: properties.map((property) => ({
+    elementId: 'root-element', property, propertyVersion: 1,
+    keyframes: [{ frame: 0, value: 100, easing: { type: 'linear' as const } }, { frame: 99, value: 200, easing: { type: 'linear' as const } }],
+  })) } }))
+  useDocumentStore.getState().setProject(project)
+  useTransportStore.getState().setPlayheadFrame(50)
 }
 beforeEach(() => {
   rect = new DOMRect(0, 0, 960, 540)
@@ -52,6 +61,59 @@ describe('title monitor input', () => {
     pointer(window, 'pointerup', 130, 115)
     expect(useDocumentStore.getState().past).toHaveLength(0); expect(current().transform.x).toBe(0)
     expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+  })
+  test.each(['Move', 'Resize'] as const)('%s capture loss cancels matching gesture and a late pointer-up cannot commit', (mode) => {
+    mount(); const handle = screen.getByRole('button', { name: `${mode} title element Text` })
+    pointer(handle, 'pointerdown', 100, 100); pointer(window, 'pointermove', 130, 115); act(() => vi.runOnlyPendingTimers())
+    expect(handle.hasPointerCapture(7)).toBe(true)
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('title-authoring')
+    handle.releasePointerCapture(7); pointer(handle, 'lostpointercapture', 130, 115)
+    expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+    pointer(window, 'pointerup', 140, 125); act(() => vi.runOnlyPendingTimers())
+    expect(useDocumentStore.getState().past).toHaveLength(0)
+  })
+  test.each(['Move', 'Resize'] as const)('%s ignores another pointer capture-loss event and normal release cannot cancel its committed drag', (mode) => {
+    mount(); const handle = screen.getByRole('button', { name: `${mode} title element Text` })
+    const release = handle.releasePointerCapture.bind(handle)
+    vi.spyOn(handle, 'releasePointerCapture').mockImplementation((id) => { release(id); pointer(handle, 'lostpointercapture', 130, 115, id) })
+    pointer(handle, 'pointerdown', 100, 100); pointer(window, 'pointermove', 130, 115); act(() => vi.runOnlyPendingTimers())
+    pointer(handle, 'lostpointercapture', 130, 115, 8)
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('title-authoring')
+    pointer(window, 'pointerup', 130, 115)
+    expect(useDocumentStore.getState().past).toHaveLength(1)
+    expect(handle.hasPointerCapture(7)).toBe(false)
+    expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+  })
+  test.each(['Move', 'Resize'] as const)('%s click at an interpolated frame changes neither keys, project, history nor redo', (mode) => {
+    animated(mode)
+    const future = [expandedTitleProject()]; useDocumentStore.setState({ future })
+    const before = useDocumentStore.getState()
+    mount(); const handle = screen.getByRole('button', { name: `${mode} title element Text` })
+    pointer(handle, 'pointerdown', 100, 100); pointer(window, 'pointermove', 100, 100); act(() => vi.runOnlyPendingTimers()); pointer(window, 'pointerup', 100, 100)
+    expect(useDocumentStore.getState()).toBe(before)
+    expect(useDocumentStore.getState().future).toBe(future)
+    expect(handle.hasPointerCapture(7)).toBe(false)
+    expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+  })
+  test.each(['Move', 'Resize'] as const)('%s drag returning to its origin has no edit, while genuine animated drags and arrows author keys once', (mode) => {
+    animated(mode); const before = useDocumentStore.getState()
+    mount(); const handle = screen.getByRole('button', { name: `${mode} title element Text` })
+    pointer(handle, 'pointerdown', 100, 100); pointer(window, 'pointermove', 130, 115); act(() => vi.runOnlyPendingTimers())
+    pointer(window, 'pointermove', 100, 100); act(() => vi.runOnlyPendingTimers()); pointer(window, 'pointerup', 100, 100)
+    expect(useDocumentStore.getState()).toBe(before)
+    pointer(handle, 'pointerdown', 100, 100); pointer(window, 'pointerup', 110, 105)
+    expect(useDocumentStore.getState().past).toHaveLength(1)
+    expect(useDocumentStore.getState().doc.tracks[0].clips[0].animation!.titleTracks!.every((lane) => lane.keyframes.some((key) => key.frame === 50))).toBe(true)
+    fireEvent.keyDown(handle, { key: 'ArrowRight' })
+    expect(useDocumentStore.getState().past).toHaveLength(2)
+  })
+  test('a click still selects an unselected animated element without creating keys', () => {
+    animated('Move'); useTitleEditorStore.getState().select('root-text', [])
+    const before = useDocumentStore.getState()
+    mount(); const handle = screen.getByRole('button', { name: 'Move title element Text' })
+    pointer(handle, 'pointerdown', 100, 100); pointer(window, 'pointerup', 100, 100); fireEvent.click(handle)
+    expect(useTitleEditorStore.getState().ids).toEqual(['root-element'])
+    expect(useDocumentStore.getState()).toBe(before)
   })
   test('arrow movement and resize use the same real commit facade', () => {
     mount(); fireEvent.keyDown(screen.getByRole('button', { name: 'Move title element Text' }), { key: 'ArrowRight', shiftKey: true })

@@ -57,6 +57,15 @@ describe('title templates', () => {
     expect(after).toBe(JSON.stringify({ version: 1, templates: [future] }))
     expect(() => titleTemplateFromLibrary(after, template.id)).toThrow(/unavailable/)
   })
+  test.each([false, true])('lookup/delete use the displayed record after duplicate-name validation, rejected-first=%s', (rejectedFirst) => {
+    const base = capture(), first = { ...base, id: 'first', name: 'Duplicate name' }
+    const rejected = { ...base, id: 'chosen', name: 'DUPLICATE NAME' }, chosen = { ...base, id: 'chosen', name: 'Valid chosen' }
+    const entries = rejectedFirst ? [first, rejected, chosen] : [first, chosen, rejected]
+    const raw = JSON.stringify({ version: 1, templates: entries })
+    expect(readTitleTemplateLibrary(raw).view.templates.map((template) => template.name)).toEqual(['Duplicate name', 'Valid chosen'])
+    expect(titleTemplateFromLibrary(raw, 'chosen')).toEqual(chosen)
+    expect(mutateTitleTemplateLibrary(raw, { kind: 'delete', id: 'chosen' })).toBe(JSON.stringify({ version: 1, templates: [first, rejected] }))
+  })
   test('bounds raw siblings, duplicate names, corruption, accessors and execution-bearing extra fields', () => {
     const template = capture()
     const raw = JSON.stringify({ version: 1, templates: Array.from({ length: 100 }, (_, i) => ({ version: 9, id: String(i) })) })

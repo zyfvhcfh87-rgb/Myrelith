@@ -1,0 +1,21 @@
+{
+  "files": {
+    "build.log": "fff54672193f644051608c993f107d3bd53ecf113c73985a30a9fbbf652f8b3b",
+    "diagnostic-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "focused.log": "562dcbb2a676f1277209e2b0e19ff6fceebc09537a12cf26501f2f0b24df6b84",
+    "lint.log": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c",
+    "list.log": "cfba9358c50041cc02bca43b3a5b95268ec152037155f7cb1b171b7f822bd8ae",
+    "parent-reproducer.log": "e739b826ab234b3c6ed91101a703d4eda5d5e5b4fbdb34e4596ce8658622ffda",
+    "raw-logs.tar.gz": "19d36168cec8322c5c588c1196550b89b0ecf4ed932ee946edec1f6dfcb16c15",
+    "runner-unit.log": "f05da7cf97b03894cec269d28de9e40a28538b40affad49ae09a6a0182d293e2"
+  },
+  "rawMembers": {
+    "focused.log": "562dcbb2a676f1277209e2b0e19ff6fceebc09537a12cf26501f2f0b24df6b84",
+    "build.log": "7c240c4fa42bf8eee1cf88436b5e3fe4592fe2048ec7b831a99d57a9eb35e24c",
+    "lint.log": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+    "parent-reproducer.log": "1b936ee9ef353e7d325f4da5cc22e80cbcf05afd58e8f82e3d7c14e99de662fc",
+    "runner-unit.log": "f05da7cf97b03894cec269d28de9e40a28538b40affad49ae09a6a0182d293e2",
+    "diagnostic-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "list.log": "cfba9358c50041cc02bca43b3a5b95268ec152037155f7cb1b171b7f822bd8ae"
+  }
+}

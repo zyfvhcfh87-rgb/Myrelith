@@ -115,9 +115,12 @@ export function builtInTitleTemplates(): readonly TitleTemplateV1[] {
     { id: 'title-card', name: 'Title card', elements: [{ ...shape, shape: { ...('shape' in shape ? shape.shape : { boxWidthPx: 0, boxHeightPx: 0, fillColor: '#243354', outlineEnabled: false, outlineColor: '#ffffff', outlineWidthPx: 0 }), boxWidthPx: 1700, boxHeightPx: 850 } } as TitleElement, text] },
   ].map(({ id, name, elements }) => readTitleTemplate({ version: 1, id, name, canvasWidth: 1920, canvasHeight: 1080, frameRate: { num: 30, den: 1 }, durationFrames: 150, title: { version: 1, elements }, titleTracks: [] }))
 }
-export function readTitleTemplateLibrary(raw: unknown): { entries: readonly unknown[] | null; view: TitleTemplateLibraryView } {
-  const unavailable = (reason: string) => ({ entries: null, view: { templates: [], unavailable: [], readOnlyReason: reason } })
-  if (raw === undefined) return { entries: [], view: { templates: [], unavailable: [], readOnlyReason: null } }
+interface AcceptedTemplateRecord { readonly index: number; readonly template: TitleTemplateV1 }
+interface ParsedTitleTemplateLibrary { readonly entries: readonly unknown[] | null; readonly accepted: readonly AcceptedTemplateRecord[]; readonly view: TitleTemplateLibraryView }
+/** One pass defines both displayed summaries and the exact records that may be used or deleted. */
+function parseTitleTemplateLibrary(raw: unknown): ParsedTitleTemplateLibrary {
+  const unavailable = (reason: string) => ({ entries: null, accepted: [], view: { templates: [], unavailable: [], readOnlyReason: reason } })
+  if (raw === undefined) return { entries: [], accepted: [], view: { templates: [], unavailable: [], readOnlyReason: null } }
   if (typeof raw !== 'string' || raw.length > TITLE_TEMPLATE_LIMITS.libraryBytes || utf8ByteLength(raw) > TITLE_TEMPLATE_LIMITS.libraryBytes) return unavailable('The local title library is invalid or exceeds 8 MiB. It remains untouched.')
   let parsed: unknown
   try { parsed = JSON.parse(raw) } catch { return unavailable('The local title library is corrupt. It remains untouched.') }
@@ -126,29 +129,34 @@ export function readTitleTemplateLibrary(raw: unknown): { entries: readonly unkn
   try {
     if (parsed.templates.some((entry: unknown) => utf8ByteLength(JSON.stringify(entry)) > TITLE_TEMPLATE_LIMITS.templateBytes)) return unavailable('A stored title record exceeds 1 MiB. The library remains untouched.')
   } catch { return unavailable('A stored title record exceeds bounded JSON depth. The library remains untouched.') }
+  const accepted: AcceptedTemplateRecord[] = []
   const templates: TitleTemplateSummary[] = [], errors: { index: number; reason: string }[] = [], ids = new Set<string>(), names = new Set<string>()
   parsed.templates.forEach((entry: unknown, index: number) => {
     try {
       const template = readTitleTemplate(entry)
       if (ids.has(template.id) || names.has(template.name.toLowerCase())) fail('Duplicate template identity or name.')
       ids.add(template.id); names.add(template.name.toLowerCase())
+      accepted.push({ index, template })
       const { id, name, durationFrames, canvasWidth, canvasHeight, frameRate } = template
       templates.push({ id, name, durationFrames, canvasWidth, canvasHeight, frameRate, elements: template.title.elements.length })
     } catch (cause) { errors.push({ index, reason: cause instanceof Error ? cause.message : 'Unavailable template.' }) }
   })
-  return { entries: parsed.templates, view: { templates, unavailable: errors, readOnlyReason: null } }
+  return { entries: parsed.templates, accepted, view: { templates, unavailable: errors, readOnlyReason: null } }
+}
+export function readTitleTemplateLibrary(raw: unknown): { entries: readonly unknown[] | null; view: TitleTemplateLibraryView } {
+  const { entries, view } = parseTitleTemplateLibrary(raw)
+  return { entries, view }
+}
+function acceptedTemplateRecord(library: ParsedTitleTemplateLibrary, id: string): AcceptedTemplateRecord {
+  const selected = library.accepted.find((entry) => entry.template.id === id)
+  if (!selected) fail(library.view.readOnlyReason ?? 'The template is unavailable or was removed. Reload the library.')
+  return selected
 }
 export function titleTemplateFromLibrary(raw: unknown, id: string): TitleTemplateV1 {
-  const { entries, view } = readTitleTemplateLibrary(raw)
-  if (!entries || !view.templates.some((item) => item.id === id)) fail(view.readOnlyReason ?? 'The template is unavailable or was removed. Reload the library.')
-  for (const entry of entries) {
-    if (!record(entry) || entry.id !== id) continue
-    try { return readTitleTemplate(entry) } catch { /* Preserve unavailable same-ID siblings; select only the validated record. */ }
-  }
-  return fail('The supported template is no longer available.')
+  return acceptedTemplateRecord(parseTitleTemplateLibrary(raw), id).template
 }
 export function mutateTitleTemplateLibrary(raw: unknown, mutation: TitleTemplateMutation): string {
-  const { entries, view } = readTitleTemplateLibrary(raw)
+  const library = parseTitleTemplateLibrary(raw), { entries, view } = library
   if (!entries) fail(view.readOnlyReason!)
   let next = [...entries]
   if (mutation.kind === 'save') {
@@ -157,13 +165,7 @@ export function mutateTitleTemplateLibrary(raw: unknown, mutation: TitleTemplate
     if (entries.some((entry) => record(entry) && (entry.id === template.id || typeof entry.name === 'string' && entry.name.toLowerCase() === template.name.toLowerCase()))) fail('A template already uses this identity or name.')
     next.push(template)
   } else {
-    if (!view.templates.some((entry) => entry.id === mutation.id)) fail('The template is unavailable or was removed. Reload the library.')
-    const index = next.findIndex((entry) => {
-      if (!record(entry) || entry.id !== mutation.id) return false
-      try { readTitleTemplate(entry); return true } catch { return false }
-    })
-    if (index < 0) fail('The supported template is no longer available.')
-    next.splice(index, 1)
+    next.splice(acceptedTemplateRecord(library, mutation.id).index, 1)
   }
   const encoded = JSON.stringify({ version: 1, templates: next })
   if (utf8ByteLength(encoded) > TITLE_TEMPLATE_LIMITS.libraryBytes) fail('The local title library exceeds 8 MiB.')

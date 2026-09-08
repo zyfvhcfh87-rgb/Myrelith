@@ -182,6 +182,8 @@ function planTitleGesture(project: SequenceProject, target: TitleEditTarget, com
   const { clip, elements } = titleEditOwner(project, target), selected = selection(elements, command.ids)
   if (!Number.isFinite(command.dx) || !Number.isFinite(command.dy) || !Number.isSafeInteger(command.frame) || command.frame < 0 || command.frame >= clip.timelineRange.durationFrames) throw new Error('Use finite movement inside the title frame range.')
   if (command.mode === 'resize' && selected.size !== 1) throw new Error('Resize one element at a time.')
+  // A click or a return to the pointer origin is selection, not an explicit Set key.
+  if (command.dx === 0 && command.dy === 0) return project
   let next = project
   for (const intent of elements) {
     if (!selected.has(intent.id)) continue

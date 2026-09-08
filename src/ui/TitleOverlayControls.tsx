@@ -6,7 +6,7 @@ import type { TitleEditCommand } from '../domain/titleEditing'
 import { beginTitleEdit, commitTitleEdit, type TitleEditSession } from '../app/titleEditingController'
 import { readMaskEditorViewport, sameMaskEditorViewport, type MaskEditorViewport } from './maskMonitorViewport'
 import './titleEditor.css'
-interface Gesture { readonly pointer: number; readonly startX: number; readonly startY: number; readonly viewport: MaskEditorViewport; readonly session: TitleEditSession; readonly command: Extract<TitleEditCommand, { kind: 'gesture' }>; readonly element: HTMLButtonElement; latest: TitleEditCommand; release(): void }
+interface Gesture { readonly pointer: number; readonly startX: number; readonly startY: number; readonly viewport: MaskEditorViewport; readonly session: TitleEditSession; readonly command: Extract<TitleEditCommand, { kind: 'gesture' }>; readonly element: HTMLButtonElement; latest: Extract<TitleEditCommand, { kind: 'gesture' }>; release(): void }
 export default function TitleOverlayControls({ canvasRef, panelRef }: { canvasRef: RefObject<HTMLCanvasElement | null>; panelRef: RefObject<HTMLDivElement | null> }) {
   const doc = useDocumentStore((state) => state.doc), generation = useDocumentStore((state) => state.projectGeneration)
   const selectedClipId = useTransportStore((state) => state.selectedClipId), frame = useTransportStore((state) => state.playheadFrame), playing = useTransportStore((state) => state.isPlaying || state.isScrubbing)
@@ -67,9 +67,14 @@ export default function TitleOverlayControls({ canvasRef, panelRef }: { canvasRe
     if (!update(event) || raf.current !== null) return
     raf.current = requestAnimationFrame(() => { raf.current = null; const active = gesture.current; if (active) { const error = active.session.preview(active.latest); if (error) { setError(error); cancel() } } })
   }
+  function lostCapture(event: ReactPointerEvent<HTMLButtonElement>) {
+    const active = gesture.current
+    if (active?.pointer === event.pointerId && active.element === event.currentTarget) cancel()
+  }
   function finish(event: PointerEvent) {
     const active = update(event)
     if (!active) return
+    if (active.latest.dx === 0 && active.latest.dy === 0) { cancel(); return }
     active.release(); gesture.current = null
     if (raf.current !== null) cancelAnimationFrame(raf.current); raf.current = null
     const failure = active.session.commit(active.latest)
@@ -93,6 +98,7 @@ export default function TitleOverlayControls({ canvasRef, panelRef }: { canvasRe
         <button type="button" className="title-canvas-element" aria-label={`Move title element ${intent.name}`} aria-pressed={selected} disabled={track!.locked}
           style={{ left: left + bounds.left * sx, top: top + bounds.top * sy, width: (bounds.right - bounds.left) * sx, height: (bounds.bottom - bounds.top) * sy, opacity: selected ? 1 : 0.45 }}
           onPointerDown={(event) => start(event, intent.id, 'move')}
+          onLostPointerCapture={lostCapture}
           onClick={() => { if (!ids.includes(intent.id)) useTitleEditorStore.getState().select(clip!.id, [intent.id]) }}
           onKeyDown={(event) => {
             if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
@@ -101,7 +107,7 @@ export default function TitleOverlayControls({ canvasRef, panelRef }: { canvasRe
             setError(commitTitleEdit({ sequenceId: doc.id, clipId: clip!.id }, { kind: 'gesture', ids: selected ? ids : [intent.id], mode: 'move', frame: frame - clip!.timelineRange.startFrame,
               dx: event.key === 'ArrowLeft' ? -amount : event.key === 'ArrowRight' ? amount : 0, dy: event.key === 'ArrowUp' ? -amount : event.key === 'ArrowDown' ? amount : 0 }) ?? '')
           }} />
-        {selected && ids.length === 1 && <button type="button" className="title-canvas-resize" aria-label={`Resize title element ${intent.name}`} disabled={track!.locked} style={{ left: left + corner.x * sx - 5, top: top + corner.y * sy - 5 }} onPointerDown={(event) => start(event, intent.id, 'resize')} onKeyDown={(event) => {
+        {selected && ids.length === 1 && <button type="button" className="title-canvas-resize" aria-label={`Resize title element ${intent.name}`} disabled={track!.locked} style={{ left: left + corner.x * sx - 5, top: top + corner.y * sy - 5 }} onPointerDown={(event) => start(event, intent.id, 'resize')} onLostPointerCapture={lostCapture} onKeyDown={(event) => {
           if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
           event.preventDefault(); event.stopPropagation()
           const amount = event.shiftKey ? 10 : 1

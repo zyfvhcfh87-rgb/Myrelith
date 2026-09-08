@@ -24,7 +24,8 @@ fresh clip/element/orphan identities, and disclose uniform centered fitting and
 unchanged frame-number timing. Local IDB writes complete only with their owning
 transaction; errors/unknown records/future envelopes are surfaced and preserved.
 Only bounded serializable summaries enter the template store. Supported lookup and
-delete bind to the validated record; same-ID future siblings survive in either order.
+delete bind to the exact record/index accepted after whole-library duplicate ID/name
+validation; unavailable same-ID and duplicate-name siblings survive in either order.
 
 A title session pins project identity/generation, sequence, clip and element
 selection, playhead, reset revision and media envelope. Cancellation releases its
@@ -48,6 +49,14 @@ proof archives/guards remain untouched; they are not misapplied to this new tree
    and command-palette Undo/Redo. Check exact history increments and portable wire state.
 2. Actual Program pointer movement and Escape cancellation; safe-guide visibility
    with identical project serialization and history. Retain guide/handle screenshot.
+   At an interpolated frame, trusted no-motion native clicks on both Move and
+   Resize preserve project serialization and the complete past/future history.
+   For each handle acquire actual pointer capture, request its release, then send
+   a native move with that same pointer still held before mouseup. Require the
+   trusted lostpointercapture event, the post-release trusted held move, preview
+   cancellation and unchanged project/history after the later native mouseup.
+   Attach each handle's event evidence even on failure; a release request alone
+   does not satisfy the assertion. Keep all existing flow assertions.
 3. Roll/crawl dialog Preview/Cancel, two-key Apply, explicit replacement listing,
    confirmation and Reapply with edited range. Retain complete review screenshot.
 4. Unavailable literal font fixture, real generic fallback control, preview status,
@@ -60,7 +69,10 @@ proof archives/guards remain untouched; they are not misapplied to this new tree
 Fixtures are inserted through test-only production-module imports after entering
 the real editor through its new-project UI. All task mutations use actual UI;
 imports are for fixture construction, positioning, stale-context injection,
-serialization/reopen and read-only evidence. This is an authoring gate, not another
+serialization/reopen and read-only evidence. The capture-loss probe additionally
+requests releasePointerCapture on the actually captured trusted pointer; it does
+not synthesize pointer events. Trusted event observations and the next native
+held move establish the actual loss. This is an authoring gate, not another
 2772-comparison rendering parity run or an encoded-export/performance claim.
 
 The observer records warnings, console errors, page errors, URL/title/body identity,
@@ -72,7 +84,18 @@ screenshots and full observations; no weakening or silent retry is allowed.
 
 run-g3-browser.py owns the launcher/Vite/Chromium descendants by PID, start time
 and command identity, preserves stdout and process ancestry, and records observer
-exceptions. Teardown affects only that run's owned processes. After the run,
+exceptions. Its 600-second deadline is checked by a nonblocking stdout reader
+even when a descendant retains the pipe or keeps writing. Output bytes go
+directly to the artifact log without potentially blocking console forwarding.
+EOF followed by a still-running launcher is also bounded by the same deadline.
+Timeout is an explicit failure and records whether stdout is complete. Teardown
+refreshes PID/start/command identities before TERM, waits two seconds, refreshes
+again before KILL, and records required escalation, survivors and query/signal
+errors. Queries, observer shutdown and child waits are individually bounded; no
+unverified process-group/name kill is used. Source-only injected-clock/process
+regressions cover a held-open pipe, continuous output, TERM resistance, PID reuse,
+new descendants and cleanup failure. These tests do not execute native processes.
+After the run,
 record fresh complete native process/listener evidence, visually inspect each
 requested screenshot, audit all observations and assertions, verify source again,
 and explicitly release port5200/native/browser slot to the supervisor. Archive
