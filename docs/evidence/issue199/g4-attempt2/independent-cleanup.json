@@ -1,0 +1,104 @@
+{
+  "at": "2026-09-08T20:47:10.804Z",
+  "out": "/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z",
+  "head": "cbb9ad83676a5b90805fedd85e0cd70ca850652f",
+  "sourceHashes": 939,
+  "clean": true,
+  "knownIdentities": [
+    {
+      "pid": 33158,
+      "parentPid": 33144,
+      "started": "Tue Sep 8 22:45:37 2026",
+      "command": "/Users/razvan-constantinbotezatu/.hermes/node/bin/node /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/g4/execute.mjs --expected-head cbb9ad83676a5b90805fedd85e0cd70ca850652f"
+    },
+    {
+      "pid": 33190,
+      "parentPid": 33158,
+      "started": "Tue Sep 8 22:45:38 2026",
+      "command": "/usr/bin/caffeinate -is -w 33158"
+    },
+    {
+      "pid": 33191,
+      "parentPid": 33158,
+      "started": "Tue Sep 8 22:45:38 2026",
+      "command": "/Users/razvan-constantinbotezatu/.hermes/node/bin/node /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5199 --strictPort"
+    },
+    {
+      "pid": 33196,
+      "parentPid": 33158,
+      "started": "Tue Sep 8 22:45:38 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --user-data-dir=/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z/chromium-profile --remote-debugging-pipe about:blank"
+    },
+    {
+      "pid": 33197,
+      "parentPid": 33196,
+      "started": "Tue Sep 8 22:45:38 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=gpu-process --no-sandbox --disable-breakpad --headless --use-angle=swiftshader-webgl --enable-unsafe-swiftshader --gpu-preferences=WAAAAAAAAAAgAAAEAAAAAAAAAAAAAGAAQAAAAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAKAAAAAAAAAAoAAAAAAAAAAgAAAAAAAAADAAAAAEAAAAAAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,12598491004005688179,3513291675447007112,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,18390852048790912183,11569630066369377192,4 --trace-process-track-uuid=3190708988185955192"
+    },
+    {
+      "pid": 33198,
+      "parentPid": 33196,
+      "started": "Tue Sep 8 22:45:38 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-US --service-sandbox-type=none --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --headless=old --shared-files --field-trial-handle=1718379636,r,12598491004005688179,3513291675447007112,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,18390852048790912183,11569630066369377192,4 --trace-process-track-uuid=3190708989122997041"
+    },
+    {
+      "pid": 33199,
+      "parentPid": 33196,
+      "started": "Tue Sep 8 22:45:38 2026",
+      "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=renderer --headless=old --no-sandbox --disable-back-forward-cache --disable-background-timer-throttling --disable-breakpad --force-color-profile=srgb --remote-debugging-pipe --allow-pre-commit-input --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --disable-gpu-compositing --lang=en-US --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1788794155070494 --launch-time-ticks=106183249212 --shared-files --field-trial-handle=1718379636,r,12598491004005688179,3513291675447007112,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,18390852048790912183,11569630066369377192,4 --trace-process-track-uuid=3190708990060038890"
+    }
+  ],
+  "supervisorParent": {
+    "pid": 33144,
+    "liveIdentityCaptured": false,
+    "qualification": "Independent observer ran after completion; parent PID recorded by supervisor, absence verified now."
+  },
+  "pidPresence": [
+    {
+      "pid": 33144,
+      "present": false
+    },
+    {
+      "pid": 33158,
+      "present": false
+    },
+    {
+      "pid": 33190,
+      "present": false
+    },
+    {
+      "pid": 33191,
+      "present": false
+    },
+    {
+      "pid": 33196,
+      "present": false
+    },
+    {
+      "pid": 33197,
+      "present": false
+    },
+    {
+      "pid": 33198,
+      "present": false
+    },
+    {
+      "pid": 33199,
+      "present": false
+    }
+  ],
+  "remaining": [],
+  "profileMatches": [],
+  "port5199": false,
+  "pmset": {
+    "status": 0,
+    "error": null,
+    "window": [
+      "2026-09-08T20:45:37.954Z",
+      "2026-09-08T20:46:00.259Z"
+    ],
+    "transitionCount": 0,
+    "transitions": []
+  },
+  "fallbackSignals": []
+}
