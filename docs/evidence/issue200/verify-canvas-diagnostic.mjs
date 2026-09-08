@@ -14,7 +14,8 @@ const allowed = new Set([
   ...['verify-canvas-diagnostic.mjs', 'run-canvas-diagnostic.py', 'canvas-diagnostic-fixture-pins.json',
     'canvas-diagnostic-protocol.md', 'canvas-diagnostic-first-run.md', 'canvas-diagnostic-source-checks.log',
     'audit-canvas-diagnostic.mjs', 'canvas-diagnostic-17d396f-evidence.tar.gz', 'canvas-diagnostic-17d396f-evidence.tar.gz.sha256',
-    'canvas-diagnostic-results.md', 'rendering-protocol.md', 'corrected-g2-source-checks.log', 'run-g2-browser.py'].map((name) => `docs/evidence/issue200/${name}`),
+    'canvas-diagnostic-results.md', 'rendering-protocol.md', 'corrected-g2-source-checks.log', 'run-g2-browser.py',
+    'g2-observable-results.md', 'g2-9bddfc5-evidence.tar.gz', 'g2-9bddfc5-evidence.tar.gz.sha256'].map((name) => `docs/evidence/issue200/${name}`),
 ])
 const git = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim()
 const changed = [...new Set([...git(['diff', '--name-only', product]).split('\n'), ...git(['ls-files', '--others', '--exclude-standard']).split('\n')].filter(Boolean))]
