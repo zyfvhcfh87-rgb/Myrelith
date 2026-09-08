@@ -19,7 +19,8 @@ interface PreparedEntry {
 }
 const preparedTracks = new WeakMap<EffectPathAnimationTrack, PreparedEntry>()
 
-function preparedPath(track: EffectPathAnimationTrack, effect: EffectDescriptor): PreparedEffectPathAnimationTrack {
+/** Shared by resolution and editing status; keeps validation in one prepared cache. */
+export function prepareCachedEffectPathAnimationTrack(track: EffectPathAnimationTrack, effect: EffectDescriptor): PreparedEffectPathAnimationTrack {
   const cached = preparedTracks.get(track)
   if (cached && cached.effectId === effect.id && cached.effectType === effect.type && cached.effectVersion === effect.version
     && cached.shape === effect.params.shape && cached.parameter === track.parameter && cached.valueType === track.valueType
@@ -44,7 +45,7 @@ export function resolveEffectPathAnimation(clip: Clip, tracks: readonly EffectPa
       if (track.effectId !== effect.id) continue
       const fallback = effect.params[track.parameter]
       if (typeof fallback !== 'string') continue
-      const prepared = preparedPath(track, effect)
+      const prepared = prepareCachedEffectPathAnimationTrack(track, effect)
       if (!prepared.ok) continue
       const value = evaluatePreparedEffectPathAnimationTrack(prepared, localFrame, fallback)
       if (value === fallback) continue

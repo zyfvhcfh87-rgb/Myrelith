@@ -1,4 +1,4 @@
-import { editMaskParamsAtFrame, maskEditingTarget, type MaskEditPatch, type MaskEditTarget } from '../domain/maskEditing'
+import { editMaskParamsAtFrame, editMaskPathAnimation, maskEditingTarget, type MaskEditPatch, type MaskEditTarget } from '../domain/maskEditing'
 import { replaceProjectSequence } from '../domain/projectSequences'
 import { useDocumentStore } from '../state/documentStore'
 import { getTransportResetRevision, useTransportStore } from '../state/transportStore'
@@ -7,6 +7,7 @@ import { portableProjectEditError } from './portableProjectEdit'
 export interface MaskEditSession {
   preview(patch: MaskEditPatch): string | null
   commit(patch: MaskEditPatch): string | null
+  commitPathKey(action: 'set' | 'remove' | 'clear'): string | null
   cancel(): void
 }
 let active: MaskEditSession | null = null
@@ -39,10 +40,11 @@ export function beginMaskEdit(target: MaskEditTarget, onEnd?: () => void): MaskE
     useTransportStore.getState().setMaskPreview(null)
     onEnd?.()
   }
-  function edit(patch: MaskEditPatch, commit: boolean): string | null {
+  function edit(patch: MaskEditPatch, commit: boolean, pathAction?: 'set' | 'remove' | 'clear'): string | null {
     if (!current()) { cancel(); return 'The project, selection or playhead changed. Start the mask edit again.' }
     try {
-      const next = editMaskParamsAtFrame(document.project, target, transport.playheadFrame, patch)
+      const next = pathAction ? editMaskPathAnimation(document.project, target, transport.playheadFrame, pathAction)
+        : editMaskParamsAtFrame(document.project, target, transport.playheadFrame, patch)
       if (commit) {
         cancel()
         if (active !== null || !contextCurrent()) return 'The project, selection or playhead changed. Start the mask edit again.'
@@ -55,7 +57,7 @@ export function beginMaskEdit(target: MaskEditTarget, onEnd?: () => void): MaskE
       return null
     } catch (cause) { cancel(); return cause instanceof Error ? cause.message : 'Could not edit this mask.' }
   }
-  const session: MaskEditSession = { preview: (patch) => edit(patch, false), commit: (patch) => edit(patch, true), cancel }
+  const session: MaskEditSession = { preview: (patch) => edit(patch, false), commit: (patch) => edit(patch, true), commitPathKey: (action) => edit({}, true, action), cancel }
   active = session
   const check = () => { if (!current()) cancel() }
   unsubscribeDocument = useDocumentStore.subscribe(check)
@@ -66,4 +68,9 @@ export function beginMaskEdit(target: MaskEditTarget, onEnd?: () => void): MaskE
 export function commitMaskParams(target: MaskEditTarget, patch: MaskEditPatch): string | null {
   try { return beginMaskEdit(target).commit(patch) }
   catch (cause) { return cause instanceof Error ? cause.message : 'Could not edit this mask.' }
+}
+
+export function commitMaskPathKey(target: MaskEditTarget, action: 'set' | 'remove' | 'clear'): string | null {
+  try { return beginMaskEdit(target).commitPathKey(action) }
+  catch (cause) { return cause instanceof Error ? cause.message : 'Could not edit these path keys.' }
 }
