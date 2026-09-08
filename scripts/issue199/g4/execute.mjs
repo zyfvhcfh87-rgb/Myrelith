@@ -59,7 +59,7 @@ try {
   page.on('dialog', async (d) => { if (d.type() === 'confirm' && d.message() === 'This project has unsaved changes. Leave them behind and return to Projects?') await d.accept(); else { report.problems.push({ step: current, type: 'dialog', text: d.message() }); await d.dismiss() } })
   await step('bounded encoded fixture, canonical retime/split and undo', async () => {
     await page.goto('http://127.0.0.1:5199'); await page.getByRole('button', { name: 'Start a new project', exact: true }).click()
-    await page.getByLabel('Project name').fill('Mixed encoded Animation G4'); await page.getByLabel('Resolution', { exact: true }).selectOption('720')
+    await page.getByLabel('Project name').fill('Mixed encoded Animation G4'); await page.locator('.project-field-resolution select').selectOption('720')
     await page.getByRole('button', { name: 'Create project', exact: true }).click(); await page.getByRole('button', { name: 'Commands', exact: true }).waitFor()
     return call('prepare')
   })
