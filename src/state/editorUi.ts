@@ -101,3 +101,9 @@ export {
 export { rangeEnd, secondsToFrames } from '../domain/time'
 
 export { SPATIAL_EFFECT_PARAMETERS, spatialEffectKind, spatialEffectParams } from '../domain/spatialEffectDefinitions'
+
+export { COLOR_LUT_TYPE } from '../domain/colorLut'
+export { isColorLutV1 } from '../domain/colorLutCatalog'
+export { isColorGradingType } from '../domain/colorGradingEffects'
+export { COLOR_CURVES_TYPE, COLOR_CURVE_LIMITS, COLOR_CURVE_CHANNELS, colorCurvesParams, parseColorCurve, compileColorCurve, type ColorCurve, type ColorCurveChannel } from '../domain/colorCurves'
+export { COLOR_WHEELS_TYPE, COLOR_WHEEL_GROUPS, COLOR_WHEEL_LIMITS, COLOR_RGB, colorWheelsParams, colorWheelPosition, colorWheelAtPosition, colorWheelBrightness, type ColorWheelGroup } from '../domain/colorWheels'

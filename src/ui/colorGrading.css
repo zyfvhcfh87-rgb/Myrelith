@@ -1,0 +1,27 @@
+.grading-fields, .grading-add { min-width: 0; display: grid; gap: 8px; }
+.grading-fields p, .grading-lut-dialog p { overflow-wrap: anywhere; }
+.grading-number { min-width: 0; }
+.grading-number input { min-width: 0; width: 100%; }
+.grading-curve-graph { display: block; width: calc(100% - 14px); margin: 7px; aspect-ratio: 1; background: #171c28; border: 1px solid #596174; overflow: visible; touch-action: none; }
+.grading-curve-grid { fill: none; stroke: #3a4252; stroke-width: 1; }
+.grading-curve-line { fill: none; stroke: #e4e9f4; stroke-width: 2; }
+.grading-curve-graph.is-red .grading-curve-line { stroke: #ff8585; }
+.grading-curve-graph.is-green .grading-curve-line { stroke: #8be5ad; }
+.grading-curve-graph.is-blue .grading-curve-line { stroke: #8baeff; }
+.grading-curve-graph circle { fill: #fff; stroke: #161c29; stroke-width: 2; cursor: grab; }
+.grading-curve-graph circle:focus-visible { stroke: #f7c967; stroke-width: 4; outline: none; }
+.grading-point-list { list-style: none; padding: 0; display: grid; gap: 8px; }
+.grading-point-list > li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 5px; border-bottom: 1px solid #394052; padding-bottom: 8px; }
+.grading-point-list .inspector-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
+.grading-point-list button { grid-column: 1 / -1; justify-self: end; }
+.grading-wheels { display: grid; gap: 12px; }
+.grading-wheel-group { min-width: 0; border: 1px solid #41485a; border-radius: 8px; padding: 10px; display: grid; gap: 6px; }
+.grading-wheel { position: relative; width: min(152px, 90%); aspect-ratio: 1; justify-self: center; border-radius: 50%; border: 2px solid #8791a3; background: radial-gradient(circle, #bbb 0%, transparent 80%), conic-gradient(from 90deg, #f36a75, #ba60dc, #637ceb, #69d8da, #8cdb8f, #e4d17b, #f36a75); touch-action: none; cursor: crosshair; }
+.grading-wheel:focus-visible { outline: 3px solid #f7c967; outline-offset: 3px; }
+.grading-wheel-marker { position: absolute; width: 12px; height: 12px; border: 2px solid white; background: #172031; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 0 1px #000; }
+.grading-animation { font-size: 11px; min-width: 0; }
+.grading-animation summary { cursor: pointer; color: #b9c4d9; }
+.grading-lut-dialog { width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; }
+.grading-lut-dialog .text-overlay-dialog-card { min-width: 0; }
+.grading-lut-dialog header { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.grading-lut-dialog select, .grading-lut-dialog input { min-width: 0; max-width: 100%; }

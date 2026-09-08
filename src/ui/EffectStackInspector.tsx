@@ -1,3 +1,6 @@
+import ColorGradingAdd from './ColorGradingAdd'
+import ColorGradingFields from './ColorGradingFields'
+import ColorGradingAnimation from './ColorGradingAnimation'
 import EffectBrowser from './EffectBrowser'
 import { SPATIAL_EFFECT_PARAMETERS, spatialEffectKind, spatialEffectParams } from '../state/editorUi'
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
@@ -587,6 +590,7 @@ export default function EffectStackInspector({
           <button type="button" className="inspector-effect-add" disabled={locked || limits.mask !== null} aria-describedby={addBudgetReasonId(limits.mask)} onClick={() => add(createMaskEffect(newId(), 'bezier'))}>Add Bezier mask</button>
         </div>
       </div>
+      <ColorGradingAdd target={{ kind: 'clip', sequenceId: doc.id, clipId: clip.id }} disabled={locked} />
       <span className="inspector-note">
         Effects run from top to bottom in project space after transform and crop, then before opacity and compositing.
       </span>
@@ -642,6 +646,8 @@ export default function EffectStackInspector({
                       `inspector-effect-enabled-${effect.id}`,
                       (enabled) => store().setEffectEnabled(clip.id, effect.id, enabled),
                     )}
+                    <ColorGradingFields target={{ kind: 'clip', sequenceId: doc.id, clipId: clip.id }} effect={effect} disabled={locked}
+                      animation={(parameter, value) => <ColorGradingAnimation target={{ kind: 'clip', sequenceId: doc.id, clipId: clip.id }} effect={effect} parameter={parameter} value={value} disabled={locked} />} />
                     <SpatialFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />
                     {editableColor && <ColorFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />}
                     {editableMask && <MaskFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />}

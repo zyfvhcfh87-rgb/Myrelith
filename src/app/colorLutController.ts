@@ -29,7 +29,7 @@ interface ImportWorker {
   terminate(): void
 }
 export function createColorLutController(createWorker: () => ImportWorker = () => new Worker(new URL('../workers/color-lut-import.worker.ts', import.meta.url), { type: 'module' })) {
-  type Pending = { project: SequenceProject; generation: number; target: ColorGradingTarget; selection: readonly string[]; effectId?: string; table: PortableColorLutV1 | null; worker: ImportWorker | null; deadline: ReturnType<typeof setTimeout> | null }
+  type Pending = { project: SequenceProject; generation: number; target: ColorGradingTarget; selection: readonly string[]; adjustmentSelection: string | null; effectId?: string; table: PortableColorLutV1 | null; worker: ImportWorker | null; deadline: ReturnType<typeof setTimeout> | null }
   let pending: Pending | null = null
   function stopWorker(session: Pending): void {
     session.worker?.terminate(); session.worker = null
@@ -44,7 +44,7 @@ export function createColorLutController(createWorker: () => ImportWorker = () =
   function current(session: Pending): boolean {
     const state = useDocumentStore.getState(), selection = useTransportStore.getState().selectedClipIds
     return pending === session && state.project === session.project && state.projectGeneration === session.generation
-      && state.activeSequenceId === session.target.sequenceId && selection.length === session.selection.length
+      && state.activeSequenceId === session.target.sequenceId && useTransportStore.getState().selectedAdjustmentId === session.adjustmentSelection && selection.length === session.selection.length
       && selection.every((id, i) => session.selection[i] === id)
   }
   return {
@@ -59,7 +59,7 @@ export function createColorLutController(createWorker: () => ImportWorker = () =
       if (!file.name.toLowerCase().endsWith('.cube') || file.size > COLOR_LUT_LIMITS.fileBytes) { cancel('Choose a .cube file no larger than 4 MiB.'); return }
       const state = useDocumentStore.getState()
       const session: Pending = { project: state.project, generation: state.projectGeneration, target, effectId,
-        selection: [...useTransportStore.getState().selectedClipIds], table: null, worker: null, deadline: null }
+        selection: [...useTransportStore.getState().selectedClipIds], adjustmentSelection: useTransportStore.getState().selectedAdjustmentId, table: null, worker: null, deadline: null }
       pending = session
       useColorLutImportStore.setState({ phase: 'reading', name: file.name, detail: 'Reading a local LUT…' })
       try {

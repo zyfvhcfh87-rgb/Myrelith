@@ -569,7 +569,7 @@ function currentPreviewDocument(): TimelineDoc {
   const transport = useTransportStore.getState()
   return documentWithClipVisualPreview(
     documentWithTextOverlayPreview(
-      useDocumentStore.getState().doc,
+      transport.colorGradingPreview?.sequenceId === useDocumentStore.getState().activeSequenceId ? transport.colorGradingPreview.document : useDocumentStore.getState().doc,
       transport.textOverlayPreview,
     ),
     transport.clipVisualPreview,
@@ -1143,6 +1143,7 @@ export function initPreview(
       if (
         s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
+        || s.colorGradingPreview !== prev.colorGradingPreview
       ) {
         syncPreviewDocument(bridge, deps)
       }
@@ -1156,6 +1157,7 @@ export function initPreview(
         || modeForTransport(s) !== modeForTransport(prev)
         || s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
+        || s.colorGradingPreview !== prev.colorGradingPreview
       ) scheduleRender(deps)
     }),
     useMediaStore.subscribe(() => {

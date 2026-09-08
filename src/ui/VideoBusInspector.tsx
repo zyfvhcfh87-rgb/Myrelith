@@ -1,3 +1,6 @@
+import ColorGradingAdd from './ColorGradingAdd'
+import ColorGradingFields from './ColorGradingFields'
+import { isColorGradingType } from '../state/editorUi'
 import { useState } from 'react'
 import { useDocumentStore } from '../state/documentStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
@@ -24,6 +27,7 @@ export default function VideoBusInspector() {
     </select></label>
     <p className="inspector-note">{target.kind === 'master' ? 'Runs after this sequence’s tracks and captions. Nested sequences finish their own master first.' : 'Runs after clip opacity and transitions, before this track blends with lower tracks. Adjustment items keep their own lower-picture processing.'} Use adjustment items for effects over a chosen time range.</p>
     <div className="inspector-effect-actions"><EffectBrowser key={`${sequenceId}:${track?.id ?? 'master'}`} busTarget={target} hasEffects={owner.effects.length > 0} /></div>
+    <ColorGradingAdd key={`${sequenceId}:${selection}`} target={target} disabled={owner.locked} />
     {owner.locked && <p>This video track is locked.</p>}
     {error && <p role="alert">{error}</p>}
     <ol className="inspector-effect-list" aria-label={`${owner.name} effect stack`}>
@@ -35,7 +39,8 @@ export default function VideoBusInspector() {
           <strong>{registration?.label ?? effect.type}</strong><p className="inspector-note">{status ? `${status.status}: ${status.detail}` : 'Waiting for preview capability status.'}</p>
           <label className="inspector-field"><span>Enabled</span><input type="checkbox" aria-label={`Enable ${registration?.label ?? effect.type}`} checked={effect.enabled} disabled={owner.locked} onChange={(event) => edit({ kind: 'enabled', effectId: effect.id, enabled: event.target.checked })} /></label>
           {supported && !editable && <p className="inspector-note">Invalid parameters are preserved. Reset this effect to restore defaults.</p>}
-          {editable && Object.entries(registration.animatableParams).map(([parameter, spec]) => <NumericField key={parameter}
+          <ColorGradingFields target={target} effect={effect} disabled={owner.locked} />
+          {editable && !isColorGradingType(effect.type) && Object.entries(registration.animatableParams).map(([parameter, spec]) => <NumericField key={parameter}
             label={'label' in spec ? String(spec.label) : parameter[0].toUpperCase() + parameter.slice(1)}
             value={Number(effect.params[parameter] ?? registration.defaultParams[parameter])} min={spec.min} max={spec.max}
             step={'step' in spec ? Number(spec.step) : 0.01} disabled={owner.locked} testId={`video-bus-${effect.id}-${parameter}`}

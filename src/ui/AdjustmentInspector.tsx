@@ -1,3 +1,9 @@
+import ColorGradingAdd from './ColorGradingAdd'
+import ColorGradingFields from './ColorGradingFields'
+import ColorGradingAnimation from './ColorGradingAnimation'
+import { usePreviewStatusStore } from '../state/previewStatusStore'
+import { effectRegistration } from '../domain/effectStack'
+import { isColorGradingType } from '../state/editorUi'
 import { useEffect, useState, type KeyboardEvent } from 'react'
 import { StackSimple } from '@phosphor-icons/react'
 import type { AdjustmentItem, EffectDescriptor, TimelineDoc } from '../domain/schema'
@@ -172,7 +178,9 @@ function AdjustmentEffectCard({
   playheadFrame: number
   locked: boolean
 }) {
-  const resolution = resolvePostCompositeEffectStack([effect], true).effects[0]!
+  const projected = usePreviewStatusStore((state) => state.effectStatuses.get(effect.id))
+  const sequenceId = useDocumentStore((state) => state.activeSequenceId)
+  const resolution = projected ?? resolvePostCompositeEffectStack([effect], true).effects[0]!
   const store = useDocumentStore.getState
   return (
     <article
@@ -210,7 +218,7 @@ function AdjustmentEffectCard({
           >↓</button>
           <button
             type="button"
-            disabled={locked || effect.type !== COLOR_ADJUST_EFFECT_TYPE}
+            disabled={locked || effectRegistration(effect.type)?.version !== effect.version}
             onClick={() => store().resetAdjustmentEffect(adjustment.id, effect.id)}
           >Reset</button>
           <button
@@ -231,7 +239,9 @@ function AdjustmentEffectCard({
           locked={locked}
         />
       )}
-      {effect.type !== COLOR_ADJUST_EFFECT_TYPE && (
+      <ColorGradingFields target={{ kind: 'adjustment', sequenceId, adjustmentId: adjustment.id }} effect={effect} disabled={locked}
+        animation={(parameter, value) => <ColorGradingAnimation target={{ kind: 'adjustment', sequenceId, adjustmentId: adjustment.id }} effect={effect} parameter={parameter} value={value} disabled={locked} />} />
+      {effect.type !== COLOR_ADJUST_EFFECT_TYPE && !isColorGradingType(effect.type) && (
         <span className="inspector-note">
           Its complete descriptor stays in the project for a compatible renderer.
         </span>
@@ -428,6 +438,7 @@ export default function AdjustmentInspector({
         <p className="inspector-note">
           Source geometry, masks, chroma keys, and plugins are intentionally unavailable here.
         </p>
+        <ColorGradingAdd target={{ kind: 'adjustment', sequenceId: doc.id, adjustmentId: adjustment.id }} disabled={locked} />
         {resolved.effects.length === 0
           ? <p className="inspector-note">No effects yet. The layer is currently a no-op.</p>
           : resolved.effects.map((effect, index) => (

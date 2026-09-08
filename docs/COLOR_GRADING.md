@@ -562,3 +562,38 @@ readback and parser measurements are separate. Evidence is in
 Canvas context loss is qualified by injected reported loss/readback failure;
 this does not claim an operating-system GPU reset test. UI, presets, parade and
 complete acceptance remain later gates.
+
+
+## Gate 4 evidence, 2026-09-08
+
+The Inspector now offers local LUT import/reuse, master/RGB curve graphs with
+numeric point lists, and lift/gamma/gain wheels with authoritative RGB and
+brightness fields. File import shows native size, domain and interpolation before
+Apply. Picker labels and focus restoration are explicit. Existing reset, bypass,
+reorder and remove actions apply to the new versioned descriptors. Effect-browser
+search includes grading; LUTs enter through their resource picker.
+
+App-owned gestures pin the immutable project, generation, selection, playhead
+and transport lifetime. Temporary documents live only in transport preview state.
+A pointer release or numeric commit validates against that snapshot and creates
+one history edit; Escape, cancellation, selection/project/playhead change or
+unmount clears preview. Animation uses existing clip/adjustment key semantics:
+LUT/curve strength and the wheel scalars are eligible, while text and buses remain
+static. Table payloads and curve point strings cannot acquire animation keys.
+
+All 171 focused tests in seven files and all 17 runner checks pass, including
+nine new gesture ownership cases. Build/typecheck, lint and diff checks pass.
+Two muted Chromium flows pass: 1D import, curve point/numeric/keyboard edits,
+wheel drag and keyboard equivalence, numeric Escape, one-edit undo/redo, scalar
+keys, native-33 import, malformed rejection without mutation, table reuse,
+adjustment animation and static text/bus controls. No page errors or console
+warnings/errors were observed. Inspector content fits at 1280 and 768 pixels
+wide; the 1280-by-720 screenshot was inspected and shows the live graded picture
+and wheel control without a framework error overlay.
+
+Initial browser fixture failures used the wrong track label and document
+replacement instead of normal adjustment insertion. Those were corrected.
+The reused picker also needed explicit accessible dialog/select labels; its final
+flow is now checked by those names. One automatic approval review timed out while
+launching the local browser-test server; its permitted retry succeeded. No user
+scope or approval gate changed.

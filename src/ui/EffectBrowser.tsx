@@ -1,3 +1,5 @@
+import ColorLutPicker from './ColorLutPicker'
+import { COLOR_LUT_TYPE } from '../state/editorUi'
 import { applyVideoBusEdit, openVideoBusEdit, openVideoBusPresetSave, videoBusEffectIneligibility, videoBusOwner, videoBusRenderBudgetError, type VideoBusTarget } from '../app/videoBusController'
 import { useEffect, useId, useRef, useState } from 'react'
 import { openAttributeEdit } from '../app/clipAttributeController'
@@ -94,9 +96,11 @@ function BrowserDialog({ clipId, busTarget, saving, onClose }: { clipId?: string
       <ul className="effect-browser-list" aria-label="Matching effects">
         {(filter === 'all' || filter === 'builtins') && builtins.map((entry) => <li key={entry.effect.type}>
           <strong>{entry.label}</strong><span>Built-in · {entry.surfaces.includes('post-composite') ? 'Clips and composites' : 'Clips only'}</span><p>{entry.description}</p>
-          {!busReason([entry.effect]) && effectTemplatePreview([entry.effect], capabilities).map((detail) => <p key={detail}>{detail}</p>)}
+          {entry.effect.type !== COLOR_LUT_TYPE && !busReason([entry.effect]) && effectTemplatePreview([entry.effect], capabilities).map((detail) => <p key={detail}>{detail}</p>)}
           <p>{busReason([entry.effect])}</p>
-          <button type="button" disabled={!!busReason([entry.effect])} onClick={() => apply([entry.effect])}>Apply {entry.label}</button>
+          {entry.effect.type === COLOR_LUT_TYPE
+            ? <ColorLutPicker target={busTarget ?? { kind: 'clip', sequenceId: session.project.sequences.find((sequence) => sequence.tracks.some((track) => track.clips.some((clip) => clip.id === session.targetIds[0])))?.id ?? '', clipId: session.targetIds[0] ?? '' }} disabled={!busTarget && session.targetIds.length !== 1} />
+            : <button type="button" disabled={!!busReason([entry.effect])} onClick={() => apply([entry.effect])}>Apply {entry.label}</button>}
         </li>)}
         {(filter === 'all' || filter === 'presets') && presets.map((preset) => <li key={preset.id}>
           <strong>{preset.name}</strong><span>Local preset · {preset.effects.length} effects · static values</span>
