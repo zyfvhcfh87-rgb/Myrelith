@@ -1,12 +1,29 @@
 # Local speech model decision — replacement lab preflight
 
-Date: 2026-09-08. Status: fifth frozen attempt exceeded the fixed resident-memory ceiling.
+Date: 2026-09-08. Status: the first exact whisper.cpp runtime attempt aborted during initialization.
 **Product enablement remains NO-GO pending runtime/offline/lifecycle evidence.**
 This status preserves the separate decision required by issue #201. The
 orchestrator may approve the independent caption implementation after reviewing
 the plan without approving speech enablement.
 
 ## Current measured candidate and outstanding decision
+
+The first exact whisper.cpp runtime attempt at73395b5 failed during initialization:
+`Core Aborted(); cooperativeZero=false`. Eight initial cases passed, the first
+English case failed, and fourteen cases remain untested. No ready, audio prepare,
+inference, window or transcript was returned. The generic diagnostic does not
+identify which initialization operation aborted. [WHISPER_CPP_RUNTIME_RUN_01.md](WHISPER_CPP_RUNTIME_RUN_01.md)
+retains complete raw final/partial evidence and independent physical release.
+
+Fifteen complete RSS samples qualified only the short observed epoch: baseline
+272,777,216 bytes, sampled peak778,502,144, delta505,724,928, maximumgap109ms.
+This is not full runtime or inference memory qualification. The client forced
+worker termination; cooperative cleanup remained unverified. Browser close took
+70ms. Exactrunner/browser PIDs and5201listener were independently absent and only
+the owned profile was removed. The single grant is consumed, no retry occurred,
+and the exclusive slot is released. Speech remainsNO-GO.
+
+## Previous ORT candidate and preparation history
 
 Candidate05 completed its single explicitly granted native run after full source
 review; it is **NO-GO**. [LAB_RUN_05.md](LAB_RUN_05.md) preserves the unchanged
@@ -36,7 +53,9 @@ whisper.cpp WASM route in [WHISPER_CPP_ROUTE_PROPOSAL.md](WHISPER_CPP_ROUTE_PROP
 The accepted source-preparation grant has now produced exact verified multilingual
 tiny-q8_0/source/toolchain assets, explicit build/token patches and an owned C/JS
 protocol in [WHISPER_CPP_SOURCE_PREPARATION.md](WHISPER_CPP_SOURCE_PREPARATION.md).
-No toolchain was installed/activated or compiler/runtime/inference executed.
+At that source-preparation checkpoint no toolchain had been installed/activated
+and no compiler/runtime/inference had executed. The later accepted private build,
+static generated-artifact review and failed runtime attempt are recorded above.
 The448-token source guard has deterministic arithmetic/placement checks; compiled
 behavior, built artifact identity, all measured acceptance and production speech
 remain unresolved. The existing raw RSS record cannot identify an exact native
