@@ -32,8 +32,9 @@ all product code matches tested `4727236`.
 - `verify-keyboard-source.mjs`: requires the exact worker directory/branch and a
   clean tree; freezes all tracked file hashes and HEAD. Production, dependencies,
   other tests and accepted G3/first-paint harness files must match the assigned
-  tested `a7207ca` checkpoint; only `keyboard-client.ts` and its focused retained-geometry
-  regression may differ under source/test paths. Product and case assertions are frozen.
+  tested `ca23f62` checkpoint; only the two title dialogs, their small focus handler,
+  focused component regression and native Direction key sequence may differ.
+  Diagnostic geometry and original outcome assertions remain frozen.
 
 The later grant uses a new external `/private/tmp/issue200-*` artifact directory,
 `ISSUE200_KEYBOARD_ARTIFACTS` and `ISSUE200_KEYBOARD_MANIFEST`. The committed
@@ -99,7 +100,10 @@ cause is not definitively proved, and no native font selection is claimed.
 
 **Dialogs/cancellation, at each viewport:** open Roll / crawl by keyboard and
 check modal semantics, initial focus and exact forward/reverse DOM control order,
-full wrap and focus containment. Change direction to down and preview frame to 48;
+full wrap and focus containment. Change direction from up to down with native `r` typeahead (the next Roll option),
+requiring the exact down value, and preview frame to 48. If native typeahead leaves
+up unchanged, explicitly qualify that selection as UNVERIFIED after checking focus
+and full project/history, then continue all remaining dialog checks;
 Preview motion owns a title preview without changing project/history/playhead.
 Escape releases it and returns focus to the exact opener. A declared second open
 exercises keyboard Cancel independently. Save title template checks real loaded

@@ -4,6 +4,7 @@ import type { TitleTemplateV1 } from '../domain/titleTemplates'
 import { titleTemplateController, pinTitleTemplateDialog } from '../app/titleTemplateController'
 import { builtInTitleTemplates, titleTemplateConversion } from '../state/titleEditorStore'
 import { useTitleTemplateStore } from '../state/titleTemplateStore'
+import { containTitleDialogKey } from './titleDialogFocus'
 import './titleEditor.css'
 export default function TitleTemplateDialog({ captureTarget, onClose }: { captureTarget?: TitleEditTarget; onClose(): void }) {
   const [pin] = useState(pinTitleTemplateDialog), [builtins] = useState(builtInTitleTemplates)
@@ -24,7 +25,7 @@ export default function TitleTemplateDialog({ captureTarget, onClose }: { captur
     finally { if (revision === readRevision.current) setLoading(false) }
   }
   const conversion = chosen ? titleTemplateConversion(chosen, sequence) : null
-  return <dialog ref={dialog} className="title-dialog" aria-labelledby="title-template-heading" onCancel={(event) => { event.preventDefault(); onClose() }} onKeyDown={(event) => event.stopPropagation()}>
+  return <dialog ref={dialog} className="title-dialog" aria-labelledby="title-template-heading" onCancel={(event) => { event.preventDefault(); onClose() }} onKeyDown={containTitleDialogKey}>
     <h2 id="title-template-heading">{captureTarget ? 'Save title template' : 'Title templates'}</h2>
     <p>Local to this browser. Used titles are independent editable copies saved with the project.</p>
     {captureTarget ? <><label className="title-field">Template name<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} /></label><button type="button" disabled={library.busy || !!library.readOnlyReason} onClick={async () => { if (await titleTemplateController.save(pin, captureTarget, name)) onClose() }}>Save template</button></>
