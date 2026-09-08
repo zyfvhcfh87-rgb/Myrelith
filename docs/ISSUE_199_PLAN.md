@@ -1,12 +1,12 @@
 # Issue #199 — unified animation editor plan
 
-Status: Corrected Gate 2 `971b5114b7c45028cef0991c8cca7eb16fd7614f`
-was accepted and integrated with schema23 owners at
-`4340f9675ad56aa320f2498cf107fd55f8819568`. Authorized Gate 3 source is ready
-for exact-commit review; see [UI evidence](evidence/issue199/gate3-unified-ui.md)
-and the [requested browser protocol](evidence/issue199/gate3-browser-protocol.md).
-Observable, performance and cross-feature/export acceptance remain pending the
-supervisor's review and exclusive slot. This document does not approve itself.
+Status: Gate 3 runtime segments have been accepted by the parent. Corrected
+Gate 4 passed all nine mixed-browser/export/decode/cleanup checkpoints at
+`705f07135ec30681ccc9593b41045dd378498698`; see the
+[completion evidence](evidence/issue199/g4-completion.md). Earlier failures and
+their bounded diagnostic corrections remain preserved. Consolidated Gate 5
+tests/build/lint and final integration/publication are owned by the parent task.
+No new browser or performance run is requested by this status update.
 
 Issue: <https://github.com/zyfvhcfh87-rgb/Myrelith/issues/199>
 
