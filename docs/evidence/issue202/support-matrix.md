@@ -51,7 +51,7 @@ Mediabunny guide and its installed source were available.
 
 | Target | Available facts | 10-bit decode/readback | Float processing | HDR monitor | 10-bit encode + metadata |
 | --- | --- | --- | --- | --- | --- |
-| Installed Playwright Chromium, macOS 26.6.2 / arm64 | Chromium revision 1234 executable exists; actual version/adapter not yet probed. Node is 26.8.1. Hardware model/RAM query denied in restricted environment. | U/P | U/P | U; headless cannot qualify | U/P |
+| Installed Playwright Chromium, macOS 26.6.2 / arm64 | Chromium revision 1234 executable exists; actual version/adapter not yet probed. Node is 26.8.1. Orchestrator-supplied sysctl evidence: Mac17,6 / Apple M5 Max / 64 GiB installed RAM; initial restricted query failed. | U/P | U/P | U; headless cannot qualify | U/P |
 | Released Safari, macOS / Apple hardware | Not yet inventoried or driven. WebKit development support cannot stand in for released Safari. | U/P | U/P | U | U/P |
 | Playwright WebKit on this Mac | Not installed; even if installed it would not automatically qualify Safari/VideoToolbox. | U | U | U | U |
 | Firefox on this Mac | Playwright binary not installed. | U | U | U | U |
@@ -61,6 +61,9 @@ Mediabunny guide and its installed source were available.
 R4 must report **supported / partial / impossible for the exact path** alongside
 these runtime facts. Unmeasured platforms remain unsupported for any proposed
 product claim, without pretending that the platform itself is incapable.
+Host identity does not qualify resident/native/GPU memory usage, browser backend
+availability or HDR display behavior. Supplied evidence provenance and its exact
+command are retained in `initial-validation.md` and `source-inventory.json`.
 
 ## Pinned library observations to carry into R2
 

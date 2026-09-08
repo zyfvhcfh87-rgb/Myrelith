@@ -7,6 +7,17 @@
   "architecture": "arm64",
   "platform": "darwin",
   "macOS": "ProductName:\t\tmacOS\nProductVersion:\t\t26.6.2\nBuildVersion:\t\t25G83",
+  "orchestratorSuppliedHostEvidence": {
+    "receivedOn": "2026-09-08",
+    "source": "Milestone 9 orchestrator task delegation",
+    "command": "/usr/sbin/sysctl -n hw.model hw.memsize machdep.cpu.brand_string",
+    "execution": "Orchestrator reports a scoped read-only sandbox escalation; not executed by this worker.",
+    "model": "Mac17,6",
+    "installedRamBytes": 68719476736,
+    "cpu": "Apple M5 Max",
+    "historicalWorkerQuery": "Initial restricted sysctl query failed with Operation not permitted.",
+    "qualification": "Installed RAM and CPU/model identity only; does not measure resident memory, native/GPU allocations, browser backend availability or physical HDR display capability. No setting changed or agreement accepted."
+  },
   "nodeModulesIsSymlink": false,
   "packages": {
     "mediabunny": "1.50.9",

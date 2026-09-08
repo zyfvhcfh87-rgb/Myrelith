@@ -10,8 +10,13 @@ It does not complete #202's experiments or authorize HDR product changes.
   `DEVELOPER_DIR=/Library/Developer/CommandLineTools`.
 - Private `node_modules` is a directory, not a symlink. Locked Mediabunny is
   1.50.9; Playwright 1.62.1; Node v26.8.1, arm64.
-- macOS 26.6.2 (25G83). Restricted `sysctl` failed to disclose model/RAM;
-  hardware and opaque/native-memory qualification remain unknown.
+- macOS 26.6.2 (25G83). The initial restricted `sysctl` failed to disclose
+  model/RAM. Later, the orchestrator supplied the result of its scoped,
+  read-only `/usr/sbin/sysctl -n hw.model hw.memsize machdep.cpu.brand_string`:
+  `Mac17,6`, `68719476736` bytes (64 GiB), `Apple M5 Max`. This is supplied
+  hardware identity, not a measurement made by this worker. Resident memory,
+  opaque native/GPU allocations, backend availability and physical HDR display
+  capability remain unmeasured. No setting changed or agreement accepted.
 - Playwright Chromium revision 1234 executable exists; Firefox and WebKit
   executables do not. No browser was launched in R0.
 - `ffmpeg` and `ffprobe` are absent from PATH; independent encoded-fixture
@@ -37,6 +42,10 @@ slot. There is no observable product change requiring browser acceptance in
 this documentary gate. R2/R3 will execute the research browser cells. Historical
 baseline failures have not been inherited as current results. Diff hygiene is
 checked on the staged gate before the local commit.
+
+The subsequent host-evidence-only amendment preserves the R0 test/build results
+above; they were not rerun for that documentation change. Its JSON, source
+hashes and diff hygiene are checked separately. No benchmark slot was granted.
 
 ## Acceptance tracking
 
