@@ -41,7 +41,9 @@ those two and the GitHub source tarballs is locally computed, **not claimed as
 a publisher-signed digest**. No detached signature verification is claimed.
 These exact archives are available locally; no unversioned SDK fallback is used.
 
-The pinned SDK maps6.0.8 to the selected bundle. Its inert DEPS text specifies
+Historical rolling-DEPS assumption (corrected by
+[the tagged-release provenance checkpoint](WHISPER_CPP_TAGGED_PROVENANCE.md)):
+the pinned SDK maps6.0.8 to the selected bundle. Its rolling DEPS text specifies
 Emscripten`aeb67926e7de656da38bc807d83050af93578758`,
 LLVM`c0125a7bf833b6cf0d5b4a085b63094e0893c85a`, and
 Binaryen`8d546dc4aea1c3e81e77643f1ed0dea1a649d21d`. The archive's version file

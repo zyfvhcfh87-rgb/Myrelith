@@ -21,8 +21,8 @@
     "buildRevision": "9d70dbe8860ccdd3595f6e6065d94bfb543ae955",
     "archiveVersionText": "6.0.8-git",
     "emscriptenRevision": "aeb67926e7de656da38bc807d83050af93578758",
-    "llvmRevision": "c0125a7bf833b6cf0d5b4a085b63094e0893c85a",
-    "binaryenRevision": "8d546dc4aea1c3e81e77643f1ed0dea1a649d21d",
+    "llvmRevision": "4bfd08c2d769736841ae4f5705d76fa6daa39027",
+    "binaryenRevision": "89a81ef9b72ef1c677be6be89178d19598e5760f",
     "node": "24.19.0",
     "python": "3.13.3",
     "cmake": "4.4.3",
@@ -40,7 +40,13 @@
       "cmake": "BSD-3-Clause plus notices",
       "node": "MIT plus bundled notices",
       "python": "PSF-2.0 plus bundled notices"
-    }
+    },
+    "dependencySnapshot": "DEPS.tagged-release",
+    "rollingDepsRevisions": {
+      "llvmRevision": "c0125a7bf833b6cf0d5b4a085b63094e0893c85a",
+      "binaryenRevision": "8d546dc4aea1c3e81e77643f1ed0dea1a649d21d"
+    },
+    "provenanceCorrection": "../whispercpp-toolchain-provenance/profile.json"
   },
   "archives": [
     {
@@ -129,7 +135,8 @@
     {
       "name": "emscripten-releases-DEPS.txt",
       "bytes": 5052,
-      "sha256": "ba08503f86f879a295c32df48f2b84c6682709d6a1bf100245e2508221be4686"
+      "sha256": "ba08503f86f879a295c32df48f2b84c6682709d6a1bf100245e2508221be4686",
+      "qualification": "Rolling snapshot retained as historical evidence; exact release uses DEPS.tagged-release."
     },
     {
       "name": "cmake-release.json",
@@ -159,7 +166,7 @@
       "name": "binaryen-LICENSE",
       "bytes": 11535,
       "sha256": "64c0d02491e16eced74826440ecd2bcf7722d37fa586faf457b2494293afbffe",
-      "url": "https://raw.githubusercontent.com/WebAssembly/binaryen/8d546dc4aea1c3e81e77643f1ed0dea1a649d21d/LICENSE"
+      "url": "https://raw.githubusercontent.com/WebAssembly/binaryen/89a81ef9b72ef1c677be6be89178d19598e5760f/LICENSE"
     },
     {
       "name": "ninja-LICENSE",
@@ -241,11 +248,19 @@
       "name": "upstream-notices.zip",
       "bytes": 67805,
       "sha256": "60f01418ae33ab976f27be21456d82660943a554b013909e69249b8b6625f970"
+    },
+    {
+      "name": "emscripten-releases-tagged-DEPS.txt",
+      "bytes": 5547,
+      "sha256": "c432603d34cfb31d8e84be556ae5474ccaa0edbccff0059dbf25b19ba11d0744",
+      "url": "https://chromium.googlesource.com/emscripten-releases/+/9d70dbe8860ccdd3595f6e6065d94bfb543ae955/DEPS.tagged-release?format=TEXT",
+      "responseEncoding": "Gitiles base64 decoded to the recorded text bytes",
+      "receipt": "../whispercpp-toolchain-provenance/official-records.zip:tagged-release-deps.base64.receipt.json"
     }
   ],
   "verification": {
     "digestProvenance": "All SHA-256 values recomputed locally. Model LFS, CMake/Ninja release-asset and Node SHASUMS publisher SHA values match. GCS bundle/Python content checks match recorded CRC32C (and MD5 where supplied); no publisher SHA/signature is asserted for those or GitHub source tarballs.",
-    "builtToolVersionsExecuted": false,
+    "builtToolVersionsExecuted": true,
     "runtimeArtifact": null,
     "noticeInventory": "archive-notice-inventory.json",
     "linkedNoticeQualification": "Pending exact build/link review",
@@ -257,7 +272,7 @@
           "name": "llvm-LICENSE.txt",
           "bytes": 15141,
           "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee",
-          "url": "https://raw.githubusercontent.com/llvm/llvm-project/c0125a7bf833b6cf0d5b4a085b63094e0893c85a/LICENSE.TXT"
+          "url": "https://raw.githubusercontent.com/llvm/llvm-project/4bfd08c2d769736841ae4f5705d76fa6daa39027/LICENSE.TXT"
         },
         {
           "name": "dlmalloc-source.c",
@@ -266,6 +281,20 @@
         }
       ],
       "reason": "Exact upstream source/license bytes, including whitespace, preserved in an inert archive."
+    },
+    "localVersionVerification": {
+      "status": "stopped-after-wrong-rolling-LLVM-expectation",
+      "confirmed": [
+        "Python3.13.3",
+        "Node24.19.0",
+        "CMake4.4.3",
+        "Ninja1.13.2"
+      ],
+      "llvmObserved": "24.0.0git / 4bfd08c2d769736841ae4f5705d76fa6daa39027",
+      "binaryenCommandExecuted": false,
+      "emscriptenCommandExecuted": false,
+      "configurationAttempted": false,
+      "compilationAttempted": false
     }
   },
   "limits": {

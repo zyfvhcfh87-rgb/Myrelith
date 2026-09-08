@@ -1,0 +1,16 @@
+{
+  "label": "correction-clang-version",
+  "command": [
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/bin/clang",
+    "--version"
+  ],
+  "timeoutSeconds": 30,
+  "startedAt": "2026-09-08T16:59:44Z",
+  "pid": 88180,
+  "processGroup": 88180,
+  "exitCode": 0,
+  "remainingGroupTerminated": false,
+  "elapsedSeconds": 0.916,
+  "logBytes": 284,
+  "logSha256": "2a4993ddb0bf7a9d09afe7788015b3db1d4d6363050f6fd06ea28eac6fb8fbfe"
+}

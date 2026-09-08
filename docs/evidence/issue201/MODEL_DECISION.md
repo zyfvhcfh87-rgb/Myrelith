@@ -318,3 +318,8 @@ Private extraction/version preparation stopped before any build; see
 [the exact failure and proposed correction](WHISPER_CPP_BUILD_PREPARATION.md).
 The exclusive build slot was released. Generated-runtime and speech acceptance
 remain open.
+
+The compiler identity mismatch is explained by the exact release using
+`DEPS.tagged-release`, not the rolling snapshot.
+[Tagged-release provenance and the preserved version stop](WHISPER_CPP_TAGGED_PROVENANCE.md)
+record the source correction; no build or execution gate is implied.

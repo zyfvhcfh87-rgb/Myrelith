@@ -1,0 +1,18 @@
+{
+  "label": "correction-node-version",
+  "command": [
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/node/node-v24.19.0-darwin-arm64/bin/node",
+    "--require",
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/config/deny-wasm.cjs",
+    "--version"
+  ],
+  "timeoutSeconds": 30,
+  "startedAt": "2026-09-08T16:59:43Z",
+  "pid": 88177,
+  "processGroup": 88177,
+  "exitCode": 0,
+  "remainingGroupTerminated": false,
+  "elapsedSeconds": 0.012,
+  "logBytes": 9,
+  "logSha256": "b7677d3ec37ee1897ba07dc2cfe8292fe421c9ac93396cca5bbece486d1a2a41"
+}

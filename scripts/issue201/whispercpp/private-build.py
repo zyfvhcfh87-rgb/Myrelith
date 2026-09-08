@@ -127,8 +127,8 @@ def version_checks(prefix):
         ('node-version', [NODE, '--require', str(DENY_WASM), '--version'], 'v24.19.0'),
         ('cmake-version', [CMAKE, '--version'], 'cmake version 4.4.3'),
         ('ninja-version', [NINJA, '--version'], '1.13.2'),
-        ('clang-version', [INSTALL / 'bin/clang', '--version'], 'c0125a7bf833b6cf0d5b4a085b63094e0893c85a'),
-        ('binaryen-version', [INSTALL / 'bin/wasm-opt', '--version'], '8d546dc4a'),
+        ('clang-version', [INSTALL / 'bin/clang', '--version'], '4bfd08c2d769736841ae4f5705d76fa6daa39027'),
+        ('binaryen-version', [INSTALL / 'bin/wasm-opt', '--version'], '132 (version_132-16-g89a81ef9b)'),
         ('emscripten-version', [PYTHON, EMSCRIPTEN / 'emcc.py', '--version'], '6.0.8-git'),
     ]
     for label, command, expected in checks:
@@ -170,6 +170,19 @@ def resume_version_checks():
     version_checks('correction-')
 
 
+def resume_tagged_version_checks():
+    # Exact release provenance correction only; previous failure remains intact.
+    failure = json.loads((LOGS / 'correction-clang-version.json').read_text())
+    if failure['exitCode'] != 0 or failure['logSha256'] != '2a4993ddb0bf7a9d09afe7788015b3db1d4d6363050f6fd06ea28eac6fb8fbfe':
+        raise RuntimeError('Unexpected predecessor LLVM identity record')
+    if (LOGS / 'build-attempt.json').exists() or (LOGS / 'prepared.json').exists():
+        raise RuntimeError('Cannot resume after a build or successful preparation')
+    with (LOGS / 'tagged-version-attempt.json').open('x') as output:
+        json.dump(dict(driverSha256=sha(Path(__file__)),
+                       taggedDependencySha256='c432603d34cfb31d8e84be556ae5474ccaa0edbccff0059dbf25b19ba11d0744'), output)
+    version_checks('tagged-')
+
+
 def build():
     if not (LOGS / 'prepared.json').exists():
         raise RuntimeError('Successful preparation required')
@@ -201,10 +214,13 @@ if __name__ == '__main__':
     actions.add_argument('--prepare', action='store_true')
     actions.add_argument('--build', action='store_true')
     actions.add_argument('--resume-version-checks', action='store_true')
+    actions.add_argument('--resume-tagged-version-checks', action='store_true')
     args = parser.parse_args()
     if args.prepare:
         prepare()
     elif args.resume_version_checks:
         resume_version_checks()
+    elif args.resume_tagged_version_checks:
+        resume_tagged_version_checks()
     else:
         build()
