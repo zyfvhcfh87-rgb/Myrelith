@@ -617,6 +617,8 @@ function migrateTimelineDocument(
   if (migrated.schemaVersion === 21) migrated = { ...migrated, schemaVersion: 22 }
   // Compact text remains unchanged; expanded title ownership is explicitly authored.
   if (migrated.schemaVersion === 22) migrated = { ...migrated, schemaVersion: 23 }
+  // Caption style/origin are optional; omission keeps historical preset intent.
+  if (migrated.schemaVersion === 23) migrated = { ...migrated, schemaVersion: 24 }
   boundedArray(migrated.tracks, '$.document.tracks', PROJECT_FILE_LIMITS.maxTracks)
   const tracks = migrated.tracks.map((trackValue, trackIndex) => {
     const track = record(trackValue, `$.document.tracks[${trackIndex}]`)
