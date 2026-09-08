@@ -1,0 +1,26 @@
+{
+  "kind": "issue202-r3-chromium-completion-source-audit",
+  "scriptSha256": "814b9e7c3ae630fc43ab6965d6172f036bc792bacd02c24368692be23b8817de",
+  "browserVersion": "151.0.7922.34",
+  "chromiumRevision": "782af9cb30a53f54487e5d2e44738645a8ec457c",
+  "tagUrl": "https://chromium.googlesource.com/chromium/src/+refs/tags/151.0.7922.34?format=JSON",
+  "tagResponseSha256": "31c2b9c43fde75c272fd329678e4c32246ccf07fc9ae55d4304d28e014c12603",
+  "sourceUrl": "https://chromium.googlesource.com/chromium/src/+/782af9cb30a53f54487e5d2e44738645a8ec457c/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc",
+  "sourceBytes": 347944,
+  "sourceSha256": "22321ae748fe62a911f06d77cd893080edb3d12f954a10f1e948dc2cd923d2f7",
+  "gitBlobSha1": "319e17ecde751471006f7c910e68081c551c5dd1",
+  "finish": {
+    "startLine": 3539,
+    "endLine": 3543,
+    "excerpt": "void WebGLRenderingContextBase::finish() {\n  if (isContextLost())\n    return;\n  ContextGL()->Flush();  // Intentionally a flush, not a finish.\n}",
+    "callsFlush": true
+  },
+  "installedChromeForTesting": {
+    "plistPath": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/Info.plist",
+    "plistSha256": "ab9c30716b623d8dc87232115e618ae116311fa28290fe2d9f59e65451a99ef3",
+    "version": "151.0.7922.34",
+    "scmRevision": "782af9cb30a53f54487e5d2e44738645a8ec457c-refs/branch-heads/7922@{#1230}"
+  },
+  "qualification": "Run1 reports matching browser version but did not capture Browser.getVersion revision. Installed CfT metadata and exact public version tag agree. Corrected runner must capture and check runtime revision before experiments.",
+  "readPixelsAuthority": "https://registry.khronos.org/webgl/specs/latest/2.0/#3.7.12"
+}

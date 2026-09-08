@@ -1,0 +1,28 @@
+{
+  "kind": "issue202-r3-independent-reference-freeze",
+  "baseCommit": "14dacb860624f1a94630df2364120c86183c66e8",
+  "candidateShaderNotAuthored": true,
+  "cases": 40,
+  "files": [
+    {
+      "path": "r3-protocol-v1.md",
+      "sha256": "8741e5c23c3599d40ad75c3f69c98cd92cac8628bf6d2131ac013cfa9b58048f"
+    },
+    {
+      "path": "r3-make-reference.py",
+      "sha256": "54ede76c676bc27a49917f3c7010e7cd3eb0ec985bef2f1b7ec73fc927f46661"
+    },
+    {
+      "path": "r3-reference-v1.json",
+      "sha256": "76cdc2ac151c098f050ea55997fdc55145649c2051331d4f622789b119f959bb"
+    },
+    {
+      "path": "oracle.py",
+      "sha256": "7693bfa016b0bf33dee39c95827c70876ac531cf7de96886d969558b025655da"
+    },
+    {
+      "path": "equations-v1.md",
+      "sha256": "d54eae132b47903184e3375777f003bebba0b92d90f6ddcf6ba3bdbd7a91f3d9"
+    }
+  ]
+}

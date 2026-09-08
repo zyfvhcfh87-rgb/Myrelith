@@ -1,0 +1,33 @@
+{
+  "kind": "issue202-codec-readback1-artifact-identity",
+  "createdAt": "2026-09-08T10:10:52.144Z",
+  "startingCommit": "ea530ecc9b88d5f36fa44cced849d9056a0166ba",
+  "startingAndCompletionScriptSha256": "32253befb82da5fe8803a446840ff22e2beeb9c6f84d381f1e64ed0a596d8b63",
+  "slot": "released after awaited browser/server teardown",
+  "decodeCalls": 3,
+  "encodeCalls": 0,
+  "completedDiagnostics": 3,
+  "qualification": "Measured same-browser visible-plane readback. All three luma planes retain896 distinct values with max error1 code; neutral chroma exact. No lossy-quality GO threshold or independent decoder/metadata/performance/display qualification.",
+  "files": [
+    {
+      "path": "docs/evidence/issue202/probe-codec-readback.mjs",
+      "bytes": 8457,
+      "sha256": "32253befb82da5fe8803a446840ff22e2beeb9c6f84d381f1e64ed0a596d8b63"
+    },
+    {
+      "path": "docs/evidence/issue202/codec-readback-1.json",
+      "bytes": 11027,
+      "sha256": "92d5fd686cf2062cf5c7dcfc5b872e2c0eeb42d03a5a8f7bd538e5942e5f0265"
+    },
+    {
+      "path": "docs/evidence/issue202/codec-readback-1-results.md",
+      "bytes": 5004,
+      "sha256": "538f3fa1faa380b610883b88ec7909d869168eaf7e8569583e54e7e505b67b6e"
+    },
+    {
+      "path": "docs/evidence/issue202/codec-run-1-manifest.json",
+      "bytes": 2747,
+      "sha256": "36231bf4f9bf0b92438765a8119dcb2c0d76d8025082758384323f803d255378"
+    }
+  ]
+}
