@@ -69,7 +69,7 @@ export default function VideoInspectorSections({
         aria-labelledby="inspector-transform-tab"
         hidden={activeTab !== 'transform'}
       >
-        <InspectorSection
+        {clip.title ? <p className="inspector-note">Use Title elements to transform this title.</p> : <InspectorSection
         title="Transform"
         resetLabel="Reset video transform"
         disabled={locked}
@@ -102,7 +102,7 @@ export default function VideoInspectorSections({
           <ToggleField label="Flip horizontally" checked={visual.flipHorizontal} disabled={locked} testId="inspector-flip-horizontal" onChange={(flipHorizontal) => patch({ visual: { flipHorizontal } })} />
           <ToggleField label="Flip vertically" checked={visual.flipVertical} disabled={locked} testId="inspector-flip-vertical" onChange={(flipVertical) => patch({ visual: { flipVertical } })} />
         </div>
-        </InspectorSection>
+        </InspectorSection>}
 
         <InspectorSection
           title="Compositing"
@@ -152,8 +152,8 @@ export default function VideoInspectorSections({
         aria-labelledby="inspector-crop-tab"
         hidden={activeTab !== 'crop'}
       >
-        <ManualLensCorrectionSection clip={clip} locked={locked} />
-        <InspectorSection
+        {!clip.title && <ManualLensCorrectionSection clip={clip} locked={locked} />}
+        {clip.title ? <p className="inspector-note">Use Title elements to crop or flip each element.</p> : <InspectorSection
         title="Crop"
         resetLabel="Reset video crop"
         disabled={locked}
@@ -166,7 +166,7 @@ export default function VideoInspectorSections({
           <RangeNumberField label="Crop bottom (%)" value={cropPercent(visual.crop.bottom)} step={0.1} min={0} max={cropPercent(MAX_CROP_SUM - visual.crop.top)} testId="inspector-crop-bottom" disabled={locked} onCommit={(bottom) => patch({ visual: { crop: { bottom: cropFraction(bottom) } } })} />
         </div>
         <span className="inspector-note">Crop removes source edges without stretching the remainder.</span>
-        </InspectorSection>
+        </InspectorSection>}
       </div>
 
       <div

@@ -1,0 +1,8 @@
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue200
+
+
+ Test Files  1 passed (1)
+      Tests  6 passed | 7 skipped (13)
+   Start at  19:37:51
+   Duration  639ms (transform 272ms, setup 22ms, import 332ms, tests 71ms, environment 165ms)

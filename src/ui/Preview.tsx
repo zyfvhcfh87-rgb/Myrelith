@@ -24,6 +24,7 @@ import { useProxyStore } from '../state/proxyStore'
 import { useVideoScopesStore } from '../state/videoScopesStore'
 import { useTransportStore } from '../state/transportStore'
 import TextOverlayControls from './TextOverlayControls'
+import TitleOverlayControls from './TitleOverlayControls'
 import VideoScopesPanel from './VideoScopesPanel'
 import VisualOverlayControls from './VisualOverlayControls'
 import MotionTrackingOverlay from './MotionTrackingOverlay'
@@ -170,6 +171,7 @@ export default function Preview() {
         <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
         <MotionTrackingOverlay canvasRef={canvasRef} panelRef={panelRef} />
         <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+        <TitleOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
       </>}
       <MaskOverlayControls canvasRef={canvasRef} panelRef={panelRef} toolbarHost={maskControlsHost} />
       {scopesEnabled ? <VideoScopesPanel /> : null}

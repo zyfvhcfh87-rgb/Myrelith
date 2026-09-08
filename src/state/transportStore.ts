@@ -149,7 +149,7 @@ export interface ColorGradingPreview {
 }
 
 export interface EffectDocumentPreview {
-  readonly owner: 'color-grading' | 'mask-gesture' | 'animation-gesture' | 'mask-tracking'
+  readonly owner: 'color-grading' | 'mask-gesture' | 'animation-gesture' | 'mask-tracking' | 'title-authoring'
   readonly sequenceId: string
   readonly document: TimelineDoc
 }
@@ -159,6 +159,7 @@ export interface TransportState {
   animationFocus: AnimationKeyAddress | null
   animationFilter: string
   animationVisibleRange: { readonly startFrame: number; readonly endFrame: number } | null
+  setTitleDocumentPreview(preview: Pick<EffectDocumentPreview, 'sequenceId' | 'document'> | null, retainOrder?: boolean): void
   animationPreview: Pick<EffectDocumentPreview, 'sequenceId' | 'document'> | null
   setAnimationSelection(keys: readonly AnimationKeyAddress[], focus?: AnimationKeyAddress | null): void
   setAnimationFilter(filter: string): void
@@ -404,17 +405,22 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
 // complete public transport state to the exact deterministic initial values.
 let transportResetRevision = 0
 
-const effectPreviewOwners = new Map<EffectDocumentPreview['owner'], { sequence: number; preview: EffectDocumentPreview; visible: boolean }>()
+const effectPreviewOwners = new Map<EffectDocumentPreview['owner'], { sequence: number; preview: EffectDocumentPreview | null; visible: boolean }>()
 let effectPreviewSequence = 0
-function updateEffectPreview(owner: EffectDocumentPreview['owner'], preview: Pick<EffectDocumentPreview, 'sequenceId' | 'document'> | null, visible = true): EffectDocumentPreview | null {
+/** All retained documents count, even while another owner is visually active. */
+export function retainedEffectPreviewDocuments(): readonly TimelineDoc[] {
+  return [...effectPreviewOwners.values()].flatMap((owner) => owner.preview ? [owner.preview.document] : [])
+}
+function updateEffectPreview(owner: EffectDocumentPreview['owner'], preview: Pick<EffectDocumentPreview, 'sequenceId' | 'document'> | null, visible = true, retainOrder = false): EffectDocumentPreview | null {
   if (preview) effectPreviewOwners.set(owner, {
     sequence: effectPreviewOwners.get(owner)?.sequence ?? ++effectPreviewSequence,
     preview: { owner, sequenceId: preview.sequenceId, document: preview.document },
     visible,
   })
+  else if (retainOrder && effectPreviewOwners.has(owner)) effectPreviewOwners.set(owner, { sequence: effectPreviewOwners.get(owner)!.sequence, preview: null, visible: false })
   else effectPreviewOwners.delete(owner)
   let active: { sequence: number; preview: EffectDocumentPreview } | null = null
-  for (const candidate of effectPreviewOwners.values()) if (candidate.visible && (!active || candidate.sequence > active.sequence)) active = candidate
+  for (const candidate of effectPreviewOwners.values()) if (candidate.visible && candidate.preview && (!active || candidate.sequence > active.sequence)) active = { sequence: candidate.sequence, preview: candidate.preview }
   return active?.preview ?? null
 }
 
@@ -849,6 +855,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
       || animationVisibleRange.startFrame < 0 || animationVisibleRange.endFrame < animationVisibleRange.startFrame)) return
     set({ animationVisibleRange: animationVisibleRange ? { ...animationVisibleRange } : null })
   },
+  setTitleDocumentPreview: (preview, retainOrder = false) => set({ effectDocumentPreview: updateEffectPreview('title-authoring', preview, true, retainOrder) }),
   setAnimationPreview: (animationPreview) => set({ animationPreview, effectDocumentPreview: updateEffectPreview('animation-gesture', animationPreview) }),
   setMaskEditorTarget: (maskEditorTarget) => set({ maskEditorTarget }),
   setMaskPreview: (maskPreview) => set({ maskPreview, effectDocumentPreview: updateEffectPreview('mask-gesture', maskPreview) }),

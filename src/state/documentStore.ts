@@ -2,6 +2,7 @@ import { captionProjectIntentError, captionRetentionError, type CaptionIntentOwn
 import { captionDocumentValidationError } from '../domain/captions'
 import type { TitleBudgetOwner } from '../domain/titleBudgets'
 import type { TitleElementIntent } from '../domain/titleElements'
+import { retainedEffectPreviewDocuments } from './transportStore'
 import { animationRetentionError } from '../domain/animationProjectBudget'
 import type { EffectPathAnimationTrack } from '../domain/maskPathAnimation'
 import { COLOR_LUT_LIMITS } from '../domain/colorLut'
@@ -13,7 +14,7 @@ import { editVideoBus, type VideoBusEdit, type VideoBusTarget } from '../domain/
  * state/documentStore.ts — Zustand store owning the complete sequence project,
  * its active TimelineDoc adapter, and project-wide undo/redo history.
  *
- * Layering (ARCHITECTURE.md): imports domain/ only — never ui/, engine/,
+ * Layering (ARCHITECTURE.md): domain operations plus transport preview-retention facts — never ui/, engine/,
  * pipeline/, workers/, or react.
  *
  * History model: plain SequenceProject snapshot stacks. `past` holds older
@@ -742,7 +743,7 @@ function commit(
 function projectCommitError(state: DocumentState, project: SequenceProject): string | null {
   const captionError = captionRetentionError(state, project)
   if (captionError) return captionError
-  const animationError = animationRetentionError(state, project)
+  const animationError = animationRetentionError({ ...state, retainedTitlePreviewDocuments: retainedEffectPreviewDocuments() }, project)
   if (animationError) return animationError
   if (!state.project.colorLuts?.length && !project.colorLuts?.length && !state.retainedClipboardColorLuts.length) {
     return newColorLutReferenceError(state.project, project)

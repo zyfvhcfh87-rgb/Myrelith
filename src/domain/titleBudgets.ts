@@ -32,6 +32,8 @@ export type TitlePayloadBudgetResult =
  * keeps its existing file/text/history bounds. These arrays are never serialized.
  */
 export interface TitleDataRetention {
+  /** All concurrently retained named document previews, including hidden owners. */
+  readonly previews?: readonly (readonly TitleBudgetOwner[])[]
   readonly candidate: readonly TitleBudgetOwner[]
   readonly current: readonly TitleBudgetOwner[]
   readonly past: readonly (readonly TitleBudgetOwner[])[]
@@ -181,10 +183,11 @@ export function retainedTitleDataBudget(retention: TitleDataRetention): TitleDat
   try {
     if (retention.past.length > TITLE_BUDGET_LIMITS.historySnapshotsPerBranch
       || retention.future.length > TITLE_BUDGET_LIMITS.historySnapshotsPerBranch) fail('Title retention projection exceeds the existing 100-entry limit for a history branch.')
+    if ((retention.previews?.length ?? 0) > 5) fail('Title retention exceeds the five named document preview owners.')
     const accounting: Accounting = { subtrees: new WeakMap(), retainedBytes: 0 }
     const seenSnapshots = new Set<readonly TitleBudgetOwner[]>()
     const seenOwners = new Set<TitleBudgetOwner>()
-    const snapshots = [retention.candidate, retention.current, ...retention.past, ...retention.future, retention.clipboards.titles]
+    const snapshots = [retention.candidate, retention.current, ...retention.past, ...retention.future, ...(retention.previews ?? []), retention.clipboards.titles]
     for (const owners of snapshots) {
       if (seenSnapshots.has(owners)) continue
       seenSnapshots.add(owners)

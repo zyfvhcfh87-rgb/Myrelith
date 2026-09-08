@@ -1,0 +1,92 @@
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue200
+
+ ❯ src/ui/TitleAuthoring.test.tsx (14 tests | 6 failed | 7 skipped) 100ms
+     × StrictMode motion preview cancels without history; Apply records two ordinary keys once 56ms
+     × StrictMode motion Reapply displays the complete replacement list and requires its checkbox 15ms
+     × StrictMode keeps real selection invalidation terminal 6ms
+     × StrictMode keeps real project invalidation terminal 4ms
+     × StrictMode keeps real playhead invalidation terminal 4ms
+     × StrictMode dialog teardown releases only its own session after another title editor takes over 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/TitleAuthoring.test.tsx > title authoring surfaces > StrictMode motion preview cancels without history; Apply records two ordinary keys once
+Error: expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <button
+  disabled=""
+  type="button"
+/>
+ ❯ src/ui/TitleAuthoring.test.tsx:88:68
+     86|     const clip = useDocumentStore.getState().doc.tracks[0].clips[0], c…
+     87|     const rendered = render(<StrictMode><TitleMotionDialog target={tar…
+     88|     expect(screen.getByRole('button', { name: 'Preview motion' })).toB…
+       |                                                                    ^
+     89|     fireEvent.click(screen.getByRole('button', { name: 'Preview motion…
+     90|     expect(useTransportStore.getState().effectDocumentPreview?.owner).…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/ui/TitleAuthoring.test.tsx > title authoring surfaces > StrictMode motion Reapply displays the complete replacement list and requires its checkbox
+Error: expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <button
+  disabled=""
+  type="button"
+/>
+ ❯ src/ui/TitleAuthoring.test.tsx:109:68
+    107|     expect(screen.getByRole('button', { name: 'Reapply motion' })).toB…
+    108|     fireEvent.click(screen.getByRole('checkbox', { name: 'Replace all …
+    109|     expect(screen.getByRole('button', { name: 'Reapply motion' })).toB…
+       |                                                                    ^
+    110|     fireEvent.click(screen.getByRole('button', { name: 'Reapply motion…
+    111|     expect(useDocumentStore.getState().past).toHaveLength(1)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  src/ui/TitleAuthoring.test.tsx > title authoring surfaces > StrictMode keeps real selection invalidation terminal
+ FAIL  src/ui/TitleAuthoring.test.tsx > title authoring surfaces > StrictMode keeps real project invalidation terminal
+ FAIL  src/ui/TitleAuthoring.test.tsx > title authoring surfaces > StrictMode keeps real playhead invalidation terminal
+Error: expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <button
+  disabled=""
+  type="button"
+/>
+ ❯ src/ui/TitleAuthoring.test.tsx:115:68
+    113|   test.each(['selection', 'project', 'playhead'] as const)('StrictMode…
+    114|     render(<StrictMode><TitleMotionDialog target={target} ids={['root-…
+    115|     expect(screen.getByRole('button', { name: 'Preview motion' })).toB…
+       |                                                                    ^
+    116|     fireEvent.click(screen.getByRole('button', { name: 'Preview motion…
+    117|     expect(useTransportStore.getState().effectDocumentPreview?.owner).…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  src/ui/TitleAuthoring.test.tsx > title authoring surfaces > StrictMode dialog teardown releases only its own session after another title editor takes over
+Error: expect(element).toBeEnabled()
+
+Received element is not enabled:
+  <button
+  disabled=""
+  type="button"
+/>
+ ❯ src/ui/TitleAuthoring.test.tsx:136:68
+    134|   test('StrictMode dialog teardown releases only its own session after…
+    135|     const mounted = render(<StrictMode><TitleMotionDialog target={targ…
+    136|     expect(screen.getByRole('button', { name: 'Preview motion' })).toB…
+       |                                                                    ^
+    137|     let replacement!: ReturnType<typeof beginTitleEdit>
+    138|     act(() => { replacement = beginTitleEdit(target); expect(replaceme…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 1 passed | 7 skipped (14)
+   Start at  20:55:43
+   Duration  692ms (transform 285ms, setup 22ms, import 347ms, tests 100ms, environment 164ms)

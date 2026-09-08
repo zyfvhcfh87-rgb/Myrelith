@@ -1442,3 +1442,23 @@ src/
   app/styles/  launcher then editor feature styles in binding cascade order
   dev/         explicitly guarded, build-gated benchmark UI/runtime only
 ```
+
+### Expanded title authoring and retained preview admission (Issue #200 G3)
+
+`domain/titleEditing.ts` owns bounded immutable element edits and geometry;
+`domain/titleTemplates.ts` owns data-only capture, explicit canvas fitting and
+independent identity remapping. App controllers pin project/generation/sequence,
+clip/element selection and playhead, and use the canonical animation planners.
+UI controls consume these facades; safe guides and motion samples are ephemeral.
+Local template storage publishes summaries only, preserves unknown siblings and
+future read-only envelopes, and reports success at IDB transaction completion.
+
+The transport arbiter now has five named document owners: color grading, mask
+gesture, animation gesture, mask tracking and title authoring. Title replacement
+can release its document while retaining its activation order. Hidden previews
+still own data. `retainedEffectPreviewDocuments()` exposes their immutable
+references for accounting, without transport reading/writing documentStore.
+The app `projectAnimationRetention.ts` facade and actual document-store commit
+boundary include all retained previews in the existing 64 MiB title budget;
+shared immutable subtrees count once. Every app preview publisher admits its
+candidate against these other owners. A rejection never clears project redo.

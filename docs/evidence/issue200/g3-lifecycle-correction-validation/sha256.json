@@ -1,0 +1,15 @@
+{
+  "files": {
+    "diagnostic-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "focused.log": "47c958a4bd0dc5d91212e5bfdbe5e42beb34fe401a62509bc70d8bc9a2d970d3",
+    "lint.log": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c",
+    "list.log": "0659398220cc1428250d85905526dc4e596f8647ddacebd2aabc05424915c9f8",
+    "raw-logs.tar.gz": "f24391e85e77d8092b1b7be9a8dda4435a60f701416d6a8fc7e3e74e444f9c72"
+  },
+  "rawMembers": {
+    "focused.log": "47c958a4bd0dc5d91212e5bfdbe5e42beb34fe401a62509bc70d8bc9a2d970d3",
+    "lint.log": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+    "diagnostic-typecheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "list.log": "0659398220cc1428250d85905526dc4e596f8647ddacebd2aabc05424915c9f8"
+  }
+}

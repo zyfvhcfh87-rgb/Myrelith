@@ -1,6 +1,6 @@
 import { pasteClipAttributes } from '../domain/clipAttributes'
 import { commitPortableProjectEdit } from './portableProjectEdit'
-import { animationRetentionError } from '../domain/animationProjectBudget'
+import { animationRetentionError } from './projectAnimationRetention'
 import {
   captureClipAttributes, supportedClipAttributeGroups, CLIP_ATTRIBUTE_LABELS,
   type AttributePasteOptions, type ClipAttributeGroup, type ClipAttributeTemplate,
