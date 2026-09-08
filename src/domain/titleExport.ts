@@ -6,7 +6,7 @@ import { rangeEnd } from './time'
 import type { Clip } from './schema'
 import { clipAnimationValidationError, evaluateAnimationTrack } from './clipAnimation'
 
-interface Range { start: number; end: number }
+import { admitSequenceFrameRange, type SequenceFrameInterval as Range } from './sequenceFrameCoverage'
 
 function contributesInRange(clip: Clip, range: Range): boolean {
   const animation = clip.animation
@@ -18,28 +18,6 @@ function contributesInRange(clip: Clip, range: Range): boolean {
   return evaluateAnimationTrack(lane, start, clip.opacity) > 0
     || evaluateAnimationTrack(lane, end, clip.opacity) > 0
     || lane.keyframes.some((key) => key.frame > start && key.frame < end && key.value > 0)
-}
-
-/** Record visited frame coverage so overlapping/repeated instances do not repeat
- * a child's work. Gaps remain gaps; no widening to a bounding interval.
- */
-function admitRange(seen: Map<string, Range[]>, id: string, input: Range): Range[] {
-  const covered = seen.get(id) ?? []
-  let pending = [input]
-  for (const range of covered) pending = pending.flatMap((part) => {
-    if (part.end <= range.start || part.start >= range.end) return [part]
-    return [...(part.start < range.start ? [{ start: part.start, end: range.start }] : []),
-      ...(part.end > range.end ? [{ start: range.end, end: part.end }] : [])]
-  })
-  if (!pending.length) return pending
-  const merged: Range[] = []
-  for (const range of [...covered, ...pending].sort((a, b) => a.start - b.start)) {
-    const last = merged.at(-1)
-    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end)
-    else merged.push({ ...range })
-  }
-  seen.set(id, merged)
-  return pending
 }
 
 export function projectTitleExportError(project: SequenceProject, sequenceId: string): string | null {
@@ -68,7 +46,7 @@ export function projectTitleExportError(project: SequenceProject, sequenceId: st
     if (next.end <= next.start) continue
     const sequence = sequences.get(next.id)
     if (!sequence) return 'A referenced title export sequence is unavailable.'
-    for (const range of admitRange(seen, next.id, next)) {
+    for (const range of admitSequenceFrameRange(seen, next.id, next)) {
       for (const blocker of blockers.get(next.id) ?? []) {
         const start = Math.max(blocker.start, range.start), end = Math.min(blocker.end, range.end)
         if (end > start && contributesInRange(blocker.clip, { start, end })) return blocker.error

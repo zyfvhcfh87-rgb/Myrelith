@@ -1,0 +1,73 @@
+{
+  "status": "exact-reviewed-inputs-reverified",
+  "speechSourceCheckpoint": "34fe9493cada403159bdce75b50f6c08a20f755b",
+  "preparedRecordSha256": "f002401adf256cb02c54d456c4b59ae87a46854a843b04083da990f3781bc03d",
+  "driverSha256": "84f37735563801687c4e57d6fc8987bc90d2eb2eb9d57eb4f63b1c211564b1ae",
+  "configSha256": "bb05af20f9fa2c7218d7e82f9441299060b8033e348430bf764e8967ba2cf166",
+  "guardSha256": "4c9ba6b9267a14db07ec6ed901ddde8eaef0f314b3b53aa7dd10128c4bd9f764",
+  "files": [
+    {
+      "path": ".tmp/issue201-whispercpp-build/recipe/CMakeLists.txt",
+      "sha256": "c137a6d26e981a6604d05a65e6cda3ecf612c5f5b849b161fbd6e70284d67939"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/recipe/adapter.cpp",
+      "sha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/recipe/myrelith-token-budget.h",
+      "sha256": "e0dc2d7ec04a52e47214de3536ca479f710b6957d422260eb5bc87b7bfe9ff9b"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/source/whisper.cpp-371b5a7561823ab2bb32142d2751e35e7534727b/CMakeLists.txt",
+      "sha256": "46c3ed5ec4e3dfa0ee5629ec0a2ed2441241b1630161d20eb6eb20af53df6bd2"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/source/whisper.cpp-371b5a7561823ab2bb32142d2751e35e7534727b/ggml/CMakeLists.txt",
+      "sha256": "7ea6e4b481b45cee13dc647907b2ae7dfe1647e41b5702d9e135bf7f1a70f104"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/source/whisper.cpp-371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/CMakeLists.txt",
+      "sha256": "55b311363d891a67d86ea96a9c65fd22a4a5ca506b11374ec24ce676125cb492"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/source/whisper.cpp-371b5a7561823ab2bb32142d2751e35e7534727b/include/whisper.h",
+      "sha256": "b9e16a7318de71c4edb0f1a3f8c4b7c1f790428e8167ae239f868352b68807ac"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/source/whisper.cpp-371b5a7561823ab2bb32142d2751e35e7534727b/src/whisper.cpp",
+      "sha256": "85617366fdfce12ea3d56ebb36d1267d2e70618b0151b17e6d84f4736ba9c2ad"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/python/python-3.13.3-0/bin/python3.13",
+      "sha256": "051ecc026af314195484c2a8e3ae3de85db8a09ae7998d9cace75323e7a40d81"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/node/node-v24.19.0-darwin-arm64/bin/node",
+      "sha256": "27db838bb204ef7c21df2931f5656e4c8fb32e6e947f363a402b49714d32b5b1"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/cmake/cmake-4.4.3-macos-universal/CMake.app/Contents/bin/cmake",
+      "sha256": "86a5ad068abe889c8d344089eb805bb70012661f1f57c16d5118d14e022f73dc"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/ninja/ninja",
+      "sha256": "458cdf3a6cf289118da14cc897b5106d152c66545947329b016629d9df085815"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/toolchain/install/bin/clang-24",
+      "sha256": "aa90e1a844375090e9a64ab1f91eea1d364cb7ff48207089547798f0b9dbd6c1"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/toolchain/install/bin/wasm-opt",
+      "sha256": "142915e0e398922ac42dd213680a6847839a9231fe5f3ff8bf87599d190394b8"
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-build/toolchain/install/emscripten/emcc.py",
+      "sha256": "7dcde7c7df232c511e187a01a85e23c4c8e714e0b1f52f6541f9858919bce9bb"
+    }
+  ],
+  "maxNinjaJobs": 2,
+  "maxInternalJobs": 1,
+  "runtimeAuthorized": false
+}

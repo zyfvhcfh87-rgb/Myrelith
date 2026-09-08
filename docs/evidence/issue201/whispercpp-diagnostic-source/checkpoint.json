@@ -1,0 +1,103 @@
+{
+  "parentHead": "b046a6794487ae608f7b83014f4e6d3ca3664ee8",
+  "status": "diagnostic-source-proposal-unwired-unexecuted",
+  "sourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic/observe-module.mjs",
+      "bytes": 3103,
+      "sha256": "f09df803982b932355225e1fb7854c16451bdd5a73a6532e2d6393ad526e6a68"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic/observe-module.test.mjs",
+      "bytes": 5466,
+      "sha256": "fa465d273ff7e251e1b2d650391f72d485da073add6e14fca22f0ff381a2cab0"
+    },
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_ABORT_DIAGNOSTICS.md",
+      "bytes": 5101,
+      "sha256": "3acf28c18a94844513742e7a95b7f21ec7e9caf96e076c0fa55345c70064cd3e"
+    }
+  ],
+  "referenceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp/worker-protocol.mjs",
+      "bytes": 8077,
+      "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/adapter.cpp",
+      "bytes": 6827,
+      "sha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/patch-identities.json",
+      "bytes": 1172,
+      "sha256": "74a2fb69113d229b172d073cebe6b37087bcf49999945bd3be28783922952a7b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/model-worker.mjs",
+      "bytes": 12676,
+      "sha256": "2cb7538d514927fcf58c8c92a9b43d34d770944794e59628fcaf02e87ee3fcfd"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/preflight.mjs",
+      "bytes": 3995,
+      "sha256": "490442fc63c4be166645b02c863d8cee23dc8809bdc41658ba3ee8c928fc6426"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.mjs.gz",
+      "bytes": 5556,
+      "sha256": "68f30b568d3724ccfe1184920c6f1e7157c8b503290a30d15b1994698ad0447d"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/checkpoint.json",
+      "bytes": 8101,
+      "sha256": "0ad4cf6dbf53d3493e8a00df97bd0fe02880176cb599aee3c29ad02aa2230ece"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-build-preparation/extraction-inventory.json.gz",
+      "bytes": 1864139,
+      "sha256": "ba24ca7b38f5f82b909da0214bcf7983e2f693e9f1db9e63ba2967270a6f2d10"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-runtime-source/checkpoint.json",
+      "bytes": 16834,
+      "sha256": "074d223786a46d3d58d094b23e1b26da1a218f927524cb78bf42919089b810e0"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-runtime-run-01/checkpoint.json",
+      "bytes": 2974,
+      "sha256": "e79fea909580f04d41a4e0e6fde169e2b63f9a09bb311f02f090cd4d4c99ccc3"
+    }
+  ],
+  "records": [
+    {
+      "path": "lint.txt",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "proposed-wiring.patch",
+      "bytes": 2197,
+      "sha256": "e45a6ce37ce9bf9336eb90309689730d2f686516ba9217d1837662749fc0a110"
+    },
+    {
+      "path": "source-excerpts.json",
+      "bytes": 2362,
+      "sha256": "fb7031fce47691627e868444e1c0974c0a5de7a5c222dda58c93777f834188ae"
+    },
+    {
+      "path": "tests.txt",
+      "bytes": 702,
+      "sha256": "ee92bf59ea6dd8f857af48c5c7fbb8c638ddaa198d1f98443c81c3fadafad3e1"
+    }
+  ],
+  "focusedTestsPassed": 5,
+  "lintPassed": true,
+  "wiringPatchApplied": false,
+  "runtimeRetryPerformed": false,
+  "generatedFactoryExecuted": false,
+  "wasmExecuted": false,
+  "sharedHeavySlotHeld": false,
+  "speechProductionGo": false
+}

@@ -1,0 +1,6 @@
+{
+  "parentReadFiles": 10,
+  "changedSinceParentRead": [
+    "src/test/titleFirstPaintObserver.test.ts"
+  ]
+}

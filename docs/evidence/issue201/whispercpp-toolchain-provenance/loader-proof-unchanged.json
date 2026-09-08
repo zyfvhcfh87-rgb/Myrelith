@@ -1,0 +1,26 @@
+{
+  "emscriptenRevisionBefore": "aeb67926e7de656da38bc807d83050af93578758",
+  "emscriptenRevisionAfter": "aeb67926e7de656da38bc807d83050af93578758",
+  "sources": [
+    {
+      "member": "install/emscripten/src/shell.js",
+      "bytes": 14812,
+      "sha256": "c24264b2c433aa57318e07705faa78414811bf5ee201dba91f2c053d0d61850a",
+      "matchesAcceptedDecodedSource": true
+    },
+    {
+      "member": "install/emscripten/src/preamble.js",
+      "bytes": 31150,
+      "sha256": "80b4c6f4eb894ee6eacb2474c3eb1aff878ae989045c122a93397bd4f4a1c0ba",
+      "matchesAcceptedDecodedSource": true
+    },
+    {
+      "member": "install/emscripten/src/settings.js",
+      "bytes": 104750,
+      "sha256": "51883b14014de59beae82df827a08f48d32baabd4b629fbf2e2b77ddd7a8f854",
+      "matchesAcceptedDecodedSource": true
+    }
+  ],
+  "loaderAssumptionsChanged": false,
+  "cAdapterAndRecipeChanged": false
+}

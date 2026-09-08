@@ -1,0 +1,32 @@
+[
+  {
+    "file": "bin/wasm-opt",
+    "strings": [
+      {
+        "offset": 9795402,
+        "text": "132 (version_132-16-g89a81ef9b)"
+      }
+    ]
+  },
+  {
+    "file": "bin/clang-24",
+    "strings": [
+      {
+        "offset": 79429964,
+        "text": "PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and dumped files."
+      },
+      {
+        "offset": 79805014,
+        "text": "PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug."
+      },
+      {
+        "offset": 79896416,
+        "text": "https:/github.com/llvm/llvm-project"
+      },
+      {
+        "offset": 80826799,
+        "text": "invalid profile created. Please file a bug at: https://github.com/llvm/llvm-project/issues/ and include the profraw files that caused this error."
+      }
+    ]
+  }
+]

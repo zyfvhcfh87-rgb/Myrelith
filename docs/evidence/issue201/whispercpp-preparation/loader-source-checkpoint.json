@@ -1,0 +1,81 @@
+{
+  "status": "source-only-review-pending",
+  "supersedesSourceCommit": "763baed2b5af4c8282aed8042ce010c6e92bad33",
+  "finding": "locateFile is called for path resolution before supplied-byte startup",
+  "sourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp/01-optional-pthreads.patch",
+      "bytes": 2313,
+      "sha256": "7ea2f544fd4168e0ae3d3f86d1c2a50345da475707df39a91a8b4eaf567e6805"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/02-whole-call-token-budget.patch",
+      "bytes": 3471,
+      "sha256": "4d3e0d398bfbe5cb61a814b1ac94555efd11abeeed37ec4a50b3b4e2677937f3"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/CMakeLists.txt",
+      "bytes": 3405,
+      "sha256": "c137a6d26e981a6604d05a65e6cda3ecf612c5f5b849b161fbd6e70284d67939"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/adapter.cpp",
+      "bytes": 6827,
+      "sha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/loader-startup.test.mjs",
+      "bytes": 7036,
+      "sha256": "309830f5580afa8a60796149868a60a994b696f04feb2aff635bd52ede2f651c"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/model-format.mjs",
+      "bytes": 4193,
+      "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/myrelith-token-budget.h",
+      "bytes": 403,
+      "sha256": "e0dc2d7ec04a52e47214de3536ca479f710b6957d422260eb5bc87b7bfe9ff9b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/patch-identities.json",
+      "bytes": 1172,
+      "sha256": "74a2fb69113d229b172d073cebe6b37087bcf49999945bd3be28783922952a7b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/preparation.test.mjs",
+      "bytes": 17845,
+      "sha256": "e349acfcf38f01434b67304eefc03726789bbc37b0dccd796a7237897c751a5a"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/resident-coverage.mjs",
+      "bytes": 2809,
+      "sha256": "96114f08b414309ae94b76777327257b75d96bfa6555da96ec189d3c4a1cd7bf"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/verify-assets.mjs",
+      "bytes": 3718,
+      "sha256": "a71f77722ac54528b21fa221784ad4daf226b2bcf1d8136a85ccbd74a718efc2"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/worker-owner.mjs",
+      "bytes": 3602,
+      "sha256": "f9ae85d3fb3593ccbf219a058218ad672133b5bd3af56f75683c2a976dfe32f5"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/worker-protocol.mjs",
+      "bytes": 8077,
+      "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b"
+    }
+  ],
+  "loaderSources": "loader-source-pins.json",
+  "checks": {
+    "sourceVmPassed": 52,
+    "loaderRegressions": 4,
+    "skipped": 0,
+    "focusedLintWarnings": 0
+  },
+  "nativeExecution": false,
+  "builtRuntime": null
+}

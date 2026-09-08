@@ -1,0 +1,46 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Traceback (most recent call last):
+  File "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/settings-source-audit.py", line 96, in <module>
+    print(json.dumps([audit(args, source) for args in json.load(sys.stdin)], indent=2))
+  File "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/settings-source-audit.py", line 96, in <listcomp>
+    print(json.dumps([audit(args, source) for args in json.load(sys.stdin)], indent=2))
+  File "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/settings-source-audit.py", line 68, in audit
+    exec(compile(selected(source['tools/cmdline.py'], cmd_names), 'pinned/tools/cmdline.py', 'exec'), ns)
+  File "pinned/tools/cmdline.py", line 54, in <module>
+  File "pinned/tools/cmdline.py", line 78, in EmccOptions
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+
+
+1 !== 0
+
+    at file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/settings-source-audit.test.mjs:20:8
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.8.1
+✖ scripts/issue201/whispercpp/settings-source-audit.test.mjs (57.108708ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 59.986417
+
+✖ failing tests:
+
+test at scripts/issue201/whispercpp/settings-source-audit.test.mjs:1:1
+✖ scripts/issue201/whispercpp/settings-source-audit.test.mjs (57.108708ms)
+  'test failed'

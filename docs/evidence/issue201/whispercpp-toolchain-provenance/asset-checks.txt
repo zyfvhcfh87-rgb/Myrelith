@@ -1,0 +1,10 @@
+{
+  "status": "verified-source-assets-only",
+  "archives": 8,
+  "evidenceFiles": 24,
+  "modelBytes": 43537433,
+  "tensorCount": 167,
+  "toolchainExecuted": false,
+  "wasmInstantiated": false,
+  "inferenceExecuted": false
+}

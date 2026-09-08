@@ -1,0 +1,27 @@
+{
+  "label": "link-settings-configure",
+  "command": [
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/cmake/cmake-4.4.3-macos-universal/CMake.app/Contents/bin/cmake",
+    "-S",
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/recipe-link-settings",
+    "-B",
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/output-link-settings",
+    "-G",
+    "Ninja",
+    "-DCMAKE_MAKE_PROGRAM=/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/ninja/ninja",
+    "-DCMAKE_TOOLCHAIN_FILE=/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+    "-DWHISPER_SOURCE_DIR=/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/source/whisper.cpp-371b5a7561823ab2bb32142d2751e35e7534727b",
+    "-DCMAKE_CROSSCOMPILING_EMULATOR=/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/config/deny-runtime.sh",
+    "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+    "-DFETCHCONTENT_UPDATES_DISCONNECTED=ON"
+  ],
+  "timeoutSeconds": 180,
+  "startedAt": "2026-09-08T18:52:56Z",
+  "pid": 2816,
+  "processGroup": 2816,
+  "exitCode": 0,
+  "remainingGroupTerminated": false,
+  "elapsedSeconds": 3.986,
+  "logBytes": 7600,
+  "logSha256": "e1468526622e0e5ac4ba2487cbe96df7e5cf620ea11e47db5970a9bfe53f6179"
+}

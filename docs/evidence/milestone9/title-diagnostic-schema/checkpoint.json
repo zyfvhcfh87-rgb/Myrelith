@@ -30,5 +30,33 @@
   "productionBuild": "pass",
   "lint": "pass",
   "browserRequired": false,
-  "qualification": "Test-only distinction between historical byte identity and current portable admission; no new pixel/native acceptance."
+  "qualification": "Test-only distinction between historical byte identity and current portable admission; no new pixel/native acceptance.",
+  "rawArchive": {
+    "path": "raw-logs.tar.gz",
+    "bytes": 4032,
+    "sha256": "f2b312a3a5042191dd7d65adf1623bc950e2bbc61bae321ac28a14ef83c54353",
+    "members": "Original records above are unchanged and identify archive member bytes."
+  },
+  "readableCopies": [
+    {
+      "path": "before.log",
+      "bytes": 4395,
+      "sha256": "d0e00c51325626aa164aff146bd20406f4838f467844f2fe07b838e916ab0649"
+    },
+    {
+      "path": "after.log",
+      "bytes": 1039,
+      "sha256": "6d59ac3ec6584b3e20ebd5a246b111b63a8de509e9797e5b2912ae5c883c054e"
+    },
+    {
+      "path": "final.log",
+      "bytes": 278,
+      "sha256": "d2be917d30dd2bfd6405e8d93986140dc79e09b80763b13bf499e6930c76f940"
+    },
+    {
+      "path": "build.log",
+      "bytes": 3852,
+      "sha256": "a6e114ebabf157ef96c5b8e51fb4b9b22bced54891cc85a90893dc4a69f70e85"
+    }
+  ]
 }

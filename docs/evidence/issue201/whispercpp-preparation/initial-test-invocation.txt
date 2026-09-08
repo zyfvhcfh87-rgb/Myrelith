@@ -1,0 +1,52 @@
+✔ exact composite replaces only the historical encoder and retains six current components, runtime and thresholds (1.0975ms)
+✔ every per-file source, logical/local path and byte identity is bound to bundle/cache identity (4.733583ms)
+✔ rejects missing/duplicate/extra component fields, unsafe paths and fabricated current-revision encoder URLs (0.397ms)
+✔ source-only preparation and runner preflight rehash all actual components without modifying any input or manifest (99.82375ms)
+✔ missing and tampered components reject preparation before any proposed writes (0.59225ms)
+file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/lab-review.test.mjs:5
+import { createContext, SourceTextModule, SyntheticModule } from 'node:vm'
+                        ^^^^^^^^^^^^^^^^
+SyntaxError: The requested module 'node:vm' does not provide an export named 'SourceTextModule'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:463:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:561:5)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v26.8.1
+✖ scripts/issue201/lab-review.test.mjs (24.492167ms)
+✔ approved model exact SHA, complete tensor profile and no trailing bytes (14.864084ms)
+✔ format rejects wrong endian/English-only shape, corrupt vocab, tensor and tail (29.753333ms)
+✔ actual C helper reserves token 448, rejects 449 before sample and cannot reset on retry (0.127ms)
+✔ all admitted integer limits exhaust exactly; a new call owns a fresh counter (1.48375ms)
+✔ both patches apply with exact hunk context and exact before/after hashes (2.039916ms)
+✔ guard scope and profile dominate every greedy sample across seek and temperature loops (0.339833ms)
+✔ wrapper uses only single-context full, fixed guard and complete-output admission (0.136125ms)
+✔ build recipe fixes non-shared CPU SIMD memory and excludes demo/runtime alternatives (0.073709ms)
+✔ outputs preserve centiseconds and reject malformed/overlapping/overhanging times (0.185ms)
+✔ outputs reject bad UTF8, pointers, empty/oversized text and aggregate overflow (0.593292ms)
+✔ lazy factory, exact assets, one context, bounded complete output and close (22.286708ms)
+✔ corrupt model fails before factory; malformed identity and nonfinite PCM terminate (33.93725ms)
+✔ token exhaustion, OOM/trap, output overhang and late deadlines never emit partial results (97.406875ms)
+✔ stale/duplicate ids and overlapping async load cannot revive a closed owner (32.675166ms)
+✔ one job owns at most twelve windows and every heap growth refreshes the copy view (33.573333ms)
+✔ busy cancel terminates synchronously, rejects pending and never claims cooperative zero (0.3905ms)
+✔ idle close allows actual zero acknowledgement and terminates before disposal resolution (0.075625ms)
+✔ host 120s deadline and idle 100ms fallback terminate even without worker event processing (0.088375ms)
+✔ 100ms target does not relax actual 250ms cadence; 256ms failure is permanent (0.247916ms)
+✔ missing, duplicate, new or vanished Chromium process rows invalidate complete coverage (0.073166ms)
+✔ resident ceiling and terminal tail/in-flight capture gaps fail independently (0.08225ms)
+✔ complete RSS capture brackets the actual read with full Chromium inventories (0.064542ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 27
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 477.495667
+
+✖ failing tests:
+
+test at scripts/issue201/lab-review.test.mjs:1:1
+✖ scripts/issue201/lab-review.test.mjs (24.492167ms)
+  'test failed'

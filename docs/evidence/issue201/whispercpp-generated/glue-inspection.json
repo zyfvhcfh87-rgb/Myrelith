@@ -1,0 +1,1171 @@
+{
+  "namedImports": [
+    {
+      "module": "a",
+      "name": "a",
+      "kind": 0,
+      "typeIndex": 15,
+      "parameters": [],
+      "results": [
+        "i32"
+      ],
+      "symbol": "___cxa_find_matching_catch_2",
+      "category": "exceptions",
+      "source": "()=>findMatchingCatch([])"
+    },
+    {
+      "module": "a",
+      "name": "b",
+      "kind": 0,
+      "typeIndex": 3,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_ii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_ii(index,a1){var sp=stackSave();try{return getWasmTableEntry(index)(a1)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "c",
+      "kind": 0,
+      "typeIndex": 7,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_viii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_viii(index,a1,a2,a3){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2,a3)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "d",
+      "kind": 0,
+      "typeIndex": 0,
+      "parameters": [
+        "i32"
+      ],
+      "results": [],
+      "symbol": "___resumeException",
+      "category": "exceptions",
+      "source": "ptr=>{ptr=exceptionLast??=new CppException(ptr);__Unwind_Resume(ptr)}"
+    },
+    {
+      "module": "a",
+      "name": "e",
+      "kind": 0,
+      "typeIndex": 4,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iii(index,a1,a2){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "f",
+      "kind": 0,
+      "typeIndex": 6,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_vii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_vii(index,a1,a2){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "g",
+      "kind": 0,
+      "typeIndex": 0,
+      "parameters": [
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_v",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_v(index){var sp=stackSave();try{getWasmTableEntry(index)()}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "h",
+      "kind": 0,
+      "typeIndex": 11,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiii(index,a1,a2,a3){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "i",
+      "kind": 0,
+      "typeIndex": 9,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_viiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_viiii(index,a1,a2,a3,a4){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2,a3,a4)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "j",
+      "kind": 0,
+      "typeIndex": 2,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_vi",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_vi(index,a1){var sp=stackSave();try{getWasmTableEntry(index)(a1)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "k",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "___cxa_find_matching_catch_3",
+      "category": "exceptions",
+      "source": "arg0=>findMatchingCatch([arg0])"
+    },
+    {
+      "module": "a",
+      "name": "l",
+      "kind": 0,
+      "typeIndex": 8,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiiiii(index,a1,a2,a3,a4,a5){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3,a4,a5)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "m",
+      "kind": 0,
+      "typeIndex": 10,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiiii(index,a1,a2,a3,a4){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3,a4)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "n",
+      "kind": 0,
+      "typeIndex": 45,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i64"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiij",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiij(index,a1,a2,a3){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "o",
+      "kind": 0,
+      "typeIndex": 14,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_viiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_viiiii(index,a1,a2,a3,a4,a5){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2,a3,a4,a5)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "p",
+      "kind": 0,
+      "typeIndex": 46,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i64",
+        "i64"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiijj",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiijj(index,a1,a2,a3,a4){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3,a4)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "q",
+      "kind": 0,
+      "typeIndex": 6,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "___cxa_throw",
+      "category": "exceptions",
+      "source": "(ptr,type,destructor)=>{var info=new ExceptionInfo(ptr);info.init(type,destructor);___cxa_increment_exception_refcount(ptr);ptr=exceptionLast=new CppException(ptr);uncaughtExceptionCount++;__Unwind_RaiseException(ptr)}"
+    },
+    {
+      "module": "a",
+      "name": "r",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_i",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_i(index){var sp=stackSave();try{return getWasmTableEntry(index)()}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "s",
+      "kind": 0,
+      "typeIndex": 17,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiiiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiiiiii(index,a1,a2,a3,a4,a5,a6){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "t",
+      "kind": 0,
+      "typeIndex": 12,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_viiiiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_viiiiiii(index,a1,a2,a3,a4,a5,a6,a7){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "u",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "___cxa_begin_catch",
+      "category": "exceptions",
+      "source": "ptr=>{var info=new ExceptionInfo(ptr);if(!info.get_caught()){info.set_caught(true);uncaughtExceptionCount--}info.set_rethrown(false);exceptionCaught.push(info);return ___cxa_get_exception_ptr(ptr)}"
+    },
+    {
+      "module": "a",
+      "name": "v",
+      "kind": 0,
+      "typeIndex": 24,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i64"
+      ],
+      "symbol": "invoke_j",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_j(index){var sp=stackSave();try{return getWasmTableEntry(index)()}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0);return 0n}}"
+    },
+    {
+      "module": "a",
+      "name": "w",
+      "kind": 0,
+      "typeIndex": 47,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i64",
+        "i64",
+        "i64"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiijjj",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiijjj(index,a1,a2,a3,a4,a5){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3,a4,a5)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "x",
+      "kind": 0,
+      "typeIndex": 13,
+      "parameters": [],
+      "results": [],
+      "symbol": "___cxa_end_catch",
+      "category": "exceptions",
+      "source": "()=>{_setThrew(0,0);var info=exceptionCaught.pop();___cxa_decrement_exception_refcount(info.excPtr);exceptionLast=null}"
+    },
+    {
+      "module": "a",
+      "name": "y",
+      "kind": 0,
+      "typeIndex": 48,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_viiiiiiiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_viiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "z",
+      "kind": 0,
+      "typeIndex": 19,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_viiiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_viiiiii(index,a1,a2,a3,a4,a5,a6){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "A",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_llvm_eh_typeid_for",
+      "category": "exceptions",
+      "source": "type=>type"
+    },
+    {
+      "module": "a",
+      "name": "B",
+      "kind": 0,
+      "typeIndex": 16,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiiiiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiiiiiii(index,a1,a2,a3,a4,a5,a6,a7){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "C",
+      "kind": 0,
+      "typeIndex": 25,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiiiiiiiiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "D",
+      "kind": 0,
+      "typeIndex": 49,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_viiiiiiiiiiiiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_viiiiiiiiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "E",
+      "kind": 0,
+      "typeIndex": 5,
+      "parameters": [
+        "i32",
+        "i32",
+        "i64"
+      ],
+      "results": [],
+      "symbol": "invoke_vij",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_vij(index,a1,a2){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "F",
+      "kind": 0,
+      "typeIndex": 50,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "f32"
+      ],
+      "results": [],
+      "symbol": "invoke_viiiif",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_viiiif(index,a1,a2,a3,a4,a5){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2,a3,a4,a5)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "G",
+      "kind": 0,
+      "typeIndex": 51,
+      "parameters": [],
+      "results": [
+        "f64"
+      ],
+      "symbol": "_emscripten_get_now",
+      "category": "time",
+      "source": "()=>performance.now()"
+    },
+    {
+      "module": "a",
+      "name": "H",
+      "kind": 0,
+      "typeIndex": 26,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "f64"
+      ],
+      "symbol": "invoke_d",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_d(index){var sp=stackSave();try{return getWasmTableEntry(index)()}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "I",
+      "kind": 0,
+      "typeIndex": 52,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "f64"
+      ],
+      "symbol": "invoke_diii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_diii(index,a1,a2,a3){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "J",
+      "kind": 0,
+      "typeIndex": 53,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "f32"
+      ],
+      "symbol": "invoke_fiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_fiii(index,a1,a2,a3){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "K",
+      "kind": 0,
+      "typeIndex": 13,
+      "parameters": [],
+      "results": [],
+      "symbol": "___cxa_rethrow",
+      "category": "exceptions",
+      "source": "()=>{if(!exceptionCaught.length){abort(\"no exception to throw\")}var info=exceptionCaught.at(-1);var ptr=info.excPtr;info.set_rethrown(true);info.set_caught(false);uncaughtExceptionCount++;___cxa_increment_exception_refcount(ptr);ptr=exceptionLast=new CppException(ptr);__Unwind_RaiseException(ptr)}"
+    },
+    {
+      "module": "a",
+      "name": "L",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_fd_close",
+      "category": "fileStubs",
+      "source": "fd=>52"
+    },
+    {
+      "module": "a",
+      "name": "M",
+      "kind": 0,
+      "typeIndex": 11,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_fd_write",
+      "category": "output",
+      "source": "(fd,iov,iovcnt,pnum)=>{var num=0;for(var i=0;i<iovcnt;i++){var ptr=HEAPU32[iov>>2];var len=HEAPU32[iov+4>>2];iov+=8;for(var j=0;j<len;j++){printChar(fd,HEAPU8[ptr+j])}num+=len}HEAPU32[pnum>>2]=num;return 0}"
+    },
+    {
+      "module": "a",
+      "name": "N",
+      "kind": 0,
+      "typeIndex": 4,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "___syscall_fcntl64",
+      "category": "fileStubs",
+      "source": "function ___syscall_fcntl64(fd,cmd,varargs){SYSCALLS.varargs=varargs;return 0}"
+    },
+    {
+      "module": "a",
+      "name": "O",
+      "kind": 0,
+      "typeIndex": 32,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "f32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiif",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiif(index,a1,a2,a3){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "P",
+      "kind": 0,
+      "typeIndex": 54,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "f32",
+        "f32"
+      ],
+      "results": [],
+      "symbol": "invoke_viiiff",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_viiiff(index,a1,a2,a3,a4,a5){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2,a3,a4,a5)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "Q",
+      "kind": 0,
+      "typeIndex": 55,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i64",
+        "i64",
+        "i64",
+        "i64"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiijjjj",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiijjjj(index,a1,a2,a3,a4,a5,a6){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "R",
+      "kind": 0,
+      "typeIndex": 20,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "invoke_viiiiiiiii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_viiiiiiiii(index,a1,a2,a3,a4,a5,a6,a7,a8,a9){var sp=stackSave();try{getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8,a9)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "S",
+      "kind": 0,
+      "typeIndex": 7,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [],
+      "symbol": "__tzset_js",
+      "category": "time",
+      "source": "(timezone,daylight,std_name,dst_name)=>{var currentYear=(new Date).getFullYear();var winter=new Date(currentYear,0,1);var summer=new Date(currentYear,6,1);var winterOffset=winter.getTimezoneOffset();var summerOffset=summer.getTimezoneOffset();var stdTimezoneOffset=Math.max(winterOffset,summerOffset);HEAPU32[timezone>>2]=stdTimezoneOffset*60;HEAP32[daylight>>2]=Number(winterOffset!=summerOffset);var extractZone=timezoneOffset=>{var sign=timezoneOffset>=0?\"-\":\"+\";var absOffset=Math.abs(timezoneOffset);var hours=String(Math.floor(absOffset/60)).padStart(2,\"0\");var minutes=String(absOffset%60).padStart(2,\"0\");return`UTC${sign}${hours}${minutes}`};var winterName=extractZone(winterOffset);var summerName=extractZone(summerOffset);if(summerOffset<winterOffset){stringToUTF8(winterName,std_name,17);stringToUTF8(summerName,dst_name,17)}else{stringToUTF8(winterName,dst_name,17);stringToUTF8(summerName,std_name,17)}}"
+    },
+    {
+      "module": "a",
+      "name": "T",
+      "kind": 0,
+      "typeIndex": 15,
+      "parameters": [],
+      "results": [
+        "i32"
+      ],
+      "symbol": "___cxa_uncaught_exceptions",
+      "category": "exceptions",
+      "source": "()=>uncaughtExceptionCount"
+    },
+    {
+      "module": "a",
+      "name": "U",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_emscripten_resize_heap",
+      "category": "memory",
+      "source": "requestedSize=>{var oldSize=HEAPU8.length;requestedSize>>>=0;var maxHeapSize=getHeapMax();if(requestedSize>maxHeapSize){return false}for(var cutDown=1;cutDown<=4;cutDown*=2){var overGrownHeapSize=oldSize+16777216/cutDown;var newSize=Math.min(maxHeapSize,alignMemory(Math.max(requestedSize,overGrownHeapSize),65536));var replacement=growMemory(newSize);if(replacement){return true}}return false}"
+    },
+    {
+      "module": "a",
+      "name": "V",
+      "kind": 0,
+      "typeIndex": 15,
+      "parameters": [],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_emscripten_get_heap_max",
+      "category": "memory",
+      "source": "()=>getHeapMax()"
+    },
+    {
+      "module": "a",
+      "name": "W",
+      "kind": 0,
+      "typeIndex": 56,
+      "parameters": [
+        "i32",
+        "i64",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_fd_seek",
+      "category": "fileStubs",
+      "source": "function _fd_seek(fd,offset,whence,newOffset){offset=bigintToI53Checked(offset);return 70}"
+    },
+    {
+      "module": "a",
+      "name": "X",
+      "kind": 0,
+      "typeIndex": 3,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_environ_get",
+      "category": "environment",
+      "source": "(__environ,environ_buf)=>{var bufSize=0;var envp=0;for(var string of getEnvStrings()){var ptr=environ_buf+bufSize;HEAPU32[__environ+envp>>2]=ptr;bufSize+=stringToUTF8(string,ptr,Infinity)+1;envp+=4}return 0}"
+    },
+    {
+      "module": "a",
+      "name": "Y",
+      "kind": 0,
+      "typeIndex": 3,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_environ_sizes_get",
+      "category": "environment",
+      "source": "(penviron_count,penviron_buf_size)=>{var strings=getEnvStrings();HEAPU32[penviron_count>>2]=strings.length;var bufSize=0;for(var string of strings){bufSize+=lengthBytesUTF8(string)+1}HEAPU32[penviron_buf_size>>2]=bufSize;return 0}"
+    },
+    {
+      "module": "a",
+      "name": "Z",
+      "kind": 0,
+      "typeIndex": 11,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_fd_read",
+      "category": "fileStubs",
+      "source": "(fd,iov,iovcnt,pnum)=>52"
+    },
+    {
+      "module": "a",
+      "name": "_",
+      "kind": 0,
+      "typeIndex": 4,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "___syscall_ioctl",
+      "category": "fileStubs",
+      "source": "function ___syscall_ioctl(fd,op,varargs){SYSCALLS.varargs=varargs;return 0}"
+    },
+    {
+      "module": "a",
+      "name": "$",
+      "kind": 0,
+      "typeIndex": 11,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "___syscall_openat",
+      "category": "fileStubs",
+      "source": "function ___syscall_openat(dirfd,path,flags,varargs){SYSCALLS.varargs=varargs}"
+    },
+    {
+      "module": "a",
+      "name": "aa",
+      "kind": 0,
+      "typeIndex": 33,
+      "parameters": [
+        "i32",
+        "i64",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_clock_time_get",
+      "category": "time",
+      "source": "function _clock_time_get(clk_id,ignored_precision,ptime){ignored_precision=bigintToI53Checked(ignored_precision);if(!checkWasiClock(clk_id)){return 28}var now;if(clk_id===0){now=_emscripten_date_now()}else if(nowIsMonotonic){now=_emscripten_get_now()}else{return 52}var nsec=Math.round(now*1e3*1e3);HEAP64[ptime>>3]=BigInt(nsec);return 0}"
+    },
+    {
+      "module": "a",
+      "name": "ba",
+      "kind": 0,
+      "typeIndex": 13,
+      "parameters": [],
+      "results": [],
+      "symbol": "__abort_js",
+      "category": "abort",
+      "source": "()=>abort(\"\")"
+    },
+    {
+      "module": "a",
+      "name": "ca",
+      "kind": 0,
+      "typeIndex": 57,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i64",
+        "i64",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiijjii",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiijjii(index,a1,a2,a3,a4,a5,a6){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "da",
+      "kind": 0,
+      "typeIndex": 58,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i64",
+        "i64",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "invoke_iiiijji",
+      "category": "indirectCallWithExceptionHandling",
+      "source": "function invoke_iiiijji(index,a1,a2,a3,a4,a5,a6){var sp=stackSave();try{return getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6)}catch(e){stackRestore(sp);if(!(e instanceof EmscriptenEH))throw e;_setThrew(1,0)}}"
+    },
+    {
+      "module": "a",
+      "name": "ea",
+      "kind": 0,
+      "typeIndex": 3,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "___cxa_find_matching_catch_4",
+      "category": "exceptions",
+      "source": "(arg0,arg1)=>findMatchingCatch([arg0,arg1])"
+    }
+  ],
+  "namedExports": [
+    {
+      "name": "ha",
+      "kind": 0,
+      "index": 1366,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_speech_model_alloc"
+    },
+    {
+      "name": "ia",
+      "kind": 0,
+      "index": 1114,
+      "parameters": [],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_speech_load"
+    },
+    {
+      "name": "ja",
+      "kind": 0,
+      "index": 998,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_speech_pcm_alloc"
+    },
+    {
+      "name": "ka",
+      "kind": 0,
+      "index": 922,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_speech_run"
+    },
+    {
+      "name": "la",
+      "kind": 0,
+      "index": 805,
+      "parameters": [],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_speech_tokens"
+    },
+    {
+      "name": "ma",
+      "kind": 0,
+      "index": 757,
+      "parameters": [],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_speech_segment_count"
+    },
+    {
+      "name": "na",
+      "kind": 0,
+      "index": 1365,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "f64"
+      ],
+      "symbol": "_speech_segment_t0"
+    },
+    {
+      "name": "oa",
+      "kind": 0,
+      "index": 1285,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "f64"
+      ],
+      "symbol": "_speech_segment_t1"
+    },
+    {
+      "name": "pa",
+      "kind": 0,
+      "index": 1208,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_speech_segment_text"
+    },
+    {
+      "name": "qa",
+      "kind": 0,
+      "index": 1154,
+      "parameters": [],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_speech_close"
+    },
+    {
+      "name": "ra",
+      "kind": 0,
+      "index": 1143,
+      "parameters": [],
+      "results": [
+        "i32"
+      ],
+      "symbol": "_speech_owned"
+    }
+  ],
+  "memoryExport": "fa",
+  "tableExport": "sa",
+  "importCategoryCounts": {
+    "exceptions": 10,
+    "indirectCallWithExceptionHandling": 34,
+    "time": 3,
+    "fileStubs": 6,
+    "output": 1,
+    "memory": 2,
+    "environment": 2,
+    "abort": 1
+  },
+  "stack": {
+    "globalIndex": 0,
+    "initialPointer": 5923760,
+    "getExport": "wa",
+    "restoreExport": "va",
+    "completeHelperBodiesInspected": true,
+    "runtimeStackBoundsTested": false
+  },
+  "suppliedBytesAssignedBeforeStartup": true,
+  "heapMaximum": 536870912,
+  "linearGrowthStep": 16777216,
+  "hasFallbackFetchAndXhr": true,
+  "factoryExecuted": false,
+  "wasmExecuted": false,
+  "sources": {
+    "findWasmBinary": "function findWasmBinary(){if(Module[\"locateFile\"]){return locateFile(\"myrelith-whisper.wasm\")}return new URL(\"myrelith-whisper.wasm\",import.meta.url).href}",
+    "getBinarySync": "function getBinarySync(file){if(file==wasmBinaryFile&&wasmBinary){return new Uint8Array(wasmBinary)}if(readBinary){return readBinary(file)}throw\"both async and sync fetching of the wasm failed\"}",
+    "getWasmBinary": "async function getWasmBinary(binaryFile){if(!wasmBinary){try{var response=await readAsync(binaryFile);return new Uint8Array(response)}catch{}}return getBinarySync(binaryFile)}",
+    "instantiateAsync": "async function instantiateAsync(binary,binaryFile,imports){if(!binary){try{var response=fetch(binaryFile,{credentials:\"same-origin\"});var instantiationResult=await WebAssembly.instantiateStreaming(response,imports);return instantiationResult}catch(reason){err(`wasm streaming compile failed: ${reason}`);err(\"falling back to ArrayBuffer instantiation\")}}return instantiateArrayBuffer(binaryFile,imports)}",
+    "createWasm": "async function createWasm(){function receiveInstance(instance){wasmExports=instance.exports;assignWasmExports(wasmExports);updateMemoryViews();return wasmExports}function receiveInstantiationResult(result){return receiveInstance(result[\"instance\"])}var info=getWasmImports();wasmBinaryFile??=findWasmBinary();var result=await instantiateAsync(wasmBinary,wasmBinaryFile,info);var exports=receiveInstantiationResult(result);return exports}",
+    "assignWasmExports": "function assignWasmExports(wasmExports){_speech_model_alloc=Module[\"_speech_model_alloc\"]=wasmExports[\"ha\"];_speech_load=Module[\"_speech_load\"]=wasmExports[\"ia\"];_speech_pcm_alloc=Module[\"_speech_pcm_alloc\"]=wasmExports[\"ja\"];_speech_run=Module[\"_speech_run\"]=wasmExports[\"ka\"];_speech_tokens=Module[\"_speech_tokens\"]=wasmExports[\"la\"];_speech_segment_count=Module[\"_speech_segment_count\"]=wasmExports[\"ma\"];_speech_segment_t0=Module[\"_speech_segment_t0\"]=wasmExports[\"na\"];_speech_segment_t1=Module[\"_speech_segment_t1\"]=wasmExports[\"oa\"];_speech_segment_text=Module[\"_speech_segment_text\"]=wasmExports[\"pa\"];_speech_close=Module[\"_speech_close\"]=wasmExports[\"qa\"];_speech_owned=Module[\"_speech_owned\"]=wasmExports[\"ra\"];_setThrew=wasmExports[\"ta\"];__emscripten_tempret_set=wasmExports[\"ua\"];__emscripten_stack_restore=wasmExports[\"va\"];_emscripten_stack_get_current=wasmExports[\"wa\"];___cxa_decrement_exception_refcount=wasmExports[\"xa\"];___cxa_increment_exception_refcount=wasmExports[\"ya\"];___cxa_can_catch=wasmExports[\"za\"];___cxa_get_exception_ptr=wasmExports[\"Aa\"];memory=wasmMemory=wasmExports[\"fa\"];__indirect_function_table=wasmTable=wasmExports[\"sa\"]}"
+  }
+}

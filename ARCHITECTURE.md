@@ -635,8 +635,25 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   fail closed instead of reaching a browser allocation. A source-space lens
   remap adds exactly two reusable RGBA source surfaces; finite export adds one
   output-sized readback surface. Adjustment evaluation borrows an existing
-  compositor leg and adds zero surfaces. The reviewed 4K peak is therefore
-  still seven surfaces / 232,243,200 bytes, below the shared 256 MiB ceiling.
+  compositor leg and adds zero surfaces. Seven 4K surfaces represent the
+  232,243,200-byte baseline; pixel-stage buffers are additional owned work.
+  `domain/maskPixelWork.ts` shares clipped Bezier geometry with raster scratch
+  allocation. `domain/pixelWorkBudget.ts` models readback, transactional working
+  copies, per-plugin input/result, retained mask arrays, spatial scratch and
+  grading cache according to the actual execution lane. A shared mask list
+  retains its arrays during later spatial stages; only a stack containing active
+  grading uses separate built-in calls. `domain/videoPixelWorkBudget.ts` covers
+  every flattened frame stack and conservative stored/held/animated document
+  possibilities before Program reservation. The common surface gate adds that
+  work, retained lens/cache bytes and the distinct export allowance before
+  provider/readback allocation. It rejects over-budget work without changing
+  authored data or quality. Native driver/encoder queues are not represented
+  as measured heap usage by this logical owned-buffer model.
+  The canonical plugin stage copies and wipes each freshly caller-owned,
+  whole-buffer result before proceeding; preview/export must not retain a
+  frame-wide list of those results. Renderer configuration cannot resize
+  surfaces borrowed by an unfinished async composite. Lens frame reservations
+  pin output dimensions and retain source high-water accounting until release.
 - `domain/presentationProfile.ts` is the browser-free authority for disposable
   Program Monitor presentation. It resolves Auto/Full/Half/Quarter into one
   uniform project-to-output scale plus an explainable reason and device-pixel

@@ -22,7 +22,7 @@ function expectReleased(session: CaptionEditSession) {
 describe('caption owner registration with synchronous subscribers', () => {
   it.each(['project', 'generation', 'sequence', 'dispose'] as const)('releases the real old review and new ledger after reentrant %s invalidation', (kind) => {
     const session = begin()
-    const old = session.prepareStyle('captions', null, { version: 9, params: { large: 'x'.repeat(128) } })
+    const old = session.prepareStyle('captions', null, { version: 9, params: { large: 'x'.repeat(128) } })!
     const before = useDocumentStore.getState()
     let fired = false, external: DocumentState | null = null
     const unsubscribe = useDocumentStore.subscribe((state) => {
@@ -79,7 +79,7 @@ describe('caption owner registration with synchronous subscribers', () => {
   })
   it.each(['style', 'noop', 'apply'] as const)('prevents nested %s from replacing the admitted owner under the outer review', (kind) => {
     const session = begin()
-    const old = session.prepareStyle('captions', null, { version: 9, params: { old: true } })
+    const old = session.prepareStyle('captions', null, { version: 9, params: { old: true } })!
     const before = useDocumentStore.getState()
     let fired = false
     const unsubscribe = useDocumentStore.subscribe((state) => {
@@ -90,7 +90,7 @@ describe('caption owner registration with synchronous subscribers', () => {
       else expect(session.apply(old)).toMatch(/admission is already/)
     })
     try {
-      const review = session.prepareStyle('captions', null, { version: 1, params: { italic: true } })
+      const review = session.prepareStyle('captions', null, { version: 1, params: { italic: true } })!
       const owners = Object.values(useDocumentStore.getState().retainedCaptionOwners).flat()
       expect(owners.some((owner) => owner.style?.params.italic === true)).toBe(true)
       expect(owners.some((owner) => owner.style?.params.nested === true)).toBe(false)
@@ -98,7 +98,9 @@ describe('caption owner registration with synchronous subscribers', () => {
       expect(useDocumentStore.getState().past).toEqual([before.project])
     } finally { unsubscribe() }
   })
-  it.each(['project', 'dispose', 'throw', 'nested'] as const)('keeps no-op owner reduction consistent under a %s subscriber', (kind) => {
+  it.each((['batch', 'style'] as const).flatMap((operation) =>
+    (['project', 'dispose', 'throw', 'nested'] as const).map((kind) => ({ operation, kind })),
+  ))('keeps $operation no-op owner reduction consistent under a $kind subscriber', ({ operation, kind }) => {
     const session = begin()
     session.prepareStyle('captions', null, { version: 9, params: { old: true } })
     const before = useDocumentStore.getState()
@@ -111,7 +113,9 @@ describe('caption owner registration with synchronous subscribers', () => {
       else if (kind === 'throw') throw new Error('Reduction subscriber failed')
       else expect(() => session.prepareStyle('captions', null, { version: 9, params: { nested: true } })).toThrow(/admission is already/)
     })
-    const clear = () => session.prepareBatch('captions', { kind: 'all' }, { kind: 'shift', deltaFrames: 0 })
+    const clear = () => operation === 'batch'
+      ? session.prepareBatch('captions', { kind: 'all' }, { kind: 'shift', deltaFrames: 0 })
+      : session.prepareStyle('captions', ['cue-a'], null)
     try {
       if (kind === 'nested') {
         expect(clear()).toBeNull()

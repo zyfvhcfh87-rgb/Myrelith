@@ -9,6 +9,31 @@ function record(work: SpatialEffectWork | undefined, scratch: number, visits: nu
   if (work) { work.scratchBytesPeak = Math.max(work.scratchBytesPeak, scratch); work.pixelVisits += visits }
 }
 function radius(value: number, surface: number, project: number): number { return Math.max(0, Math.round(value * surface / project)) }
+function shadowRowCapacity(height: number, ry: number, dy: number): number {
+  return Math.min(height, 2 * ry + Math.abs(dy) + 2)
+}
+function outlineScratch(width: number, height: number, rx: number, ry: number) {
+  rx = Math.min(rx, width - 1); ry = Math.min(ry, height - 1)
+  const capacity = 2 * ry + 2
+  return { rx, ry, capacity, bytes: width * capacity * 3 + width * 9 + (width + rx + 1) * 4 }
+}
+
+/** Exact typed-array scratch for an executable spatial stage; no allocation. */
+export function spatialEffectScratchBytes(effect: SpatialPixelEffect, geometry: PixelEffectGeometry): number {
+  const { kind, params } = effect
+  if (spatialEffectIsIdentity(kind, params)) return 0
+  const { surfaceWidth: width, surfaceHeight: height, projectWidth, projectHeight } = geometry
+  if (kind === 'box-blur') return Math.max(
+    radius(Number(params.radius), width, projectWidth) === 0 ? 0 : width * 4,
+    radius(Number(params.radius), height, projectHeight) === 0 ? 0 : height * 4,
+  )
+  if (kind === 'sharpen') return width * 12
+  if (kind === 'vignette') return 0
+  if (kind === 'drop-shadow') return width * (8 + shadowRowCapacity(height,
+    radius(Number(params.radius), height, projectHeight), Math.round(Number(params.offsetY) * height / projectHeight)))
+  return outlineScratch(width, height, radius(Number(params.width), width, projectWidth),
+    radius(Number(params.width), height, projectHeight)).bytes
+}
 
 function blurAxis(rgba: Uint8ClampedArray, width: number, height: number, r: number, horizontal: boolean, work?: SpatialEffectWork) {
   if (r === 0) return
@@ -96,7 +121,7 @@ function shadow(rgba: Uint8ClampedArray, geometry: PixelEffectGeometry, rx: numb
   const { surfaceWidth: width, surfaceHeight: height } = geometry
   // Preserve original alpha rows before any output overwrites them, including
   // positive offsets that need source rows long after they were composited.
-  const capacity = Math.min(height, 2 * ry + Math.abs(dy) + 2)
+  const capacity = shadowRowCapacity(height, ry, dy)
   const rows = new Uint8ClampedArray(capacity * width), sums = new Float64Array(width)
   record(work, rows.byteLength + sums.byteLength, width * height * 5)
   let generated = -1
@@ -133,8 +158,9 @@ function shadow(rgba: Uint8ClampedArray, geometry: PixelEffectGeometry, rx: numb
 }
 function outline(rgba: Uint8ClampedArray, geometry: PixelEffectGeometry, rx: number, ry: number, opacity: number, color: readonly number[], work?: SpatialEffectWork) {
   const { surfaceWidth: width, surfaceHeight: height } = geometry
-  rx = Math.min(rx, width - 1); ry = Math.min(ry, height - 1)
-  const capacity = 2 * ry + 2
+  const layout = outlineScratch(width, height, rx, ry)
+  rx = layout.rx; ry = layout.ry
+  const capacity = layout.capacity
   // Relative row ages are bounded by the kernel. Uint16 indices cover the bounded
   // 16,384-pixel raster plus its clamped radius without wrapping.
   const values = new Uint8Array(width * capacity), ages = new Uint16Array(width * capacity)

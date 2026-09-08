@@ -1,0 +1,30 @@
+)]}'
+{
+  "commit": "9d70dbe8860ccdd3595f6e6065d94bfb543ae955",
+  "tree": "6304c486910b5151b2cd0f281932ab84216aa929",
+  "parents": [
+    "c2c018ef3cf23eaa6646c68829b5e79058febdab"
+  ],
+  "author": {
+    "name": "Sam Clegg",
+    "email": "sbc@chromium.org",
+    "time": "Thu Aug 20 05:57:12 2026"
+  },
+  "committer": {
+    "name": "Sam Clegg",
+    "email": "sbc@chromium.org",
+    "time": "Thu Aug 20 15:29:27 2026"
+  },
+  "message": "Version 6.0.8 RC\n\nDEPS from revision 1aa74b7a00d9a0ac2542e2bbb2f4d4a3633f1092\nThis CL was created by src/create_release_candidate.py\n\nR\u003dazakai@google.com, dschuff@chromium.org, sbc@chromium.org\n\nChange-Id: Ie1980f454102d37f8285616c521571c4adda14b0\nReviewed-on: https://chromium-review.googlesource.com/c/emscripten-releases/+/8272671\nReviewed-by: Derek Schuff \u003cdschuff@chromium.org\u003e\n",
+  "tree_diff": [
+    {
+      "type": "modify",
+      "old_id": "648eac1f7bbca44367aedaa76aa77afffd0e7620",
+      "old_mode": 33188,
+      "old_path": "DEPS.tagged-release",
+      "new_id": "23a31f3971b7321e576fe02a4723a38897429ff7",
+      "new_mode": 33188,
+      "new_path": "DEPS.tagged-release"
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+(node:22148) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✖ the real runner refuses an absent exclusive grant before server, browser or attempt writes (1.202ms)
+✖ the real runner stops on its first failed case and retains raw process samples and owned cleanup (0.624666ms)
+✖ process churn stops before any acceptance case without discarding the incomplete raw observation (0.54525ms)
+✖ an already existing profile is not adopted or removed after mkdir rejects (0.503042ms)
+✖ the attempt marker prevents a second run after an earlier failure (0.489791ms)
+(node:22149) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ exact candidate identity includes both generated artifacts and all unchanged fixture/acceptance limits (1.339583ms)
+✔ continuous epochs retain all samples and distinguish verified browser absence from model work (0.266542ms)
+✔ late samples, process churn, missing RSS, ceilings and unverified shutdown remain failures (0.200458ms)
+✔ reopen cannot reset away the original resident baseline (0.06625ms)
+✔ original bounded native audio preparation is byte-identical in the separate worker (0.128167ms)
+✔ worker seam verifies glue before import and sends the exact WASM bytes to the existing core authority (6.233792ms)
+✔ worker rejects changed candidate metadata or changed glue before generated module import (5.528459ms)
+✔ worker seam keeps twelve bounded windows, charges the C PCM copy, and closes every fake native sample (320.306875ms)
+✔ a core work-budget failure discards completion and releases audio owners in finally (4.629125ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 9
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 372.980334
+
+✖ failing tests:
+
+test at scripts/issue201/whispercpp-lab/runner.test.mjs:104:1
+✖ the real runner refuses an absent exclusive grant before server, browser or attempt writes (1.202ms)
+  SyntaxError: Unexpected reserved word
+      at new Module (node:internal/vm/module:155:21)
+      at new SourceTextModule (node:internal/vm/module:301:5)
+      at runInert (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-lab/runner.test.mjs:88:18)
+      at TestContext.<anonymous> (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-lab/runner.test.mjs:105:21)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+
+test at scripts/issue201/whispercpp-lab/runner.test.mjs:109:1
+✖ the real runner stops on its first failed case and retains raw process samples and owned cleanup (0.624666ms)
+  SyntaxError: Unexpected reserved word
+      at new Module (node:internal/vm/module:155:21)
+      at new SourceTextModule (node:internal/vm/module:301:5)
+      at runInert (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-lab/runner.test.mjs:88:18)
+      at TestContext.<anonymous> (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-lab/runner.test.mjs:110:21)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at scripts/issue201/whispercpp-lab/runner.test.mjs:124:1
+✖ process churn stops before any acceptance case without discarding the incomplete raw observation (0.54525ms)
+  SyntaxError: Unexpected reserved word
+      at new Module (node:internal/vm/module:155:21)
+      at new SourceTextModule (node:internal/vm/module:301:5)
+      at runInert (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-lab/runner.test.mjs:88:18)
+      at TestContext.<anonymous> (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-lab/runner.test.mjs:125:21)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at scripts/issue201/whispercpp-lab/runner.test.mjs:135:1
+✖ an already existing profile is not adopted or removed after mkdir rejects (0.503042ms)
+  SyntaxError: Unexpected reserved word
+      at new Module (node:internal/vm/module:155:21)
+      at new SourceTextModule (node:internal/vm/module:301:5)
+      at runInert (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-lab/runner.test.mjs:88:18)
+      at TestContext.<anonymous> (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-lab/runner.test.mjs:136:21)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at scripts/issue201/whispercpp-lab/runner.test.mjs:140:1
+✖ the attempt marker prevents a second run after an earlier failure (0.489791ms)
+  SyntaxError: Unexpected reserved word
+      at new Module (node:internal/vm/module:155:21)
+      at new SourceTextModule (node:internal/vm/module:301:5)
+      at runInert (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-lab/runner.test.mjs:88:18)
+      at TestContext.<anonymous> (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-lab/runner.test.mjs:141:23)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)

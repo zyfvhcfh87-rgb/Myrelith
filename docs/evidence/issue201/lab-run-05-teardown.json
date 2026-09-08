@@ -1,0 +1,39 @@
+{
+  "recordedAt": "2026-09-08T13:33:35.383Z",
+  "sourceCommit": "500a4834de99db221c1be47f60b01db4f52af58b",
+  "rawResultBytes": 97436,
+  "rawResultSha256": "61a151c71f8bfe0ed39d411544a3954253e4357fe60971452505ff6f7269ad16",
+  "profile": "profile-1788874313046",
+  "profileCreatedAt": "2026-09-08T13:31:53.046Z",
+  "filesBeforeRemoval": 111,
+  "regularFileBytesBeforeRemoval": 138007556,
+  "symlinksNotFollowed": 0,
+  "browserAlreadyClosed": true,
+  "recordedChromiumPids": [
+    62273,
+    62276,
+    62274,
+    62275
+  ],
+  "ownedProcessesAbsent": true,
+  "processInspection": "Successful complete ps table; recorded PIDs, exact private profile and issue201 runner absent.",
+  "port5201ListenerAbsent": true,
+  "listenerInspection": "lsof exited1 with empty stdout/stderr.",
+  "cleanupMode": "Delete only the verified runner-created private browser profile after forced browser shutdown. This is filesystem teardown, not cooperative application model-cache removal.",
+  "profileAbsent": true,
+  "postRunSourceHashesVerified": 9,
+  "postRunManifestSha256": "c68800d6b46bcecd9bbdfe7ed8abc853bcb8cf194bbe98dc3fd39518f37c8804",
+  "postRunComposition": {
+    "preservedCandidate04Sha256": "4aebb4adbd8c0a00615065f4dd3c0d1da5259e2daf5a37f71489e0c5732470e7",
+    "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+    "modelBytes": 43610465,
+    "candidate04PlusStagedBytes": 87232592,
+    "compositePlusStagedBytes": 87220930,
+    "cacheByteLimit": 100663296,
+    "unchangedRuntimeAndNotices": 11,
+    "unchangedFixtures": 5,
+    "retainedCurrentComponents": 6,
+    "originalEncoderPreserved": true,
+    "nativeExecution": false
+  }
+}

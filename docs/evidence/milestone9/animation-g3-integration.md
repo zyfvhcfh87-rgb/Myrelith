@@ -1,0 +1,15 @@
+# Animation workspace and preview coordination integration
+
+Reviewed issue source `16ac2e6d498ca9a486148ccb936f729fc886050d` merged onto `93eb98f7d6af48bdef1cefba4084a3620ec2aae5` on 2026-09-08. The automatic merge preserved all 33 changed product/test paths exactly as reviewed, including removal of the older separate curve editor. One later test-only correction is described below; production source remains identical to the accepted worker.
+
+The unified workspace provides indexed lanes, bounded dense key/curve views, shared snapping, native keyboard/pointer editing and stable pointer capture through dense rebucketing. Preview replacement retains the Animation gesture's activation order, so refreshing an older draft cannot cover a newer title, mask, tracking or grading preview. Grading cancels when transport starts moving and revalidates after cleanup before committing. The existing title facade suite is preserved; separate tests exercise the actual title/Animation owners and all-five-owner reset.
+
+Accepted issue-branch native evidence remains scoped to its observed sources: 34 gesture cases and 13 editing cases at `75b89ef`, followed by four large-document checkpoints at product `1537d5e`. The large run records native capture/commit/undo and bounded displayed glyphs; exact all-key moves additionally have component coverage. No wall-time performance threshold, decoded pixel/PCM or final combined browser pass is inferred from these runs. Original failed attempts and qualifications remain in the issue-owned evidence.
+
+## Combined validation
+
+The first nine suites passed 147 tests. Five additional integration suites passed 120 tests and exposed one stale error-message expectation in `animationLaneIndex.test.ts`: its fixture has a missing effect owner, so the canonical resolver reports that missing owner before title-stage eligibility. The supervisor changed only the test title and expected message, retaining the unavailable status. All six tests in that affected suite then passed. Across the fourteen suites, all 268 current assertions are qualified; the canonical runner's 17 checks passed on successful invocations. Logs retain the original failure and the focused correction separately. The initial command included a nonexistent tracking-test path; the actual `maskMotionTrackingController.test.ts` was included in the additional five-suite run.
+
+Production TypeScript/Vite build and lint pass on the identical product source; the later assertion-only correction does not change application code. The build retains its existing chunk-size advisory. A supervisor command initially built the unchanged root checkout; that log is retained outside this evidence as `milestone9-animation-g3-unintended-baseline-build.log` and contributes no integration acceptance. The recorded build is from this integration worktree. Full suite, final production audit and shared mixed browser/export checks remain open.
+
+Exact original streams are in [the raw log archive manifest](animation-g3-integration/manifest.json), separately hashed from whitespace-normalized readable copies. No issue closure, push or PR is implied by this local integration.

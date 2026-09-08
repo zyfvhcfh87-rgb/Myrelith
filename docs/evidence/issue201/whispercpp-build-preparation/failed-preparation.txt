@@ -1,0 +1,10 @@
+{"label": "python-version", "command": ["/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/python/python-3.13.3-0/bin/python3.13", "--version"], "timeoutSeconds": 30, "startedAt": "2026-09-08T16:47:18Z", "pid": 85237, "processGroup": 85237, "exitCode": 0, "remainingGroupTerminated": false, "elapsedSeconds": 0.386, "logBytes": 14, "logSha256": "466d56409acd0196aa49258a5892f36ee5da8580e74ee5e3a7f7d81d9d9f5b78"}
+{"label": "node-version", "command": ["/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/node/node-v24.19.0-darwin-arm64/bin/node", "--no-expose-wasm", "--version"], "timeoutSeconds": 30, "startedAt": "2026-09-08T16:47:19Z", "pid": 85238, "processGroup": 85238, "exitCode": 9, "remainingGroupTerminated": false, "elapsedSeconds": 0.899, "logBytes": 180, "logSha256": "c5bcfce424e00662098afacba3820ac3d152e22db715ea30c3e2267ba91b028b"}
+Traceback (most recent call last):
+  File "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/private-build.py", line 170, in <module>
+    prepare() if args.prepare else build()
+  File "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/private-build.py", line 128, in prepare
+    output = run(label, command, 30, env)
+  File "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/private-build.py", line 87, in run
+    raise RuntimeError('Stopped after unsuccessful/unfinished command: ' + label)
+RuntimeError: Stopped after unsuccessful/unfinished command: node-version

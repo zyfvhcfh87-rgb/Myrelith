@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --run src/app/captionReviewController.test.ts src/app/captionStyleReview.test.ts src/app/captionAdmission.test.ts src/app/captionReentrancy.test.ts src/app/captionFileController.test.ts src/domain/captionBatch.test.ts src/domain/captionStyle.test.ts src/test/architecture.test.ts --maxWorkers=2
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201
+
+
+ Test Files  8 passed (8)
+      Tests  124 passed (124)
+   Start at  22:38:12
+   Duration  2.45s (transform 438ms, setup 152ms, import 1.47s, tests 1.21s, environment 1.61s)
+
+✔ cold samples each use and close a fresh BrowserContext (0.668916ms)
+✔ source identity rejects end-of-run drift (0.163833ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (218.074333ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (128.180792ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.307417ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.721125ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.114625ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.242417ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.126375ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.093375ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.235334ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.530583ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.758167ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.104167ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.151792ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.168416ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.111916ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 534.58075

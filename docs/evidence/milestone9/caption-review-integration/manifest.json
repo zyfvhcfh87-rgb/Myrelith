@@ -1,0 +1,46 @@
+{
+  "sourceSha": "078be7be7c9e64caee554dfbc8afba15fd9badc3",
+  "baseSha": "580de54f85c877d1d746c9a5b201b1aa4ac3ef4d",
+  "focusedFiles": 26,
+  "focusedTests": 467,
+  "runnerChecks": 17,
+  "productionBuild": "passed",
+  "lint": "passed",
+  "initialDiff": "failed only whitespace; exact stream retained",
+  "finalDiff": "passed after original-preserving whitespace normalization",
+  "archive": {
+    "path": "raw-logs.tar.gz",
+    "bytes": 3333,
+    "sha256": "d9e805370caed8252e277a4fe9a669bf9cf4c64c581c80b05c38e8eb464afe96"
+  },
+  "logs": [
+    {
+      "path": "milestone9-caption-review-integration-tests.log",
+      "rawBytes": 2957,
+      "rawSha256": "b62a5a2dfb9266b0b522044420c8e45ca0ca0c179746ef06568125880c4bc7f5",
+      "readableBytes": 2957,
+      "readableSha256": "b62a5a2dfb9266b0b522044420c8e45ca0ca0c179746ef06568125880c4bc7f5"
+    },
+    {
+      "path": "milestone9-caption-review-integration-build.log",
+      "rawBytes": 4627,
+      "rawSha256": "42d7b98ed5b2c5275a64d92ebf55eef04ac2bbab18ec579f0e8136537a2f6ebf",
+      "readableBytes": 4626,
+      "readableSha256": "533fb217b9fe036f61e917938908807af82643c14e9805763c3ecd2be6d4096f"
+    },
+    {
+      "path": "milestone9-caption-review-integration-lint.log",
+      "rawBytes": 41,
+      "rawSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "readableBytes": 40,
+      "readableSha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c"
+    },
+    {
+      "path": "milestone9-caption-review-integration-diff.log",
+      "rawBytes": 1507,
+      "rawSha256": "b355421d41ed6e4ba2569f1d4af184e040e9c7c1dfdfb47e9e0d74fbdf0b0a5d",
+      "readableBytes": 1502,
+      "readableSha256": "0146c347d475feae7c246fa3c7af779c434509fcc9cc03755120223c202690dc"
+    }
+  ]
+}

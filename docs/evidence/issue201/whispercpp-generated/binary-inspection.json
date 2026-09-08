@@ -1,0 +1,1550 @@
+{
+  "bytes": 1198861,
+  "sections": [
+    {
+      "id": 1,
+      "offset": 11,
+      "bytes": 747
+    },
+    {
+      "id": 2,
+      "offset": 761,
+      "bytes": 360
+    },
+    {
+      "id": 3,
+      "offset": 1124,
+      "bytes": 1311
+    },
+    {
+      "id": 4,
+      "offset": 2437,
+      "bytes": 7
+    },
+    {
+      "id": 5,
+      "offset": 2446,
+      "bytes": 6
+    },
+    {
+      "id": 6,
+      "offset": 2454,
+      "bytes": 14
+    },
+    {
+      "id": 7,
+      "offset": 2471,
+      "bytes": 131
+    },
+    {
+      "id": 9,
+      "offset": 2605,
+      "bytes": 2183
+    },
+    {
+      "id": 12,
+      "offset": 4790,
+      "bytes": 2
+    },
+    {
+      "id": 10,
+      "offset": 4796,
+      "bytes": 1053581
+    },
+    {
+      "id": 11,
+      "offset": 1058381,
+      "bytes": 140480
+    }
+  ],
+  "types": 91,
+  "imports": [
+    {
+      "module": "a",
+      "name": "a",
+      "kind": 0,
+      "typeIndex": 15,
+      "parameters": [],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "b",
+      "kind": 0,
+      "typeIndex": 3,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "c",
+      "kind": 0,
+      "typeIndex": 7,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "d",
+      "kind": 0,
+      "typeIndex": 0,
+      "parameters": [
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "e",
+      "kind": 0,
+      "typeIndex": 4,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "f",
+      "kind": 0,
+      "typeIndex": 6,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "g",
+      "kind": 0,
+      "typeIndex": 0,
+      "parameters": [
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "h",
+      "kind": 0,
+      "typeIndex": 11,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "i",
+      "kind": 0,
+      "typeIndex": 9,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "j",
+      "kind": 0,
+      "typeIndex": 2,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "k",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "l",
+      "kind": 0,
+      "typeIndex": 8,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "m",
+      "kind": 0,
+      "typeIndex": 10,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "n",
+      "kind": 0,
+      "typeIndex": 45,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i64"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "o",
+      "kind": 0,
+      "typeIndex": 14,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "p",
+      "kind": 0,
+      "typeIndex": 46,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i64",
+        "i64"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "q",
+      "kind": 0,
+      "typeIndex": 6,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "r",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "s",
+      "kind": 0,
+      "typeIndex": 17,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "t",
+      "kind": 0,
+      "typeIndex": 12,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "u",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "v",
+      "kind": 0,
+      "typeIndex": 24,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i64"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "w",
+      "kind": 0,
+      "typeIndex": 47,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i64",
+        "i64",
+        "i64"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "x",
+      "kind": 0,
+      "typeIndex": 13,
+      "parameters": [],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "y",
+      "kind": 0,
+      "typeIndex": 48,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "z",
+      "kind": 0,
+      "typeIndex": 19,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "A",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "B",
+      "kind": 0,
+      "typeIndex": 16,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "C",
+      "kind": 0,
+      "typeIndex": 25,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "D",
+      "kind": 0,
+      "typeIndex": 49,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "E",
+      "kind": 0,
+      "typeIndex": 5,
+      "parameters": [
+        "i32",
+        "i32",
+        "i64"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "F",
+      "kind": 0,
+      "typeIndex": 50,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "f32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "G",
+      "kind": 0,
+      "typeIndex": 51,
+      "parameters": [],
+      "results": [
+        "f64"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "H",
+      "kind": 0,
+      "typeIndex": 26,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "f64"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "I",
+      "kind": 0,
+      "typeIndex": 52,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "f64"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "J",
+      "kind": 0,
+      "typeIndex": 53,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "f32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "K",
+      "kind": 0,
+      "typeIndex": 13,
+      "parameters": [],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "L",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "M",
+      "kind": 0,
+      "typeIndex": 11,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "N",
+      "kind": 0,
+      "typeIndex": 4,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "O",
+      "kind": 0,
+      "typeIndex": 32,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "f32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "P",
+      "kind": 0,
+      "typeIndex": 54,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "f32",
+        "f32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "Q",
+      "kind": 0,
+      "typeIndex": 55,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i64",
+        "i64",
+        "i64",
+        "i64"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "R",
+      "kind": 0,
+      "typeIndex": 20,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "S",
+      "kind": 0,
+      "typeIndex": 7,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "T",
+      "kind": 0,
+      "typeIndex": 15,
+      "parameters": [],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "U",
+      "kind": 0,
+      "typeIndex": 1,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "V",
+      "kind": 0,
+      "typeIndex": 15,
+      "parameters": [],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "W",
+      "kind": 0,
+      "typeIndex": 56,
+      "parameters": [
+        "i32",
+        "i64",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "X",
+      "kind": 0,
+      "typeIndex": 3,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "Y",
+      "kind": 0,
+      "typeIndex": 3,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "Z",
+      "kind": 0,
+      "typeIndex": 11,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "_",
+      "kind": 0,
+      "typeIndex": 4,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "$",
+      "kind": 0,
+      "typeIndex": 11,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "aa",
+      "kind": 0,
+      "typeIndex": 33,
+      "parameters": [
+        "i32",
+        "i64",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "ba",
+      "kind": 0,
+      "typeIndex": 13,
+      "parameters": [],
+      "results": []
+    },
+    {
+      "module": "a",
+      "name": "ca",
+      "kind": 0,
+      "typeIndex": 57,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i64",
+        "i64",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "da",
+      "kind": 0,
+      "typeIndex": 58,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32",
+        "i32",
+        "i64",
+        "i64",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "module": "a",
+      "name": "ea",
+      "kind": 0,
+      "typeIndex": 3,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    }
+  ],
+  "exports": [
+    {
+      "name": "fa",
+      "kind": 2,
+      "index": 0
+    },
+    {
+      "name": "ga",
+      "kind": 0,
+      "index": 1367,
+      "parameters": [],
+      "results": []
+    },
+    {
+      "name": "ha",
+      "kind": 0,
+      "index": 1366,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "ia",
+      "kind": 0,
+      "index": 1114,
+      "parameters": [],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "ja",
+      "kind": 0,
+      "index": 998,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "ka",
+      "kind": 0,
+      "index": 922,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "la",
+      "kind": 0,
+      "index": 805,
+      "parameters": [],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "ma",
+      "kind": 0,
+      "index": 757,
+      "parameters": [],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "na",
+      "kind": 0,
+      "index": 1365,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "f64"
+      ]
+    },
+    {
+      "name": "oa",
+      "kind": 0,
+      "index": 1285,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "f64"
+      ]
+    },
+    {
+      "name": "pa",
+      "kind": 0,
+      "index": 1208,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "qa",
+      "kind": 0,
+      "index": 1154,
+      "parameters": [],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "ra",
+      "kind": 0,
+      "index": 1143,
+      "parameters": [],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "sa",
+      "kind": 1,
+      "index": 0
+    },
+    {
+      "name": "ta",
+      "kind": 0,
+      "index": 807,
+      "parameters": [
+        "i32",
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "name": "ua",
+      "kind": 0,
+      "index": 806,
+      "parameters": [
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "name": "va",
+      "kind": 0,
+      "index": 1150,
+      "parameters": [
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "name": "wa",
+      "kind": 0,
+      "index": 1149,
+      "parameters": [],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "xa",
+      "kind": 0,
+      "index": 1172,
+      "parameters": [
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "name": "ya",
+      "kind": 0,
+      "index": 1173,
+      "parameters": [
+        "i32"
+      ],
+      "results": []
+    },
+    {
+      "name": "za",
+      "kind": 0,
+      "index": 1158,
+      "parameters": [
+        "i32",
+        "i32",
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    },
+    {
+      "name": "Aa",
+      "kind": 0,
+      "index": 1157,
+      "parameters": [
+        "i32"
+      ],
+      "results": [
+        "i32"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "type": "funcref",
+      "flags": 1,
+      "initial": 1162,
+      "maximum": 1162
+    }
+  ],
+  "memories": [
+    {
+      "flags": 1,
+      "initial": 1024,
+      "maximum": 8192
+    }
+  ],
+  "globals": [
+    {
+      "type": "i32",
+      "mutable": 1,
+      "initial": 5923760
+    },
+    {
+      "type": "i32",
+      "mutable": 1,
+      "initial": 0
+    }
+  ],
+  "exportedBodies": [
+    {
+      "name": "ga",
+      "index": 1367,
+      "bytes": 17850,
+      "prefix": [
+        4,
+        10,
+        127,
+        3,
+        123,
+        1,
+        126,
+        4,
+        125,
+        35,
+        0,
+        65,
+        16,
+        107,
+        34,
+        3
+      ]
+    },
+    {
+      "name": "ha",
+      "index": 1366,
+      "bytes": 65,
+      "prefix": [
+        1,
+        1,
+        127,
+        2,
+        64,
+        32,
+        0,
+        65,
+        153,
+        168,
+        225,
+        20,
+        71,
+        13,
+        0,
+        65
+      ]
+    },
+    {
+      "name": "ia",
+      "index": 1114,
+      "bytes": 581,
+      "prefix": [
+        1,
+        4,
+        127,
+        35,
+        0,
+        65,
+        64,
+        106,
+        34,
+        2,
+        36,
+        0,
+        65,
+        164,
+        127,
+        33
+      ]
+    },
+    {
+      "name": "ja",
+      "index": 998,
+      "bytes": 102,
+      "prefix": [
+        1,
+        1,
+        127,
+        2,
+        64,
+        32,
+        0,
+        65,
+        129,
+        166,
+        29,
+        107,
+        65,
+        191,
+        230,
+        98
+      ]
+    },
+    {
+      "name": "ka",
+      "index": 922,
+      "bytes": 1244,
+      "prefix": [
+        3,
+        6,
+        127,
+        1,
+        124,
+        4,
+        126,
+        35,
+        0,
+        65,
+        208,
+        3,
+        107,
+        34,
+        1,
+        36
+      ]
+    },
+    {
+      "name": "la",
+      "index": 805,
+      "bytes": 9,
+      "prefix": [
+        0,
+        65,
+        244,
+        229,
+        8,
+        40,
+        2,
+        0,
+        11
+      ]
+    },
+    {
+      "name": "ma",
+      "index": 757,
+      "bytes": 9,
+      "prefix": [
+        0,
+        65,
+        240,
+        229,
+        8,
+        40,
+        2,
+        0,
+        11
+      ]
+    },
+    {
+      "name": "na",
+      "index": 1365,
+      "bytes": 54,
+      "prefix": [
+        1,
+        1,
+        124,
+        68,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        240,
+        191,
+        33,
+        1,
+        2,
+        64
+      ]
+    },
+    {
+      "name": "oa",
+      "index": 1285,
+      "bytes": 54,
+      "prefix": [
+        1,
+        1,
+        124,
+        68,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        240,
+        191,
+        33,
+        1,
+        2,
+        64
+      ]
+    },
+    {
+      "name": "pa",
+      "index": 1208,
+      "bytes": 71,
+      "prefix": [
+        1,
+        1,
+        127,
+        2,
+        64,
+        32,
+        0,
+        65,
+        0,
+        72,
+        13,
+        0,
+        32,
+        0,
+        65,
+        240
+      ]
+    },
+    {
+      "name": "qa",
+      "index": 1154,
+      "bytes": 114,
+      "prefix": [
+        1,
+        1,
+        127,
+        65,
+        164,
+        127,
+        33,
+        0,
+        65,
+        224,
+        229,
+        8,
+        45,
+        0,
+        0,
+        4
+      ]
+    },
+    {
+      "name": "ra",
+      "index": 1143,
+      "bytes": 34,
+      "prefix": [
+        0,
+        65,
+        232,
+        229,
+        8,
+        40,
+        2,
+        0,
+        65,
+        0,
+        71,
+        65,
+        228,
+        229,
+        8,
+        40
+      ]
+    },
+    {
+      "name": "ta",
+      "index": 807,
+      "bytes": 31,
+      "prefix": [
+        0,
+        65,
+        200,
+        178,
+        41,
+        40,
+        2,
+        0,
+        69,
+        4,
+        64,
+        65,
+        204,
+        178,
+        41,
+        32
+      ]
+    },
+    {
+      "name": "ua",
+      "index": 806,
+      "bytes": 6,
+      "prefix": [
+        0,
+        32,
+        0,
+        36,
+        1,
+        11
+      ]
+    },
+    {
+      "name": "va",
+      "index": 1150,
+      "bytes": 6,
+      "prefix": [
+        0,
+        32,
+        0,
+        36,
+        0,
+        11
+      ]
+    },
+    {
+      "name": "wa",
+      "index": 1149,
+      "bytes": 4,
+      "prefix": [
+        0,
+        35,
+        0,
+        11
+      ]
+    },
+    {
+      "name": "xa",
+      "index": 1172,
+      "bytes": 114,
+      "prefix": [
+        1,
+        1,
+        127,
+        2,
+        64,
+        2,
+        64,
+        32,
+        0,
+        69,
+        13,
+        0,
+        32,
+        0,
+        65,
+        24
+      ]
+    },
+    {
+      "name": "ya",
+      "index": 1173,
+      "bytes": 25,
+      "prefix": [
+        0,
+        32,
+        0,
+        4,
+        64,
+        32,
+        0,
+        65,
+        24,
+        107,
+        34,
+        0,
+        32,
+        0,
+        40,
+        2
+      ]
+    },
+    {
+      "name": "za",
+      "index": 1158,
+      "bytes": 67,
+      "prefix": [
+        1,
+        1,
+        127,
+        35,
+        0,
+        65,
+        16,
+        107,
+        34,
+        3,
+        36,
+        0,
+        32,
+        3,
+        32,
+        2
+      ]
+    },
+    {
+      "name": "Aa",
+      "index": 1157,
+      "bytes": 60,
+      "prefix": [
+        1,
+        1,
+        127,
+        2,
+        64,
+        32,
+        0,
+        65,
+        20,
+        107,
+        40,
+        2,
+        0,
+        34,
+        1,
+        69
+      ]
+    }
+  ],
+  "definedFunctions": 1309,
+  "functionInstructionsValidated": false,
+  "wasmExecuted": false
+}

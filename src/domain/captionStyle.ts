@@ -57,7 +57,7 @@ const VALIDATORS = {
   marginYPermille: finiteRange(0, 250),
 } satisfies Record<keyof CaptionStyleV1, (value: CaptionStyleValue) => boolean>
 
-function knownKey(value: string): value is keyof CaptionStyleV1 {
+export function isCaptionStyleField(value: string): value is keyof CaptionStyleV1 {
   return Object.hasOwn(VALIDATORS, value)
 }
 
@@ -73,10 +73,10 @@ export function inspectCaptionStyle(value: unknown): CaptionStyleInspection {
   const checked = Object.entries(params)
   const bounded = { descriptor, serializedUtf8Bytes }
   if (version !== 1) return { kind: 'unavailable', reason: `Caption style version ${version} is unavailable`, ...bounded }
-  const unknown = checked.filter(([key]) => !knownKey(key)).map(([key]) => key).sort()
+  const unknown = checked.filter(([key]) => !isCaptionStyleField(key)).map(([key]) => key).sort()
   if (unknown.length) return { kind: 'unavailable', reason: `Caption style fields are unavailable: ${unknown.join(', ')}`, ...bounded }
   for (const [key, parameter] of checked) {
-    if (!knownKey(key) || !VALIDATORS[key](parameter)) {
+    if (!isCaptionStyleField(key) || !VALIDATORS[key](parameter)) {
       return { kind: 'invalid', reason: `Caption style ${key} has an unsupported value` }
     }
   }

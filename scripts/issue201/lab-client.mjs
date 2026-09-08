@@ -1,3 +1,4 @@
+import { modelCachePayload, verifyModelBundle } from './composite-model.mjs'
 // Lab-only controller for observable acquisition/cache/worker/project generations.
 const manifest = await (await fetch('/manifest.json')).json()
 const events = []
@@ -6,11 +7,8 @@ const record = (event) => {
   events.push({ at: performance.now(), ...event })
 }
 const digest = async (bytes) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (b) => b.toString(16).padStart(2, '0')).join('')
-const modelIdentity = await digest(new TextEncoder().encode(JSON.stringify({ model: manifest.model.id,
-  revision: manifest.model.revision, files: manifest.model.files.map(({ path, bytes, sha256 }) => ({ path, bytes, sha256 })),
-  runtime: manifest.runtime.transformerVersion, ort: manifest.runtime.ortVersion,
-  artifacts: manifest.runtime.artifacts?.map(({ name, sha256 }) => ({ name, sha256 })),
-  sessionOptions: manifest.runtime.sessionOptions, encoderFetchPolicy: manifest.runtime.encoderFetchPolicy })))
+await verifyModelBundle(manifest.model, digest)
+const modelIdentity = await digest(new TextEncoder().encode(modelCachePayload(manifest)))
 const registryName = 'myrelith-issue201-lab-registry'
 const registryKey = `${location.origin}/model-registry`
 let generation = 1
@@ -28,11 +26,13 @@ async function installedCache() {
   const response = await registry.match(registryKey)
   if (!response) throw new Error('No local speech model is installed')
   const record = await response.json()
-  if (record.identity !== modelIdentity || record.revision !== manifest.model.revision || record.bytes !== manifest.model.totalBytes) throw new Error('Model registry provenance mismatch')
+  if (record.identity !== modelIdentity || record.bundleId !== manifest.model.bundleId || record.configurationRevision !== manifest.model.configurationRevision || record.bytes !== manifest.model.totalBytes) throw new Error('Model registry provenance mismatch')
   const cache = await caches.open(record.name)
   for (const file of manifest.model.files) {
     const entry = await cache.match(file.url)
-    if (!entry || Number(entry.headers.get('content-length')) !== file.bytes || entry.headers.get('x-sha256') !== file.sha256) throw new Error('Model cache is incomplete')
+    if (!entry || Number(entry.headers.get('content-length')) !== file.bytes || entry.headers.get('x-sha256') !== file.sha256
+      || entry.headers.get('x-model-bundle') !== manifest.model.bundleId || entry.headers.get('x-source-revision') !== file.sourceRevision
+      || entry.headers.get('x-source-repository') !== file.sourceRepository || entry.headers.get('x-upstream-path') !== file.upstreamPath) throw new Error('Model cache is incomplete')
     const bytes = await entry.arrayBuffer()
     if (bytes.byteLength !== file.bytes || await digest(bytes) !== file.sha256) throw new Error('Model cache digest mismatch')
   }
@@ -82,7 +82,7 @@ async function installModel({ byteLimit = manifest.thresholds.modelCacheByteLimi
         if (count !== file.bytes || await digest(bytes) !== file.sha256) throw new Error('Model download digest differs')
         token.abort.signal.throwIfAborted()
         record({ type: 'cache-write', file: file.path })
-        await candidate.put(file.url, new Response(blob, { headers: { 'content-length': String(count), 'x-sha256': file.sha256 } }))
+        await candidate.put(file.url, new Response(blob, { headers: { 'content-length': String(count), 'x-sha256': file.sha256, 'x-model-bundle': manifest.model.bundleId, 'x-source-revision': file.sourceRevision, 'x-source-repository': file.sourceRepository, 'x-upstream-path': file.upstreamPath } }))
         if (pauseAt === 'cache-write') {
           phase = 'cache-write-pause'
           await new Promise((resolve) => setTimeout(resolve, pauseMs))
@@ -95,7 +95,7 @@ async function installModel({ byteLimit = manifest.thresholds.modelCacheByteLimi
       if (token.generation !== generation) throw new Error('Project changed before model publication')
       phase = 'cache-commit'
       record({ type: 'cache-commit' })
-      await registry.put(registryKey, new Response(JSON.stringify({ name, identity: modelIdentity, revision: manifest.model.revision, bytes: bytesTotal })))
+      await registry.put(registryKey, new Response(JSON.stringify({ name, identity: modelIdentity, bundleId: manifest.model.bundleId, configurationRevision: manifest.model.configurationRevision, bytes: bytesTotal })))
       if (pauseAt === 'cache-commit') {
         phase = 'cache-commit-pause'
         await new Promise((resolve) => setTimeout(resolve, pauseMs))
@@ -236,7 +236,7 @@ async function transcribeFixture(name, { seconds, language, repeatSeconds = null
     }
     worker.onerror = (event) => fail(new Error(event.message))
     worker.onmessageerror = () => fail(new Error('Worker message decoding failed'))
-    worker.postMessage({ type: 'initialize', manifest, modelCache: installed.name })
+    worker.postMessage({ type: 'initialize', manifest, modelCache: installed.name, modelIdentity })
   })
 }
 

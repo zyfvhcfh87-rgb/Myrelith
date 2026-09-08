@@ -2,6 +2,13 @@
 
 Status: **static/open/held authoring and the 7/7 focused tracking browser gate accepted. Resource, performance and whole-issue acceptance remain open.**
 
+The authorized shared resource implementation is ready for source review:
+[pixel-work admission and immediate plugin cleanup](evidence/issue198/resource-source-gate.md).
+Its focused gate passes 406 tests across 18 files plus 17 runner checks. The
+[next measurement protocol](evidence/issue198/resource-performance-protocol.md)
+is a proposal; executable harness review and an exclusive grant precede any
+resource, performance or export-stress run.
+
 Prepared on `codex/issue198` from `ce91074c276ca6892a74addb7dd673b9a19c7eeb`.
 The Milestone 9 orchestrator owns approval, migration ordering, integration and
 publication. The orchestrator approved the independent pure gate before shared

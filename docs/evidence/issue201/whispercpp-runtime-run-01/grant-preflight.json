@@ -1,0 +1,8 @@
+{
+  "at": "2026-09-08T20:22:29.308912+00:00",
+  "head": "73395b5e39df01b6e19b0fb847cc2079d3f437d6",
+  "checkpointSha256": "074d223786a46d3d58d094b23e1b26da1a218f927524cb78bf42919089b810e0",
+  "unrelatedCaptionDrafts": " M src/app/captionEditingController.ts\n M src/app/captionStyleReview.test.ts\n M src/domain/captionStyle.ts\n?? src/app/captionReviewController.test.ts\n?? src/app/captionReviewController.ts\n?? src/app/captionStylePresentation.ts\n",
+  "ownedAwakeHelper": null,
+  "scope": "One exact runtime attempt granted by supervisor; no other heavy work; no retry."
+}

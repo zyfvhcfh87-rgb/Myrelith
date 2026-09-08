@@ -1,0 +1,1 @@
+wasm-opt version 132 (version_132-16-g89a81ef9b)

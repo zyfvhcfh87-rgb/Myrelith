@@ -1,0 +1,24 @@
+{
+  "status": "built-unexecuted-static-review-ready",
+  "wasmExecuted": false,
+  "artifacts": [
+    {
+      "name": "myrelith-whisper.mjs",
+      "packed": "myrelith-whisper.mjs.gz",
+      "bytes": 22350,
+      "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7",
+      "packedBytes": 5556,
+      "packedSha256": "68f30b568d3724ccfe1184920c6f1e7157c8b503290a30d15b1994698ad0447d"
+    },
+    {
+      "name": "myrelith-whisper.wasm",
+      "packed": "myrelith-whisper.wasm.gz",
+      "bytes": 1198861,
+      "sha256": "9df26c6b690de120e6f1fb5ce17a25ebb2b016a73f0477b24376f558ee00ce72",
+      "packedBytes": 386503,
+      "packedSha256": "5d54071f2d88478c3ba721f92b8220d00974ef4652f288d091fa1c297b750b78"
+    }
+  ],
+  "staticChecksPassed": true,
+  "supervisorStaticAcceptancePending": true
+}

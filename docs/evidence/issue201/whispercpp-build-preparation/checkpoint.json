@@ -1,0 +1,179 @@
+{
+  "status": "extracted-version-preparation-stopped-no-build",
+  "sourceCheckpoint": "d8a1ff4460aabee0df5113d731a2698ed5777012",
+  "integratedHead": "4d4a6c2534cf25b8db3ec653f564b38cf2a67b6e",
+  "acceptedSourceFilesUnchanged": [
+    {
+      "path": "scripts/issue201/whispercpp/01-optional-pthreads.patch",
+      "bytes": 2313,
+      "sha256": "7ea2f544fd4168e0ae3d3f86d1c2a50345da475707df39a91a8b4eaf567e6805"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/02-whole-call-token-budget.patch",
+      "bytes": 3471,
+      "sha256": "4d3e0d398bfbe5cb61a814b1ac94555efd11abeeed37ec4a50b3b4e2677937f3"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/CMakeLists.txt",
+      "bytes": 3405,
+      "sha256": "c137a6d26e981a6604d05a65e6cda3ecf612c5f5b849b161fbd6e70284d67939"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/adapter.cpp",
+      "bytes": 6827,
+      "sha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/loader-startup.test.mjs",
+      "bytes": 7036,
+      "sha256": "309830f5580afa8a60796149868a60a994b696f04feb2aff635bd52ede2f651c"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/model-format.mjs",
+      "bytes": 4193,
+      "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/myrelith-token-budget.h",
+      "bytes": 403,
+      "sha256": "e0dc2d7ec04a52e47214de3536ca479f710b6957d422260eb5bc87b7bfe9ff9b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/patch-identities.json",
+      "bytes": 1172,
+      "sha256": "74a2fb69113d229b172d073cebe6b37087bcf49999945bd3be28783922952a7b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/preparation.test.mjs",
+      "bytes": 17845,
+      "sha256": "e349acfcf38f01434b67304eefc03726789bbc37b0dccd796a7237897c751a5a"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/resident-coverage.mjs",
+      "bytes": 2809,
+      "sha256": "96114f08b414309ae94b76777327257b75d96bfa6555da96ec189d3c4a1cd7bf"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/verify-assets.mjs",
+      "bytes": 3718,
+      "sha256": "a71f77722ac54528b21fa221784ad4daf226b2bcf1d8136a85ccbd74a718efc2"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/worker-owner.mjs",
+      "bytes": 3602,
+      "sha256": "f9ae85d3fb3593ccbf219a058218ad672133b5bd3af56f75683c2a976dfe32f5"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/worker-protocol.mjs",
+      "bytes": 8077,
+      "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b"
+    }
+  ],
+  "newSourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp/extract-verified.py",
+      "bytes": 10196,
+      "sha256": "89b066e913d115ece14f4fceb317972e9667151ca667a7acbe372ed1ee31914c"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/private-build.py",
+      "bytes": 11236,
+      "sha256": "d79f773a3451e727efd0417b62c2dce4c370bffb5a3157b9246b3f59bd921fbf"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/private-build.test.mjs",
+      "bytes": 1910,
+      "sha256": "cec57efe408581ace8ce2bc2f14dbceb98cd21ce759a8967aa010b168d810551"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/deny-wasm.cjs",
+      "bytes": 467,
+      "sha256": "4c9ba6b9267a14db07ec6ed901ddde8eaef0f314b3b53aa7dd10128c4bd9f764"
+    }
+  ],
+  "evidence": [
+    {
+      "name": "extraction-inventory.json.gz",
+      "bytes": 1864139,
+      "sha256": "ba24ca7b38f5f82b909da0214bcf7983e2f693e9f1db9e63ba2967270a6f2d10"
+    },
+    {
+      "name": "node-version.json",
+      "bytes": 534,
+      "sha256": "e2b64e69876bef4aa79ffca194e558d107d627489cc859fb4d15355b9c59c44e"
+    },
+    {
+      "name": "node-version.txt",
+      "bytes": 180,
+      "sha256": "c5bcfce424e00662098afacba3820ac3d152e22db715ea30c3e2267ba91b028b"
+    },
+    {
+      "name": "private-environment.json",
+      "bytes": 2760,
+      "sha256": "8c058651f2489ab50ae960279518de52754c70f4cc9cf0fb7ec1a587ea4e6686"
+    },
+    {
+      "name": "python-version.json",
+      "bytes": 508,
+      "sha256": "6cf0b489c69b6c13b163f8b8a5564c591ab0954cf5671b8ba4d1b036ea72189d"
+    },
+    {
+      "name": "python-version.txt",
+      "bytes": 14,
+      "sha256": "466d56409acd0196aa49258a5892f36ee5da8580e74ee5e3a7f7d81d9d9f5b78"
+    },
+    {
+      "name": "slot-release.json",
+      "bytes": 318,
+      "sha256": "25f0ba64045c163a72715d25d2dd908ec829579df99fd4c68727a32397262431"
+    },
+    {
+      "name": "static-version-strings.json",
+      "bytes": 920,
+      "sha256": "aa371d11949bbe62177b8d33d8aa3b8c0258e048bca766df25c80913a3997bad"
+    },
+    {
+      "name": "extraction.txt",
+      "bytes": 2073,
+      "sha256": "5ed99534c677e3c87698aeb55533840960838f32a9b00f7904f9820a55f32f0c"
+    },
+    {
+      "name": "failed-preparation.txt",
+      "bytes": 1700,
+      "sha256": "e210d7d355edc551e96ffb8fb70dd0cda0c4dd398bab80fa69dd0a55f01bd388"
+    },
+    {
+      "name": "source-checks.txt",
+      "bytes": 5837,
+      "sha256": "5a2cb753988eb4b65b18b3bd2f31e4e51cc00635cdc154073342a2ff37b03ac4"
+    },
+    {
+      "name": "failed-private-config.txt",
+      "bytes": 753,
+      "sha256": "b318ddf9a5bb0bb4ef27fd81ca89c37c92f444e9aed19ba2fad79a9e5e38ad53"
+    },
+    {
+      "name": "final-correction-source-checks.txt",
+      "bytes": 375,
+      "sha256": "87e1844f17ee753a3e58f092d583d91371a4e1357ca13a8ed86ba2b7fadb61a1"
+    }
+  ],
+  "extractedEntries": 41729,
+  "extractedBytes": 2104027449,
+  "sourceVmPassed": 55,
+  "focusedLintWarnings": 0,
+  "pythonVersionConfirmed": "3.13.3",
+  "nodeVersionCheckFailed": {
+    "exitCode": 9,
+    "unsupportedOption": "--no-expose-wasm"
+  },
+  "proposedCorrection": "Ordinary --require preload rejects access/replacement of WebAssembly; source checked, private tool execution not resumed.",
+  "additionalUnresolvedEvidence": "Static wasm-opt string at byte 9795402: 132 (version_132-16-g89a81ef9b), different from pinned DEPS Binaryen8d546dc4. Not executed or reconciled.",
+  "configureAttempted": false,
+  "compileAttempted": false,
+  "wasmInstantiated": false,
+  "inferenceExecuted": false,
+  "slotReleased": true,
+  "linkedArtifacts": null,
+  "linkedNotices": "Pending actual build; existing full source/toolchain notice inventory retained."
+}

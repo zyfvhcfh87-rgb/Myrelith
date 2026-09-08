@@ -1,0 +1,63 @@
+{
+  "status": "source-correction-pending-version-checks-and-review",
+  "sdkVersion": "6.0.8",
+  "releaseCommit": "9d70dbe8860ccdd3595f6e6065d94bfb543ae955",
+  "releaseDependencyFile": "DEPS.tagged-release",
+  "releaseDependencyGitBlob": "23a31f3971b7321e576fe02a4723a38897429ff7",
+  "releaseDependencySha256": "c432603d34cfb31d8e84be556ae5474ccaa0edbccff0059dbf25b19ba11d0744",
+  "sourceSnapshot": "1aa74b7a00d9a0ac2542e2bbb2f4d4a3633f1092",
+  "emscriptenRevision": "aeb67926e7de656da38bc807d83050af93578758",
+  "llvmRevision": "4bfd08c2d769736841ae4f5705d76fa6daa39027",
+  "binaryenRevision": "89a81ef9b72ef1c677be6be89178d19598e5760f",
+  "expectedBinaryenVersionStamp": "132 (version_132-16-g89a81ef9b)",
+  "rollingDeps": {
+    "llvmRevision": "c0125a7bf833b6cf0d5b4a085b63094e0893c85a",
+    "binaryenRevision": "8d546dc4aea1c3e81e77643f1ed0dea1a649d21d"
+  },
+  "bundleSha256": "63ec9acba14b67a925f7da9730395c84ce6ca1f5412ebcc4149b40fc43228385",
+  "bundleBytes": 273726956,
+  "proof": [
+    {
+      "file": "tagged-release-deps.txt",
+      "bytes": 5547,
+      "sha256": "c432603d34cfb31d8e84be556ae5474ccaa0edbccff0059dbf25b19ba11d0744",
+      "gitBlob": "23a31f3971b7321e576fe02a4723a38897429ff7"
+    },
+    {
+      "file": "release-readme.txt",
+      "bytes": 3569,
+      "sha256": "78391ba2a2b56c1065dd0aaba0d0a5cf73a60168f49d17c0a67b72c0e2a0d7a0",
+      "gitBlob": "015de4dfff6d523fe9c1432c4505611a71aaad0b"
+    },
+    {
+      "file": "build.py.txt",
+      "bytes": 66915,
+      "sha256": "498c402f2cd04b620670c36000ac39303561a6fdc7e248dd844cc8214c32bdaa",
+      "gitBlob": "61bba4e7e4b6bdf26c5f279f1736fb918b69546b"
+    },
+    {
+      "file": "buildbot.py.txt",
+      "bytes": 3862,
+      "sha256": "2b90dcd6b50a24169d13665632b840c8b6cec1a759ee8e82f2645e23a52443cd",
+      "gitBlob": "6a09333c744e30c20a7716b69214f40afe25e5a1"
+    },
+    {
+      "file": "create_release_candidate.py.txt",
+      "bytes": 4102,
+      "sha256": "a2286cdc7e4fff500071189a0f631576ccd50ea1163a93d1036a25ba7fc02ef7",
+      "gitBlob": "4dbf1a7adfd79e789a4070513b930adb041a980d"
+    },
+    {
+      "file": "release-info.py.txt",
+      "bytes": 12268,
+      "sha256": "2c9238a6ad286215553710689cf841bf9b4d0f9a1d2474b27a6cb538766f7d60",
+      "gitBlob": "e8794a4ea18cd8ce0e5793ad71a395051731a988"
+    },
+    {
+      "file": "cloud.py.txt",
+      "bytes": 2269,
+      "sha256": "89f2021ff40c50acc2e67423b4b9a1658f29e9a13e6ba137e8f80ddc801caa33",
+      "gitBlob": "ea515df17e2c63be7ca6b0f11df4dc5c02318cde"
+    }
+  ]
+}

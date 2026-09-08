@@ -24,3 +24,9 @@ explicitly separates it from ordinary current-schema fixtures; the architecture
 guard itself is unchanged. That intermediate result is retained in `after.log`.
 The complete final eighteen-check result and production build log are retained
 alongside a hash manifest. This focused pass does not qualify the full suite.
+
+The four original log byte streams are also preserved in `raw-logs.tar.gz`,
+with their original hashes unchanged in the checkpoint. Readable `.log` copies
+normalize trailing whitespace and blank lines at EOF; separate copy hashes make
+the distinction explicit. This packaging correction makes the complete milestone
+diff pass whitespace checks and changes no source, tests, or validation result.

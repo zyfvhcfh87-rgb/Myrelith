@@ -1,0 +1,11 @@
+✔ private build guard rejects all WebAssembly access before any API call (1.113458ms)
+✔ private build guard cannot be replaced, deleted or reconfigured (0.32125ms)
+✔ private build configuration uses an explicit preload and rejecting emulator (0.082792ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 30.849208

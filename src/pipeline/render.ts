@@ -1,5 +1,7 @@
 import { ColorGradingExecutionError, ColorGradingCancelledError, type ColorGradingFrame } from './colorGradingRuntime'
 import { colorGradingPlanError, colorGradingPlanNeedsPixels } from '../domain/colorGradingBudget'
+import { videoPixelWorkBudget } from '../domain/videoPixelWorkBudget'
+import { renderWorkSurfaceBudget } from '../domain/renderSurfaceBudget'
 import { EMPTY_COLOR_GRADING_CONTEXT, isColorGradingPixel, isColorGradingType } from '../domain/colorGradingEffects'
 /**
  * pipeline/render.ts — compositeFrame(doc, frame): draw one timeline frame.
@@ -37,7 +39,7 @@ import { EMPTY_COLOR_GRADING_CONTEXT, isColorGradingPixel, isColorGradingType } 
  *   Preview and export consume that same
  *   ordered plan; this compositor never reconstructs groups by adjacency.
  */
-import { resolveVideoBusEffects, videoBusRenderBudgetError } from '../domain/videoBusStage'
+import { resolveVideoBusEffects } from '../domain/videoBusStage'
 import { titleCompositionBudgetError } from '../domain/titleComposition'
 
 import type {
@@ -52,7 +54,7 @@ import type {
   Transform,
 } from '../domain/schema'
 import type { PresentationProfile } from '../domain/presentationProfile'
-import { wrapTextLines } from '../domain/textLayout'
+import { textLayoutMetrics, wrapTextLines } from '../domain/textLayout'
 import type { TitlePaintElement } from '../domain/titleComposition'
 import { textPropsValidationError } from '../domain/textOverlay'
 import {
@@ -287,18 +289,49 @@ export async function compositeFrame(
   if (titleBudgetError) throw new RangeError(titleBudgetError)
   grading?.check()
   const gradingContext = grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT
+  const geometry = { surfaceWidth: presentation?.outputWidth ?? doc.width,
+    surfaceHeight: presentation?.outputHeight ?? doc.height, projectWidth: doc.width, projectHeight: doc.height }
+  const pixelWork = videoPixelWorkBudget(plan, geometry, gradingContext)
+  // A preceding frame can leave the grading cache alive even when this frame
+  // executes only masks/spatial effects. Count that actual retained owner too.
+  const additionalOwnedBytes = pixelWork.peakAdditionalBytes
+    + Math.max(0, (grading?.runtime.ledger().bytes ?? 0) - pixelWork.gradingCacheBytes)
+  const workBudget = renderWorkSurfaceBudget(geometry.surfaceWidth, geometry.surfaceHeight, {
+    additionalOwnedBytes, includeExportReadback: presentation?.reason === 'export',
+  })
+  const workError = pixelWork.reason ?? workBudget.reason
+  if (workError) throw new VideoEffectStageExecutionError(workError)
+  // Pin all resolved child stacks before provider surfaces or readback exist.
+  // The lens owner also checks its already-retained source allocation here and
+  // rechecks exact new source dimensions immediately before remapping.
+  const releaseFrameWork = lensRemapProvider?.reserveFrameWork?.({
+    additionalOwnedBytes,
+    outputWidth: geometry.surfaceWidth, outputHeight: geometry.surfaceHeight,
+    includeExportReadback: presentation?.reason === 'export',
+  })
+  try {
+    return await compositeAdmittedFrame(doc, plan, ctx, source, transitionSurfaceProvider,
+      presentation, lensRemapProvider, videoEffectStageExecutor, grading)
+  } finally { releaseFrameWork?.() }
+}
+
+async function compositeAdmittedFrame(
+  doc: TimelineDoc,
+  plan: VideoCompositionPlan,
+  ctx: Composite2D,
+  source: FrameSource,
+  transitionSurfaceProvider: TransitionSurfaceProvider,
+  presentation?: PresentationProfile,
+  lensRemapProvider?: LensRemapProvider | null,
+  videoEffectStageExecutor?: VideoEffectStageExecutor | null,
+  grading?: ColorGradingFrame,
+): Promise<CompositeResult> {
+  const gradingContext = grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT
   const gradingPixels = colorGradingPlanNeedsPixels(plan, gradingContext)
   const gradingError = colorGradingPlanError(plan, presentation?.outputWidth ?? doc.width, presentation?.outputHeight ?? doc.height,
-    gradingContext, grading?.policy ?? 'fail', !gradingPixels || supportsCanvasEffectPixels(transitionSurfaceProvider.get().leg.ctx), doc.width, doc.height)
+    gradingContext, grading?.policy ?? 'fail', !gradingPixels || supportsCanvasEffectPixels(transitionSurfaceProvider.get().leg.ctx))
   if (gradingError) throw new ColorGradingExecutionError(gradingError)
   if (!gradingPixels) { grading?.runtime.clearCache(); grading = undefined }
-  const hasBuses = plan.items.some((item) => item.kind === 'video-bus'
-    ? resolveVideoBusEffects(item.effects, true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT).pixelEffects.length > 0
-    : 'trackEffects' in item && resolveVideoBusEffects(item.trackEffects ?? [], true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT).pixelEffects.length > 0)
-  if (hasBuses) {
-    const error = videoBusRenderBudgetError(presentation?.outputWidth ?? doc.width, presentation?.outputHeight ?? doc.height, doc.width, doc.height)
-    if (error) throw new VideoEffectStageExecutionError(error)
-  }
   // Phase 1 — collect what needs pixels, bottom-to-top.
   const requests = videoCompositionRequests(plan)
 
@@ -520,7 +553,6 @@ export async function compositeFrame(
 
 const MAX_CACHED_TEXT_LAYOUTS_PER_CONTEXT = 64
 const MAX_CACHED_TEXT_BYTES_PER_CONTEXT = 8 * 1024 * 1024
-const MAX_RENDERED_TEXT_LINES = 512
 interface TextLayoutCache {
   readonly owner: WeakRef<TimelineDoc>
   readonly entries: Map<string, { readonly lines: readonly string[]; readonly bytes: number }>
@@ -538,13 +570,7 @@ function textLines(
   text: TextProps,
   doc: TimelineDoc,
 ): readonly string[] {
-  const lineHeight = Math.ceil(text.fontSizePx * 1.2)
-  const innerWidth = text.boxWidthPx - text.paddingPx * 2
-  const innerHeight = text.boxHeightPx - text.paddingPx * 2
-  const maxLines = Math.max(
-    1,
-    Math.min(MAX_RENDERED_TEXT_LINES, Math.floor(innerHeight / lineHeight)),
-  )
+  const { innerWidth, maxLines } = textLayoutMetrics(text)
   const key = [
     text.content,
     text.fontFamily,
@@ -630,7 +656,7 @@ function drawTextPayload(
   const anchorY = transform.anchorY * text.boxHeightPx
   const canvasX = (doc.width - text.boxWidthPx) / 2 + anchorX + transform.x
   const canvasY = (doc.height - text.boxHeightPx) / 2 + anchorY + transform.y
-  const lineHeight = Math.ceil(text.fontSizePx * 1.2)
+  const { lineHeight } = textLayoutMetrics(text)
   const x = text.align === 'left'
     ? text.paddingPx
     : text.align === 'right'
