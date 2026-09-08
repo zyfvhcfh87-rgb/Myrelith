@@ -1,0 +1,14 @@
+{
+  "at": "2026-09-08T19:22:40.847Z",
+  "head": "4fd79339aa6913ae34e0bdbcffd767aa1fbe8243",
+  "clean": true,
+  "productSource": "1537d5e23ebf223c51f269f1e1a5f6a902ecaa0e",
+  "sourceFiles": 242,
+  "checkpointFiles": 71,
+  "generationProductSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+  "observationsSha256": "8abd3fe730f00431c85bc6c63bb980489c09cfd6f6e3aa03894f201cc64e8cb4",
+  "unchangedLargeActionsAssertionsLimits": true,
+  "allFixtureGeneratorBytesPreserved": true,
+  "standaloneProductionBuild": "passed",
+  "segment": "large"
+}
