@@ -36,7 +36,7 @@ describe('bounded semantic ASS import', () => {
     expect(result.proposal.items).toEqual([{ id: 'cue-0', range: { startFrame: 25, durationFrames: 25 }, text: 'Hello' }])
     expect(inspectCaptionStyle(result.proposal.style)).toMatchObject({ kind: 'supported', params: {
       fontFamily: 'sans-serif', fontSizePermille: 50, color: '#ff0000ff', outlineColor: '#00ff007f',
-      outlinePermille: 2, outlineEnabled: true, backgroundEnabled: false, bold: false, italic: true,
+      outlinePermille: 2, outlineEnabled: true, backgroundEnabled: false, shadowEnabled: false, bold: false, italic: true,
       marginXPermille: 20, marginYPermille: 20, align: 'center', position: 'bottom',
     } })
   })

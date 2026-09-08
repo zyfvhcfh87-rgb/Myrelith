@@ -7,7 +7,7 @@ import type { FrameRate } from './schema'
 const rate = { num: 25, den: 1 }
 const params: CaptionStyleV1 = { fontFamily: 'sans-serif', fontSizePermille: 50,
   color: '#12345680', outlineColor: '#abcdef00', backgroundColor: '#00000000',
-  bold: true, italic: false, backgroundEnabled: false, outlineEnabled: true,
+  bold: true, italic: false, backgroundEnabled: false, shadowEnabled: false, outlineEnabled: true,
   outlinePermille: 2, align: 'center', position: 'bottom', marginXPermille: 20, marginYPermille: 20 }
 const style = (overrides: Partial<CaptionStyleV1> = {}): CaptionStyleDescriptor => ({ version: 1, params: { ...params, ...overrides } })
 function proposal(overrides: Partial<CaptionAssProposal> = {}): CaptionAssProposal {
@@ -82,6 +82,19 @@ describe('semantic ASS export proposals', () => {
     const result = planCaptionAssExport(proposal({ style: style({ outlinePermille: 1e-22 }) }), rate)
     expect(result.kind).toBe('review')
     expect(result.report.details.some((entry) => entry.detail.includes('outlinePermille'))).toBe(true)
+  })
+
+  it('requires explicit resolved shadow intent and reports its loss on track and cue export', () => {
+    const shadowed = planCaptionAssExport(proposal({ style: style({ shadowEnabled: true }) }), rate)
+    expect(shadowed.kind).toBe('review')
+    expect(shadowed.report.details.some((entry) => entry.detail.includes('shadowEnabled: true becomes false'))).toBe(true)
+    const cue = proposal().items[0]!
+    const overridden = planCaptionAssExport(proposal({ items: [{ ...cue, style: { version: 1, params: { shadowEnabled: true } } }] }), rate)
+    expect(overridden.kind).toBe('review')
+    expect(overridden.report.details.some((entry) => entry.detail.includes('shadowEnabled: true becomes false (Cue cue)'))).toBe(true)
+    const { shadowEnabled: _shadow, ...partial } = params
+    expect(planCaptionAssExport(proposal({ style: { version: 1, params: partial } }), rate).kind).toBe('rejected')
+    expect(reimport(ready().text).style.params.shadowEnabled).toBe(false)
   })
 
   it('requires review for outward one-frame NTSC coverage and reports exact changed frames', () => {

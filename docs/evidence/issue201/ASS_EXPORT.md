@@ -13,8 +13,10 @@ not permission to download. The eventual app review must own explicit acceptance
 
 Input is the existing `CaptionAssProposal`: explicit script resolution, complete
 known track style, optional supported cue overrides, semantic text and integer
-ranges. This resolved interchange profile has no shadow and currently requires
-`minimal` as the proposal's future preset selection. Correction: legacy minimal
+ranges, including an explicit resolved `shadowEnabled` value. The output ASS
+profile has no shadow and currently requires `minimal` as the proposal's future
+preset selection. True shadow intent produces a visible loss; omission from a
+fully resolved input rejects. Correction: legacy minimal
 itself does enable a shadow; its name is not proof of resolved ASS appearance. Partial track styles, other unresolved presets and unavailable
 future descriptors reject. This avoids inventing legacy preset values before
 schema24 and the shared style resolver exist. Future app wiring must resolve

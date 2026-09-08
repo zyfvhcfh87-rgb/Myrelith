@@ -53,6 +53,12 @@ styles remain static and introduce no dependency on #199's scalar animation.
   `position` (`top`, `middle`, `bottom`); `marginXPermille` and
   `marginYPermille` (0–250). No per-span styling, arbitrary fonts, animation,
   shadows with new semantics, or unbounded CSS enters this descriptor.
+- Shadow correction (2026-09-08 proposal): add optional boolean `shadowEnabled`
+  to v1, inheriting the preset when omitted. Minimal and classic both have legacy
+  shadow; boxed does not. Preserve legacy color/blur/offset parameters. ASS imports
+  explicitly set false; full resolved export must reject/report enabled shadow.
+  Neither a preset name nor the presence of an override implies no shadow.
+  This pure contract needs review before schema/app/painter wiring.
 - Known v1 values must validate before edits/persistence. Bound every descriptor
   to 24 primitive keys, 128-character keys/strings, 4 KiB serialized UTF-8, finite
   numbers, and 2 MiB aggregate styling/provenance per project before history.

@@ -27,6 +27,8 @@ export interface CaptionStyleV1 {
   bold: boolean
   italic: boolean
   backgroundEnabled: boolean
+  /** Omission inherits the preset; legacy shadow color/blur/offsets stay unchanged. */
+  shadowEnabled: boolean
   outlineEnabled: boolean
   outlinePermille: number
   align: 'left' | 'center' | 'right'
@@ -75,6 +77,7 @@ const VALIDATORS = {
   bold: booleanValue,
   italic: booleanValue,
   backgroundEnabled: booleanValue,
+  shadowEnabled: booleanValue,
   outlineEnabled: booleanValue,
   outlinePermille: finiteRange(0, 10),
   align: (value) => value === 'left' || value === 'center' || value === 'right',

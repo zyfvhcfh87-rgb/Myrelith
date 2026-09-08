@@ -5,7 +5,7 @@ import { utf8ByteLength } from './documentMemory'
 describe('bounded semantic caption style intent', () => {
   it('admits each supported primitive without changing normalized values', () => {
     const params = { fontFamily: 'serif', fontSizePermille: 52.5, color: '#ffffffff', outlineColor: '#000000ff',
-      backgroundColor: '#000000cc', bold: true, italic: false, outlineEnabled: true, backgroundEnabled: false,
+      backgroundColor: '#000000cc', bold: true, italic: false, outlineEnabled: true, backgroundEnabled: false, shadowEnabled: false,
       outlinePermille: 3.5, align: 'right', position: 'top', marginXPermille: 70, marginYPermille: 60 }
     const result = inspectCaptionStyle({ version: 1, params })
     expect(result.kind).toBe('supported')
@@ -20,7 +20,7 @@ describe('bounded semantic caption style intent', () => {
   it.each([
     ['fontFamily', 'Arial'], ['fontSizePermille', 7.99], ['fontSizePermille', 150.01],
     ['color', '#ffffff'], ['color', '#FFFFFFFF'], ['outlineColor', 'red'], ['backgroundColor', 'url(x)'],
-    ['bold', 'true'], ['italic', 1], ['outlineEnabled', 0], ['backgroundEnabled', 'false'],
+    ['bold', 'true'], ['italic', 1], ['outlineEnabled', 0], ['backgroundEnabled', 'false'], ['shadowEnabled', 1],
     ['outlinePermille', -0.1], ['outlinePermille', 10.1], ['align', 'justify'], ['position', 'baseline'],
     ['marginXPermille', -1], ['marginYPermille', 251],
   ])('rejects unsupported known %s=%s', (key, value) => {
@@ -52,6 +52,17 @@ describe('bounded semantic caption style intent', () => {
     expect(combineCaptionStyleOverrides(track, cue).params).toEqual({ bold: false, color: '#ffffffff' })
     expect(track.params.bold).toBe(true)
     expect(() => combineCaptionStyleOverrides({ version: 1, params: { bold: 'invalid' } }, undefined)).toThrow()
+  })
+
+  it('inherits omitted shadow intent, honors explicit track/cue values and bypasses unknown overrides as a whole', () => {
+    expect(combineCaptionStyleOverrides({ version: 1, params: {} }, undefined).params).not.toHaveProperty('shadowEnabled')
+    const track = { version: 1, params: { shadowEnabled: false } }
+    expect(combineCaptionStyleOverrides(track, { version: 1, params: {} }).params.shadowEnabled).toBe(false)
+    expect(combineCaptionStyleOverrides(track, { version: 1, params: { shadowEnabled: true } }).params.shadowEnabled).toBe(true)
+    const future = { version: 1, params: { shadowEnabled: true, shadowColor: '#ffffffff' } }
+    const result = combineCaptionStyleOverrides(track, future)
+    expect(result.params.shadowEnabled).toBe(false)
+    expect(result.unavailable).toHaveLength(1)
   })
 
   it.each([NaN, Infinity, -Infinity, null, undefined, {}, [], () => 1])('rejects nonportable primitive %s even for future versions', (value) => {

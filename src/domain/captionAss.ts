@@ -136,7 +136,7 @@ function compileStyle(raw: RawRecord, width: number, height: number, substitutio
   const params: CaptionStyleV1 = { fontFamily, fontSizePermille: n('fontsize') * 1_000 / height,
     color: styleColor(v.primarycolour!, line), outlineColor: styleColor(v.outlinecolour!, line),
     backgroundColor: '#00000000', bold: booleanStyle('bold'), italic: booleanStyle('italic'),
-    backgroundEnabled: false, outlineEnabled: outline > 0, outlinePermille: outline * 1_000 / height,
+    backgroundEnabled: false, shadowEnabled: false, outlineEnabled: outline > 0, outlinePermille: outline * 1_000 / height,
     ...alignment(n('alignment'), line), marginXPermille: Math.max(marginLeft, marginRight) * 1_000 / width,
     marginYPermille: marginVertical * 1_000 / height }
   styleColor(v.backcolour!, line)
@@ -343,7 +343,7 @@ export type CaptionAssExport =
 
 const FULL_STYLE_FIELDS = { fontFamily: true, fontSizePermille: true, color: true,
   outlineColor: true, backgroundColor: true, bold: true, italic: true,
-  backgroundEnabled: true, outlineEnabled: true, outlinePermille: true,
+  backgroundEnabled: true, shadowEnabled: true, outlineEnabled: true, outlinePermille: true,
   align: true, position: true, marginXPermille: true, marginYPermille: true,
 } satisfies Record<keyof CaptionStyleV1, true>
 const STYLE_KEYS = Object.keys(FULL_STYLE_FIELDS) as (keyof CaptionStyleV1)[]

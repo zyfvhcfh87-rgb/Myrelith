@@ -18,10 +18,11 @@ document behavior and avoids fabricating a TimelineDoc merely to validate a file
 
 Imported styles carry a complete descriptor and select `minimal` as their future
 track preset. Correction: the legacy minimal preset does enable a shadow
-(`captionPaintFor` sets `shadowEnabled: !boxed`). The descriptor has no shadow
-field, so the future custom-style resolver must explicitly honor the supported
-ASS no-shadow profile; the preset selection alone cannot do that. This appearance
-boundary is not implemented or qualified here. Legacy preset pixels remain
+(`captionPaintFor` sets `shadowEnabled: !boxed`). The corrected pure style contract
+now includes `shadowEnabled`, and ASS import explicitly stores false. The future
+custom-style resolver must honor that explicit intent while retaining preset
+behavior for omitted/empty overrides. The preset selection alone cannot do that.
+The renderer boundary is not implemented or qualified here. Legacy preset pixels remain
 unchanged. Raw ASS, attached fonts, positions, animated effects or vector drawings
 never enter stored intent.
 The parser does not claim pixel equivalence between Canvas and other renderers.
