@@ -20,7 +20,10 @@ focus indicators and all contrast predicates. Ordinary Inspector clipping is
 unchanged. A genuinely clipped control inside the dialog still fails. No product
 layout, test-case action, font qualification, timeout, retry or cleanup change.
 
-The source guard pins a7207ca and permits only the passive client to differ under
-source/test paths. TypeScript, focused lint, guard syntax and the existing focused
+The existing helper test now locks the retained geometry: excluding the Inspector
+allows the visible control, while actual modal-edge, internal-scroller and viewport
+clipping still fail. This pure check does not simulate native top-layer layout.
+The source guard pins a7207ca and permits only the passive client and that focused
+regression to differ under source/test paths. TypeScript, focused lint, guard syntax and the existing focused
 predicate/architecture tests validate the source correction. Native dialog/narrow
 acceptance remains pending the next shared slot; no new acceptance gate is added.

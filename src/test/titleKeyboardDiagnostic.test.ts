@@ -18,6 +18,17 @@ describe('keyboard evidence rejects false positives', () => {
     expect(inside(checkbox, region)).toBe(true)
     expect(inside(label, region)).toBe(false)
   })
+  test('modal geometry excludes the Inspector behind it but retains real clipping', () => {
+    const screen = { x: 0, y: 0, width: 1280, height: 720 }
+    const modal = { x: 361, y: 179.28125, width: 558, height: 361 }
+    const inspector = { x: 761, y: 101, width: 518, height: 218 }
+    const control = { x: 383, y: 382.328125, width: 253, height: 21 }
+    expect(inside(control, clippedRegion(screen, modal))).toBe(true)
+    expect(inside(control, clippedRegion(modal, inspector))).toBe(false)
+    expect(inside({ ...control, y: 530 }, clippedRegion(screen, modal))).toBe(false)
+    expect(inside(control, clippedRegion(modal, { ...control, width: 200 }))).toBe(false)
+    expect(inside(control, clippedRegion({ ...screen, width: 400 }, modal))).toBe(false)
+  })
   test('both traversal bounds are independently enforced', () => {
     requireTabBudget(128, 512)
     for (const [target, total] of [[129, 200], [1, 513], [2, 1], [1.5, 2], [-1, 2]]) expect(() => requireTabBudget(target, total)).toThrow()

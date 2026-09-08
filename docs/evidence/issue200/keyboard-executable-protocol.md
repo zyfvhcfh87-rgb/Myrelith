@@ -32,8 +32,8 @@ all product code matches tested `4727236`.
 - `verify-keyboard-source.mjs`: requires the exact worker directory/branch and a
   clean tree; freezes all tracked file hashes and HEAD. Production, dependencies,
   other tests and accepted G3/first-paint harness files must match the assigned
-  tested `a7207ca` checkpoint; only `keyboard-client.ts` may differ under source/test
-  paths. Product code, case assertions, qualification and pure tests are frozen.
+  tested `a7207ca` checkpoint; only `keyboard-client.ts` and its focused retained-geometry
+  regression may differ under source/test paths. Product and case assertions are frozen.
 
 The later grant uses a new external `/private/tmp/issue200-*` artifact directory,
 `ISSUE200_KEYBOARD_ARTIFACTS` and `ISSUE200_KEYBOARD_MANIFEST`. The committed

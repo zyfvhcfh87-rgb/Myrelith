@@ -11,6 +11,7 @@ if (process.cwd() !== root || git('branch', '--show-current') !== 'codex/issue20
 if (git('status', '--porcelain', '--untracked-files=all')) throw new Error('Keyboard checkpoint must be clean')
 const allowed = new Set([
   'tests/diagnostics/issue200/keyboard-client.ts',
+  'src/test/titleKeyboardDiagnostic.test.ts',
 ])
 const changed = git('diff', '--name-only', baseline, '--', 'src', 'tests', 'package.json', 'package-lock.json', 'vite.config.ts', 'playwright.issue200.config.ts',
   'docs/evidence/issue200/run-g3-browser.py', 'docs/evidence/issue200/verify-g3-source.mjs', 'docs/evidence/issue200/g3-authoring-protocol.md',
