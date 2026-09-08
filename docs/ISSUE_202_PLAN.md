@@ -1,6 +1,6 @@
 # Issue #202 — managed 10-bit and HDR research
 
-Status: **initial research gate ready for review; experiments not yet run**.
+Status: **R0 approved; R1 numerical proof and bounded R2 probes in progress**.
 Baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue202`, inspected 2026-09-08. Scope comes from
 [#202](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/202) and the Milestone 9
@@ -11,6 +11,13 @@ production source, dependency, UI, export preset, project format, plugin ABI,
 or existing SDR math. An evidence-backed no-go is a completed research outcome;
 an incomplete experiment is not. The orchestrator reviews this initial gate
 before continuing the laboratory. Only the orchestrator publishes or integrates.
+
+On 2026-09-08 the orchestrator approved R0 commit `8ce3742` for the R1
+independent numerical oracle/candidate and bounded R2 capability/metadata
+experiments. The color model remains a research candidate. The original limits
+stand; substantial decode/encode, timings and full suites require an exclusive
+slot, which has not been granted. Host identity supplied by the orchestrator is
+recorded in the evidence inventory and does not qualify HDR presentation.
 
 ## Gates and deliverables
 
