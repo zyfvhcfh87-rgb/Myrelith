@@ -73,3 +73,24 @@ with242 verified source hashes. It granted only that unchanged early segment.
 The containing source correction is described in focus-correction.md. The
 original native assertion and accepted harness remain unchanged; they need
 reviewed repinning and a fresh grant before testing the focus fix in Chromium.
+
+## Corrected early segment passed
+
+5. Exact granted harnessb5729c926ae8c497a8b9ee0ad7f26a466a8565e0 /
+   productb33b7531027979b8886f5db979d57cd96b96175d, all242 hashes verified,
+   Chromium151.0.7922.34 / SwiftShader. All six early checkpoints passed:
+   production portable entry, native1440x900 first-use lazy dock/layout,
+  720x900 open-dock layout, native input/IME containment, all six both-handle
+   center/+2/-2px no-motion cases, and original Back-to-Timeline assertion.
+   Return focus is BUTTON/Animation; zoom11.62962962962963, origin0 and clip
+   selection remain exact. Console/page problems are empty. The committed
+   runner differs from the prior accepted runner only in its source pin.
+
+   Browser closed; server PID68319 exited143; captured PIDs68319/68321/68322/
+  68323 are absent and lsof confirms no5199 listener. Explicit release proof
+   timestamp13:56:48.273Z. Ten screenshots, trace and raw provenance remain at
+   the paths/hashes in attempt5-artifacts.json. No continuation executed.
+
+This is only the early segment (`preflight-passed`). The large-document,
+native-drag/cancellation, mapping/persistence and remaining approved protocol
+still need their own reviewed continuation. See early-segment-passed.md.

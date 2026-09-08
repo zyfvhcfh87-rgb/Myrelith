@@ -6,8 +6,10 @@ handle corrections at42eb93b, the granted early rerun passed those checks but
 stopped on Back-to-Timeline losing focus to BODY. That slot was released and
 the separate focus correction is accepted at finalb33b753. This early harness
 is now pinned to that source and242 hashes in observation-source-hashes.json.
-All native assertions are unchanged. A fresh slot grant is pending; do not
-execute the repinned harness yet. Ignored continuation drafts remain separate.
+All native assertions are unchanged. The grantedb5729c9 run passed this early
+segment and released5199; evidence is in browser-gate3/early-segment-passed.md.
+Do not rerun without a new grant. Ignored continuation drafts remain separate
+and require their own source/protocol review before any execution.
 
 `prepare-browser-fixtures.mjs` calls the canonical portable serializer/parser via
 Vite SSR without opening a listener. Generated fixtures and hashes are committed
