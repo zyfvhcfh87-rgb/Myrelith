@@ -132,3 +132,83 @@ test('close restores toggle focus and unavailable targets explain why editing ca
   fireEvent.click(toggle)
   expect(useTransportStore.getState().maskEditorTarget).toBeNull()
 })
+
+function drawPoint(x: number, y: number) {
+  fireEvent.click(screen.getByRole('button', { name: 'Add mask path point in Program' }), { clientX: 100 + (0.1 + 0.5 * x) * canvasWidth, clientY: 50 + (0.1 + 0.5 * y) * 540, detail: 1 })
+}
+function beginDrawing() { fireEvent.click(screen.getByRole('button', { name: 'Draw new path' })) }
+function numericDraftPoint(x: number, y: number) {
+  fireEvent.change(screen.getByLabelText('Next point X (%)'), { target: { value: String(x) } })
+  fireEvent.change(screen.getByLabelText('Next point Y (%)'), { target: { value: String(y) } })
+  fireEvent.click(screen.getByRole('button', { name: 'Add draft point' }))
+}
+
+test('open points and remove remain temporary; Close creates one valid path with exact undo/redo', () => {
+  render(<Harness />)
+  const before = useDocumentStore.getState().project
+  useDocumentStore.setState({ future: [before] })
+  beginDrawing()
+  expect(screen.getByRole('button', { name: 'Close path' })).toBeDisabled()
+  drawPoint(0.2, 0.2); drawPoint(0.8, 0.2); drawPoint(0.8, 0.8)
+  fireEvent.click(screen.getByRole('button', { name: 'Remove last draft point' }))
+  expect(screen.getByRole('button', { name: 'Close path' })).toBeDisabled()
+  numericDraftPoint(20, 80)
+  expect(useDocumentStore.getState()).toMatchObject({ project: before, past: [], future: [before] })
+  expect(useTransportStore.getState().maskPreview).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Close path' }))
+  expect(params().shape).toBe('bezier')
+  const path = parseMaskBezierPath(params().path as string)!
+  expect(path.segments).toHaveLength(3)
+  expect(path.start).toEqual({ x: 0.2, y: 0.2 })
+  expect(path.segments.at(-1)!.end).toEqual(path.start)
+  expect(useDocumentStore.getState().past).toEqual([before])
+  expect(screen.getByRole('button', { name: 'Draw new path' })).toHaveFocus()
+  act(() => useDocumentStore.getState().undo()); expect(useDocumentStore.getState().project).toBe(before)
+  act(() => useDocumentStore.getState().redo()); expect(params().path).toBeTruthy()
+})
+
+test.each(['escape', 'cancel', 'blur', 'pointercancel', 'resize', 'canvas-hidden', 'selection', 'generation', 'frame', 'unmount'] as const)('open draft %s leaves no preview or history, including late Close', (kind) => {
+  const rendered = render(<Harness />), before = useDocumentStore.getState().project
+  beginDrawing(); drawPoint(0.2, 0.2); drawPoint(0.8, 0.2); drawPoint(0.8, 0.8)
+  const close = screen.getByRole('button', { name: 'Close path' })
+  if (kind === 'escape') fireEvent.keyDown(close, { key: 'Escape' })
+  if (kind === 'cancel') fireEvent.click(screen.getByRole('button', { name: 'Cancel new path' }))
+  if (kind === 'blur') fireEvent.blur(window)
+  if (kind === 'pointercancel') fireEvent.pointerCancel(screen.getByRole('button', { name: 'Add mask path point in Program' }))
+  if (kind === 'resize') { canvasWidth = 800; fireEvent.resize(window) }
+  if (kind === 'canvas-hidden') { canvasWidth = 0; fireEvent.resize(window); canvasWidth = 960; fireEvent.resize(window) }
+  if (kind === 'selection') act(() => useTransportStore.getState().setClipSelection(['other', 'clip'], 'clip'))
+  if (kind === 'generation') act(() => useDocumentStore.setState({ projectGeneration: useDocumentStore.getState().projectGeneration + 1 }))
+  if (kind === 'frame') act(() => useTransportStore.getState().setPlayheadFrame(2))
+  if (kind === 'unmount') rendered.unmount()
+  expect(screen.queryByRole('button', { name: 'Close path' })).toBeNull()
+  fireEvent.click(close)
+  expect(useDocumentStore.getState()).toMatchObject({ project: before, past: [] })
+  expect(useTransportStore.getState().maskPreview).toBeNull()
+})
+
+test('opening layout may settle before the first point; later resizing cancels the pinned draft', () => {
+  render(<Harness />); beginDrawing()
+  canvasWidth = 800; fireEvent.resize(window)
+  expect(screen.getByRole('button', { name: 'Close path' })).toBeDisabled()
+  drawPoint(0.2, 0.2)
+  expect(screen.getByRole('status')).toHaveTextContent('1/8 points')
+  canvasWidth = 900; fireEvent.resize(window)
+  expect(screen.queryByRole('button', { name: 'Close path' })).toBeNull()
+  expect(useDocumentStore.getState().past).toEqual([])
+})
+
+test('open authoring bounds points and exposes validation without changing saved state', () => {
+  render(<Harness />); beginDrawing()
+  drawPoint(-0.1, 0.2)
+  expect(screen.getByRole('alert')).toHaveTextContent(/inside the mask box/)
+  expect(screen.getByRole('status')).toHaveTextContent('0/8 points')
+  for (let i = 0; i < 8; i++) numericDraftPoint(i * 10, i % 2 * 50)
+  expect(screen.getByRole('button', { name: 'Add draft point' })).toBeDisabled()
+  drawPoint(0.9, 0.9)
+  expect(screen.getByRole('alert')).toHaveTextContent(/at most eight/)
+  expect(useDocumentStore.getState().past).toEqual([])
+  fireEvent.click(screen.getByRole('button', { name: 'Close path' }))
+  expect(parseMaskBezierPath(params().path as string)!.segments).toHaveLength(8)
+  expect(useDocumentStore.getState().past).toHaveLength(1)
+})

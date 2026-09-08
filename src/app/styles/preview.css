@@ -726,6 +726,20 @@
   background: #0f1a28;
 }
 .mask-editor-dock:empty { display: none; }
+.mask-editor-dock:has(.mask-path-authoring-toolbar) { height: 45%; }
+.mask-path-drawing-surface {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: crosshair;
+  pointer-events: auto;
+  touch-action: none;
+}
+.mask-path-drawing-surface:focus-visible { outline: 2px solid #b7ffe4; outline-offset: -2px; }
+.mask-path-draft-outline { pointer-events: none; }
+.mask-path-draft-box { stroke-dasharray: 6 4; opacity: 0.6; }
+.mask-path-draft-outline circle { fill: #90dfc3; stroke: none; }
 .mask-editor-overlay {
   position: absolute;
   inset: 0;

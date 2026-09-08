@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { DEFAULT_MASK_BEZIER_PATH } from './effectStack'
 import { parseMaskBezierPath, type MaskPoint, type ParsedMaskPath } from './maskPath'
-import { closeMaskBezierDraft, editMaskBezierPath, maskPathPartPoint, serializeMaskBezierPath, type MaskPathEditResult } from './maskPathEdit'
+import { appendMaskBezierDraftPoint, closeMaskBezierDraft, editMaskBezierPath, maskPathPartPoint, removeLastMaskBezierDraftPoint, serializeMaskBezierPath, type MaskPathEditResult } from './maskPathEdit'
 
 const shape = 'M 0.2 0.2 C 0.3 0.1 0.7 0.1 0.8 0.2 C 0.9 0.5 0.3 0.8 0.2 0.2 Z'
 const parsed = () => parseMaskBezierPath(shape)!
@@ -150,5 +150,51 @@ describe('bounded mask path commands', () => {
     expect(serializeMaskBezierPath({ start: { x: -0, y: 0 }, segments: [{ control1: { x: 0, y: 0 }, control2: { x: 0, y: 0 }, end: { x: 0, y: 0 } }] })).not.toContain('-0')
     expect(() => serializeMaskBezierPath({ ...path, start: { x: Number.POSITIVE_INFINITY, y: 0 } })).toThrow()
     expect(() => serializeMaskBezierPath({ ...path, start: { x: 0.1, y: 0.2 } })).toThrow('ending at its start')
+  })
+})
+
+describe('open mask point authoring', () => {
+  test('places straight cubic segments immutably, removes points, and closes through the existing grammar', () => {
+    const first = appendMaskBezierDraftPoint(null, { x: 0.1, y: 0.2 })
+    expect(first.ok).toBe(true)
+    if (!first.ok) return
+    const second = appendMaskBezierDraftPoint(first.draft, { x: 0.7, y: 0.2 })
+    if (!second.ok) throw new Error(second.reason)
+    expect(first.draft?.segments).toEqual([])
+    expect(second.draft?.segments[0].control1.x).toBeCloseTo(0.3)
+    expect(second.draft?.segments[0].control2.x).toBeCloseTo(0.5)
+    const third = appendMaskBezierDraftPoint(second.draft, { x: 0.7, y: 0.8 })
+    if (!third.ok) throw new Error(third.reason)
+    const closed = accepted(closeMaskBezierDraft(third.draft!)), parsed = parseMaskBezierPath(closed.path)!
+    expect(parsed.segments).toHaveLength(3)
+    expect(parsed.segments.at(-1)!.end).toEqual(parsed.start)
+    expect(removeLastMaskBezierDraftPoint(third.draft)).toEqual(second)
+    expect(removeLastMaskBezierDraftPoint(first.draft)).toEqual({ ok: true, draft: null })
+    expect(removeLastMaskBezierDraftPoint(null)).toEqual({ ok: true, draft: null })
+  })
+
+  test('reserves the eighth segment for Close and rejects a ninth point before traversing payload', () => {
+    let draft: ParsedMaskPath | null = null
+    for (let i = 0; i < 8; i++) {
+      const next = appendMaskBezierDraftPoint(draft, { x: i / 10, y: i % 2 / 2 })
+      if (!next.ok) throw new Error(next.reason)
+      draft = next.draft
+    }
+    expect(draft!.segments).toHaveLength(7)
+    expect(parseMaskBezierPath(accepted(closeMaskBezierDraft(draft!)).path)!.segments).toHaveLength(8)
+    expect(appendMaskBezierDraftPoint(draft, { x: 0.9, y: 0.9 }).ok).toBe(false)
+    const segments = new Array(9)
+    Object.defineProperty(segments, 0, { get() { throw new Error('oversized draft was read') } })
+    expect(appendMaskBezierDraftPoint({ start: { x: 0, y: 0 }, segments }, { x: 0.5, y: 0.5 }).ok).toBe(false)
+    expect(removeLastMaskBezierDraftPoint({ start: { x: 0, y: 0 }, segments }).ok).toBe(false)
+  })
+
+  test('rejects invalid coordinates, consecutive duplicates and invalid existing geometry without mutation', () => {
+    const draft = { start: { x: 0.5, y: 0.5 }, segments: [] }, before = JSON.stringify(draft)
+    for (const point of [{ x: -0.1, y: 0 }, { x: 1.1, y: 0 }, { x: NaN, y: 0 }, { x: 0, y: Infinity }, draft.start]) {
+      expect(appendMaskBezierDraftPoint(draft, point).ok).toBe(false)
+    }
+    expect(appendMaskBezierDraftPoint({ start: { x: NaN, y: 0 }, segments: [] }, { x: 0.1, y: 0.2 }).ok).toBe(false)
+    expect(JSON.stringify(draft)).toBe(before)
   })
 })

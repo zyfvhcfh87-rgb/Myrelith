@@ -22,6 +22,10 @@ export type MaskPathEditResult =
   | { readonly ok: true; readonly path: string; readonly changed: boolean; readonly selected: MaskPathPart }
   | { readonly ok: false; readonly reason: string }
 
+export type MaskPathDraftResult =
+  | { readonly ok: true; readonly draft: ParsedMaskPath | null }
+  | { readonly ok: false; readonly reason: string }
+
 function finitePoint(point: MaskPoint): boolean {
   return Number.isFinite(point.x) && Number.isFinite(point.y)
 }
@@ -167,6 +171,29 @@ export function editMaskBezierPath(value: string, edit: MaskPathEdit): MaskPathE
 }
 
 /** Open paths exist only as drafts; Close appends one straight cubic if necessary. */
+export function appendMaskBezierDraftPoint(draft: ParsedMaskPath | null, point: MaskPoint): MaskPathDraftResult {
+  // Reserve one segment for explicit closure before inspecting or copying geometry.
+  if (draft && draft.segments.length >= MAX_MASK_BEZIER_SEGMENTS - 1) return { ok: false, reason: 'A new mask can have at most eight points.' }
+  if (!normalizedPoint(point)) return { ok: false, reason: 'Place the point inside the mask box, or enter coordinates from 0 to 100%.' }
+  const error = draft && pathGeometryError(draft, false)
+  if (error) return { ok: false, reason: error }
+  const end = { ...point }
+  if (!draft) return { ok: true, draft: { start: end, segments: [] } }
+  const previous = draft.segments.at(-1)?.end ?? draft.start
+  if (samePoint(previous, point)) return { ok: false, reason: 'Choose a different position for the next point.' }
+  return { ok: true, draft: { start: draft.start, segments: [...draft.segments, {
+    control1: interpolate(previous, end, 1 / 3), control2: interpolate(previous, end, 2 / 3), end,
+  }] } }
+}
+
+/** Removing a draft point never consumes document undo history. */
+export function removeLastMaskBezierDraftPoint(draft: ParsedMaskPath | null): MaskPathDraftResult {
+  if (!draft) return { ok: true, draft: null }
+  const error = pathGeometryError(draft, false)
+  if (error) return { ok: false, reason: error }
+  return { ok: true, draft: draft.segments.length === 0 ? null : { start: draft.start, segments: draft.segments.slice(0, -1) } }
+}
+
 export function closeMaskBezierDraft(draft: ParsedMaskPath): MaskPathEditResult {
   const error = pathGeometryError(draft, false)
   if (error) return { ok: false, reason: error }

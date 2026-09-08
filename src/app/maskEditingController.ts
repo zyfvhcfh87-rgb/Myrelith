@@ -9,9 +9,10 @@ export interface MaskEditSession {
 }
 let active: MaskEditSession | null = null
 
-/** The gesture owns subscriptions; transport contains only its disposable data. */
-export function beginMaskEdit(target: MaskEditTarget): MaskEditSession {
+/** The gesture owns subscriptions; onEnd runs once after cleanup, including commit. */
+export function beginMaskEdit(target: MaskEditTarget, onEnd?: () => void): MaskEditSession {
   active?.cancel()
+  if (active !== null) throw new Error('Another mask edit started during cleanup. Finish that edit first.')
   const document = useDocumentStore.getState(), transport = useTransportStore.getState()
   if (document.activeSequenceId !== target.sequenceId || transport.selectedClipId !== target.clipId) throw new Error('Select this mask clip before editing it.')
   if (transport.isPlaying || transport.isScrubbing) throw new Error('Pause playback before editing a mask.')
@@ -34,6 +35,7 @@ export function beginMaskEdit(target: MaskEditTarget): MaskEditSession {
     if (active !== session) return
     active = null
     useTransportStore.getState().setMaskPreview(null)
+    onEnd?.()
   }
   function edit(patch: MaskEditPatch, commit: boolean): string | null {
     if (!current()) { cancel(); return 'The project, selection or playhead changed. Start the mask edit again.' }
@@ -41,7 +43,7 @@ export function beginMaskEdit(target: MaskEditTarget): MaskEditSession {
       const next = editMaskParamsAtFrame(document.project, target, transport.playheadFrame, patch)
       if (commit) {
         cancel()
-        if (!contextCurrent()) return 'The project, selection or playhead changed. Start the mask edit again.'
+        if (active !== null || !contextCurrent()) return 'The project, selection or playhead changed. Start the mask edit again.'
         return useDocumentStore.getState().commitMaskEdit(document.project, document.projectGeneration, target.sequenceId, next)
       }
       useTransportStore.getState().setMaskPreview({ sequenceId: target.sequenceId, effectId: target.effectId, params: { ...patch } as Record<string, number | string | boolean>, document: next })
