@@ -1,0 +1,32 @@
+{
+  "kind": "issue202-r3-run1-evidence",
+  "runCommit": "d7b900a396c5a5cf004e1ddc7cc9fe5aeaae424f",
+  "rawPreserved": true,
+  "previewCompletion": "unqualified-finish-is-flush",
+  "files": [
+    {
+      "path": "r3-run-1.json",
+      "sha256": "e04b854961c742f90f89546ae712c9743ab36b92097b797a8f37271da9bd2e6f"
+    },
+    {
+      "path": "r3-analysis-1.json",
+      "sha256": "b434d33913742d2af683d4c3ae6c578d74315cbfac1ba82b2bfdff6d24272ea4"
+    },
+    {
+      "path": "verify-r3-run1.mjs",
+      "sha256": "391c332ba7825e924fec7bc87aebc33a66b827d4c912ccf734467ae578a9226e"
+    },
+    {
+      "path": "r3-run-1-results.md",
+      "sha256": "3abac1f618777b9f6f7cd7b1a1a2af22b9359c15c5c62b3f68235d21397a2ac6"
+    },
+    {
+      "path": "r3-audit-chromium-source.py",
+      "sha256": "814b9e7c3ae630fc43ab6965d6172f036bc792bacd02c24368692be23b8817de"
+    },
+    {
+      "path": "r3-completion-source-audit.json",
+      "sha256": "1229c99918acbbc69198a103d58fe3ca92608fc46dd544f44de71b52a3cd36d7"
+    }
+  ]
+}
