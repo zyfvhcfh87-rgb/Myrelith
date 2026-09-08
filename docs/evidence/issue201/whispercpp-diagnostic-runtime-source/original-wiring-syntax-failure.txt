@@ -1,0 +1,8 @@
+/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-diagnostic-invalid-wiring/scripts/issue201/whispercpp-lab/model-worker.mjs:88
+    const result = try { await callCore('load', { model: modelBytes, wasm: wasmBytes }) }
+                   ^^^
+
+SyntaxError: Unexpected token 'try'
+    at checkSyntax (node:internal/main/check_syntax:84:5)
+
+Node.js v26.8.1
