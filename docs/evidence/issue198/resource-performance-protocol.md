@@ -28,6 +28,14 @@ successful attachment metadata is insufficient. Final summaries must reference
 those bytes and their hashes. Stop on first numeric, pixel, owner, console or
 timeout failure. Keep the original run directory on every outcome.
 
+The corrected runner bounds browser/server setup, initial evaluation and cell
+enumeration, plus export UI setup, at 30 seconds per operation. Owner close and
+forced close each have separate 10-second bounds; a failed owner cannot prevent
+later cleanup or durable evidence finalization. An inert stalled-owner child
+test proves failure exit with raw/partial evidence and exact hashes retained.
+These setup/cleanup bounds do not change any measurement actions, thresholds or
+evidence caps below. Physical process/port release still requires verification.
+
 ## Raster matrix and held selection
 
 Proposed matrix: 180 unique cells, from three outputs (1280×720, 1920×1080,

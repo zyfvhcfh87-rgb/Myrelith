@@ -9,6 +9,11 @@ import { once } from 'node:events'
 import { createConnection } from 'node:net'
 import { dirtyFingerprint, assertSourceIdentityUnchanged, chromiumDeviceMetadata, sampleChromiumProcessMemory } from '../performance/run-benchmark.mjs'
 import { createEvidenceStore } from './evidenceStore.mjs'
+import { bounded, closeOwnedResources, runCommand } from './runnerLifecycle.mjs'
+export { bounded } from './runnerLifecycle.mjs'
+
+const SETUP_TIMEOUT_MS = 30_000
+const setup = (operation, label) => bounded(Promise.resolve().then(operation), SETUP_TIMEOUT_MS, label)
 
 export function parseOptions(args) {
   const options = { port: 5198, segment: null, expectedSha: null, output: null }
@@ -27,15 +32,9 @@ export function parseOptions(args) {
   return options
 }
 
-export async function bounded(promise, milliseconds, label) {
-  let timer
-  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} exceeded ${milliseconds} ms`)), milliseconds) })]) }
-  finally { clearTimeout(timer) }
-}
-
 async function sourceIdentity(root) {
-  const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
-  return { commit, ...await dirtyFingerprint(root, commit) }
+  const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', timeout: 10_000 }).trim()
+  return { commit, ...await setup(() => dirtyFingerprint(root, commit), 'Source fingerprint') }
 }
 function isAlive(pid) {
   try { process.kill(pid, 0); return true } catch (cause) { if (cause.code === 'ESRCH') return false; throw cause }
@@ -71,10 +70,15 @@ export async function run(options) {
   const directory = options.output ? resolve(options.output) : join(root, '.tmp', `issue198-${initial.commit.slice(0, 7)}-${options.segment}-${Date.now()}`)
   if (!directory.startsWith(join(root, '.tmp') + '/')) throw new Error('Evidence output must be a fresh directory under this worktree .tmp')
   const store = await createEvidenceStore(directory), problems = [], capturedPids = new Set()
-  let vite, browserServer, browser, cdp, context, awake, nativeTimer, memoryPending = Promise.resolve(), failure
+  let vite, browserServer, browser, cdp, context, awake, nativeTimer, memoryPending = Promise.resolve(), signalCleanup = Promise.resolve(), failure
   let memoryIndex = 0, nativeBusy = false, stopping = false, measuredMemorySamples = 0, unavailableMemorySamples = 0
   const origin = `http://127.0.0.1:${options.port}`
-  const onSignal = () => { stopping = true; void browserServer?.kill() }
+  const onSignal = () => {
+    if (stopping) return
+    stopping = true
+    signalCleanup = bounded(Promise.resolve().then(() => browserServer?.kill()), 10_000, 'Interrupted browser force close')
+      .catch((cause) => { problems.push({ kind: 'signal-cleanup', message: cause.message }) })
+  }
   process.once('SIGINT', onSignal); process.once('SIGTERM', onSignal)
   const record = (value) => store.record(value)
   async function sampleMemory(label) {
@@ -88,33 +92,35 @@ export async function run(options) {
   try {
     if (platform() === 'darwin') {
       awake = spawn('/usr/bin/caffeinate', ['-i', '-w', String(process.pid)], { stdio: 'ignore' })
-      await once(awake, 'spawn'); capturedPids.add(awake.pid)
+      await bounded(once(awake, 'spawn'), SETUP_TIMEOUT_MS, 'Scoped awake spawn'); capturedPids.add(awake.pid)
     }
     await record({ kind: 'run-start', options, source: initial, runnerPid: process.pid, awakePid: awake?.pid ?? null,
       host: { node: process.version, platform: platform(), release: release(), arch: arch(), cpus: cpus(), totalMemoryBytes: totalmem() } })
-    vite = await createServer({ root, server: { host: '127.0.0.1', port: options.port, strictPort: true }, logLevel: 'warn' })
-    await vite.listen()
+    vite = await setup(() => createServer({ root, server: { host: '127.0.0.1', port: options.port, strictPort: true }, logLevel: 'warn' }), 'Vite creation')
+    await setup(() => vite.listen(), 'Vite listen')
     const launch = { headless: true, args: ['--mute-audio', '--enable-precise-memory-info'], timeout: 30_000 }
     browserServer = await chromium.launchServer(launch)
     capturedPids.add(browserServer.process().pid)
-    browser = await chromium.connect(browserServer.wsEndpoint())
-    cdp = await browser.newBrowserCDPSession()
-    context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
-    const page = await context.newPage()
+    browser = await setup(() => chromium.connect(browserServer.wsEndpoint(), { timeout: SETUP_TIMEOUT_MS }), 'Chromium connect')
+    cdp = await setup(() => browser.newBrowserCDPSession(), 'Browser CDP session')
+    context = await setup(() => browser.newContext({ viewport: { width: 1440, height: 1000 } }), 'Browser context')
+    context.setDefaultTimeout(SETUP_TIMEOUT_MS)
+    context.setDefaultNavigationTimeout(SETUP_TIMEOUT_MS)
+    const page = await setup(() => context.newPage(), 'Browser page')
     page.on('console', (message) => { if (['warning', 'error'].includes(message.type())) problems.push({ kind: message.type(), message: message.text() }) })
     page.on('pageerror', (error) => problems.push({ kind: 'pageerror', message: error.message }))
     function checkCaller(caller) { if (caller.page !== page || caller.frame !== page.mainFrame() || !caller.frame.url().startsWith(origin + '/')) throw new Error('Evidence binding caller is not the owned page') }
-    await page.exposeBinding('__issue198Record', async (caller, value) => { checkCaller(caller); await record({ ...value, source: 'browser' }) })
-    await page.exposeBinding('__issue198Binary', async (caller, part) => { checkCaller(caller); await store.binary(part) })
-    await page.goto(origin + (options.segment === 'raster' ? '/scripts/issue198/mask-performance-gate.html' : '/'), { waitUntil: 'domcontentloaded' })
+    await setup(() => page.exposeBinding('__issue198Record', async (caller, value) => { checkCaller(caller); await record({ ...value, source: 'browser' }) }), 'Record binding')
+    await setup(() => page.exposeBinding('__issue198Binary', async (caller, part) => { checkCaller(caller); await store.binary(part) }), 'Binary binding')
+    await setup(() => page.goto(origin + (options.segment === 'raster' ? '/scripts/issue198/mask-performance-gate.html' : '/'), { waitUntil: 'domcontentloaded' }), 'Initial navigation')
     await record({ kind: 'browser-provenance', version: browser.version(), launch, viewport: page.viewportSize(), gpu: await bounded(chromiumDeviceMetadata(cdp), 10_000, 'GPU provenance')
       .catch((cause) => ({ status: 'unavailable', reason: cause.message })),
-      browser: await page.evaluate(() => {
+      browser: await setup(() => page.evaluate(() => {
         const samples = []; let previous = performance.now()
         for (let index = 0; index < 10_000; index++) { const now = performance.now(); if (now > previous) samples.push(now - previous); previous = now }
         return { userAgent: navigator.userAgent, timeOrigin: performance.timeOrigin, crossOriginIsolated,
           timerPositiveDeltas: samples, timerMinimumMs: samples.length ? Math.min(...samples) : null }
-      }) })
+      }), 'Browser timer provenance') })
     const owned = processDescendants(browserServer.process().pid)
     if (owned.status === 'measured') for (const entry of owned.processes) capturedPids.add(entry.pid)
     await record({ kind: 'process-start', owned })
@@ -130,7 +136,7 @@ export async function run(options) {
       assertSourceIdentityUnchanged(initial, await sourceIdentity(root))
     }
     if (options.segment === 'raster') {
-      const cells = await page.evaluate(async () => (await import('/scripts/issue198/maskPerformanceGate.ts')).cells)
+      const cells = await setup(() => page.evaluate(async () => (await import('/scripts/issue198/maskPerformanceGate.ts')).cells), 'Raster cell enumeration')
       if (cells.length !== 180 || new Set(cells.map((cell) => JSON.stringify(cell))).size !== 180) throw new Error('Raster cell count/identity changed')
       for (const [index, cell] of cells.entries()) {
         await check(); await record({ kind: 'cell-dispatched', index, cell })
@@ -145,11 +151,11 @@ export async function run(options) {
         await gate.measureHeldSelection(io.recordEvidence)
       }), 30_000, 'Held resolver measurement')
     } else {
-      await page.getByRole('button', { name: 'Start a new project' }).click()
-      await page.getByLabel('Project name').fill('Issue198 resource export')
-      await page.getByLabel('Resolution').selectOption('720')
-      await page.getByRole('button', { name: 'Create project', exact: true }).click()
-      await page.getByRole('button', { name: 'Commands' }).waitFor()
+      await setup(() => page.getByRole('button', { name: 'Start a new project' }).click(), 'New project action')
+      await setup(() => page.getByLabel('Project name').fill('Issue198 resource export'), 'Project name action')
+      await setup(() => page.getByLabel('Resolution').selectOption('720'), 'Resolution action')
+      await setup(() => page.getByRole('button', { name: 'Create project', exact: true }).click(), 'Create project action')
+      await setup(() => page.getByRole('button', { name: 'Commands' }).waitFor(), 'Project ready')
       const fixture = await bounded(page.evaluateHandle(async () => {
         const gate = await import('/scripts/issue198/exportResourceGate.ts'), io = await import('/scripts/issue198/browserIO.ts')
         return gate.prepareExportFixture(io.recordEvidence, io.persistBinary)
@@ -163,7 +169,10 @@ export async function run(options) {
           }, { index, mode, fixture }), 150_000, `Export ${index} ${mode}`)
           await sampleMemory(`export-${index}-${mode}-settled`)
         }
-      } finally { await fixture.dispose() }
+      } finally {
+        await bounded(fixture.dispose(), 10_000, 'Export fixture handle release')
+          .catch((cause) => { problems.push({ kind: 'fixture-release', message: cause.message }) })
+      }
     }
     await check(); await sampleMemory('segment-complete')
     await record({ kind: 'segment-complete', segment: options.segment, source: await sourceIdentity(root), problems })
@@ -172,19 +181,20 @@ export async function run(options) {
     await record({ kind: 'run-failed', error: cause?.stack ?? String(cause), problems })
   } finally {
     stopping = true; clearInterval(nativeTimer)
+    await signalCleanup
     await bounded(memoryPending, 15_000, 'Memory sampling teardown').catch((cause) => { failure ??= cause })
     if (browserServer) {
       const owned = processDescendants(browserServer.process().pid)
       if (owned.status === 'measured') for (const entry of owned.processes) capturedPids.add(entry.pid)
       await record({ kind: 'process-before-close', owned })
     }
-    const cleanup = []
-    for (const [name, close] of [
-      ['context', () => context?.close()], ['browser', () => browser?.close()], ['browser-server', () => browserServer?.close()], ['vite', () => vite?.close()],
-    ]) {
-      try { await bounded(Promise.resolve().then(close), 10_000, `${name} close`); cleanup.push({ name, status: 'closed' }) }
-      catch (cause) { cleanup.push({ name, status: 'failed', error: cause.message }); failure ??= cause; if (name === 'browser-server') await browserServer?.kill().catch(() => {}) }
-    }
+    const { cleanup, failure: cleanupFailure } = await closeOwnedResources([
+      { name: 'context', close: () => context?.close() },
+      { name: 'browser', close: () => browser?.close() },
+      { name: 'browser-server', close: () => browserServer?.close(), force: () => browserServer?.kill() },
+      { name: 'vite', close: () => vite?.close() },
+    ])
+    failure ??= cleanupFailure
     if (awake && awake.exitCode === null && awake.signalCode === null) {
       const exited = once(awake, 'exit'); awake.kill('SIGTERM')
       await bounded(exited, 5000, 'Scoped awake release').catch((cause) => { failure ??= cause })
@@ -208,5 +218,5 @@ export async function run(options) {
 }
 
 if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
-  run(parseOptions(process.argv.slice(2))).catch((cause) => { process.stderr.write(`${cause.stack ?? cause}\n`); process.exitCode = 1 })
+  await runCommand(() => run(parseOptions(process.argv.slice(2))))
 }

@@ -83,14 +83,30 @@ peaks do not prove an exact allocation peak; browser/GPU process footprint is
 not compared with the separate 256 MiB logical render allowance. No native leak
 or real-time playback result is claimed by preparing this source.
 
-## Bounded teardown and source checks
+## Bounded setup, teardown and source checks
+
+Vite creation/listening, Chromium connection, CDP/context/page creation, evidence
+bindings, initial navigation, timer provenance and cell enumeration each have a
+30-second host deadline. Chromium connect also receives an explicit 30-second
+Playwright timeout. Context action/navigation defaults and each of the five
+export setup actions are bounded at 30 seconds. The existing raster/resolver,
+fixture preparation and export measurement deadlines are unchanged. Export
+fixture handle release has a 10-second deadline.
 
 The driver records browser/descendant/CDP PIDs at launch, while sampling and
-before close. Every close has a deadline. A stuck owned browser server is killed
-through Playwright's process owner; unrelated captured PIDs are never killed.
+before close. Every owner close has a 10-second deadline. A stuck owned browser
+server gets a separate 10-second forced close through Playwright's process
+owner; unrelated captured PIDs are never killed. Both failures are recorded,
+the first failure is preserved even if forced close succeeds, and later owners
+still get their cleanup attempt. Signal-triggered forced close is also bounded
+at 10 seconds and its rejection is handled.
 The scoped awake child is terminated and awaited. Actual PID liveness and the
 strict port must be clear within five seconds. The parent independently verifies
-runner exit and physical slot release. Raw failures and a manifest remain even
+runner exit and physical slot release. After durable teardown and manifest
+closure, a failed command explicitly exits with code 1 so leftover owner handles
+cannot hold Node open. That exit does not certify descendant termination: any
+remaining PID/port is retained as a teardown failure for parent verification.
+Raw failures and a manifest remain even
 when the candidate fails. `--expected-sha` is checked before launch and between
 cells/attempts; browser console warnings/errors and page errors fail the segment.
 
@@ -99,7 +115,7 @@ Small source checks, which do not launch a browser or encode video:
 ```sh
 DEVELOPER_DIR=/Library/Developer/CommandLineTools npx tsc -p scripts/issue198/tsconfig.json
 DEVELOPER_DIR=/Library/Developer/CommandLineTools NODE_OPTIONS=--no-experimental-webstorage npx vitest run --config scripts/issue198/vitest.config.ts --maxWorkers=2
-DEVELOPER_DIR=/Library/Developer/CommandLineTools node --test scripts/issue198/evidenceStore.test.mjs
+DEVELOPER_DIR=/Library/Developer/CommandLineTools node --test scripts/issue198/evidenceStore.test.mjs scripts/issue198/runnerLifecycle.test.mjs
 ```
 
 The first fixture gate passed 11 checks, including 32×32 actual raster equality
@@ -107,4 +123,10 @@ and durable ordering of an intentionally invalid clock sample. Initial driver
 validation caught a missing closing brace before any tests/browser ran; after
 correction the Node checks passed, including raw/partial evidence, exact hashes,
 limits, source options and deadlines. Subsequent added concurrent-close proof
-brings the Node gate to eight checks. Full native execution remains pending.
+brings the original Node gate to eight checks. The runner correction adds two
+owner lifecycle checks. One inert Node child stalls both close and forced close
+while retaining a live interval: later cleanup completes, the command exits
+itself with code 1, and raw JSON, partial binary bytes and exact manifest hashes
+remain intact. Its 5 ms injected close deadlines are test-only; the actual
+runner retains the deadlines above. All ten Node checks passed (306 ms), with
+typecheck and lint passing. Full native execution remains pending.
