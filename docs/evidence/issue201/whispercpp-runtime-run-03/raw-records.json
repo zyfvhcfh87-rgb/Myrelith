@@ -1,0 +1,32 @@
+[
+  {
+    "source": ".tmp/issue201-whispercpp-lab/runtime-attempt-03.json",
+    "archive": "runtime-attempt-03.json.gz",
+    "bytes": 208,
+    "sha256": "85b1e0734c0643d12db1467b2aaeab2fc81a4ca5773bf05b9d0f6929b843b2df"
+  },
+  {
+    "source": ".tmp/issue201-whispercpp-lab/runtime-partial-03.jsonl",
+    "archive": "runtime-partial-03.jsonl.gz",
+    "bytes": 53841,
+    "sha256": "8d3fb7292ec50ab577580671691cbb6ef6faf27352ffb51f68e01d25f42d5a74"
+  },
+  {
+    "source": ".tmp/issue201-whispercpp-lab/runtime-results-03.json",
+    "archive": "runtime-results-03.json.gz",
+    "bytes": 66129,
+    "sha256": "076690c5280aca371e7439665a9f2e99fb9cc6fd681f1147759b27fd936ef4f7"
+  },
+  {
+    "source": ".tmp/issue201-whispercpp-lab/runtime-independent-release-03.json",
+    "archive": "runtime-independent-release-03.json.gz",
+    "bytes": 228,
+    "sha256": "f2a01997539d534eec732cb8298af669c61fd97b5876dcf8f105fafbd5af8213"
+  },
+  {
+    "source": ".tmp/issue201-reservation-native-outer.txt",
+    "archive": "issue201-reservation-native-outer.txt.gz",
+    "bytes": 2063,
+    "sha256": "5177f3e8f3e7d85422bbc768553bc7c56c288fff71b8198b40d3b46dcdcae844"
+  }
+]
