@@ -1,0 +1,5 @@
+{
+  "head": "be8d2592384b75225be64e80779cbe0ebb1ee753",
+  "resultSha256": "5f12a2849db2c14cca221af3759970d5fc190402d8c658a72eae067e289a7506",
+  "qualification": "Other raw artifacts retained; parent packaging will hash all top-level artifacts without editing originals."
+}
