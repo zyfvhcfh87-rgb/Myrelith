@@ -38,3 +38,23 @@ The memory-stop wiring itself and native runtime cleanup still require the
 exclusive browser experiment; a predicate unit test is not that evidence.
 Node reports its expected experimental VM-module warning. No full suite, browser
 or inference test was run, and no speech product enablement is implied.
+
+## Follow-up: retain named memory observations
+
+The orchestrator independently reran the documented seven-test command and
+accepted the retirement, timing and URL corrections, then found that
+`takeSample(label)` could return a pending periodic sample unchanged. A named
+closed-job or final-idle observation could therefore disappear.
+
+`createLabSampleQueue` now coalesces only unnamed periodic requests. Each named
+request waits behind the current observation and captures a fresh state with
+its own label. The drain includes already queued named work; it never relabels
+an earlier observation. A stop prevents queued observations from starting.
+
+Two additional deterministic overlap tests block an initial periodic capture,
+queue both closed-English and final-idle, then change the fake state to disposed
+before release. Both named observations see the later disposed state, in order.
+A second test verifies that a stop suppresses queued captures. The documented
+Node command now passes **9/9 tests**; script syntax and lint also pass. The model,
+asset manifest and measurement/accuracy thresholds are unchanged. Real memory
+sampling and inference remain unrun and require the explicit exclusive slot.

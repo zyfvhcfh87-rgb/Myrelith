@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { readFile } from 'node:fs/promises'
 import { webcrypto, createHash } from 'node:crypto'
 import { createContext, SourceTextModule } from 'node:vm'
-import { declaredLabRequest, residentCeilingBreached, speechSegments, withinSourceCoverage } from './lab-contract.mjs'
+import { createLabSampleQueue, declaredLabRequest, residentCeilingBreached, speechSegments, withinSourceCoverage } from './lab-contract.mjs'
 
 const flush = () => new Promise((resolve) => setImmediate(resolve))
 async function until(condition) {
@@ -169,4 +169,43 @@ test('resident ceiling triggers on the first byte above the frozen incremental a
   assert.equal(residentCeilingBreached(100, 300, 200), false)
   assert.equal(residentCeilingBreached(100, 301, 200), true)
   assert.equal(residentCeilingBreached(null, 301, 200), false)
+})
+
+test('overlapping named memory samples each capture a fresh state after the periodic drain', async () => {
+  let release
+  const blocked = new Promise((resolve) => { release = resolve })
+  const observed = []
+  let state = 'working'
+  const queue = createLabSampleQueue(async (label = 'periodic') => {
+    observed.push({ label, state })
+    if (label === 'periodic') await blocked
+  }, () => false)
+  const periodic = queue.take()
+  await flush()
+  const closed = queue.take('closed-english')
+  const final = queue.take('final-idle')
+  assert.equal(queue.take(), final)
+  assert.deepEqual(observed, [{ label: 'periodic', state: 'working' }])
+  state = 'disposed'
+  release()
+  await queue.drain()
+  await Promise.all([periodic, closed, final])
+  assert.deepEqual(observed, [{ label: 'periodic', state: 'working' },
+    { label: 'closed-english', state: 'disposed' }, { label: 'final-idle', state: 'disposed' }])
+})
+
+test('a stop during the periodic observation prevents queued named captures', async () => {
+  let release
+  let stopped = false
+  const blocked = new Promise((resolve) => { release = resolve })
+  const observed = []
+  const queue = createLabSampleQueue(async (label = 'periodic') => { observed.push(label); await blocked }, () => stopped)
+  const periodic = queue.take()
+  await flush()
+  const closed = queue.take('closed-english')
+  stopped = true
+  release()
+  await queue.drain()
+  await Promise.all([periodic, closed])
+  assert.deepEqual(observed, ['periodic'])
 })

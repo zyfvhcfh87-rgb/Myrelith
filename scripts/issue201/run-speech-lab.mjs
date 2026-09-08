@@ -7,7 +7,7 @@ import { gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { chromium } from '@playwright/test'
-import { declaredLabRequest, residentCeilingBreached } from './lab-contract.mjs'
+import { createLabSampleQueue, declaredLabRequest, residentCeilingBreached } from './lab-contract.mjs'
 
 if (process.env.ISSUE201_EXCLUSIVE_SLOT !== '1') throw new Error('Obtain the orchestrator exclusive slot before running inference; then set ISSUE201_EXCLUSIVE_SLOT=1')
 const root = fileURLToPath(new URL('../../', import.meta.url))
@@ -65,7 +65,7 @@ const network = []
 let context
 let sampler
 let sampling = false
-let pendingSample = null
+let sampleQueue = null
 let runtime = null
 let memoryAssessment = null
 let baselineMemory = null
@@ -125,11 +125,8 @@ try {
     } catch (error) { memory.push({ at: Date.now(), label, complete: false, error: error.message }) }
     finally { sampling = false }
   }
-  function takeSample(label) {
-    if (pendingSample) return pendingSample
-    pendingSample = sampleMemory(label).finally(() => { pendingSample = null })
-    return pendingSample
-  }
+  sampleQueue = createLabSampleQueue(sampleMemory, () => Boolean(stopReason))
+  const takeSample = sampleQueue.take
   await page.goto('http://127.0.0.1:5201/')
   await page.waitForFunction(() => Boolean(globalThis.lab))
   await takeSample('idle-baseline')
@@ -283,7 +280,7 @@ try {
   })
   await check('offline-persistent-browser-reopen', async () => {
     clearInterval(sampler)
-    await pendingSample
+    await sampleQueue.drain()
     await context.close()
     context = await chromium.launchPersistentContext(profile, { headless: true,
       args: ['--mute-audio', '--disable-background-networking', '--disable-component-update'], acceptDownloads: false })
@@ -327,7 +324,7 @@ try {
   for (const [filename, digest] of Object.entries(source.files)) expect(hash(await readFile(path.join(root, 'scripts/issue201', filename))) === digest, 'Laboratory source changed during qualification')
 } finally {
   clearInterval(sampler)
-  await pendingSample
+  await sampleQueue?.drain()
   await context?.close()
   await new Promise((resolve) => server.close(resolve))
   const artifact = { kind: 'issue201-speech-lab-result-v1', recordedAt: new Date().toISOString(), source,

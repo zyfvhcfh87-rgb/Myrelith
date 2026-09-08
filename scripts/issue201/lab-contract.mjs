@@ -29,3 +29,22 @@ export function declaredLabRequest(url, method, servedUrls) {
 export function residentCeilingBreached(baseline, sample, ceiling) {
   return Number.isFinite(baseline) && Number.isFinite(sample) && sample - baseline > ceiling
 }
+
+/** Periodic requests coalesce; every named request queues a fresh observation. */
+export function createLabSampleQueue(capture, stopped) {
+  let tail = null
+  function take(label) {
+    if (label === undefined && tail) return tail
+    const predecessor = tail
+    const work = (async () => {
+      await predecessor
+      if (stopped()) return
+      return capture(label)
+    })()
+    tail = work
+    const release = () => { if (tail === work) tail = null }
+    void work.then(release, release)
+    return work
+  }
+  return { take, drain: () => tail ?? Promise.resolve() }
+}
