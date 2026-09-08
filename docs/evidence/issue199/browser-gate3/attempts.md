@@ -37,3 +37,9 @@ source before calling the failure resolved in-browser.
 Parent independently confirmed a separate no-motion Bezier handle mutation on
 87d8032. It was not reached by this browser attempt. Its source fix follows in
 a separate commit; all other accepted workspace contracts remain intact.
+
+The separately committed handle correction is documented in
+handle-correction.md with independent red/green proof and final source hashes.
+No further browser run occurred after attempt2; the exclusive slot remains
+released. Entry547adc9 plus the containing handle-fix commit need source review
+and a new rerun grant before any observable acceptance can proceed.

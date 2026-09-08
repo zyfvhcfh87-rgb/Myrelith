@@ -163,11 +163,11 @@ describe('unified animation workspace', () => {
     expect(store().doc.tracks[0].clips[0].animation?.titleTracks?.[0].keyframes.at(-1)?.frame).toBe(35)
   })
 
-  test('Bézier pointer handles show only admitted rAF previews and commit once on release', () => {
+  test.each(['1', '2'])('Bézier pointer handle %s shows only admitted rAF previews and commits once on release', (which) => {
     render(<AnimationWorkspace />); keyDown('Home')
     fireEvent.change(screen.getByLabelText('Key easing'), { target: { value: 'Ease in/out' } })
     fireEvent.click(screen.getByRole('button', { name: 'Curve' }))
-    const handle = screen.getByRole('button', { name: 'Drag Bézier handle 1; numeric alternatives in key controls' })
+    const handle = screen.getByRole('button', { name: `Drag Bézier handle ${which}; numeric alternatives in key controls` })
     const before = store()
     fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 20, clientY: 80 })
     fireEvent.pointerMove(handle, { pointerId: 1, clientX: 90, clientY: 50 })
@@ -175,7 +175,48 @@ describe('unified animation workspace', () => {
     flushFrames(); expect(transport().animationPreview?.easing).toMatchObject({ type: 'cubic-bezier' }); expect(store()).toBe(before)
     fireEvent.pointerUp(handle, { pointerId: 1, clientX: 90, clientY: 50 })
     expect(store().past).toHaveLength(before.past.length + 1); expect(transport().animationPreview).toBeNull()
-    expect(keys()[0].easing).toMatchObject({ type: 'cubic-bezier', x1: 1 })
+    expect(keys()[0].easing).toMatchObject({ type: 'cubic-bezier', [`x${which}`]: 1 })
+  })
+
+  test.each(['1', '2'].flatMap((handle) => [0, 2, -2].map((offset) => ({ handle, offset }))))('a no-motion click on Bézier handle $handle at hit offset $offset preserves exact state and redo', ({ handle: which, offset }) => {
+    render(<AnimationWorkspace />); keyDown('Home')
+    fireEvent.change(screen.getByLabelText('Key easing'), { target: { value: 'Ease in/out' } })
+    keyDown('ArrowRight', { ctrlKey: true }); keyDown('z', { ctrlKey: true }); keyDown('Home'); keyDown('c', { ctrlKey: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Curve' }))
+    const handle = screen.getByRole('button', { name: `Drag Bézier handle ${which}; numeric alternatives in key controls` })
+    const clientX = Number(handle.getAttribute('cx')) + offset, clientY = Number(handle.getAttribute('cy')) + offset
+    const before = store(), easing = keys()[0].easing, clipboard = animationEditorController.getClipboard()
+    expect(before.future).toHaveLength(1)
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 42, clientX, clientY })
+    fireEvent.pointerUp(handle, { pointerId: 42, clientX, clientY })
+    expect(store()).toBe(before); expect(keys()[0].easing).toBe(easing); expect(animationEditorController.getClipboard()).toBe(clipboard)
+    expect(transport().animationPreview).toBeNull(); expect(frames.size).toBe(0)
+  })
+
+  test.each(['1', '2'])('Bézier handle %s ignores sub-threshold jitter and cancels real previews on lost capture and Escape', (which) => {
+    render(<AnimationWorkspace />); keyDown('Home')
+    fireEvent.change(screen.getByLabelText('Key easing'), { target: { value: 'Ease in/out' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Curve' }))
+    const handle = screen.getByRole('button', { name: `Drag Bézier handle ${which}; numeric alternatives in key controls` })
+    const clientX = Number(handle.getAttribute('cx')) + 2, clientY = Number(handle.getAttribute('cy')) + 2, before = store()
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX, clientY })
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: clientX + 1, clientY: clientY + 1 }); flushFrames()
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: clientX + 1, clientY: clientY + 1 })
+    expect(store()).toBe(before); expect(transport().animationPreview).toBeNull()
+    for (const cancel of ['capture', 'escape']) {
+      fireEvent.pointerDown(handle, { button: 0, pointerId: 2, clientX, clientY })
+      fireEvent.pointerMove(handle, { pointerId: 2, clientX: clientX + 20, clientY: clientY + 20 }); flushFrames()
+      expect(transport().animationPreview).not.toBeNull(); expect(store()).toBe(before)
+      if (cancel === 'capture') fireEvent.lostPointerCapture(handle, { pointerId: 2 })
+      else keyDown('Escape')
+      fireEvent.pointerUp(handle, { pointerId: 2, clientX: clientX + 20, clientY: clientY + 20 })
+      expect(store()).toBe(before); expect(transport().animationPreview).toBeNull(); expect(frames.size).toBe(0)
+    }
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 3, clientX, clientY })
+    fireEvent.pointerMove(handle, { pointerId: 3, clientX: clientX + 20, clientY: clientY + 20 }); flushFrames()
+    fireEvent.pointerMove(handle, { pointerId: 3, clientX, clientY }); flushFrames()
+    fireEvent.pointerUp(handle, { pointerId: 3, clientX, clientY })
+    expect(store()).toBe(before); expect(transport().animationPreview).toBeNull(); expect(frames.size).toBe(0)
   })
 
   test('Inspector entry and close retain document identity and cancel a live preview', () => {

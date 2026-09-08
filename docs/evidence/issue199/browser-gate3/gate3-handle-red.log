@@ -1,0 +1,1913 @@
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --run src/ui/animation/AnimationWorkspace.test.tsx -t no-motion click|sub-threshold jitter --maxWorkers=1
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx (21 tests | 7 failed | 13 skipped) 340ms
+     × a no-motion click on Bézier handle '1' at hit offset +0 preserves exact state and redo 110ms
+     × a no-motion click on Bézier handle '1' at hit offset 2 preserves exact state and redo 43ms
+     × a no-motion click on Bézier handle '1' at hit offset -2 preserves exact state and redo 38ms
+     × a no-motion click on Bézier handle '2' at hit offset 2 preserves exact state and redo 35ms
+     × a no-motion click on Bézier handle '2' at hit offset -2 preserves exact state and redo 34ms
+     × Bézier handle 1 ignores sub-threshold jitter and cancels real previews on lost capture and Escape 26ms
+     × Bézier handle 2 ignores sub-threshold jitter and cancels real previews on lost capture and Escape 25ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > a no-motion click on Bézier handle '1' at hit offset +0 preserves exact state and redo
+AssertionError: expected { …(137) } to be { …(137) } // Object.is equality
+
+- Expected
++ Received
+
+@@ -60,11 +60,11 @@
+                  {
+                    "keyframes": [
+                      {
+                        "easing": {
+                          "type": "cubic-bezier",
+-                         "x1": 0.42,
++                         "x1": 0.42000000000000004,
+                          "x2": 0.58,
+                          "y1": 0,
+                          "y2": 1,
+                        },
+                        "frame": 0,
+@@ -312,11 +312,26 @@
+    "duplicateTimelineMarker": [Function duplicateTimelineMarker],
+    "editMulticamDefinition": [Function editMulticamDefinition],
+    "editMulticamInstance": [Function editMulticamInstance],
+    "editSequenceInstance": [Function editSequenceInstance],
+    "editVideoBus": [Function editVideoBus],
+-   "future": [
++   "future": [],
++   "insertAdjustment": [Function insertAdjustment],
++   "insertClip": [Function insertClip],
++   "insertClips": [Function insertClips],
++   "linkClips": [Function linkClips],
++   "makeSequenceInstanceIndependent": [Function makeSequenceInstanceIndependent],
++   "matchProjectFrameRate": [Function matchProjectFrameRate],
++   "mergeCaptionWithNext": [Function mergeCaptionWithNext],
++   "moveAdjustment": [Function moveAdjustment],
++   "moveClip": [Function moveClip],
++   "moveClipKeyframe": [Function moveClipKeyframe],
++   "moveClips": [Function moveClips],
++   "moveEffectKeyframe": [Function moveEffectKeyframe],
++   "normalizeMasterLoudness": [Function normalizeMasterLoudness],
++   "openSequenceInstance": [Function openSequenceInstance],
++   "past": [
+      {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+@@ -352,18 +367,14 @@
+                      "tracks": [
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+-                               "type": "cubic-bezier",
+-                               "x1": 0.42,
+-                               "x2": 0.58,
+-                               "y1": 0,
+-                               "y2": 1,
++                               "type": "linear",
+                              },
+-                             "frame": 1,
+-                             "sourceTimeTicks": 1000000,
++                             "frame": 0,
++                             "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+                            {
+                              "easing": {
+                                "type": "linear",
+@@ -853,26 +864,10 @@
+            ],
+            "width": 1920,
+          },
+        ],
+      },
+-   ],
+-   "insertAdjustment": [Function insertAdjustment],
+-   "insertClip": [Function insertClip],
+-   "insertClips": [Function insertClips],
+-   "linkClips": [Function linkClips],
+-   "makeSequenceInstanceIndependent": [Function makeSequenceInstanceIndependent],
+-   "matchProjectFrameRate": [Function matchProjectFrameRate],
+-   "mergeCaptionWithNext": [Function mergeCaptionWithNext],
+-   "moveAdjustment": [Function moveAdjustment],
+-   "moveClip": [Function moveClip],
+-   "moveClipKeyframe": [Function moveClipKeyframe],
+-   "moveClips": [Function moveClips],
+-   "moveEffectKeyframe": [Function moveEffectKeyframe],
+-   "normalizeMasterLoudness": [Function normalizeMasterLoudness],
+-   "openSequenceInstance": [Function openSequenceInstance],
+-   "past": [
+      {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+@@ -908,11 +903,15 @@
+                      "tracks": [
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+-                               "type": "linear",
++                               "type": "cubic-bezier",
++                               "x1": 0.42,
++                               "x2": 0.58,
++                               "y1": 0,
++                               "y2": 1,
+                              },
+                              "frame": 0,
+                              "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+@@ -1446,11 +1445,11 @@
+                      {
+                        "keyframes": [
+                          {
+                            "easing": {
+                              "type": "cubic-bezier",
+-                             "x1": 0.42,
++                             "x1": 0.42000000000000004,
+                              "x2": 0.58,
+                              "y1": 0,
+                              "y2": 1,
+                            },
+                            "frame": 0,
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx:192:21
+    190|     fireEvent.pointerDown(handle, { button: 0, pointerId: 42, clientX,…
+    191|     fireEvent.pointerUp(handle, { pointerId: 42, clientX, clientY })
+    192|     expect(store()).toBe(before); expect(keys()[0].easing).toBe(easing…
+       |                     ^
+    193|     expect(transport().animationPreview).toBeNull(); expect(frames.siz…
+    194|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > a no-motion click on Bézier handle '1' at hit offset 2 preserves exact state and redo
+AssertionError: expected { …(137) } to be { …(137) } // Object.is equality
+
+- Expected
++ Received
+
+@@ -60,11 +60,11 @@
+                  {
+                    "keyframes": [
+                      {
+                        "easing": {
+                          "type": "cubic-bezier",
+-                         "x1": 0.42,
++                         "x1": 0.6199999999999999,
+                          "x2": 0.58,
+                          "y1": 0,
+                          "y2": 1,
+                        },
+                        "frame": 0,
+@@ -312,11 +312,26 @@
+    "duplicateTimelineMarker": [Function duplicateTimelineMarker],
+    "editMulticamDefinition": [Function editMulticamDefinition],
+    "editMulticamInstance": [Function editMulticamInstance],
+    "editSequenceInstance": [Function editSequenceInstance],
+    "editVideoBus": [Function editVideoBus],
+-   "future": [
++   "future": [],
++   "insertAdjustment": [Function insertAdjustment],
++   "insertClip": [Function insertClip],
++   "insertClips": [Function insertClips],
++   "linkClips": [Function linkClips],
++   "makeSequenceInstanceIndependent": [Function makeSequenceInstanceIndependent],
++   "matchProjectFrameRate": [Function matchProjectFrameRate],
++   "mergeCaptionWithNext": [Function mergeCaptionWithNext],
++   "moveAdjustment": [Function moveAdjustment],
++   "moveClip": [Function moveClip],
++   "moveClipKeyframe": [Function moveClipKeyframe],
++   "moveClips": [Function moveClips],
++   "moveEffectKeyframe": [Function moveEffectKeyframe],
++   "normalizeMasterLoudness": [Function normalizeMasterLoudness],
++   "openSequenceInstance": [Function openSequenceInstance],
++   "past": [
+      {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+@@ -352,18 +367,14 @@
+                      "tracks": [
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+-                               "type": "cubic-bezier",
+-                               "x1": 0.42,
+-                               "x2": 0.58,
+-                               "y1": 0,
+-                               "y2": 1,
++                               "type": "linear",
+                              },
+-                             "frame": 1,
+-                             "sourceTimeTicks": 1000000,
++                             "frame": 0,
++                             "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+                            {
+                              "easing": {
+                                "type": "linear",
+@@ -853,26 +864,10 @@
+            ],
+            "width": 1920,
+          },
+        ],
+      },
+-   ],
+-   "insertAdjustment": [Function insertAdjustment],
+-   "insertClip": [Function insertClip],
+-   "insertClips": [Function insertClips],
+-   "linkClips": [Function linkClips],
+-   "makeSequenceInstanceIndependent": [Function makeSequenceInstanceIndependent],
+-   "matchProjectFrameRate": [Function matchProjectFrameRate],
+-   "mergeCaptionWithNext": [Function mergeCaptionWithNext],
+-   "moveAdjustment": [Function moveAdjustment],
+-   "moveClip": [Function moveClip],
+-   "moveClipKeyframe": [Function moveClipKeyframe],
+-   "moveClips": [Function moveClips],
+-   "moveEffectKeyframe": [Function moveEffectKeyframe],
+-   "normalizeMasterLoudness": [Function normalizeMasterLoudness],
+-   "openSequenceInstance": [Function openSequenceInstance],
+-   "past": [
+      {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+@@ -908,11 +903,15 @@
+                      "tracks": [
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+-                               "type": "linear",
++                               "type": "cubic-bezier",
++                               "x1": 0.42,
++                               "x2": 0.58,
++                               "y1": 0,
++                               "y2": 1,
+                              },
+                              "frame": 0,
+                              "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+@@ -1446,11 +1445,11 @@
+                      {
+                        "keyframes": [
+                          {
+                            "easing": {
+                              "type": "cubic-bezier",
+-                             "x1": 0.42,
++                             "x1": 0.6199999999999999,
+                              "x2": 0.58,
+                              "y1": 0,
+                              "y2": 1,
+                            },
+                            "frame": 0,
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx:192:21
+    190|     fireEvent.pointerDown(handle, { button: 0, pointerId: 42, clientX,…
+    191|     fireEvent.pointerUp(handle, { pointerId: 42, clientX, clientY })
+    192|     expect(store()).toBe(before); expect(keys()[0].easing).toBe(easing…
+       |                     ^
+    193|     expect(transport().animationPreview).toBeNull(); expect(frames.siz…
+    194|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > a no-motion click on Bézier handle '1' at hit offset -2 preserves exact state and redo
+AssertionError: expected { …(137) } to be { …(137) } // Object.is equality
+
+- Expected
++ Received
+
+@@ -60,13 +60,13 @@
+                  {
+                    "keyframes": [
+                      {
+                        "easing": {
+                          "type": "cubic-bezier",
+-                         "x1": 0.42,
++                         "x1": 0.22000000000000003,
+                          "x2": 0.58,
+-                         "y1": 0,
++                         "y1": 0.020512820512820308,
+                          "y2": 1,
+                        },
+                        "frame": 0,
+                        "sourceTimeTicks": 0,
+                        "value": 0.2,
+@@ -312,11 +312,26 @@
+    "duplicateTimelineMarker": [Function duplicateTimelineMarker],
+    "editMulticamDefinition": [Function editMulticamDefinition],
+    "editMulticamInstance": [Function editMulticamInstance],
+    "editSequenceInstance": [Function editSequenceInstance],
+    "editVideoBus": [Function editVideoBus],
+-   "future": [
++   "future": [],
++   "insertAdjustment": [Function insertAdjustment],
++   "insertClip": [Function insertClip],
++   "insertClips": [Function insertClips],
++   "linkClips": [Function linkClips],
++   "makeSequenceInstanceIndependent": [Function makeSequenceInstanceIndependent],
++   "matchProjectFrameRate": [Function matchProjectFrameRate],
++   "mergeCaptionWithNext": [Function mergeCaptionWithNext],
++   "moveAdjustment": [Function moveAdjustment],
++   "moveClip": [Function moveClip],
++   "moveClipKeyframe": [Function moveClipKeyframe],
++   "moveClips": [Function moveClips],
++   "moveEffectKeyframe": [Function moveEffectKeyframe],
++   "normalizeMasterLoudness": [Function normalizeMasterLoudness],
++   "openSequenceInstance": [Function openSequenceInstance],
++   "past": [
+      {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+@@ -352,18 +367,14 @@
+                      "tracks": [
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+-                               "type": "cubic-bezier",
+-                               "x1": 0.42,
+-                               "x2": 0.58,
+-                               "y1": 0,
+-                               "y2": 1,
++                               "type": "linear",
+                              },
+-                             "frame": 1,
+-                             "sourceTimeTicks": 1000000,
++                             "frame": 0,
++                             "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+                            {
+                              "easing": {
+                                "type": "linear",
+@@ -853,26 +864,10 @@
+            ],
+            "width": 1920,
+          },
+        ],
+      },
+-   ],
+-   "insertAdjustment": [Function insertAdjustment],
+-   "insertClip": [Function insertClip],
+-   "insertClips": [Function insertClips],
+-   "linkClips": [Function linkClips],
+-   "makeSequenceInstanceIndependent": [Function makeSequenceInstanceIndependent],
+-   "matchProjectFrameRate": [Function matchProjectFrameRate],
+-   "mergeCaptionWithNext": [Function mergeCaptionWithNext],
+-   "moveAdjustment": [Function moveAdjustment],
+-   "moveClip": [Function moveClip],
+-   "moveClipKeyframe": [Function moveClipKeyframe],
+-   "moveClips": [Function moveClips],
+-   "moveEffectKeyframe": [Function moveEffectKeyframe],
+-   "normalizeMasterLoudness": [Function normalizeMasterLoudness],
+-   "openSequenceInstance": [Function openSequenceInstance],
+-   "past": [
+      {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+@@ -908,11 +903,15 @@
+                      "tracks": [
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+-                               "type": "linear",
++                               "type": "cubic-bezier",
++                               "x1": 0.42,
++                               "x2": 0.58,
++                               "y1": 0,
++                               "y2": 1,
+                              },
+                              "frame": 0,
+                              "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+@@ -1446,13 +1445,13 @@
+                      {
+                        "keyframes": [
+                          {
+                            "easing": {
+                              "type": "cubic-bezier",
+-                             "x1": 0.42,
++                             "x1": 0.22000000000000003,
+                              "x2": 0.58,
+-                             "y1": 0,
++                             "y1": 0.020512820512820308,
+                              "y2": 1,
+                            },
+                            "frame": 0,
+                            "sourceTimeTicks": 0,
+                            "value": 0.2,
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx:192:21
+    190|     fireEvent.pointerDown(handle, { button: 0, pointerId: 42, clientX,…
+    191|     fireEvent.pointerUp(handle, { pointerId: 42, clientX, clientY })
+    192|     expect(store()).toBe(before); expect(keys()[0].easing).toBe(easing…
+       |                     ^
+    193|     expect(transport().animationPreview).toBeNull(); expect(frames.siz…
+    194|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > a no-motion click on Bézier handle '2' at hit offset 2 preserves exact state and redo
+AssertionError: expected { …(137) } to be { …(137) } // Object.is equality
+
+- Expected
++ Received
+
+@@ -61,13 +61,13 @@
+                    "keyframes": [
+                      {
+                        "easing": {
+                          "type": "cubic-bezier",
+                          "x1": 0.42,
+-                         "x2": 0.58,
++                         "x2": 0.78,
+                          "y1": 0,
+-                         "y2": 1,
++                         "y2": 0.9794871794871794,
+                        },
+                        "frame": 0,
+                        "sourceTimeTicks": 0,
+                        "value": 0.2,
+                      },
+@@ -312,11 +312,26 @@
+    "duplicateTimelineMarker": [Function duplicateTimelineMarker],
+    "editMulticamDefinition": [Function editMulticamDefinition],
+    "editMulticamInstance": [Function editMulticamInstance],
+    "editSequenceInstance": [Function editSequenceInstance],
+    "editVideoBus": [Function editVideoBus],
+-   "future": [
++   "future": [],
++   "insertAdjustment": [Function insertAdjustment],
++   "insertClip": [Function insertClip],
++   "insertClips": [Function insertClips],
++   "linkClips": [Function linkClips],
++   "makeSequenceInstanceIndependent": [Function makeSequenceInstanceIndependent],
++   "matchProjectFrameRate": [Function matchProjectFrameRate],
++   "mergeCaptionWithNext": [Function mergeCaptionWithNext],
++   "moveAdjustment": [Function moveAdjustment],
++   "moveClip": [Function moveClip],
++   "moveClipKeyframe": [Function moveClipKeyframe],
++   "moveClips": [Function moveClips],
++   "moveEffectKeyframe": [Function moveEffectKeyframe],
++   "normalizeMasterLoudness": [Function normalizeMasterLoudness],
++   "openSequenceInstance": [Function openSequenceInstance],
++   "past": [
+      {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+@@ -352,18 +367,14 @@
+                      "tracks": [
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+-                               "type": "cubic-bezier",
+-                               "x1": 0.42,
+-                               "x2": 0.58,
+-                               "y1": 0,
+-                               "y2": 1,
++                               "type": "linear",
+                              },
+-                             "frame": 1,
+-                             "sourceTimeTicks": 1000000,
++                             "frame": 0,
++                             "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+                            {
+                              "easing": {
+                                "type": "linear",
+@@ -853,26 +864,10 @@
+            ],
+            "width": 1920,
+          },
+        ],
+      },
+-   ],
+-   "insertAdjustment": [Function insertAdjustment],
+-   "insertClip": [Function insertClip],
+-   "insertClips": [Function insertClips],
+-   "linkClips": [Function linkClips],
+-   "makeSequenceInstanceIndependent": [Function makeSequenceInstanceIndependent],
+-   "matchProjectFrameRate": [Function matchProjectFrameRate],
+-   "mergeCaptionWithNext": [Function mergeCaptionWithNext],
+-   "moveAdjustment": [Function moveAdjustment],
+-   "moveClip": [Function moveClip],
+-   "moveClipKeyframe": [Function moveClipKeyframe],
+-   "moveClips": [Function moveClips],
+-   "moveEffectKeyframe": [Function moveEffectKeyframe],
+-   "normalizeMasterLoudness": [Function normalizeMasterLoudness],
+-   "openSequenceInstance": [Function openSequenceInstance],
+-   "past": [
+      {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+@@ -908,11 +903,15 @@
+                      "tracks": [
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+-                               "type": "linear",
++                               "type": "cubic-bezier",
++                               "x1": 0.42,
++                               "x2": 0.58,
++                               "y1": 0,
++                               "y2": 1,
+                              },
+                              "frame": 0,
+                              "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+@@ -1447,13 +1446,13 @@
+                        "keyframes": [
+                          {
+                            "easing": {
+                              "type": "cubic-bezier",
+                              "x1": 0.42,
+-                             "x2": 0.58,
++                             "x2": 0.78,
+                              "y1": 0,
+-                             "y2": 1,
++                             "y2": 0.9794871794871794,
+                            },
+                            "frame": 0,
+                            "sourceTimeTicks": 0,
+                            "value": 0.2,
+                          },
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx:192:21
+    190|     fireEvent.pointerDown(handle, { button: 0, pointerId: 42, clientX,…
+    191|     fireEvent.pointerUp(handle, { pointerId: 42, clientX, clientY })
+    192|     expect(store()).toBe(before); expect(keys()[0].easing).toBe(easing…
+       |                     ^
+    193|     expect(transport().animationPreview).toBeNull(); expect(frames.siz…
+    194|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > a no-motion click on Bézier handle '2' at hit offset -2 preserves exact state and redo
+AssertionError: expected { …(137) } to be { …(137) } // Object.is equality
+
+- Expected
++ Received
+
+@@ -61,11 +61,11 @@
+                    "keyframes": [
+                      {
+                        "easing": {
+                          "type": "cubic-bezier",
+                          "x1": 0.42,
+-                         "x2": 0.58,
++                         "x2": 0.38,
+                          "y1": 0,
+                          "y2": 1,
+                        },
+                        "frame": 0,
+                        "sourceTimeTicks": 0,
+@@ -312,11 +312,26 @@
+    "duplicateTimelineMarker": [Function duplicateTimelineMarker],
+    "editMulticamDefinition": [Function editMulticamDefinition],
+    "editMulticamInstance": [Function editMulticamInstance],
+    "editSequenceInstance": [Function editSequenceInstance],
+    "editVideoBus": [Function editVideoBus],
+-   "future": [
++   "future": [],
++   "insertAdjustment": [Function insertAdjustment],
++   "insertClip": [Function insertClip],
++   "insertClips": [Function insertClips],
++   "linkClips": [Function linkClips],
++   "makeSequenceInstanceIndependent": [Function makeSequenceInstanceIndependent],
++   "matchProjectFrameRate": [Function matchProjectFrameRate],
++   "mergeCaptionWithNext": [Function mergeCaptionWithNext],
++   "moveAdjustment": [Function moveAdjustment],
++   "moveClip": [Function moveClip],
++   "moveClipKeyframe": [Function moveClipKeyframe],
++   "moveClips": [Function moveClips],
++   "moveEffectKeyframe": [Function moveEffectKeyframe],
++   "normalizeMasterLoudness": [Function normalizeMasterLoudness],
++   "openSequenceInstance": [Function openSequenceInstance],
++   "past": [
+      {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+@@ -352,18 +367,14 @@
+                      "tracks": [
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+-                               "type": "cubic-bezier",
+-                               "x1": 0.42,
+-                               "x2": 0.58,
+-                               "y1": 0,
+-                               "y2": 1,
++                               "type": "linear",
+                              },
+-                             "frame": 1,
+-                             "sourceTimeTicks": 1000000,
++                             "frame": 0,
++                             "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+                            {
+                              "easing": {
+                                "type": "linear",
+@@ -853,26 +864,10 @@
+            ],
+            "width": 1920,
+          },
+        ],
+      },
+-   ],
+-   "insertAdjustment": [Function insertAdjustment],
+-   "insertClip": [Function insertClip],
+-   "insertClips": [Function insertClips],
+-   "linkClips": [Function linkClips],
+-   "makeSequenceInstanceIndependent": [Function makeSequenceInstanceIndependent],
+-   "matchProjectFrameRate": [Function matchProjectFrameRate],
+-   "mergeCaptionWithNext": [Function mergeCaptionWithNext],
+-   "moveAdjustment": [Function moveAdjustment],
+-   "moveClip": [Function moveClip],
+-   "moveClipKeyframe": [Function moveClipKeyframe],
+-   "moveClips": [Function moveClips],
+-   "moveEffectKeyframe": [Function moveEffectKeyframe],
+-   "normalizeMasterLoudness": [Function normalizeMasterLoudness],
+-   "openSequenceInstance": [Function openSequenceInstance],
+-   "past": [
+      {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+@@ -908,11 +903,15 @@
+                      "tracks": [
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+-                               "type": "linear",
++                               "type": "cubic-bezier",
++                               "x1": 0.42,
++                               "x2": 0.58,
++                               "y1": 0,
++                               "y2": 1,
+                              },
+                              "frame": 0,
+                              "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+@@ -1447,11 +1446,11 @@
+                        "keyframes": [
+                          {
+                            "easing": {
+                              "type": "cubic-bezier",
+                              "x1": 0.42,
+-                             "x2": 0.58,
++                             "x2": 0.38,
+                              "y1": 0,
+                              "y2": 1,
+                            },
+                            "frame": 0,
+                            "sourceTimeTicks": 0,
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx:192:21
+    190|     fireEvent.pointerDown(handle, { button: 0, pointerId: 42, clientX,…
+    191|     fireEvent.pointerUp(handle, { pointerId: 42, clientX, clientY })
+    192|     expect(store()).toBe(before); expect(keys()[0].easing).toBe(easing…
+       |                     ^
+    193|     expect(transport().animationPreview).toBeNull(); expect(frames.siz…
+    194|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > Bézier handle 1 ignores sub-threshold jitter and cancels real previews on lost capture and Escape
+AssertionError: expected { …(137) } to be { …(137) } // Object.is equality
+
+- Expected
++ Received
+
+@@ -60,11 +60,11 @@
+                  {
+                    "keyframes": [
+                      {
+                        "easing": {
+                          "type": "cubic-bezier",
+-                         "x1": 0.42,
++                         "x1": 0.72,
+                          "x2": 0.58,
+                          "y1": 0,
+                          "y2": 1,
+                        },
+                        "frame": 0,
+@@ -368,11 +368,551 @@
+                        {
+                          "keyframes": [
+                            {
+                              "easing": {
+                                "type": "linear",
++                             },
++                             "frame": 0,
++                             "sourceTimeTicks": 0,
++                             "value": 0.2,
++                           },
++                           {
++                             "easing": {
++                               "type": "linear",
++                             },
++                             "frame": 10,
++                             "sourceTimeTicks": 10000000,
++                             "value": 0.8,
++                           },
++                         ],
++                         "property": "opacity",
++                       },
++                     ],
++                   },
++                   "assetId": "__myrelith_text__:root-text",
++                   "audio": {
++                     "balance": 0,
++                     "enabled": true,
++                     "fadeInFrames": 0,
++                     "fadeOutFrames": 0,
++                   },
++                   "audioEffects": [],
++                   "blendMode": "normal",
++                   "effects": [],
++                   "id": "root-text",
++                   "lensCorrection": null,
++                   "name": "Title 世界",
++                   "opacity": 1,
++                   "sourceMode": "timed",
++                   "sourceRange": {
++                     "durationFrames": 100,
++                     "startFrame": 0,
++                   },
++                   "sourceTimeMap": {
++                     "rate": {
++                       "denominator": 1,
++                       "numerator": 1,
++                     },
++                     "sourceDurationTicks": 100000000,
++                     "sourceStartTicks": 0,
++                     "speedCurve": {
++                       "originFrame": 0,
++                       "points": [],
++                     },
++                   },
++                   "text": {
++                     "align": "center",
++                     "backgroundColor": "#000000",
++                     "backgroundEnabled": false,
++                     "bold": true,
++                     "boxHeightPx": 238,
++                     "boxWidthPx": 1248,
++                     "color": "#ffffff",
++                     "content": "Title 世界
++ Second line",
++                     "fontFamily": "sans-serif",
++                     "fontSizePx": 72,
++                     "italic": false,
++                     "outlineColor": "#000000",
++                     "outlineEnabled": true,
++                     "outlineWidthPx": 2,
++                     "paddingPx": 18,
++                     "shadowBlurPx": 4,
++                     "shadowColor": "#000000",
++                     "shadowEnabled": true,
++                     "shadowOffsetXPx": 2,
++                     "shadowOffsetYPx": 2,
++                   },
++                   "timelineRange": {
++                     "durationFrames": 100,
++                     "startFrame": 0,
++                   },
++                   "transform": {
++                     "anchorX": 0.5,
++                     "anchorY": 0.5,
++                     "rotation": 0,
++                     "scaleX": 1,
++                     "scaleY": 1,
++                     "x": 0,
++                     "y": 0,
++                   },
++                   "visual": {
++                     "crop": {
++                       "bottom": 0,
++                       "left": 0,
++                       "right": 0,
++                       "top": 0,
++                     },
++                     "flipHorizontal": false,
++                     "flipVertical": false,
++                     "scaleLocked": true,
++                   },
++                   "volume": 1,
++                 },
++               ],
++               "hidden": false,
++               "id": "root-V1",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V1",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-V2",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V2",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-V3",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V3",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-V4",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V4",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-A1",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A1",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-A2",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A2",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-A3",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A3",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-A4",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A4",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++           ],
++           "width": 1920,
++         },
++         {
++           "audioSampleRate": 48000,
++           "captionTracks": [],
++           "frameRate": {
++             "den": 1,
++             "num": 30,
++           },
++           "height": 1080,
++           "id": "dormant",
++           "markers": [],
++           "masterAudio": {
++             "audioEffects": [],
++             "balance": 0,
++             "muted": false,
++             "volume": 1,
++           },
++           "masterVideoEffects": [],
++           "name": "dormant",
++           "schemaVersion": 23,
++           "tracks": [
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [
++                 {
++                   "animation": {
++                     "effectTracks": [],
++                     "tracks": [],
++                   },
++                   "assetId": "__myrelith_text__:dormant-text",
++                   "audio": {
++                     "balance": 0,
++                     "enabled": true,
++                     "fadeInFrames": 0,
++                     "fadeOutFrames": 0,
+                    },
++                   "audioEffects": [],
++                   "blendMode": "normal",
++                   "effects": [],
++                   "id": "dormant-text",
++                   "lensCorrection": null,
++                   "name": "Title 世界",
++                   "opacity": 1,
++                   "sourceMode": "timed",
++                   "sourceRange": {
++                     "durationFrames": 100,
++                     "startFrame": 0,
++                   },
++                   "sourceTimeMap": {
++                     "rate": {
++                       "denominator": 1,
++                       "numerator": 1,
++                     },
++                     "sourceDurationTicks": 100000000,
++                     "sourceStartTicks": 0,
++                     "speedCurve": {
++                       "originFrame": 0,
++                       "points": [],
++                     },
++                   },
++                   "text": {
++                     "align": "center",
++                     "backgroundColor": "#000000",
++                     "backgroundEnabled": false,
++                     "bold": true,
++                     "boxHeightPx": 238,
++                     "boxWidthPx": 1248,
++                     "color": "#ffffff",
++                     "content": "Title 世界
++ Second line",
++                     "fontFamily": "sans-serif",
++                     "fontSizePx": 72,
++                     "italic": false,
++                     "outlineColor": "#000000",
++                     "outlineEnabled": true,
++                     "outlineWidthPx": 2,
++                     "paddingPx": 18,
++                     "shadowBlurPx": 4,
++                     "shadowColor": "#000000",
++                     "shadowEnabled": true,
++                     "shadowOffsetXPx": 2,
++                     "shadowOffsetYPx": 2,
++                   },
++                   "timelineRange": {
++                     "durationFrames": 100,
++                     "startFrame": 0,
++                   },
++                   "transform": {
++                     "anchorX": 0.5,
++                     "anchorY": 0.5,
++                     "rotation": 0,
++                     "scaleX": 1,
++                     "scaleY": 1,
++                     "x": 0,
++                     "y": 0,
++                   },
++                   "visual": {
++                     "crop": {
++                       "bottom": 0,
++                       "left": 0,
++                       "right": 0,
++                       "top": 0,
++                     },
++                     "flipHorizontal": false,
++                     "flipVertical": false,
++                     "scaleLocked": true,
++                   },
++                   "volume": 1,
++                 },
++               ],
++               "hidden": false,
++               "id": "dormant-V1",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V1",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-V2",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V2",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-V3",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V3",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-V4",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V4",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-A1",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A1",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-A2",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A2",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-A3",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A3",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-A4",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A4",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++           ],
++           "width": 1920,
++         },
++       ],
++     },
++     {
++       "colorLuts": [],
++       "id": "title-project",
++       "multicams": [],
++       "name": "Title project",
++       "rootSequenceId": "root",
++       "sequences": [
++         {
++           "audioSampleRate": 48000,
++           "captionTracks": [],
++           "frameRate": {
++             "den": 1,
++             "num": 30,
++           },
++           "height": 1080,
++           "id": "root",
++           "markers": [],
++           "masterAudio": {
++             "audioEffects": [],
++             "balance": 0,
++             "muted": false,
++             "volume": 1,
++           },
++           "masterVideoEffects": [],
++           "name": "root",
++           "schemaVersion": 23,
++           "tracks": [
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [
++                 {
++                   "animation": {
++                     "tracks": [
++                       {
++                         "keyframes": [
++                           {
++                             "easing": {
++                               "type": "cubic-bezier",
++                               "x1": 0.42,
++                               "x2": 0.58,
++                               "y1": 0,
++                               "y2": 1,
++                             },
+                              "frame": 0,
+                              "sourceTimeTicks": 0,
+                              "value": 0.2,
+                            },
+                            {
+@@ -905,11 +1445,11 @@
+                      {
+                        "keyframes": [
+                          {
+                            "easing": {
+                              "type": "cubic-bezier",
+-                             "x1": 0.42,
++                             "x1": 0.72,
+                              "x2": 0.58,
+                              "y1": 0,
+                              "y2": 1,
+                            },
+                            "frame": 0,
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx:205:21
+    203|     fireEvent.pointerMove(handle, { pointerId: 1, clientX: clientX + 1…
+    204|     fireEvent.pointerUp(handle, { pointerId: 1, clientX: clientX + 1, …
+    205|     expect(store()).toBe(before); expect(transport().animationPreview)…
+       |                     ^
+    206|     for (const cancel of ['capture', 'escape']) {
+    207|       fireEvent.pointerDown(handle, { button: 0, pointerId: 2, clientX…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > Bézier handle 2 ignores sub-threshold jitter and cancels real previews on lost capture and Escape
+AssertionError: expected { …(137) } to be { …(137) } // Object.is equality
+
+- Expected
++ Received
+
+@@ -61,13 +61,13 @@
+                    "keyframes": [
+                      {
+                        "easing": {
+                          "type": "cubic-bezier",
+                          "x1": 0.42,
+-                         "x2": 0.58,
++                         "x2": 0.8800000000000001,
+                          "y1": 0,
+-                         "y2": 1,
++                         "y2": 0.9692307692307691,
+                        },
+                        "frame": 0,
+                        "sourceTimeTicks": 0,
+                        "value": 0.2,
+                      },
+@@ -864,12 +864,11 @@
+            ],
+            "width": 1920,
+          },
+        ],
+      },
+-   ],
+-   "project": {
++     {
+        "colorLuts": [],
+        "id": "title-project",
+        "multicams": [],
+        "name": "Title project",
+        "rootSequenceId": "root",
+@@ -909,10 +908,551 @@
+                                "type": "cubic-bezier",
+                                "x1": 0.42,
+                                "x2": 0.58,
+                                "y1": 0,
+                                "y2": 1,
++                             },
++                             "frame": 0,
++                             "sourceTimeTicks": 0,
++                             "value": 0.2,
++                           },
++                           {
++                             "easing": {
++                               "type": "linear",
++                             },
++                             "frame": 10,
++                             "sourceTimeTicks": 10000000,
++                             "value": 0.8,
++                           },
++                         ],
++                         "property": "opacity",
++                       },
++                     ],
++                   },
++                   "assetId": "__myrelith_text__:root-text",
++                   "audio": {
++                     "balance": 0,
++                     "enabled": true,
++                     "fadeInFrames": 0,
++                     "fadeOutFrames": 0,
++                   },
++                   "audioEffects": [],
++                   "blendMode": "normal",
++                   "effects": [],
++                   "id": "root-text",
++                   "lensCorrection": null,
++                   "name": "Title 世界",
++                   "opacity": 1,
++                   "sourceMode": "timed",
++                   "sourceRange": {
++                     "durationFrames": 100,
++                     "startFrame": 0,
++                   },
++                   "sourceTimeMap": {
++                     "rate": {
++                       "denominator": 1,
++                       "numerator": 1,
++                     },
++                     "sourceDurationTicks": 100000000,
++                     "sourceStartTicks": 0,
++                     "speedCurve": {
++                       "originFrame": 0,
++                       "points": [],
++                     },
++                   },
++                   "text": {
++                     "align": "center",
++                     "backgroundColor": "#000000",
++                     "backgroundEnabled": false,
++                     "bold": true,
++                     "boxHeightPx": 238,
++                     "boxWidthPx": 1248,
++                     "color": "#ffffff",
++                     "content": "Title 世界
++ Second line",
++                     "fontFamily": "sans-serif",
++                     "fontSizePx": 72,
++                     "italic": false,
++                     "outlineColor": "#000000",
++                     "outlineEnabled": true,
++                     "outlineWidthPx": 2,
++                     "paddingPx": 18,
++                     "shadowBlurPx": 4,
++                     "shadowColor": "#000000",
++                     "shadowEnabled": true,
++                     "shadowOffsetXPx": 2,
++                     "shadowOffsetYPx": 2,
++                   },
++                   "timelineRange": {
++                     "durationFrames": 100,
++                     "startFrame": 0,
++                   },
++                   "transform": {
++                     "anchorX": 0.5,
++                     "anchorY": 0.5,
++                     "rotation": 0,
++                     "scaleX": 1,
++                     "scaleY": 1,
++                     "x": 0,
++                     "y": 0,
++                   },
++                   "visual": {
++                     "crop": {
++                       "bottom": 0,
++                       "left": 0,
++                       "right": 0,
++                       "top": 0,
++                     },
++                     "flipHorizontal": false,
++                     "flipVertical": false,
++                     "scaleLocked": true,
++                   },
++                   "volume": 1,
++                 },
++               ],
++               "hidden": false,
++               "id": "root-V1",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V1",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-V2",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V2",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-V3",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V3",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-V4",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V4",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-A1",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A1",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-A2",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A2",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-A3",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A3",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "root-A4",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A4",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++           ],
++           "width": 1920,
++         },
++         {
++           "audioSampleRate": 48000,
++           "captionTracks": [],
++           "frameRate": {
++             "den": 1,
++             "num": 30,
++           },
++           "height": 1080,
++           "id": "dormant",
++           "markers": [],
++           "masterAudio": {
++             "audioEffects": [],
++             "balance": 0,
++             "muted": false,
++             "volume": 1,
++           },
++           "masterVideoEffects": [],
++           "name": "dormant",
++           "schemaVersion": 23,
++           "tracks": [
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [
++                 {
++                   "animation": {
++                     "effectTracks": [],
++                     "tracks": [],
++                   },
++                   "assetId": "__myrelith_text__:dormant-text",
++                   "audio": {
++                     "balance": 0,
++                     "enabled": true,
++                     "fadeInFrames": 0,
++                     "fadeOutFrames": 0,
++                   },
++                   "audioEffects": [],
++                   "blendMode": "normal",
++                   "effects": [],
++                   "id": "dormant-text",
++                   "lensCorrection": null,
++                   "name": "Title 世界",
++                   "opacity": 1,
++                   "sourceMode": "timed",
++                   "sourceRange": {
++                     "durationFrames": 100,
++                     "startFrame": 0,
++                   },
++                   "sourceTimeMap": {
++                     "rate": {
++                       "denominator": 1,
++                       "numerator": 1,
++                     },
++                     "sourceDurationTicks": 100000000,
++                     "sourceStartTicks": 0,
++                     "speedCurve": {
++                       "originFrame": 0,
++                       "points": [],
++                     },
++                   },
++                   "text": {
++                     "align": "center",
++                     "backgroundColor": "#000000",
++                     "backgroundEnabled": false,
++                     "bold": true,
++                     "boxHeightPx": 238,
++                     "boxWidthPx": 1248,
++                     "color": "#ffffff",
++                     "content": "Title 世界
++ Second line",
++                     "fontFamily": "sans-serif",
++                     "fontSizePx": 72,
++                     "italic": false,
++                     "outlineColor": "#000000",
++                     "outlineEnabled": true,
++                     "outlineWidthPx": 2,
++                     "paddingPx": 18,
++                     "shadowBlurPx": 4,
++                     "shadowColor": "#000000",
++                     "shadowEnabled": true,
++                     "shadowOffsetXPx": 2,
++                     "shadowOffsetYPx": 2,
++                   },
++                   "timelineRange": {
++                     "durationFrames": 100,
++                     "startFrame": 0,
++                   },
++                   "transform": {
++                     "anchorX": 0.5,
++                     "anchorY": 0.5,
++                     "rotation": 0,
++                     "scaleX": 1,
++                     "scaleY": 1,
++                     "x": 0,
++                     "y": 0,
++                   },
++                   "visual": {
++                     "crop": {
++                       "bottom": 0,
++                       "left": 0,
++                       "right": 0,
++                       "top": 0,
++                     },
++                     "flipHorizontal": false,
++                     "flipVertical": false,
++                     "scaleLocked": true,
++                   },
++                   "volume": 1,
++                 },
++               ],
++               "hidden": false,
++               "id": "dormant-V1",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V1",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-V2",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V2",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-V3",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V3",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-V4",
++               "kind": "video",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "V4",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-A1",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A1",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-A2",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A2",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-A3",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A3",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++             {
++               "adjustments": [],
++               "audioEffects": [],
++               "balance": 0,
++               "clips": [],
++               "hidden": false,
++               "id": "dormant-A4",
++               "kind": "audio",
++               "locked": false,
++               "multicamInstances": [],
++               "muted": false,
++               "name": "A4",
++               "sequenceInstances": [],
++               "solo": false,
++               "transitions": [],
++               "videoEffects": [],
++               "volume": 1,
++             },
++           ],
++           "width": 1920,
++         },
++       ],
++     },
++   ],
++   "project": {
++     "colorLuts": [],
++     "id": "title-project",
++     "multicams": [],
++     "name": "Title project",
++     "rootSequenceId": "root",
++     "sequences": [
++       {
++         "audioSampleRate": 48000,
++         "captionTracks": [],
++         "frameRate": {
++           "den": 1,
++           "num": 30,
++         },
++         "height": 1080,
++         "id": "root",
++         "markers": [],
++         "masterAudio": {
++           "audioEffects": [],
++           "balance": 0,
++           "muted": false,
++           "volume": 1,
++         },
++         "masterVideoEffects": [],
++         "name": "root",
++         "schemaVersion": 23,
++         "tracks": [
++           {
++             "adjustments": [],
++             "audioEffects": [],
++             "balance": 0,
++             "clips": [
++               {
++                 "animation": {
++                   "tracks": [
++                     {
++                       "keyframes": [
++                         {
++                           "easing": {
++                             "type": "cubic-bezier",
++                             "x1": 0.42,
++                             "x2": 0.8800000000000001,
++                             "y1": 0,
++                             "y2": 0.9692307692307691,
+                            },
+                            "frame": 0,
+                            "sourceTimeTicks": 0,
+                            "value": 0.2,
+                          },
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx:205:21
+    203|     fireEvent.pointerMove(handle, { pointerId: 1, clientX: clientX + 1…
+    204|     fireEvent.pointerUp(handle, { pointerId: 1, clientX: clientX + 1, …
+    205|     expect(store()).toBe(before); expect(transport().animationPreview)…
+       |                     ^
+    206|     for (const cancel of ['capture', 'escape']) {
+    207|       fireEvent.pointerDown(handle, { button: 0, pointerId: 2, clientX…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed | 1 passed | 13 skipped (21)
+   Start at  15:15:09
+   Duration  1.41s (transform 300ms, setup 22ms, import 832ms, tests 340ms, environment 165ms)

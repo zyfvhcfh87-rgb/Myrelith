@@ -33,15 +33,15 @@ export default function AnimationCurve({ row, frame, start, end, width, height }
   const y = (value: number) => 28 + (center + visibleSpan / 2 - value) / visibleSpan * innerHeight
   const path = samples.points.map((point) => `${point.move ? 'M' : 'L'} ${x(point.frame).toFixed(3)} ${y(point.value).toFixed(3)}`).join(' ')
   const easing = draft ?? key?.easing
-  const pointer = useRef<{ id: number; handle: '1' | '2'; rect: DOMRect; easing: Extract<ClipAnimationEasing, { type: 'cubic-bezier' }> } | null>(null)
+  const pointer = useRef<{ id: number; handle: '1' | '2'; startX: number; startY: number; moved: boolean; easing: Extract<ClipAnimationEasing, { type: 'cubic-bezier' }> } | null>(null)
   function handleValue(event: PointerEvent<SVGCircleElement>): ClipAnimationEasing | null {
     const active = pointer.current
     if (!active || !scalarKey || !scalarNext || !row) return null
     const span = scalarNext.frame - scalarKey.frame, values = scalarNext.value as number - (scalarKey.value as number)
-    const localX = event.clientX - active.rect.left, localY = event.clientY - active.rect.top
-    const progressX = ((start + localX / width * (end - start)) - row.owner.item.timelineRange.startFrame - scalarKey.frame) / span
-    const value = center + visibleSpan / 2 - (localY - 28) / innerHeight * visibleSpan
-    const progressY = values === 0 ? active.easing[active.handle === '1' ? 'y1' : 'y2'] : (value - (scalarKey.value as number)) / values
+    // Preserve the grip offset inside the hit circle. Zero pointer displacement
+    // returns the exact authored handle, without re-evaluating screen rounding.
+    const progressX = active.easing[active.handle === '1' ? 'x1' : 'x2'] + (event.clientX - active.startX) / width * (end - start) / span
+    const progressY = active.easing[active.handle === '1' ? 'y1' : 'y2'] - (values === 0 ? 0 : (event.clientY - active.startY) / innerHeight * visibleSpan / values)
     return { ...active.easing, [`x${active.handle}`]: Math.max(0, Math.min(1, progressX)), [`y${active.handle}`]: Math.max(0, Math.min(1, progressY)) }
   }
   return <div className="animation-curve-view">
@@ -65,12 +65,22 @@ export default function AnimationCurve({ row, frame, start, end, width, height }
             try {
               gesture.current?.cancel()
               gesture.current = animationEditorController.begin(() => { gesture.current = null; pointer.current = null; if (target.hasPointerCapture?.(id)) target.releasePointerCapture(id) })
-              pointer.current = { id, handle, rect: target.ownerSVGElement!.getBoundingClientRect(), easing }
+              pointer.current = { id, handle, startX: event.clientX, startY: event.clientY, moved: false, easing }
               target.setPointerCapture?.(id)
             } catch (cause) { animationCommandResult(cause instanceof Error ? cause.message : 'Cannot edit this handle.', '') }
           }}
-          onPointerMove={(event) => { if (pointer.current?.id !== event.pointerId) return; const next = handleValue(event); if (next) gesture.current?.preview({ kind: 'set-easing', easing: next }) }}
-          onPointerUp={(event) => { if (pointer.current?.id !== event.pointerId) return; const next = handleValue(event); if (next && gesture.current) animationCommandResult(gesture.current.commit({ kind: 'set-easing', easing: next }), 'Bézier handles updated.') }}
+          onPointerMove={(event) => {
+            const active = pointer.current
+            if (active?.id !== event.pointerId) return
+            active.moved ||= Math.hypot(event.clientX - active.startX, event.clientY - active.startY) >= 3
+            if (!active.moved) return
+            const next = handleValue(event); if (next) gesture.current?.preview({ kind: 'set-easing', easing: next })
+          }}
+          onPointerUp={(event) => {
+            if (pointer.current?.id !== event.pointerId) return
+            if (!pointer.current.moved) { gesture.current?.cancel(); return }
+            const next = handleValue(event); if (next && gesture.current) animationCommandResult(gesture.current.commit({ kind: 'set-easing', easing: next }), 'Bézier handles updated.')
+          }}
           onPointerCancel={() => gesture.current?.cancel()} onLostPointerCapture={() => gesture.current?.cancel()} />
       })}
     </svg>
