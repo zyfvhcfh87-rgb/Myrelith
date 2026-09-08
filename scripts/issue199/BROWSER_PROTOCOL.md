@@ -1,8 +1,11 @@
 # Gate3 production browser observations
 
 Supervisor approved `docs/evidence/issue199/gate3-browser-protocol.md` and granted
-port5199 exclusively after accepting product source87d8032. Product files must
-remain identical to that source throughout the observation run.
+port5199 exclusively after accepting product source87d8032. The first product
+failure stopped that run and released the slot. The bounded corrections are
+committed and accepted at42eb93b; this early harness is now pinned to that exact
+source with observation-source-hashes.json. A fresh slot grant is pending;
+do not execute the repinned harness yet. Current queue is198 →200 →201 →199.
 
 `prepare-browser-fixtures.mjs` calls the canonical portable serializer/parser via
 Vite SSR without opening a listener. Generated fixtures and hashes are committed
@@ -14,8 +17,12 @@ owners. No fixture emits audio. No fixtures are imported by production.
 unchanged production source, refuses an occupied5199, launches muted headless
 Chromium with a private context, records source/build/browser/fixture provenance,
 checks desktop/compact layouts and lazy requests, native input/IME, no-motion
-Bezier clicks and return-to-Timeline state/focus. First failure stops the run and
-closes owned browser/server. All attempts write results/screenshots/trace outside
+center/+2/-2px clicks on BOTH Bezier handles and return-to-Timeline state/focus.
+Console/page warnings or errors fail step acceptance and final acceptance; they
+are never merely collected. Compare shared origin, zoom and clip selection
+immediately before/after Back, preserving any intentional prior Fit keys change.
+First failure stops the run and closes owned browser/server. All attempts write
+results/screenshots/trace outside
 the repo under `/private/tmp/issue199-gate3-browser/<timestamp>/`.
 
 Read-only diagnostics discover exported Zustand stores from production modules

@@ -10,7 +10,7 @@ import { performance } from 'node:perf_hooks'
 import { chromium, expect } from '@playwright/test'
 
 const root = fileURLToPath(new URL('../..', import.meta.url))
-const productSource = '87d8032f25ef469449d59741fba56d1b76eda6aa'
+const productSource = '42eb93bf082dceb8fe7bc66434436c5d4614e7ba'
 const url = 'http://127.0.0.1:5199'
 const out = `/private/tmp/issue199-gate3-browser/${new Date().toISOString().replaceAll(':', '-')}`
 mkdirSync(out, { recursive: true })
@@ -26,7 +26,8 @@ let server, browser, page, context, currentStep = 'preflight', sourceFiles, serv
 function pinSource() {
   assert.equal(git('status', '--porcelain'), '', 'Run requires a clean committed harness and source')
   assert.equal(git('diff', productSource, '--', 'src', 'package.json', 'package-lock.json', 'vite.config.ts', 'tsconfig.app.json'), '', 'Product source differs from accepted Gate3')
-  const manifest = JSON.parse(readFileSync(join(root, 'docs/evidence/issue199/gate3-source-hashes.json'), 'utf8'))
+  const manifest = JSON.parse(readFileSync(join(root, 'scripts/issue199/observation-source-hashes.json'), 'utf8'))
+  assert.equal(manifest.productSource, productSource, 'Harness and observation source manifest disagree')
   for (const [path, expected] of Object.entries(manifest.sha256)) assert.equal(hash(readFileSync(join(root, path))), expected, path)
   sourceFiles = manifest.sha256
   for (const [path, facts] of Object.entries(fixtureManifest.files)) assert.equal(hash(readFileSync(join(fixtureRoot, path))), facts.sha256, path)
@@ -42,7 +43,7 @@ async function state() {
 async function shot(label) { const path = join(out, `${label}.png`); await page.screenshot({ path, fullPage: false }); report.screenshots.push(path) }
 async function step(name, action) {
   currentStep = name; const start = performance.now()
-  try { const detail = await action(); report.steps.push({ name, status: 'passed', elapsedMs: performance.now() - start, detail }); persist(); console.log(`PASS ${name}`) }
+  try { const detail = await action(); assert.deepEqual(report.problems, [], 'Console or page problems fail observable acceptance'); report.steps.push({ name, status: 'passed', elapsedMs: performance.now() - start, detail }); persist(); console.log(`PASS ${name}`) }
   catch (error) { report.steps.push({ name, status: 'failed', elapsedMs: performance.now() - start, error: error.stack }); throw error }
 }
 async function bridge() {
@@ -126,24 +127,33 @@ try {
     assert.deepEqual((await state()).project, before.project, 'Native input/IME modified the document')
     await input.fill('Native curve title'); return { past: (await state()).past }
   })
-  await step('Bézier handle click without a drag preserves exact document and history', async () => {
+  await step('both Bézier handles preserve exact document and history for center and off-center no-motion clicks', async () => {
     const grid = page.getByRole('grid', { name: 'Animation keys' }); await grid.focus(); await grid.press('Home')
     await page.getByRole('button', { name: 'Curve', exact: true }).click(); await page.getByRole('button', { name: 'Fit keys', exact: true }).click(); await settled()
-    const handle = page.getByRole('button', { name: 'Drag Bézier handle 1; numeric alternatives in key controls', exact: true })
-    await expect(handle).toBeVisible(); await shot('curve-before-click')
-    const box = await handle.boundingBox(); assert.ok(box)
-    const before = await state(); await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down(); await page.mouse.up(); await settled()
-    const after = await state(); report.noMotionHandle = { before, after, box }
-    await shot('curve-after-click')
-    assert.equal(after.past, before.past, 'A no-motion Bézier click added an undo entry')
-    assert.deepEqual(after.project, before.project, 'A no-motion Bézier click changed authored easing')
-    return { history: after.past, box }
+    await shot('curve-before-click'); report.noMotionHandles = []
+    for (const which of ['1', '2']) for (const offset of [0, 2, -2]) {
+      currentStep = `native no-motion Bézier handle${which}, hit offset${offset}`
+      const handle = page.getByRole('button', { name: `Drag Bézier handle ${which}; numeric alternatives in key controls`, exact: true })
+      await expect(handle).toBeVisible()
+      const box = await handle.boundingBox(); assert.ok(box)
+      const point = { x: box.x + box.width / 2 + offset, y: box.y + box.height / 2 + offset }
+      const before = await state(); await page.mouse.move(point.x, point.y); await page.mouse.down(); await page.mouse.up(); await settled()
+      const after = await state(); report.noMotionHandles.push({ handle: which, offset, point, box, before, after })
+      await shot(`curve-handle-${which}-offset-${offset}`)
+      assert.equal(after.past, before.past, 'A no-motion Bézier click added an undo entry')
+      assert.equal(after.future, before.future, 'A no-motion Bézier click changed redo')
+      assert.deepEqual(after.project, before.project, 'A no-motion Bézier click changed authored easing')
+      assert.deepEqual(report.problems, [], 'Console or page problems fail observable acceptance')
+      persist()
+    }
+    return { cases: report.noMotionHandles.map(({ handle, offset, before }) => ({ handle, offset, history: before.past })) }
   })
   await step('Animation back to Timeline preserves selection, shared viewport and usable focus', async () => {
     const before = await state(); await page.getByRole('button', { name: 'Back to Timeline', exact: true }).click(); await settled()
     await expect(page.locator('.timeline-scroll-host')).toBeVisible(); const after = await state()
-    assert.deepEqual(after.selectedClipIds, report.timelineBefore.selectedClipIds)
-    assert.equal(after.zoom, before.zoom); assert.ok(Number.isSafeInteger(after.origin) && after.origin >= 0)
+    assert.deepEqual(after.selectedClipIds, before.selectedClipIds)
+    assert.equal(after.zoom, before.zoom); assert.equal(after.origin, before.origin, 'Closing Animation changed the shared integer origin')
+    assert.ok(Number.isSafeInteger(after.origin) && after.origin >= 0)
     assert.ok(!['BODY', 'HTML'].includes(after.active.tag), 'Closing Animation lost focus to the document body')
     await shot('timeline-return'); return { before: { zoom: before.zoom, origin: before.origin }, after: { zoom: after.zoom, origin: after.origin, active: after.active } }
   })
@@ -161,6 +171,9 @@ try {
   if (server) { server.kill('SIGTERM'); await new Promise((resolve) => { if (server.exitCode !== null) resolve(); else { server.once('exit', resolve); setTimeout(resolve, 3000) } }); report.cleanup.serverExitCode = server.exitCode; report.cleanup.serverSignal = server.signalCode }
   report.cleanup.port5199Listening = await listening()
   report.cleanup.productSourceStillAccepted = git('diff', productSource, '--', 'src', 'package.json', 'package-lock.json', 'vite.config.ts', 'tsconfig.app.json') === ''
+  if (report.status === 'preflight-passed' && report.problems.length) {
+    report.status = 'failed'; report.failure = { step: 'final console/page acceptance', error: 'Recorded console or page problems prevent acceptance', problems: report.problems }; process.exitCode = 1
+  }
   writeFileSync(join(out, 'server.log'), serverLog)
   report.finishedAt = new Date().toISOString(); persist(); console.log(`Evidence: ${out}`)
 }
