@@ -1,0 +1,108 @@
+{
+  "status": "private-tool-versions-confirmed-build-not-started",
+  "acceptedSpeechSourceHead": "34fe9493cada403159bdce75b50f6c08a20f755b",
+  "executionContext": "Accepted speech source/config files verified byte-identical; independently authorized caption shared-helper work was in progress.",
+  "versionChecksPassed": 7,
+  "evidence": [
+    {
+      "name": "prepared.json",
+      "bytes": 1781,
+      "sha256": "f002401adf256cb02c54d456c4b59ae87a46854a843b04083da990f3781bc03d"
+    },
+    {
+      "name": "tagged-binaryen-version.json",
+      "bytes": 510,
+      "sha256": "05330c52409e5fcaff3251714b499f6c4bac4556b3674a8ea5fcb8f1f4c099f0"
+    },
+    {
+      "name": "tagged-binaryen-version.txt",
+      "bytes": 49,
+      "sha256": "312db670f796f2590ca0784b6ea86771ce3f4e808fc7e46b8e045f2fb4490127"
+    },
+    {
+      "name": "tagged-clang-version.json",
+      "bytes": 505,
+      "sha256": "4a2aa823fab60a7aec2d341513172e98a6a580821ec2475cea5d488eafc883df"
+    },
+    {
+      "name": "tagged-clang-version.txt",
+      "bytes": 284,
+      "sha256": "2a4993ddb0bf7a9d09afe7788015b3db1d4d6363050f6fd06ea28eac6fb8fbfe"
+    },
+    {
+      "name": "tagged-cmake-version.json",
+      "bytes": 539,
+      "sha256": "a607842090e313486c8fb9ed6f30211ae85268cfb0f80898e3927c2762c71da4"
+    },
+    {
+      "name": "tagged-cmake-version.txt",
+      "bytes": 90,
+      "sha256": "f46066af33a13476fb604a1a1a24bb8d4dbddb6eb5855e0c24f9f7132784c9f0"
+    },
+    {
+      "name": "tagged-emscripten-version.json",
+      "bytes": 674,
+      "sha256": "99376ed6dc5222de62900f2bd544dafc42c6a2944550c11a633685462fed0ebe"
+    },
+    {
+      "name": "tagged-emscripten-version.txt",
+      "bytes": 4610,
+      "sha256": "73dbad27149f35da432ae8a25f89191f4ddf160f0b5212074c3b85b3c13b73ff"
+    },
+    {
+      "name": "tagged-ninja-version.json",
+      "bytes": 487,
+      "sha256": "f2d26f921d37c8211d9c7c6e9d219266ee902f2779e86a98d81b675f02089223"
+    },
+    {
+      "name": "tagged-ninja-version.txt",
+      "bytes": 7,
+      "sha256": "810ab97f4b3fccb9adf1db7959945b479635931ccc4a0243c34a41b739eae25a"
+    },
+    {
+      "name": "tagged-node-version.json",
+      "bytes": 669,
+      "sha256": "abe29402a735b848b1fa6b40da9326050123dfcaa0910e54b738b38f7c978f4d"
+    },
+    {
+      "name": "tagged-node-version.txt",
+      "bytes": 9,
+      "sha256": "b7677d3ec37ee1897ba07dc2cfe8292fe421c9ac93396cca5bbece486d1a2a41"
+    },
+    {
+      "name": "tagged-private-environment.json",
+      "bytes": 2921,
+      "sha256": "2ac97cf0048c5a3afecb0e9b7b6f5e3080044a8f653da642f3c512b413eab0a3"
+    },
+    {
+      "name": "tagged-python-version.json",
+      "bytes": 515,
+      "sha256": "cc6cf36a32669c3b2eda0629c35ad41f41c49ebe7dbabc5d371e1af94986f46d"
+    },
+    {
+      "name": "tagged-python-version.txt",
+      "bytes": 14,
+      "sha256": "466d56409acd0196aa49258a5892f36ee5da8580e74ee5e3a7f7d81d9d9f5b78"
+    },
+    {
+      "name": "tagged-version-attempt.json",
+      "bytes": 178,
+      "sha256": "ac7a2117e66d5746ac05f53681ccee49a8044f23130981b3dd67d092b75f56c9"
+    },
+    {
+      "name": "tagged-version-cleanup.json",
+      "bytes": 468,
+      "sha256": "ab98deb8c5731689f01749ff459fce7f2b8782554c63373d6b324ae269e83d22"
+    },
+    {
+      "name": "invocation.txt",
+      "bytes": 3635,
+      "sha256": "0485e1fb64bb5b28ce62bdbdfb20193f966afbebf392d46f9927b83e1a1a8b1e"
+    }
+  ],
+  "configurationAttempted": false,
+  "compilationAttempted": false,
+  "wasmInstantiated": false,
+  "inferenceExecuted": false,
+  "waitingForExclusiveCompileSlot": true
+}

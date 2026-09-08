@@ -283,16 +283,17 @@
       "reason": "Exact upstream source/license bytes, including whitespace, preserved in an inert archive."
     },
     "localVersionVerification": {
-      "status": "stopped-after-wrong-rolling-LLVM-expectation",
+      "status": "all-seven-tagged-versions-match",
+      "evidence": "../whispercpp-tool-versions/checkpoint.json",
       "confirmed": [
         "Python3.13.3",
         "Node24.19.0",
         "CMake4.4.3",
-        "Ninja1.13.2"
+        "Ninja1.13.2",
+        "LLVM24.0.0git / 4bfd08c2d769736841ae4f5705d76fa6daa39027",
+        "Binaryen132 (version_132-16-g89a81ef9b)",
+        "Emscripten6.0.8-git / aeb67926e7de656da38bc807d83050af93578758"
       ],
-      "llvmObserved": "24.0.0git / 4bfd08c2d769736841ae4f5705d76fa6daa39027",
-      "binaryenCommandExecuted": false,
-      "emscriptenCommandExecuted": false,
       "configurationAttempted": false,
       "compilationAttempted": false
     }

@@ -1,0 +1,42 @@
+{
+  "status": "prepared",
+  "sourceCheckpoint": "d8a1ff4460aabee0df5113d731a2698ed5777012",
+  "integratedHead": "4d4a6c2534cf25b8db3ec653f564b38cf2a67b6e",
+  "recipeSha256": "c137a6d26e981a6604d05a65e6cda3ecf612c5f5b849b161fbd6e70284d67939",
+  "configSha256": "bb05af20f9fa2c7218d7e82f9441299060b8033e348430bf764e8967ba2cf166",
+  "driverSha256": "84f37735563801687c4e57d6fc8987bc90d2eb2eb9d57eb4f63b1c211564b1ae",
+  "guardSha256": "4c9ba6b9267a14db07ec6ed901ddde8eaef0f314b3b53aa7dd10128c4bd9f764",
+  "patchedFiles": {
+    "sourceCommit": "371b5a7561823ab2bb32142d2751e35e7534727b",
+    "build": [
+      {
+        "path": "CMakeLists.txt",
+        "before": "ad8d5b3f05151f3e7a7a782242ebcefd65ebf01a652501d9ee7e53176880830f",
+        "after": "46c3ed5ec4e3dfa0ee5629ec0a2ed2441241b1630161d20eb6eb20af53df6bd2"
+      },
+      {
+        "path": "ggml/CMakeLists.txt",
+        "before": "5c97a1112c1e038259447f73924f1132bf0d412a8964b068971dd641acfb03f0",
+        "after": "7ea6e4b481b45cee13dc647907b2ae7dfe1647e41b5702d9e135bf7f1a70f104"
+      },
+      {
+        "path": "ggml/src/CMakeLists.txt",
+        "before": "b4210d3aded4f4d217209624f981ecb5c65b1592eca7e049ff14b13c60743cb5",
+        "after": "55b311363d891a67d86ea96a9c65fd22a4a5ca506b11374ec24ce676125cb492"
+      }
+    ],
+    "guard": [
+      {
+        "path": "include/whisper.h",
+        "before": "a7d19f7feb5be52426628ff07e0602de28a30dc4312d0d0603e1e536753f76dd",
+        "after": "b9e16a7318de71c4edb0f1a3f8c4b7c1f790428e8167ae239f868352b68807ac"
+      },
+      {
+        "path": "src/whisper.cpp",
+        "before": "dc70e14a08119b58ed2a7c7c2919f87b120897f75648002202cce58d8e09191f",
+        "after": "85617366fdfce12ea3d56ebb36d1267d2e70618b0151b17e6d84f4736ba9c2ad"
+      }
+    ]
+  },
+  "runtimeExecuted": false
+}

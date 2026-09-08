@@ -1,0 +1,31 @@
+tools.filelock:DEBUG: Attempting to acquire lock 4389701344 on /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/tmp/emscripten_temp/emscripten.lock
+tools.filelock:DEBUG: Lock 4389701344 acquired on /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/tmp/emscripten_temp/emscripten.lock
+profiler:DEBUG: block "read_ports" took 0.016 seconds
+emcc:WARNING: invocation: /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/emcc.py --version (in /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build)
+profiler:DEBUG: block "parse_arguments" took 0.000 seconds
+cache:DEBUG: PID 92021 acquiring multiprocess file lock to Emscripten cache at /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/cache
+tools.filelock:DEBUG: Attempting to acquire lock 4393308944 on /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/cache/cache.lock
+tools.filelock:DEBUG: Lock 4393308944 acquired on /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/cache/cache.lock
+cache:DEBUG: done
+shared:DEBUG: sanity file not found: /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/cache/sanity.txt
+utils:DEBUG: successfully executed /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/node/node-v24.19.0-darwin-arm64/bin/node --require /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/config/deny-wasm.cjs --version
+utils:DEBUG: successfully executed /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/bin/clang --version
+utils:DEBUG: successfully executed /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/bin/clang -print-targets
+shared:INFO: (Emscripten: Running sanity checks)
+utils:DEBUG: successfully executed /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/node/node-v24.19.0-darwin-arm64/bin/node --require /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/config/deny-wasm.cjs -e 'console.log("hello")'
+profiler:DEBUG: block "check_node" took 0.027 seconds
+profiler:DEBUG: block "sanity LLVM" took 0.000 seconds
+tools.filelock:DEBUG: Attempting to release lock 4393308944 on /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/cache/cache.lock
+tools.filelock:DEBUG: Lock 4393308944 released on /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/cache/cache.lock
+cache:DEBUG: PID 92021 released multiprocess file lock to Emscripten cache at /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/cache
+profiler:DEBUG: block "check_sanity" took 0.081 seconds
+profiler:DEBUG: block "setup" took 0.000 seconds
+profiler:DEBUG: block "main" took 0.081 seconds
+emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.8-git (aeb67926e7de656da38bc807d83050af93578758)
+Copyright (C) 2026 the Emscripten authors (see AUTHORS.txt)
+This is free and open source software under the MIT license.
+There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+not cleaning up temp files since in debug-save mode, see them in /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/tmp/emscripten_temp
+tools.filelock:DEBUG: Attempting to release lock 4389701344 on /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/tmp/emscripten_temp/emscripten.lock
+tools.filelock:DEBUG: Lock 4389701344 released on /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/tmp/emscripten_temp/emscripten.lock

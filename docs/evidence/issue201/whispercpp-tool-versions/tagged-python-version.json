@@ -1,0 +1,16 @@
+{
+  "label": "tagged-python-version",
+  "command": [
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/python/python-3.13.3-0/bin/python3.13",
+    "--version"
+  ],
+  "timeoutSeconds": 30,
+  "startedAt": "2026-09-08T17:36:01Z",
+  "pid": 92014,
+  "processGroup": 92014,
+  "exitCode": 0,
+  "remainingGroupTerminated": false,
+  "elapsedSeconds": 0.006,
+  "logBytes": 14,
+  "logSha256": "466d56409acd0196aa49258a5892f36ee5da8580e74ee5e3a7f7d81d9d9f5b78"
+}
