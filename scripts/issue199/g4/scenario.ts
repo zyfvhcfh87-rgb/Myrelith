@@ -3,6 +3,7 @@ import { RECOVERY_SAVE_DELAY_MS } from '../../../src/app/projectPersistenceContr
 import { useProjectSessionStore } from '../../../src/state/projectSessionStore'
 import { PcmCoverage } from './pcmCoverage'
 import { buildFixtureProject } from './fixture'
+import { G4PreparedExportFailure, runPreparedExport, type PreparedExportEvent } from './preparedExport'
 /** Disposable source-module browser adapter. Never imported by the production app. */
 import { Output, BufferTarget, CanvasSource, WebMOutputFormat, Input, BlobSource, ALL_FORMATS, VideoSampleSink, AudioBufferSink } from 'mediabunny'
 import { importMedia } from '../../../src/app/mediaImportController'
@@ -12,7 +13,8 @@ import { useTransportStore } from '../../../src/state/transportStore'
 import { planTitleEdit } from '../../../src/domain/titleEditing'
 import { createProjectFileSnapshot, parseProjectFile, serializeProjectFile } from '../../../src/domain/projectFile'
 import { exportPresetById } from '../../../src/domain/exportProfile'
-import { startExport, disposeExport } from '../../../src/app/exportController'
+import { disposeExport } from '../../../src/app/exportController'
+import { disposePluginPreparedExportOwner } from '../../../src/app/pluginPreparedExportOwner'
 import { subscribePreviewRenderDiagnostics, disposePreview } from '../../../src/app/previewController'
 import { pauseAndDrainPlayback, disposeTransport } from '../../../src/app/transportController'
 import { mediaResourceAdmission } from '../../../src/app/mediaResourceAdmission'
@@ -146,11 +148,11 @@ export async function capture(frame: number) {
   try { ctx.drawImage(canvas, 0, 0, 1280, 720); const data = ctx.getImageData(0, 0, 1280, 720).data; const result = { frame, pixels: sampled(data), glyph: glyph(data) }; raw.push(result); return { ...result, proof, projectId: now.project.id, generation: now.projectGeneration, dimensions: [canvas.width, canvas.height] } }
   finally { sample.width = sample.height = 0 }
 }
-export async function exportEncoded() {
+export async function exportEncoded(progress: (event: PreparedExportEvent) => Promise<void>) {
   await pauseAndDrainPlayback()
   const before = useDocumentStore.getState().project
   check(before === referenceProject, 'Export differs from the reopened reference project')
-  const result = await startExport(profile); check(result?.destination === 'download', 'Export did not produce bytes')
+  const result = await runPreparedExport(profile, before, progress); check(result?.destination === 'download', 'Export did not produce bytes')
   encoded = new Uint8Array(result.buffer)
   return { projectUnchanged: useDocumentStore.getState().project === before, bytes: encode(encoded), sha256: await digest(encoded), size: encoded.length }
 }
@@ -188,17 +190,21 @@ export async function decodeOutput(progress: (value: unknown) => Promise<void>) 
       videoCodec: await video.getCodec(), audioCodec: await audio.getCodec(), videoPackets: await video.computePacketStats(), frames, pcm: { through: complete.coveredSamples, coverage: complete, early: [rms(0, 9600), rms(1, 9600)], late: [rms(0, 33600), rms(1, 33600)] }, admission, afterAdmission: mediaResourceAdmission.snapshot() }
   } catch (error) { partial.error = String(error); await progress(partial); throw error } finally { input.dispose(); canvas.width = canvas.height = 0; await disposeExport(); raw = []; encoded = null }
 }
-export async function rejectMissingFont() {
+export async function rejectMissingFont(progress: (event: PreparedExportEvent) => Promise<void>) {
   const before = useDocumentStore.getState().project
   const missing = planTitleEdit(before, { sequenceId: 'g4', clipId: 'g4-title' }, { kind: 'patch', ids: ['g4-words'], patch: { font: { family: 'G4 Missing Named Font', fallbackFamily: null } } }, () => 'g4-unused')
   useDocumentStore.getState().setProject(missing)
-  let reason = '', unexpected: Awaited<ReturnType<typeof startExport>>
-  try { unexpected = await startExport(profile) } catch (error) { reason = String(error) }
-  finally { await disposeExport(); useDocumentStore.getState().setProject(before) }
+  let reason = '', unexpected: Awaited<ReturnType<typeof runPreparedExport>>
+  try { unexpected = await runPreparedExport(profile, missing, progress) }
+  catch (error) {
+    if (!(error instanceof G4PreparedExportFailure) || error.stage !== 'start') throw error
+    reason = String(error.cause)
+  }
+  finally { try { await disposeExport() } finally { useDocumentStore.getState().setProject(before) } }
   if (unexpected) return { unexpected: true, destination: unexpected.destination, bytes: unexpected.destination === 'download' ? encode(new Uint8Array(unexpected.buffer)) : null }
   check(/font|fallback/i.test(reason), `Missing font refusal absent: ${reason}`); return { reason }
 }
-export async function dispose() { await pauseAndDrainPlayback(); await disposeExport(); await disposeTransport(); await disposePreview(); originals = []; raw = []; portable = ''; encoded = null; referenceProject = null; return mediaResourceAdmission.snapshot() }
+export async function dispose() { await pauseAndDrainPlayback(); await disposePluginPreparedExportOwner('issue199-g4-dispose'); await disposeExport(); await disposeTransport(); await disposePreview(); originals = []; raw = []; portable = ''; encoded = null; referenceProject = null; return mediaResourceAdmission.snapshot() }
 
 let sessionObservation: ReturnType<typeof observeProjectSession> | null = null
 export function observeSession(write: (event: SessionEvent) => Promise<void>) {

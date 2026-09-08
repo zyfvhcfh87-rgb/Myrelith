@@ -30,7 +30,7 @@ function processRows() { const p = spawnSync('/bin/ps', ['-axo', 'pid=,ppid=,lst
 function sample(label) { const rows = ownedProcessRows(processRows(), profile, known); for (const row of rows) if (!known.some((r) => sameProcessIdentity(r, row))) known.push(row); report.processes.push({ label, at: new Date().toISOString(), rows }); save(); return rows }
 let server, awake, context, page, serverLog = '', current = 'preflight', rejectSessionFailure
 const sessionFailure = new Promise((_, reject) => { rejectSessionFailure = reject }); void sessionFailure.catch(() => undefined)
-const call = (name, arg) => page.evaluate(async ({ name, arg }) => { const module = await import('/scripts/issue199/g4/scenario.ts'); return module[name](name === 'decodeOutput' ? (value) => globalThis.__issue199Evidence(value) : name === 'observeSession' ? (value) => globalThis.__issue199Session(value) : arg) }, { name, arg })
+const call = (name, arg) => page.evaluate(async ({ name, arg }) => { const module = await import('/scripts/issue199/g4/scenario.ts'); return module[name](name === 'decodeOutput' ? (value) => globalThis.__issue199Evidence(value) : name === 'observeSession' ? (value) => globalThis.__issue199Session(value) : ['rejectMissingFont', 'exportEncoded'].includes(name) ? (value) => globalThis.__issue199PreparedExport(name, value) : arg) }, { name, arg })
 function preservePortable(saved, name) {
   writeFileSync(join(out, name), saved.portable)
   for (const file of saved.files) { const bytes = Buffer.from(file.bytes, 'base64'); assert.equal(hash(bytes), file.sha256); writeFileSync(join(out, file.name), bytes) }
@@ -69,6 +69,12 @@ try {
   report.chromium = context.browser().version(); await context.tracing.start({ screenshots: true, snapshots: true, sources: true })
   page = context.pages()[0]; page.setDefaultTimeout(15000)
   await page.exposeFunction('__issue199Evidence', (partial) => writeFileSync(join(out, 'partial-decode.json'), JSON.stringify(partial, null, 2) + '\n'))
+  const preparedExports = { rejectMissingFont: [], exportEncoded: [] }
+  await page.exposeFunction('__issue199PreparedExport', (name, event) => {
+    assert.ok(Object.hasOwn(preparedExports, name)); assert.ok(preparedExports[name].length < 16)
+    preparedExports[name].push(event)
+    writeFileSync(join(out, 'prepared-exports.json'), JSON.stringify(preparedExports, null, 2) + '\n')
+  })
   await page.exposeFunction('__issue199Session', (event) => {
     assert.equal(event.sequence, report.sessionEvents.length); assert.ok(report.sessionEvents.length < 256)
     report.sessionEvents.push({ step: current, ...event })

@@ -79,7 +79,20 @@ responsive-layout or assistive-technology claim.
 
 ## Actual encoded output and predicates
 
-Production `startExport` uses WebM, VP9 at 5 Mbps and Opus at 192 kbps, stereo.
+Both export calls use the public `pluginPreparedExportOwner` facade used by
+ExportDialog: prepare, review, then start with the one-shot ready token. The two
+unchanged disabled `plugin:missing/future` descriptors are classified `invalid`
+before toggle handling. The diagnostic records their complete preparation facts,
+checks exactly two matching version-99 disabled descriptors with the original
+literal payload, and calls canonical `approveReviewedBlockers` for that exact
+review token. Additional, enabled or changed descriptors fail before approval.
+The owner closes in finally on every path; preparation, cleanup and evidence
+errors cannot count as the expected start-stage font refusal. Data-only events
+are saved to `prepared-exports.json`; tokens are never written there. This is
+diagnostic orchestration of the production facade, not native ExportDialog UI
+approval coverage. The plain-export guard and fixture remain unchanged.
+
+Production prepared export uses WebM, VP9 at 5 Mbps and Opus at 192 kbps, stereo.
 The actual returned encoded bytes are saved **before** numerical acceptance.
 Export and readback are separate calls: the driver saves encoded bytes and
 their hash before starting any readback. Per-frame and per-buffer decoded facts
