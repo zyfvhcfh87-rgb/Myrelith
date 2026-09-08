@@ -22,7 +22,7 @@ const report = { format: 'issue199-animation-observation-v1', startedAt: new Dat
   runtime: { node: process.version, platform: process.platform, architecture: process.arch, macOS: execFileSync('sw_vers', ['-productVersion'], { encoding: 'utf8' }).trim() }, browserPath: 'Browser plugin not available; approved regular Playwright with muted headless Chromium', steps: [], observations: [], problems: [], requests: [], screenshots: [], pending: ['native key/handle drag and all cancellation causes', 'sibling preview restoration', 'cross-owner mapping/history/save/reopen', 'large-document40/512/256 bounds and raw cold/warm timings', 'remaining protocol cases'], cleanup: {} }
 const persist = () => writeFileSync(join(out, 'result.json'), JSON.stringify(report, null, 2) + '\n')
 const listening = () => new Promise((resolve) => { const socket = createConnection({ host: '127.0.0.1', port: 5199 }); socket.once('connect', () => { socket.destroy(); resolve(true) }); socket.once('error', () => resolve(false)) })
-let server, browser, page, context, currentStep = 'preflight', sourceFiles
+let server, browser, page, context, currentStep = 'preflight', sourceFiles, serverLog = ''
 function pinSource() {
   assert.equal(git('status', '--porcelain'), '', 'Run requires a clean committed harness and source')
   assert.equal(git('diff', productSource, '--', 'src', 'package.json', 'package-lock.json', 'vite.config.ts', 'tsconfig.app.json'), '', 'Product source differs from accepted Gate3')
@@ -72,7 +72,7 @@ try {
   writeFileSync(join(out, 'build.log'), build)
   report.buildHashes = Object.fromEntries(readdirSync(join(root, 'dist/assets')).map((name) => [`assets/${name}`, hash(readFileSync(join(root, 'dist/assets', name)))]))
   server = spawn(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'), 'preview', '--host', '127.0.0.1', '--port', '5199', '--strictPort'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
-  report.serverPid = server.pid; let serverLog = ''; server.stdout.on('data', (data) => { serverLog += data }); server.stderr.on('data', (data) => { serverLog += data })
+  report.serverPid = server.pid; server.stdout.on('data', (data) => { serverLog += data }); server.stderr.on('data', (data) => { serverLog += data })
   for (let attempt = 0; attempt < 50 && !(await listening()); attempt++) await new Promise((resolve) => setTimeout(resolve, 100))
   assert.ok(await listening(), 'Private production preview did not start')
   browser = await chromium.launch({ headless: true, args: ['--mute-audio'] })
@@ -92,7 +92,7 @@ try {
     assert.equal(report.requests.some((request) => /AnimationWorkspace-/.test(request)), false)
     await page.getByRole('button', { name: 'Open a project', exact: true }).click()
     await page.locator('input[type="file"][accept=".myrelith,.webcut"]').setInputFiles(join(fixtureRoot, 'mixed.myrelith'))
-    await page.getByRole('button', { name: 'Open project', exact: true }).click()
+    await page.getByRole('button', { name: 'Open with 2 offline', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Animation', exact: true })).toBeVisible(); await settled()
     assert.equal(report.requests.some((request) => /AnimationWorkspace-/.test(request)), false, 'Workspace requested before first open')
     return await bridge()
@@ -161,5 +161,6 @@ try {
   if (server) { server.kill('SIGTERM'); await new Promise((resolve) => { if (server.exitCode !== null) resolve(); else { server.once('exit', resolve); setTimeout(resolve, 3000) } }); report.cleanup.serverExitCode = server.exitCode; report.cleanup.serverSignal = server.signalCode }
   report.cleanup.port5199Listening = await listening()
   report.cleanup.productSourceStillAccepted = git('diff', productSource, '--', 'src', 'package.json', 'package-lock.json', 'vite.config.ts', 'tsconfig.app.json') === ''
+  writeFileSync(join(out, 'server.log'), serverLog)
   report.finishedAt = new Date().toISOString(); persist(); console.log(`Evidence: ${out}`)
 }
