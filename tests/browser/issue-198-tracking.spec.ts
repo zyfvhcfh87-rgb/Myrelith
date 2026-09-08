@@ -199,8 +199,13 @@ test('real point tracking previews, applies once, saves/reopens through UI and m
   await page.getByRole('button', { name: 'Projects', exact: true }).click()
   await page.getByRole('button', { name: 'Open a project', exact: true }).click()
   await page.getByLabel('Choose a Myrelith project file', { exact: true }).setInputFiles(downloadPath)
-  await presentedAction(page, 0, () => page.getByRole('button', { name: 'Open with 1 offline', exact: true }).click(), { event: 'click', connected: false })
+  // Paused Auto uses the preregistered 1280x720 project dimensions. Offline
+  // Open checks retained data/UI; relink below separately qualifies source pixels.
+  await presentedAction(page, 0, () => page.getByRole('button', { name: 'Open with 1 offline', exact: true }).click(), {
+    event: 'click', connected: false, expectedOfflineCanvasSize: [1280, 720],
+  })
   await expect(page.getByRole('button', { name: 'Commands' })).toBeVisible()
+  await expect(page.getByText('Source offline', { exact: true })).toBeVisible()
   expect((await snapshot(page)).clip.animation.effectTracks).toEqual(tracks)
   expect((await snapshot(page)).past).toBe(0)
   await presentedAction(page, 0, () => page.getByLabel(`Relink ${filename}`, { exact: true }).setInputFiles(sourceFile), { event: 'change' })

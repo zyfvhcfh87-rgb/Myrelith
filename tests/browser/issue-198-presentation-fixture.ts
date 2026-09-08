@@ -9,8 +9,9 @@ interface Presentation {
 interface PresentationProbe {
   records: Presentation[]
   lastCheck: { reason: string; expectedFrame: number | null; actionAfter: number | null;
-    stateChangedAt: number; presentation: Presentation | null; differentContext: string[]; reused: boolean } | null
-  arm(frame: number, connected: boolean, allowCurrent: boolean, event?: 'click' | 'change'): void
+    stateChangedAt: number; presentation: Presentation | null; differentContext: string[]; reused: boolean;
+    observedSize: (number | null)[]; currentSize: (number | null)[]; expectedOfflineCanvasSize: readonly [number, number] | null } | null
+  arm(frame: number, connected: boolean, allowCurrent: boolean, event?: 'click' | 'change', expectedOfflineCanvasSize?: readonly [number, number]): void
   mark(): void
   ready(): boolean
   cancelArm(): void
@@ -48,7 +49,8 @@ export async function observePresentations(page: Page) {
       }
     }
     const unsubscribeStores = [document.subscribe(observeState), transport.subscribe(observeState), media.subscribe(observeState)]
-    let armed: { frame: number; connected: boolean; allowCurrent: boolean; after: number; current: Presentation | null } | null = null
+    let armed: { frame: number; connected: boolean; allowCurrent: boolean; after: number; current: Presentation | null;
+      expectedOfflineCanvasSize?: readonly [number, number] } | null = null
     let removeTrigger = () => {}
     const records: Presentation[] = []
     const unsubscribe = subscribePreviewRenderDiagnostics((event: Presentation) => {
@@ -57,9 +59,9 @@ export async function observePresentations(page: Page) {
     })
     const probe: PresentationProbe = {
       records, lastCheck: null,
-      arm(frame, connected, allowCurrent, event) {
+      arm(frame, connected, allowCurrent, event, expectedOfflineCanvasSize) {
         probe.cancelArm()
-        armed = { frame, connected, allowCurrent, after: Number.POSITIVE_INFINITY, current: null }
+        armed = { frame, connected, allowCurrent, expectedOfflineCanvasSize, after: Number.POSITIVE_INFINITY, current: null }
         if (event) {
           // Set the action watermark at the native event, after locator scroll/
           // actionability work and before React handles this visual mutation.
@@ -78,19 +80,32 @@ export async function observePresentations(page: Page) {
       },
       ready() {
         const names = ['projectGeneration', 'document', 'assets', 'descriptors', 'frame', 'canvas', 'canvas.width', 'canvas.height']
-        const differentContext = latest ? context().flatMap((value, index) => value === latest!.context[index] ? [] : [names[index]!]) : []
+        const current = context()
+        const differentContext = latest ? current.flatMap((value, index) => value === latest!.context[index] ? [] : [names[index]!]) : []
+        const dimensions = (values: unknown[]) => values.slice(6).map((value) => typeof value === 'number' ? value : null)
         const finish = (reason: string) => {
           probe.lastCheck = { reason, expectedFrame: armed?.frame ?? null,
             actionAfter: armed && Number.isFinite(armed.after) ? armed.after : null,
             stateChangedAt: changedAt, presentation: latest?.event ?? null, differentContext,
-            reused: latest !== null && latest.event === armed?.current }
+            reused: latest !== null && latest.event === armed?.current,
+            observedSize: dimensions(latest?.context ?? []), currentSize: dimensions(current),
+            expectedOfflineCanvasSize: armed?.expectedOfflineCanvasSize ?? null }
           return reason === 'ready'
         }
         if (!armed) return finish('not-armed')
         if (!latest) return finish('no-presentation')
         if (!Number.isFinite(armed.after)) return finish('unmarked-action')
         const { event } = latest
-        if (differentContext.length > 0) return finish('context-changed')
+        const offlineSize = armed.expectedOfflineCanvasSize
+        if (offlineSize) {
+          if (armed.connected || armed.allowCurrent || offlineSize.some((value) => !Number.isSafeInteger(value) || value <= 0)) return finish('invalid-offline-size-mode')
+          // Offline Open qualifies UI/retained data, not source pixels. The
+          // new HTML placeholder may reflect its intrinsic dimensions after
+          // the worker diagnostic. Require the independently expected size,
+          // while preserving every other identity and fresh-request check.
+          if (differentContext.some((name) => name !== 'canvas.width' && name !== 'canvas.height')) return finish('context-changed')
+          if (current[6] !== offlineSize[0] || current[7] !== offlineSize[1]) return finish('offline-canvas-size-pending')
+        } else if (differentContext.length > 0) return finish('context-changed')
         // A late old request must not inherit new store identities merely
         // because its post-paint callback runs after that state change.
         if (event.requestedAt < changedAt) return finish('request-before-state')
@@ -112,11 +127,12 @@ export async function presentedAction(page: Page, frame: number, action: () => P
   event?: 'click' | 'change'
   connected?: boolean
   allowCurrent?: boolean
+  expectedOfflineCanvasSize?: readonly [number, number]
 } = {}) {
   await page.evaluate(({ frame, options }) => {
     const probe = window.__issue198Presentation
     if (!probe) throw new Error('Presentation observer was not installed')
-    probe.arm(frame, options.connected ?? true, options.allowCurrent ?? false, options.event)
+    probe.arm(frame, options.connected ?? true, options.allowCurrent ?? false, options.event, options.expectedOfflineCanvasSize)
   }, { frame, options })
   const cancelArm = () => page.evaluate(() => window.__issue198Presentation?.cancelArm())
   try {

@@ -63,6 +63,7 @@ async function harness(t) {
     at: (time) => { now = time },
     replaceCanvas: () => { canvas = { width: 640, height: 360 } },
     resizeCanvas: () => { canvas.width = 1280 },
+    setCanvasSize: (width, height) => { canvas.width = width; canvas.height = height },
     present: () => { now = 20; emit(event) },
   }
 }
@@ -129,4 +130,56 @@ test('wrong-frame and render-error results cannot qualify', async (t) => {
   const h = await harness(t); h.at(20)
   h.emit({ ...h.event, frame: 1 }); assert.equal(h.probe.ready(), false)
   h.emit({ ...h.event, result: { ...h.event.result, status: 'error' } }); assert.equal(h.probe.ready(), false)
+})
+
+test('explicit offline UI waits for the expected intrinsic dimensions after a fresh presentation', async (t) => {
+  const h = await harness(t); h.setCanvasSize(300, 150)
+  h.probe.arm(0, false, false, undefined, [640, 360]); h.probe.mark(); h.present()
+  assert.equal(h.probe.ready(), false)
+  h.setCanvasSize(640, 360); assert.equal(h.probe.ready(), true)
+  h.setCanvasSize(641, 360); assert.equal(h.probe.ready(), false)
+})
+
+test('the default wait still refuses changed intrinsic dimensions', async (t) => {
+  const h = await harness(t); h.setCanvasSize(300, 150); h.present()
+  h.setCanvasSize(640, 360); assert.equal(h.probe.ready(), false)
+})
+
+test('offline expected-size handling cannot qualify a replaced canvas', async (t) => {
+  const h = await harness(t); h.setCanvasSize(300, 150)
+  h.probe.arm(0, false, false, undefined, [640, 360]); h.probe.mark(); h.present()
+  h.replaceCanvas(); assert.equal(h.probe.ready(), false)
+})
+
+for (const field of ['document', 'media', 'frame']) {
+  test(`offline expected-size handling still refuses a changed ${field}`, async (t) => {
+    const h = await harness(t); h.setCanvasSize(300, 150)
+    h.probe.arm(0, false, false, undefined, [640, 360]); h.probe.mark(); h.present()
+    h.at(25)
+    if (field === 'document') h.document.update({ doc: {} })
+    if (field === 'media') h.media.update({ assets: new Map() })
+    if (field === 'frame') h.transport.update({ playheadFrame: 1 })
+    h.setCanvasSize(640, 360); assert.equal(h.probe.ready(), false)
+  })
+}
+
+test('offline readiness cannot be reused for relink source pixels', async (t) => {
+  const h = await harness(t); h.setCanvasSize(300, 150)
+  h.probe.arm(0, false, false, undefined, [640, 360]); h.probe.mark(); h.present()
+  h.setCanvasSize(640, 360); assert.equal(h.probe.ready(), true)
+  h.at(25); h.probe.arm(0, true, false); h.probe.mark()
+  assert.equal(h.probe.ready(), false)
+  h.at(30); h.emit({ ...h.event, requestedAt: 26, presentedAt: 30,
+    result: { status: 'drawn', drawnClipIds: ['mask-tracking-source'], missingClipIds: [] } })
+  assert.equal(h.probe.ready(), true)
+})
+
+test('offline size handling is invalid with connected pixels or same-frame reuse', async (t) => {
+  const h = await harness(t); h.present()
+  h.probe.arm(0, false, true, undefined, [640, 360]); h.probe.mark()
+  assert.equal(h.probe.ready(), false)
+  h.probe.arm(0, true, false, undefined, [640, 360]); h.probe.mark()
+  h.emit({ ...h.event, requestedAt: 21, presentedAt: 22,
+    result: { status: 'drawn', drawnClipIds: ['mask-tracking-source'], missingClipIds: [] } })
+  assert.equal(h.probe.ready(), false)
 })

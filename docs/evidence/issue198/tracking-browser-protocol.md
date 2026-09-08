@@ -54,6 +54,16 @@ The portable file opens offline before explicit relink; it must not silently
 depend on a live object URL. Native handle permission/persistence remains a
 separate qualification.
 
+Offline Open qualifies the opened UI and retained project data. Its explicit
+readiness mode requires a fresh frame0 drawn result, unchanged project/media/
+frame/canvas identity and the independently expected paused1280x720 placeholder
+dimensions. It permits the initial HTML intrinsic-size reflection after the
+diagnostic, and verifies the Source offline UI. This mode forbids connected
+source qualification and prior-presentation reuse. Relink arms a new strict
+connected-source presentation wait before any source-pixel comparison; all
+original pixel/export thresholds remain unchanged. See the retained intrinsic
+size evidence in `tracking-browser-offline-ui.md`.
+
 ## Resource evidence and teardown
 
 After actual analysis and at each flow's end, the production analysis scheduler
