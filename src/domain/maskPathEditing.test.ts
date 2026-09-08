@@ -6,6 +6,7 @@ import { editMaskParamsAtFrame, editMaskPathAnimation } from './maskEditing'
 import { resolveClipAnimationAtFrame } from './clipAnimation'
 import { MASK_PATH_ANIMATION_LIMITS } from './maskPathAnimation'
 import { defaultSourceTimeMap } from './sourceTimeMap'
+import { expandedTitleProject } from '../test/titleOwnerFixtures'
 
 const path = 'M 0 0 C 1 0 1 1 0 0 Z'
 function fixture() {
@@ -16,6 +17,23 @@ function fixture() {
 }
 
 describe('mask held path authoring', () => {
+  test.each(['supported', 'future'] as const)('%s expanded titles preserve inactive mask keys and reject path authoring', (kind) => {
+    const project = expandedTitleProject(), doc = project.sequences[0], clip = doc.tracks[0].clips[0]
+    if (kind === 'future') clip.title = { version: 9, payload: 'Preserved title' }
+    const effect = createMaskEffect('mask', 'bezier')
+    clip.effects = [effect]
+    clip.animation = { tracks: [], effectPathTracks: [pathTrack()] }
+    const target = { sequenceId: doc.id, clipId: clip.id, effectId: effect.id }
+    const before = JSON.stringify(project)
+    expect(maskPathAnimationStatus(clip, effect).reason).toMatch(/stay static/)
+    for (const operation of ['set', 'remove', 'clear'] as const) {
+      expect(() => editMaskPathAnimation(project, target, 10, operation)).toThrow(/stay static/)
+    }
+    expect(() => editMaskParamsAtFrame(project, target, 10, { path })).toThrow(/stay static/)
+    expect(resolveClipAnimationAtFrame(clip, 10).effects[0].params.path).toBe(DEFAULT_MASK_BEZIER_PATH)
+    expect(JSON.stringify(project)).toBe(before)
+  })
+
   test('explicit keys use target source ticks and hold; editing preserves static and opaque sibling intent', () => {
     const { project, clip, target } = fixture()
     clip.timelineRange.startFrame = 100; clip.sourceRange.startFrame = 200

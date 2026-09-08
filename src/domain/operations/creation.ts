@@ -1,4 +1,5 @@
 import type { Clip, MediaAsset, SourceTimeMap, TimeRange, TimelineDoc, TrackId } from '../schema';
+import { copyTitleDefinition, projectTitleOwnershipError, titleClipOwnershipError } from '../titleOwnership';
 import { clipAnimation, clipAnimationKeyframeCount, clipAnimationKindError, clipAnimationValidationError, cloneClipAnimation, defaultClipAnimation, documentAnimationKeyframeGrowthAllowed } from '../clipAnimation';
 import { clipAudioSettings, clipAudioSettingsValidationError, clipVisualSettings, clipVisualSettingsValidationError, defaultClipAudioSettings, defaultClipVisualSettings, defaultClipTransform, transformScaleValidationError } from '../clipInspector';
 import { defaultTextProps, proceduralTextAssetId, textOverlayName, textPropsValidationError } from '../textOverlay';
@@ -234,6 +235,8 @@ export function insertClip(
   const trackIndex = doc.tracks.findIndex((t) => t.id === trackId)
   if (trackIndex === -1) return reject(doc, op, `track ${trackId} not found`)
   const track = doc.tracks[trackIndex]
+  const titleError = titleClipOwnershipError(clip, track.kind)
+  if (titleError) return reject(doc, op, titleError)
   if (track.locked) return reject(doc, op, `track ${track.id} is locked`)
   if (clip.text !== undefined && track.kind !== 'video') {
     return reject(doc, op, 'text clips can only be placed on video tracks')
@@ -278,9 +281,12 @@ export function insertClip(
     effects: clip.effects.map((e) => ({ ...e, params: { ...e.params } })),
     audioEffects: cloneAudioEffectStack(clip.audioEffects),
     ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
+    ...(clip.title === undefined ? {} : { title: copyTitleDefinition(clip.title) }),
   }
 
   const clips = [...track.clips, copy].sort(byStart)
   const nextTrack = reconcileTransitions(track, { ...track, clips })
-  return withTrack(doc, trackIndex, nextTrack)
+  const candidate = withTrack(doc, trackIndex, nextTrack)
+  const ownerError = projectTitleOwnershipError({ sequences: [candidate] })
+  return ownerError ? reject(doc, op, ownerError) : candidate
 }

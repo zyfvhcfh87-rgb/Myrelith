@@ -1,7 +1,7 @@
 # Issue #200 — reusable titles and animated text
 
-Status: **G1a approved; pure budget review corrections awaiting review;
-G1b waits for the approved schema22 foundation**.
+Status: **G1a and corrected budgets approved; schema22 accepted at f9945c4;
+G1b title-owner implementation awaiting review. Stop before G2/G3**.
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
 issue last updated 2026-08-25T21:36:47Z. [Issue #200](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/200).
@@ -15,8 +15,12 @@ Clip, animation ownership, migrations, store, renderer and UI remain unchanged.
 See [G1a API and validation evidence](evidence/issue200/pure-foundation.md) and
 [pure budget completion](evidence/issue200/pure-budgets.md). The accepted combined
 foundation `b0e43ed449719fe3e424a46cd97d384b6a11cf1a` was fast-forwarded into this
-branch under the orchestrator's instruction. Product acceptance remains open;
-stop before G1b until the shared schema22 foundation is approved.
+branch under the orchestrator's instruction. The later corrected budget and
+schema22 gates were accepted; this branch then fast-forwarded to exact
+`f9945c44f75a4818bc939d8b6e63c09db353e669` before the authorized G1b work.
+See [schema23 ownership evidence](evidence/issue200/schema23-owners.md), including
+remaining rendering, template-capture and authoring gates. Product acceptance
+remains open; stop for G1b review before G2/G3.
 
 ## Proposed outcome and boundaries
 
@@ -477,6 +481,12 @@ integration, remote publication and issue closure.
    allocation/remapping and all-sequence/retained budgets. Run the exact boundary
    fixtures against the real parser/serializer/store, plus adversarial,
    round-trip, split/trim/history checks. No unsupported future data loss.
+   **Implementation for review:** actual title-plus-track ownership, explicit
+   compact upgrade, version-only migration, project-wide identity remapping and
+   real file/recovery/history boundaries are implemented. Whole future definition
+   copies refuse unknown identity semantics; future elements retain known headers.
+   See schema23 evidence for final validation and the remaining G3 template
+   capture criterion; this gate does not claim renderer/UI completion.
 4. **G2 — shared rendering and parity.** Resolve scalar elements in the canonical
    plan; paint ordered elements into one existing isolated leg. Implement strict
    title font status in preview/export owners and cache invalidation. Pass the

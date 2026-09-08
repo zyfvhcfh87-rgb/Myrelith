@@ -32,6 +32,11 @@ export function proceduralTextAssetId(clipId: ClipId): string {
   return `${TEXT_ASSET_PREFIX}${clipId}`
 }
 
+/** Both supported procedural wire variants own pixels without a media asset. */
+export function isProceduralTitleClip(clip: { readonly text?: unknown; readonly title?: unknown }): boolean {
+  return clip.text !== undefined || clip.title !== undefined
+}
+
 export function isProceduralTextAssetId(assetId: string): boolean {
   return (
     (assetId.startsWith(TEXT_ASSET_PREFIX) && assetId.length > TEXT_ASSET_PREFIX.length)

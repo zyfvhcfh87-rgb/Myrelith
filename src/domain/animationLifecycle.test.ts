@@ -57,12 +57,13 @@ describe('typed animation lifecycle integration', () => {
     clip.effects = [createMaskEffect('mask', 'bezier')]
     expect(resolveClipAnimationAtFrame(clip, 10).effects[0].params.path).toBe(clip.effects[0].params.path)
     doc.tracks[0].clips = [clip]
-    const right = splitClipAtFrame(doc, clip.id, 5).tracks[0].clips[1]
+    const right = splitClipAtFrame(doc, clip.id, 5, () => 'split-orphan').tracks[0].clips[1]
     expect(right.animation!.titleTracks![0].keyframes.map((key) => [key.frame, key.sourceTimeTicks])).toEqual([[-5, -5_000_000], [5, 5_000_000]])
     expect(right.animation!.effectPathTracks![0].keyframes[0].sourceTimeTicks).toBe(-5_000_000)
-    const mapped = remapTitleAnimationElementIds(right.animation!, new Map([['orphan', 'copy']]))
+    const mapped = remapTitleAnimationElementIds(right.animation!, new Map([['split-orphan', 'copy']]))
     expect(mapped.titleTracks![0]).toMatchObject({ elementId: 'copy', propertyVersion: 3 })
-    expect(right.animation!.titleTracks![0].elementId).toBe('orphan')
+    expect(right.animation!.titleTracks![0].elementId).toBe('split-orphan')
+    expect(clip.animation!.titleTracks![0].elementId).toBe('orphan')
   })
 
   test('attribute paste onto an old clip without animation retains path-only and dangling keys with fresh ids', () => {

@@ -1,4 +1,6 @@
 import { projectCropAnimationError } from '../projectCropAnimation'
+import { projectTitleAnimationError } from '../animationProjectBudget'
+import { projectTitleOwnershipError } from '../titleOwnership'
 import { validatePortableAnimation } from './animationValidation'
 import { colorLutCatalogError } from '../colorLutCatalog'
 import type { AdjustmentItem, CaptionItem, CaptionTrack, Clip, MasterAudioSettings, MulticamDefinition, MulticamInstance, SequenceInstance, TimelineDoc, TimelineMarker, Track } from '../schema';
@@ -347,7 +349,7 @@ function validateTransition(
   if (to.id !== transition.toClipId || from.id === to.id) {
     fail(path, 'transition endpoints must be ordered adjacent clips')
   }
-  if (from.text !== undefined || to.text !== undefined) {
+  if (from.text !== undefined || from.title !== undefined || to.text !== undefined || to.title !== undefined) {
     fail(path, 'text clips cannot be transition endpoints')
   }
   const cutFrame = from.timelineRange.startFrame + from.timelineRange.durationFrames
@@ -806,5 +808,8 @@ export function validateProjectFile(value: unknown): ProjectFile {
   }
   const cropError = projectCropAnimationError(project as unknown as ProjectFile)
   if (cropError) fail('$.sequences', cropError)
+  const titleError = projectTitleOwnershipError(project as unknown as ProjectFile)
+    ?? projectTitleAnimationError(project as unknown as ProjectFile)
+  if (titleError) fail('$.sequences', titleError)
   return project as unknown as ProjectFile
 }

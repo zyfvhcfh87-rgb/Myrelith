@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /**
  * domain/selectors.ts — Pure derived reads over a TimelineDoc. Phase 3.2+.
  * No browser APIs, no stores — plain functions over plain data.
@@ -148,7 +149,7 @@ export function audibleTracks(doc: TimelineDoc): Track[] {
  * key that becomes visible. Text clips are not media sources.
  */
 export function clipContributesVisualOutput(clip: Clip): boolean {
-  if (clip.text) return false
+  if (isProceduralTitleClip(clip)) return false
   if (clip.opacity > 0) return true
   return clipAnimation(clip).tracks.some((track) => (
     track.property === 'opacity'
@@ -161,7 +162,7 @@ export function clipContributesVisualOutput(clip: Clip): boolean {
  * or a volume key that becomes audible.
  */
 export function clipContributesAudioOutput(clip: Clip): boolean {
-  if (clip.text) return false
+  if (isProceduralTitleClip(clip)) return false
   if (!clipAudioSettings(clip).enabled) return false
   if (clip.volume > 0) return true
   return clipAnimation(clip).tracks.some((track) => (

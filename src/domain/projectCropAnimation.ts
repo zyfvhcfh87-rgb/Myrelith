@@ -29,6 +29,7 @@ export function certifyProjectCropAnimation(project: SequenceProject): CropAnima
     const ranges = new Map<Clip, { start: number; end: number }>()
     const byId = new Map(track.clips.map((clip) => [clip.id, clip]))
     for (const clip of track.clips) {
+      if (clip.title !== undefined) continue // Outer title geometry lanes are preserved but inactive.
       if (clip.animation?.tracks.some((lane) => (lane.propertyVersion ?? 1) === 1
         && CROP_ANIMATION_PROPERTIES.some((property) => property === lane.property))) {
         ranges.set(clip, { start: 0, end: clip.timelineRange.durationFrames - 1 })

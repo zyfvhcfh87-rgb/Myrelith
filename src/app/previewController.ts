@@ -955,7 +955,7 @@ function documentAssetIds(doc: TimelineDoc): Set<AssetId> {
       // Text clips render procedurally and never sample their backing asset.
       // Legacy projects may validly carry image-backed text clips, so treating
       // every clip id as a still-source reference would decode unused pixels.
-      if (clip.text === undefined) ids.add(clip.assetId)
+      if (clip.text === undefined && clip.title === undefined) ids.add(clip.assetId)
     }
   }
   return ids

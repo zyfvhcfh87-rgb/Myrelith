@@ -102,7 +102,9 @@ describe('schema22 canonical animation foundation', () => {
     const snapshot = createProjectFileSnapshot(duplicate.project, [ATTRIBUTE_ASSET_DESCRIPTOR])
     const encoded = serializeProjectFile(snapshot), reopened = parseProjectFile(encoded)
     expect(serializeProjectFile(reopened)).toBe(encoded)
-    expect(reopened.sequences[1].tracks[0].clips[0].animation?.titleTracks).toEqual(clip.animation.titleTracks)
+    expect(copied.animation!.titleTracks![0].elementId).not.toBe(clip.animation.titleTracks![0].elementId)
+    expect(copied.animation!.titleTracks![0]).toEqual({ ...clip.animation.titleTracks![0], elementId: copied.animation!.titleTracks![0].elementId })
+    expect(reopened.sequences[1].tracks[0].clips[0].animation?.titleTracks).toEqual(copied.animation?.titleTracks)
   })
 
   test('resolves held mask keys through the same clip result without rebasing for crop', () => {

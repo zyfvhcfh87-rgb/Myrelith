@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /** Pure, bounded scalar clip-keyframe model and evaluator. */
 
 import {
@@ -431,7 +432,7 @@ export function resolveClipAnimationAtFrame(clip: Clip, timelineFrame: number): 
   const values = new Map<ClipAnimationProperty, number>()
   for (const track of animation.tracks) {
     if (!isKnownClipAnimationProperty(track.property) || (track.propertyVersion ?? 1) !== 1
-      || (clip.text !== undefined && track.property !== 'opacity')) continue
+      || (isProceduralTitleClip(clip) && track.property !== 'opacity')) continue
     const fallback = readClipAnimationProperty(clip, track.property)
     values.set(
       track.property,
@@ -444,7 +445,7 @@ export function resolveClipAnimationAtFrame(clip: Clip, timelineFrame: number): 
     localFrame,
   )
   // Title-path geometry remains unavailable until the title/path owners agree it.
-  return clip.text !== undefined ? resolved : resolveEffectPathAnimation(resolved, effectPathAnimationTracks(animation), localFrame)
+  return isProceduralTitleClip(clip) ? resolved : resolveEffectPathAnimation(resolved, effectPathAnimationTracks(animation), localFrame)
 }
 
 function replaceTrack(
