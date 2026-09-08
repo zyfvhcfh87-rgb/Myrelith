@@ -1,6 +1,6 @@
 # Issue #198: direct masks and bounded manual path animation
 
-Status: **static/open/held authoring accepted; tracking Inspector source gate ready for review.**
+Status: **static/open/held authoring and the 7/7 focused tracking browser gate accepted. Resource, performance and whole-issue acceptance remain open.**
 
 Prepared on `codex/issue198` from `ce91074c276ca6892a74addb7dd673b9a19c7eeb`.
 The Milestone 9 orchestrator owns approval, migration ordering, integration and
@@ -371,8 +371,8 @@ is accepted and its separate pure planning/operation slice is committed as
 `9c3cb54`; the corrected app review/preview implementation is accepted. See
 [tracking implementation evidence](evidence/issue198/tracking-attachment.md).
 The shared schema 23 checkpoint `4340f967` is now merged with the canonical title
-guard and all preview owners preserved. Inspector source review and tracking
-browser acceptance remain open. No tracking code was included in the held-path gate.
+guard and all preview owners preserved. No tracking code was included in the
+held-path gate; the later Inspector/browser result is recorded below.
 Parent review found three app defects on `8d22cbc`; the corrected project-budget,
 post-cleanup playback and preview-priority boundaries pass the unchanged parent
 reproducer and 253 focused tests. Parent accepted correction `8cc1fe9` and the
@@ -382,6 +382,19 @@ slice now exposes the accepted mask review and passes 324 focused tests across
 10-million-character tracking/history admission. See the
 [Inspector source evidence](evidence/issue198/tracking-inspector.md) and
 [preregistered browser/export/resource protocol](evidence/issue198/tracking-browser-protocol.md).
-Seven browser checks are discovered but the new tracking flows have not run;
-source review and an exclusive slot precede execution. Full/performance/resource
-and cross-feature acceptance remain open.
+Parent accepted Inspector product `c0bce34` and each subsequent test-only
+correction. Exact frozen `2b3dbd7281909777c558766279729af21ac89611` passed all seven
+browser flows in 26.8 seconds under the granted exclusive slot. Real point and
+backward box analysis, preview/Apply/history, portable offline Open/relink and
+decoded short export assertions all passed. All nine screenshots were inspected;
+native cleanup and slot release were verified. The successful list reporter did
+not preserve raw body attachments or a trace, so export/resource values are
+qualified by passed assertions, not independently inspected raw JSON. See the
+[complete browser evidence](evidence/issue198/tracking-browser-acceptance.md),
+including the non-overlapping host sleep timeline and retained earlier failures.
+Parent accepted this functional gate after independently reviewing the complete
+log, all nine screenshots, actual portable file and native/sleep evidence.
+Resource authority and cleanup implementation is authorized under the previously
+accepted proposal only after the parent supplies the accepted integration SHA
+for synchronization. No resource/performance run is included in that grant.
+Full/performance/retention and cross-feature acceptance remain open.

@@ -1,10 +1,13 @@
 # Tracking Inspector, portable file, export and resource protocol
 
-Status: **preregistered, not executed**. Parent accepted the corrected controller
+Status: **preregistered protocol executed: all seven flows passed on `2b3dbd7`;
+parent accepted the focused functional gate.** See [the run evidence](tracking-browser-acceptance.md)
+for exact source, retained failures, artifacts and qualification limits. The
+later rendering/retention gate below remains unexecuted. Parent accepted the corrected controller
 `8cc1fe997688f541df0a19a9be41ddf5657550ed` and integrated it at
 `08805c570fb60f739e3414e4d76eff861cc89343`. This document and the browser tests
-belong to the subsequent Inspector slice. They are not evidence of browser
-acceptance. The exact committed source will be recorded in the run evidence.
+belong to the subsequent Inspector slice. The protocol alone does not establish
+acceptance; the run evidence records the exact tested source and outcome.
 
 ## First bounded browser run
 
@@ -71,6 +74,11 @@ must be idle with zero active jobs/decoder reservations; observed maxima must
 remain within one job and one decoder. Worker diagnostics must show at least
 one created worker, zero active workers and equal created/terminated counts.
 The tests attach raw scheduler/worker snapshots and point/export pixel results.
+The successful `2b3dbd7` run's list reporter and retain-on-failure trace setting
+did not persist these body attachments. Its assertions passed, but the raw
+values cannot be independently re-inspected. A later measurement gate must
+write raw JSON to explicit output files before attachment; this observation
+does not authorize a rerun or substitute for that gate.
 These counters qualify scheduler and worker lifetimes. They do not measure
 native decoder memory or prove absence of every native allocation.
 
