@@ -1,6 +1,6 @@
 # Local speech model decision — replacement lab preflight
 
-Date: 2026-09-08. Status: third frozen attempt exceeded the fixed resident-memory ceiling.
+Date: 2026-09-08. Status: fourth frozen attempt exceeded the fixed resident-memory ceiling.
 **Product enablement remains NO-GO pending runtime/offline/lifecycle evidence.**
 This status preserves the separate decision required by issue #201. The
 orchestrator may approve the independent caption implementation after reviewing
@@ -42,16 +42,20 @@ The guard terminated the worker and closed the browser before any transcript
 completed. Candidate 03 is NO-GO under that gate; later cases remain incomplete.
 Forced shutdown and separate removal of only its private browser profile are
 recorded honestly; cooperative cache removal was unavailable. No product speech
-enablement or replacement run has occurred.
+enablement has occurred.
 
-[ENCODER_FETCH_CANDIDATE_04.md](ENCODER_FETCH_CANDIDATE_04.md) now proposes a
+[ENCODER_FETCH_CANDIDATE_04.md](ENCODER_FETCH_CANDIDATE_04.md) adds an
 adapter scoped to the encoder instance, using ORT's output-selection API to fetch
-only the
-encoder hidden state consumed by generation. The exact graph also exposes four
-unused attention outputs totaling 216,000,000 float32 bytes at batch one. Pinned
-source proves selected fetches omit their WASM-to-JS copies, not that peak RSS
-will fall enough. All decoder outputs, model/runtime bytes, windows and thresholds
-remain unchanged. The candidate is prepared for review; no run 04 is authorized.
+only the hidden state consumed by generation. Pinned source shows this excludes
+four unused attention copies totaling 216,000,000 float32 bytes at batch one,
+without proving a smaller native peak. All decoder outputs, model/runtime bytes,
+windows and thresholds remain unchanged. After source review, one run04 was
+granted. [LAB_RUN_04.md](LAB_RUN_04.md) records that the first selected encoder
+call began but did not complete before the fixed guard stopped it: incremental
+RSS 1,099,415,552 bytes, exceeding the ceiling by 25,673,728. Eight initial cases
+passed, one failed and fourteen remain missing. Candidate04 is also NO-GO.
+Forced shutdown and separate private-profile teardown are documented; the slot
+is released and no further native run is authorized.
 
 The original 3.8.1 standalone candidate is **superseded for lab execution** after
 the advisory lookup in [candidate-advisories.json](candidate-advisories.json).
