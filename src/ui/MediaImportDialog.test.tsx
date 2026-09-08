@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { useEditShortcuts } from '../app/useEditShortcuts'
@@ -208,7 +209,7 @@ describe('MediaImportDialog', () => {
       locked: false,
     })
     const document: TimelineDoc = {
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc-import-a11y',
       name: 'import a11y',
       frameRate: { num: 30, den: 1 },

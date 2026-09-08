@@ -1,10 +1,9 @@
 # Issue #199 — unified animation editor plan
 
-Status: The supervisor accepted the scalar/timing extraction and both pure
-title/path foundations. A standalone crop certificate is being committed for
-review; crop runtime promotion remains gated on that review. Schema 22 foundation
-work is now authorized after merging the exact shared integration commit. Batch
-operations and UI remain later gates. This document does not approve itself.
+Status: The supervisor accepted scalar/timing, title/path, crop certificate,
+and title-budget foundations. Schema 22 Gate 1 implementation is complete and
+is being committed for exact-SHA review; see [Gate 1 evidence](evidence/issue199/schema22-foundation.md).
+Batch operations and UI remain later gates. This document does not approve itself.
 
 Issue: <https://github.com/zyfvhcfh87-rgb/Myrelith/issues/199>
 
@@ -103,7 +102,7 @@ payloads; they must never turn path strings into scalar tracks.
 | Still/title clip | Preserve fixed source semantics; Slip remains a no-op and retiming remains unavailable. Title split/head trim shifts local frames, then re-anchors procedural ticks to `frame * SOURCE_TIME_TICKS_PER_FRAME` because its source map restarts at zero. Timed-media absolute ticks must not receive that title-specific reanchor. |
 | Move/add/paste key | Recompute destination source ticks; never copy the source clip's source-time ticks into a different destination map. |
 | Adjustment | Item-local integer frames only; no invented media source map or source ticks. |
-| Change project FPS | Extend the current project-rate conversion through every typed collection, preflight collisions across active and dormant sequences, and preserve all-or-nothing behavior. |
+| Change project FPS | Preserve the existing content-empty project restriction. A populated project remains unchanged; this issue does not introduce rate conversion. |
 
 Extend clone/default/shift/count/remap/id-reservation/file-validation helpers
 together, including clip attributes, presets, sequence duplication, compounds,
@@ -203,10 +202,9 @@ animation on text remains unavailable unless #198/#200 explicitly agree it.
 #200 owns fresh element
 identity remapping for templates; #199 provides corresponding track remapping.
 
-No title implementation starts until both plans agree and the orchestrator
-assigns the migration/foundation order. The proposal received in-task on
-2026-09-08 and its complete on-disk plan are incorporated here. Both remain
-proposals pending the orchestrator's exact-commit review. #200's fixed-local
+The orchestrator accepted the pure title/property/path contracts and assigned
+the migration order on 2026-09-08. Their exact commits are recorded in the
+Gate 1 evidence. Clip.title ownership remains #200 schema 23 work. #200's fixed-local
 source tick rule is a required shared-helper branch, not the timed-media rule.
 
 ### #198 — hold-only mask paths
@@ -264,8 +262,9 @@ serializing them. Preserve explicit authored metadata, including unknown data.
 Actual new tracks/future identities alone require new bytes. Keep the current
 10,000,000-character file limit. Test actual production serialization of legacy
 no-animation and scalar-animation files at 9,999,999/10,000,000 characters,
-including equal-length edits. #200's measured old-file proof does not itself
-prove the future schema 22/23 serializer.
+including equal-length edits. Gate 1 now exercises the actual schema 22
+production migration, serializer, app preflight and store undo/redo at both
+exact limits. This does not qualify the future schema 23 title-owner upgrade.
 
 ## Portable future/plugin intent
 
@@ -412,7 +411,7 @@ precedes Gate 0 acceptance.
 
 | Issue requirement | Required proof |
 | --- | --- |
-| Stable properties and all timing semantics | Table-driven scalar/path/title tests; hostile files; old migration fixture; split/head/tail trim/slip/retime/freeze/FPS conversion; nested/dormant sequence and duplication coverage. |
+| Stable properties and all timing semantics | Table-driven scalar/path/title tests; hostile files; old migration fixture; split/head/tail trim/slip/retime/freeze and the existing empty-project FPS restriction; nested/dormant sequence and duplication coverage. |
 | One evaluator | Reference scalar outputs through Inspector, video composition, text painter, plugin parameter records, sample-boundary audio plan and export. No UI interpolation formula. |
 | Atomic multi-key edits | Collision with selected/unselected keys, negative/overflow frames, per-track/document/project/path/clipboard budgets, stale declaration/document, lock, no-op, populated redo, undo/redo and exact selection mapping. |
 | Unknown/plugin preservation | Save/reopen missing/future descriptors, orphan elements/effects, version/units/package mismatch, unavailable timing-only operations and explicit legacy binding behavior. |

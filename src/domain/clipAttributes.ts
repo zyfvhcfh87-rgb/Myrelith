@@ -5,9 +5,10 @@ import type {
   ClipVisualSettings, EffectDescriptor, TimelineDoc, TrackKind, Transform,
 } from './schema'
 import {
-  clipAnimation, clipAnimationKindError, clipAnimationValidationError,
-  cloneClipAnimation, effectAnimationTracks,
+  clipAnimation, clipAnimationKindError, clipAnimationValidationError, clipAnimationKeyframeCount,
+  cloneClipAnimation, effectAnimationTracks, isKnownClipAnimationProperty,
 } from './clipAnimation'
+import { effectPathAnimationTracks, titleAnimationTracks } from './animationCollections'
 import {
   clipAudioSettings, clipVisualSettings, defaultClipAudioSettings,
   defaultClipVisualSettings, defaultClipTransform,
@@ -70,6 +71,12 @@ const PROPERTY_GROUP: Readonly<Record<ClipAnimationProperty, ClipAttributeGroup>
   'position-x': 'transform', 'position-y': 'transform',
   'scale-x': 'transform', 'scale-y': 'transform', rotation: 'transform',
   opacity: 'opacity', volume: 'audio-settings', balance: 'audio-settings',
+  'crop-left': 'crop-and-flip', 'crop-right': 'crop-and-flip',
+  'crop-top': 'crop-and-flip', 'crop-bottom': 'crop-and-flip',
+}
+
+function selectedPropertyGroup(groups: readonly ClipAttributeGroup[], property: string): boolean {
+  return isKnownClipAnimationProperty(property) && groups.includes(PROPERTY_GROUP[property])
 }
 
 export function supportedClipAttributeGroups(kind: TrackKind): readonly ClipAttributeGroup[] {
@@ -125,8 +132,9 @@ function validateTemplate(template: ClipAttributeTemplate): void {
   }
   const error = clipAnimationValidationError(template.animation)
   if (error) throw new Error(error)
-  if (template.animation.tracks.some((track) => !kinds.has(PROPERTY_GROUP[track.property]))
-    || (effectAnimationTracks(template.animation).length > 0 && !kinds.has('effects'))) {
+  if (template.animation.tracks.some((track) => !isKnownClipAnimationProperty(track.property) || !kinds.has(PROPERTY_GROUP[track.property]))
+    || ((effectAnimationTracks(template.animation).length > 0 || effectPathAnimationTracks(template.animation).length > 0) && !kinds.has('effects'))
+    || titleAnimationTracks(template.animation).length > 0) {
     throw new Error('Animation does not belong to a copied attribute group.')
   }
 }
@@ -165,8 +173,12 @@ export function captureClipAttributes(
       }
     })
     const animation = cloneClipAnimation(clipAnimation(clip))
-    animation.tracks = animation.tracks.filter((track) => groups.includes(PROPERTY_GROUP[track.property]))
+    animation.tracks = animation.tracks.filter((track) => selectedPropertyGroup(groups, track.property))
     animation.effectTracks = effectAnimationTracks(animation).filter((track) => (
+      groups.includes('effects') && (!selected || selected.has(track.effectId))
+    ))
+    delete animation.titleTracks
+    if (animation.effectPathTracks !== undefined) animation.effectPathTracks = animation.effectPathTracks.filter((track) => (
       groups.includes('effects') && (!selected || selected.has(track.effectId))
     ))
     const effects = attributes.find((attribute) => attribute.kind === 'effects')?.value ?? []
@@ -262,6 +274,7 @@ export function pasteClipAttributes(
     const allocate = createProjectEffectIdAllocator(project, factory, [
       ...sourceEffects.map((effect) => effect.id),
       ...effectAnimationTracks(template.animation).map((track) => track.effectId),
+      ...effectPathAnimationTracks(template.animation).map((track) => track.effectId),
     ])
     return editTargets(project, sequenceId, targetIds, options.groups, (clip) => {
       const next: Clip = { ...clip }
@@ -289,28 +302,34 @@ export function pasteClipAttributes(
           case 'effects': {
             const effects = attribute.value.map((effect) => ({ ...cloneEffectDescriptor(effect), id: remap(effect.id) }))
             next.effects = options.effectsMode === 'append' ? [...clip.effects, ...effects] : effects
-            if (options.effectsMode === 'replace') animation.effectTracks = []
+            if (options.effectsMode === 'replace') {
+              animation.effectTracks = []
+              if (animation.effectPathTracks !== undefined) animation.effectPathTracks = []
+            }
             break
           }
         }
       }
-      animation.tracks = animation.tracks.filter((track) => !options.groups.includes(PROPERTY_GROUP[track.property]))
+      animation.tracks = animation.tracks.filter((track) => !selectedPropertyGroup(options.groups, track.property))
       if (options.includeAnimation) {
         const copied = cloneClipAnimation(template.animation)
-        copied.tracks = copied.tracks.filter((track) => options.groups.includes(PROPERTY_GROUP[track.property]))
+        copied.tracks = copied.tracks.filter((track) => selectedPropertyGroup(options.groups, track.property))
         const copiedEffects = options.groups.includes('effects') ? [...effectAnimationTracks(copied)] : []
-        if (copied.tracks.length || copiedEffects.length) {
+        const copiedPaths = options.groups.includes('effects') ? [...effectPathAnimationTracks(copied)] : []
+        if (copied.tracks.length || copiedEffects.length || copiedPaths.length) {
           const map = clipSourceTimeMap(clip)
           if (sourceTimeMapHasInvalidSpeedCurve(map)) throw new Error('Destination speed curve is invalid.')
-          for (const track of [...copied.tracks, ...copiedEffects]) {
+          for (const track of [...copied.tracks, ...copiedEffects, ...copiedPaths]) {
             for (const key of track.keyframes) key.sourceTimeTicks = sourceTicksAtTimelineOffset(map, key.frame)
           }
           for (const track of copiedEffects) track.effectId = remap(track.effectId)
+          for (const track of copiedPaths) track.effectId = remap(track.effectId)
           animation.tracks.push(...copied.tracks)
           animation.effectTracks = [...effectAnimationTracks(animation), ...copiedEffects]
+          if (copiedPaths.length) animation.effectPathTracks = [...effectPathAnimationTracks(animation), ...copiedPaths]
         }
       }
-      if (clip.animation || animation.tracks.length || effectAnimationTracks(animation).length) next.animation = animation
+      if (clip.animation || clipAnimationKeyframeCount(animation) > 0) next.animation = animation
       return next
     })
   } catch (cause) {
@@ -328,7 +347,7 @@ export function resetClipAttributes(
   return editTargets(project, sequenceId, targetIds, groups, (clip) => {
     const next = { ...clip }
     const animation = cloneClipAnimation(clipAnimation(clip))
-    animation.tracks = animation.tracks.filter((track) => !groups.includes(PROPERTY_GROUP[track.property]))
+    animation.tracks = animation.tracks.filter((track) => !selectedPropertyGroup(groups, track.property))
     if (groups.includes('transform')) next.transform = defaultClipTransform()
     if (groups.includes('crop-and-flip')) next.visual = defaultClipVisualSettings()
     if (groups.includes('opacity')) next.opacity = 1
@@ -354,6 +373,7 @@ export function resetClipAttributes(
         return value
       })
       animation.effectTracks = effectAnimationTracks(animation).filter((track) => !reset.has(track.effectId))
+      if (animation.effectPathTracks !== undefined) animation.effectPathTracks = animation.effectPathTracks.filter((track) => !reset.has(track.effectId))
     }
     if (clip.animation) next.animation = animation
     return next

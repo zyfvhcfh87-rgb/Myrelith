@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * app/exportController.test.ts — Phase 5.2a composition-root wiring.
  *
@@ -77,7 +78,7 @@ function fileDestination(
 }
 
 const DOC: TimelineDoc = {
-  schemaVersion: 21,
+  schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
   id: 'doc-export-controller',
   name: 'Export controller fixture',
   frameRate: { num: 30, den: 1 },

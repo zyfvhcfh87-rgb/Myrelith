@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { defaultClipAnimation } from '../domain/clipAnimation'
 import { defaultClipVisualSettings } from '../domain/clipInspector'
@@ -37,7 +38,7 @@ function makeClip(): Clip {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-dynamic-store',
     name: 'Dynamic zoom history',
     frameRate: { num: 30, den: 1 },

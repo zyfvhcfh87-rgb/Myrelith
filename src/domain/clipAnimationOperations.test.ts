@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from './schema'
 import { defaultClipAnimation, resolveClipAnimationAtFrame } from './clipAnimation'
@@ -53,7 +54,7 @@ function track(clips: Clip[], kind: Track['kind'] = 'video', locked = false): Tr
 
 function doc(clips = [clip()], kind: Track['kind'] = 'video', locked = false): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-1',
     name: 'Animation operations',
     frameRate: { num: 30, den: 1 },

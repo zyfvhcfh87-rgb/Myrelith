@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { describe, expect, test } from 'vitest'
 import type { TimelineDoc } from '../domain/schema'
 import { createParametricEqEffect } from '../domain/audioEffectStack'
@@ -9,7 +10,7 @@ import {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-audio-status',
     name: 'Audio status',
     frameRate: { num: 30, den: 1 },

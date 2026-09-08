@@ -1,0 +1,37 @@
+# Schema 22 and mask integration
+
+The orchestrator reviewed schema foundation f555a043074ca8e8f54cb312a1372d061fd881eb
+and mask authoring a4bb578d2d7e1f0b6a8763667979bb4a8a18a8c8, previously integrated
+as 32324c38bbfc0a3cda94f4fd1263a942bc691df1. This merge resolves the new shared
+store admission name in commitMaskEdit and shares the complete app file preflight
+through portableProjectEditError. The mask controller retains its existing exact
+project, generation, sequence, selection, playhead and reentrant-session guards;
+its final store action retains sequence admission and one-entry history.
+
+The actual 9,999,999 / 10,000,000-character legacy-file matrix now includes a
+static mask and verifies that a growing mask edit rejects before clearing a
+populated redo branch. Ordinary equal-length edits and exact undo/redo remain
+covered. All four combinations of file size and legacy scalar presence pass.
+
+Independent foundation validation passed 42 files / 499 tests and 17 repository
+runner checks. Integration validation passed 49 files / 682 tests and 17 runner
+checks, build/typecheck, lint and diff hygiene. The matrix is the foundation's
+schema22-focused-files.txt plus maskGeometry, maskPathEdit, maskEditingController,
+MaskOverlayControls, Preview, transportStore and previewController tests, with
+maxWorkers=2, DEVELOPER_DIR=/Library/Developer/CommandLineTools and
+NODE_OPTIONS=--no-experimental-webstorage. Build retains the existing Vite chunk
+size advisory.
+
+The first integration attempt passed 662 tests and failed six UI assertions:
+the old mask UI fixture omitted its media descriptor, so the new real portable
+preflight correctly refused its commits. Adding the existing canonical descriptor
+fixture corrected all six without changing production admission or assertions.
+The controller fixture also supplies explicit source ticks for its capacity
+case. An initially listed nonexistent maskEditing.test.ts filter was corrected
+to maskGeometry.test.ts; all 49 final paths were checked to exist. The final count
+above is the actual runner result, not the requested filter count.
+
+Exact logs are retained locally in /private/tmp/schema22-mask-integration-*.
+The earlier four-flow mask browser result qualifies ef5c191, before this merge.
+Combined browser revalidation, full suite, export parity and measured performance
+remain separate gates. No issue is complete and no publication is included.

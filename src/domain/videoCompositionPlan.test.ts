@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type {
   AdjustmentItem,
@@ -105,7 +106,7 @@ function adjustment(
 
 function doc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'visual-plan',
     name: 'Visual plan',
     frameRate: { num: 30, den: 1 },
@@ -591,6 +592,12 @@ describe('video composition plan', () => {
           { frame: 2, value: 1, easing: { type: 'linear' } },
         ],
       }],
+    }
+    const declaration = pluginSnapshot().declarations[0]
+    for (const owner of [from, to]) owner.animation!.effectTracks![0].parameterIdentity = {
+      version: 1, effectType: declaration.effectType, descriptorVersion: declaration.descriptorVersion,
+      contributionId: declaration.contributionId, contributionVersion: declaration.contributionVersion,
+      packageDigest: declaration.packageDigest,
     }
     const document = doc([track('V1', [from, to], [crossfade(from.id, to.id)])])
     const sources = catalog([['from-asset', exact()], ['to-asset', exact()]])

@@ -22,6 +22,7 @@ import type {
 } from './schema'
 import { MAX_KEYFRAME_FRAME } from './scalarAnimation'
 import { mapAnimationTrackKeyframes } from './animationTiming'
+import { mapAnimationCollections, type AnyAnimationTrack } from './animationCollections'
 
 export const SOURCE_TIME_TICKS_PER_FRAME = 1_000_000 as const
 export const MIN_SOURCE_TIME_RATE: Readonly<SourceTimeRate> = Object.freeze({
@@ -910,7 +911,7 @@ export function animationWithSourceTimeIntent(
   animation: ClipAnimation,
   map: SourceTimeMap,
 ): ClipAnimation {
-  const withIntent = <T extends ClipAnimation['tracks'][number] | NonNullable<ClipAnimation['effectTracks']>[number]>(
+  const withIntent = <T extends AnyAnimationTrack>(
     tracks: readonly T[],
   ): T[] => tracks.map((track) => ({
     ...track,
@@ -921,10 +922,15 @@ export function animationWithSourceTimeIntent(
       easing: { ...keyframe.easing },
     })),
   }))
-  return {
-    tracks: withIntent(animation.tracks),
-    effectTracks: withIntent(animation.effectTracks ?? []),
-  }
+  return mapAnimationCollections(animation, withIntent)!
+}
+
+/** Procedural title maps restart at zero after head trim/right split. */
+export function reanchorProceduralAnimation(animation: ClipAnimation): ClipAnimation {
+  return mapAnimationCollections(animation, <T extends AnyAnimationTrack>(tracks: readonly T[]): T[] =>
+    tracks.map((track) => ({ ...track, keyframes: track.keyframes.map((key) => ({
+      ...key, sourceTimeTicks: key.frame * SOURCE_TIME_TICKS_PER_FRAME, easing: { ...key.easing },
+    })) })))!
 }
 
 /** Re-anchor authored source intent after a slip keeps timeline keys fixed. */
@@ -940,16 +946,14 @@ export function shiftClipAnimationSourceTimeIntent(
   } catch {
     return null
   }
-  const shiftTracks = <T extends ClipAnimation['tracks'][number] | NonNullable<ClipAnimation['effectTracks']>[number]>(
+  const shiftTracks = <T extends AnyAnimationTrack>(
     sourceTracks: readonly T[],
   ): T[] | null => mapAnimationTrackKeyframes(sourceTracks, (keyframe) => {
     const sourceTimeTicks = keyframe.sourceTimeTicks! + sourceDeltaTicks
     if (!Number.isSafeInteger(sourceTimeTicks)) return null
     return { ...keyframe, sourceTimeTicks, easing: { ...keyframe.easing } }
   })
-  const tracks = shiftTracks(withIntent.tracks)
-  const effectTracks = shiftTracks(withIntent.effectTracks ?? [])
-  return tracks && effectTracks ? { tracks, effectTracks } : null
+  return mapAnimationCollections(withIntent, shiftTracks)
 }
 
 export function retimeClipAnimation(
@@ -961,7 +965,7 @@ export function retimeClipAnimation(
   if (!Number.isSafeInteger(newDurationFrames) || newDurationFrames < 1) {
     throw new RangeError('Retimed animation duration must be a positive safe integer')
   }
-  const retimeTracks = <T extends ClipAnimation['tracks'][number] | NonNullable<ClipAnimation['effectTracks']>[number]>(
+  const retimeTracks = <T extends AnyAnimationTrack>(
     sourceTracks: readonly T[],
   ): T[] | null => mapAnimationTrackKeyframes(sourceTracks, (keyframe) => {
     let sourceTicks: number
@@ -981,9 +985,7 @@ export function retimeClipAnimation(
     if (frame === null) return null
     return { ...keyframe, frame, sourceTimeTicks: sourceTicks, easing: { ...keyframe.easing } }
   }, 'sorted-unique')
-  const tracks = retimeTracks(animation.tracks)
-  const effectTracks = retimeTracks(animation.effectTracks ?? [])
-  return tracks && effectTracks ? { tracks, effectTracks } : null
+  return mapAnimationCollections(animation, retimeTracks)
 }
 
 declare const constantAudioStretchRate: unique symbol

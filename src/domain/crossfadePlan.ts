@@ -488,9 +488,14 @@ function pairCapacities(
 function transitionWindow(
   seam: CrossfadeSeam,
 ): { startFrame: number; endFrame: number } | null {
-  const startFrame = seam.cutFrame
-    - Math.floor(seam.transition.durationFrames / 2)
-  const endFrame = startFrame + seam.transition.durationFrames
+  return crossfadeWindowAtCut(seam.cutFrame, seam.transition.durationFrames)
+}
+
+/** Shared integer window arithmetic for composition and admission of both handles. */
+export function crossfadeWindowAtCut(cutFrame: number, durationFrames: number): { startFrame: number; endFrame: number } | null {
+  if (!Number.isSafeInteger(cutFrame) || !Number.isSafeInteger(durationFrames) || durationFrames < 1) return null
+  const startFrame = cutFrame - Math.floor(durationFrames / 2)
+  const endFrame = startFrame + durationFrames
   return Number.isSafeInteger(startFrame) && Number.isSafeInteger(endFrame)
     ? { startFrame, endFrame }
     : null

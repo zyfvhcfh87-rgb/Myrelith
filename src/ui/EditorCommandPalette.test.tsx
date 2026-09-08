@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { useEffect } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
@@ -36,7 +37,7 @@ function fixture(): TimelineDoc {
     locked: false,
   }
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'palette-doc',
     name: 'Palette fixture',
     frameRate: { num: 30, den: 1 },

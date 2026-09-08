@@ -1,23 +1,14 @@
-import type { AudioEffectDescriptor, Clip, ClipAnimation, ClipAnimationEasing, ClipAnimationProperty, ClipAudioSettings, ClipVisualSettings, Effect, FrameRate, SourceTimeMap, SourceTimeSpeedCurve, TextProps, Track, Transform } from '../schema';
+import { validatePortableAnimation } from './animationValidation'
+import type { AudioEffectDescriptor, Clip, ClipAnimation, ClipAudioSettings, ClipVisualSettings, Effect, FrameRate, SourceTimeMap, SourceTimeSpeedCurve, TextProps, Track, Transform } from '../schema';
 import {
-  ANIMATABLE_CLIP_PROPERTIES,
   clipAnimationKindError,
-  clipAnimationValidationError,
   defaultClipAnimation,
-  MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP,
-  MAX_ANIMATED_FINITE_MAGNITUDE,
-  MAX_KEYFRAME_FRAME,
-  MAX_KEYFRAMES_PER_TRACK,
 } from '../clipAnimation';
 import {
   clipAudioSettingsValidationError,
   clipVisualSettingsValidationError,
-  MAX_AUDIO_BALANCE,
   MAX_CLIP_SCALE,
-  MAX_CLIP_VOLUME,
-  MIN_AUDIO_BALANCE,
   MIN_CLIP_SCALE,
-  MIN_CLIP_VOLUME,
 } from '../clipInspector';
 import { microsecondsDurationToFrames } from '../time';
 import { isProceduralTextAssetId, isSupportedTextColor, isSupportedTextFontFamily, TEXT_OVERLAY_LIMITS, textPropsValidationError, proceduralTextAssetId } from '../textOverlay';
@@ -104,162 +95,10 @@ export function validateClipAudio(
   if (error) fail(path, error)
 }
 
-export function validateAnimationEasing(
-  value: unknown,
-  path: string,
-): asserts value is ClipAnimationEasing {
-  const easing = record(value, path)
-  if (easing.type === 'linear' || easing.type === 'hold') {
-    exactKeys(easing, ['type'], [], path)
-    return
-  }
-  if (easing.type !== 'cubic-bezier') {
-    fail(`${path}.type`, 'expected hold, linear, or cubic-bezier')
-  }
-  exactKeys(easing, ['type', 'x1', 'y1', 'x2', 'y2'], [], path)
-  for (const key of ['x1', 'y1', 'x2', 'y2'] as const) {
-    finiteNumber(easing[key], `${path}.${key}`, 0, 1)
-  }
-}
+export { validateAnimationEasing } from './animationValidation'
 
-export function validateClipAnimation(
-  value: unknown,
-  path: string,
-  context: ValidationContext,
-): asserts value is ClipAnimation {
-  const animation = record(value, path)
-  exactKeys(animation, ['tracks', 'effectTracks'], [], path)
-  boundedArray(
-    animation.tracks,
-    `${path}.tracks`,
-    ANIMATABLE_CLIP_PROPERTIES.length,
-  )
-  const properties = new Set<ClipAnimationProperty>()
-  for (let trackIndex = 0; trackIndex < animation.tracks.length; trackIndex++) {
-    const trackPath = `${path}.tracks[${trackIndex}]`
-    const track = record(animation.tracks[trackIndex], trackPath)
-    exactKeys(track, ['property', 'keyframes'], [], trackPath)
-    if (
-      typeof track.property !== 'string'
-      || !ANIMATABLE_CLIP_PROPERTIES.includes(
-        track.property as ClipAnimationProperty,
-      )
-    ) {
-      fail(`${trackPath}.property`, 'unsupported animated property')
-    }
-    const property = track.property as ClipAnimationProperty
-    if (properties.has(property)) fail(`${trackPath}.property`, 'duplicate animation track')
-    properties.add(property)
-    boundedArray(track.keyframes, `${trackPath}.keyframes`, MAX_KEYFRAMES_PER_TRACK)
-    if (track.keyframes.length === 0) fail(`${trackPath}.keyframes`, 'must not be empty')
-    context.keyframeCount += track.keyframes.length
-    if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
-      fail(
-        '$.sequences',
-        `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`,
-      )
-    }
-    let previousFrame: number | null = null
-    for (let keyframeIndex = 0; keyframeIndex < track.keyframes.length; keyframeIndex++) {
-      const keyframePath = `${trackPath}.keyframes[${keyframeIndex}]`
-      const keyframe = record(track.keyframes[keyframeIndex], keyframePath)
-      exactKeys(
-        keyframe,
-        ['frame', 'sourceTimeTicks', 'value', 'easing'],
-        [],
-        keyframePath,
-      )
-      safeInteger(
-        keyframe.frame,
-        `${keyframePath}.frame`,
-        -MAX_KEYFRAME_FRAME,
-        MAX_KEYFRAME_FRAME,
-      )
-      safeInteger(
-        keyframe.sourceTimeTicks,
-        `${keyframePath}.sourceTimeTicks`,
-        Number.MIN_SAFE_INTEGER,
-        Number.MAX_SAFE_INTEGER,
-      )
-      if (previousFrame !== null && keyframe.frame <= previousFrame) {
-        fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
-      }
-      const minimum = property === 'opacity' ? 0
-        : property === 'volume' ? MIN_CLIP_VOLUME
-          : property === 'balance' ? MIN_AUDIO_BALANCE
-            : property === 'scale-x' || property === 'scale-y' ? MIN_CLIP_SCALE
-              : -MAX_ANIMATED_FINITE_MAGNITUDE
-      const maximum = property === 'opacity' ? 1
-        : property === 'volume' ? MAX_CLIP_VOLUME
-          : property === 'balance' ? MAX_AUDIO_BALANCE
-            : property === 'scale-x' || property === 'scale-y' ? MAX_CLIP_SCALE
-              : MAX_ANIMATED_FINITE_MAGNITUDE
-      finiteNumber(keyframe.value, `${keyframePath}.value`, minimum, maximum)
-      validateAnimationEasing(keyframe.easing, `${keyframePath}.easing`)
-      previousFrame = keyframe.frame
-    }
-  }
-  boundedArray(
-    animation.effectTracks,
-    `${path}.effectTracks`,
-    MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP,
-  )
-  const effectTargets = new Set<string>()
-  for (let trackIndex = 0; trackIndex < animation.effectTracks.length; trackIndex++) {
-    const trackPath = `${path}.effectTracks[${trackIndex}]`
-    const track = record(animation.effectTracks[trackIndex], trackPath)
-    exactKeys(track, ['effectId', 'parameter', 'keyframes'], [], trackPath)
-    stringValue(track.effectId, `${trackPath}.effectId`, PROJECT_FILE_LIMITS.maxIdCharacters)
-    stringValue(track.parameter, `${trackPath}.parameter`, PROJECT_FILE_LIMITS.maxNameCharacters)
-    const target = `${String(track.effectId)}\u0000${String(track.parameter)}`
-    if (effectTargets.has(target)) fail(trackPath, 'duplicate effect animation track')
-    effectTargets.add(target)
-    boundedArray(track.keyframes, `${trackPath}.keyframes`, MAX_KEYFRAMES_PER_TRACK)
-    if (track.keyframes.length === 0) fail(`${trackPath}.keyframes`, 'must not be empty')
-    context.keyframeCount += track.keyframes.length
-    if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
-      fail(
-        '$.sequences',
-        `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`,
-      )
-    }
-    let previousFrame: number | null = null
-    for (let keyframeIndex = 0; keyframeIndex < track.keyframes.length; keyframeIndex++) {
-      const keyframePath = `${trackPath}.keyframes[${keyframeIndex}]`
-      const keyframe = record(track.keyframes[keyframeIndex], keyframePath)
-      exactKeys(
-        keyframe,
-        ['frame', 'sourceTimeTicks', 'value', 'easing'],
-        [],
-        keyframePath,
-      )
-      safeInteger(
-        keyframe.frame,
-        `${keyframePath}.frame`,
-        -MAX_KEYFRAME_FRAME,
-        MAX_KEYFRAME_FRAME,
-      )
-      safeInteger(
-        keyframe.sourceTimeTicks,
-        `${keyframePath}.sourceTimeTicks`,
-        Number.MIN_SAFE_INTEGER,
-        Number.MAX_SAFE_INTEGER,
-      )
-      if (previousFrame !== null && keyframe.frame <= previousFrame) {
-        fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
-      }
-      finiteNumber(
-        keyframe.value,
-        `${keyframePath}.value`,
-        -MAX_ANIMATED_FINITE_MAGNITUDE,
-        MAX_ANIMATED_FINITE_MAGNITUDE,
-      )
-      validateAnimationEasing(keyframe.easing, `${keyframePath}.easing`)
-      previousFrame = Number(keyframe.frame)
-    }
-  }
-  const error = clipAnimationValidationError(animation as unknown as ClipAnimation)
-  if (error) fail(path, error)
+export function validateClipAnimation(value: unknown, path: string, context: ValidationContext): asserts value is ClipAnimation {
+  validatePortableAnimation(value, path, context, 'required')
 }
 
 export function validateEffect(
@@ -468,6 +307,8 @@ export interface ValidationContext {
   audioEffectStringCharacterCount: number
   textCharacterCount: number
   transitionCount: number
+  pathKeyframeCount: number
+  pathValueCharacters: number
   keyframeCount: number
   speedPointCount: number
 }

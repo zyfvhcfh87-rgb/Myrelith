@@ -1,3 +1,7 @@
+import type { TitleBudgetOwner } from '../domain/titleBudgets'
+import type { TitleElementIntent } from '../domain/titleElements'
+import { animationRetentionError } from '../domain/animationProjectBudget'
+import type { EffectPathAnimationTrack } from '../domain/maskPathAnimation'
 import { COLOR_LUT_LIMITS } from '../domain/colorLut'
 import { newColorLutReferenceError, retainedColorLutBytes, type PortableColorLut } from '../domain/colorLutCatalog'
 import { sequenceProjectWithinEditBudget } from '../domain/projectSequences'
@@ -226,7 +230,12 @@ const HISTORY_LIMIT = 100
 export interface DocumentState {
   /** Data-only clipboard retention ledger; shares immutable project records. */
   retainedClipboardColorLuts: readonly PortableColorLut[]
-  commitColorLutEdit: (expectedProject: SequenceProject, generation: number, next: SequenceProject) => string | null
+  retainedAttributePathTracks: readonly EffectPathAnimationTrack[]
+  retainedKeyPathTracks: readonly EffectPathAnimationTrack[]
+  retainedTitleClipboardOwners: readonly TitleBudgetOwner[]
+  retainedTitleClipboardElements: readonly TitleElementIntent[]
+  retainedTitleClipboardKeys: readonly object[]
+  commitProjectEdit: (expectedProject: SequenceProject, generation: number, next: SequenceProject) => string | null
 
   /** Complete portable edit snapshot. Browser resources remain elsewhere. */
   project: SequenceProject
@@ -714,7 +723,7 @@ function commit(
     state.activeSequenceId,
     next,
   )
-  if (project === state.project || colorLutCommitError(state, project)) return state
+  if (project === state.project || projectCommitError(state, project)) return state
   return {
     project,
     doc: next,
@@ -723,7 +732,9 @@ function commit(
   }
 }
 
-function colorLutCommitError(state: DocumentState, project: SequenceProject): string | null {
+function projectCommitError(state: DocumentState, project: SequenceProject): string | null {
+  const animationError = animationRetentionError(state, project)
+  if (animationError) return animationError
   if (!state.project.colorLuts?.length && !project.colorLuts?.length && !state.retainedClipboardColorLuts.length) {
     return newColorLutReferenceError(state.project, project)
   }
@@ -751,7 +762,7 @@ function commitProject(
   project: SequenceProject,
   preferredActiveId = state.activeSequenceId,
 ): Partial<DocumentState> | DocumentState {
-  if (project === state.project || colorLutCommitError(state, project)) return state
+  if (project === state.project || projectCommitError(state, project)) return state
   return {
     project,
     ...activeSequenceFor(project, preferredActiveId),
@@ -775,12 +786,17 @@ const INITIAL_PROJECT = sequenceProjectFromTimeline(INITIAL_DOCUMENT)
 
 export const useDocumentStore = create<DocumentState>()((set) => ({
   retainedClipboardColorLuts: [],
-  commitColorLutEdit: (expectedProject, generation, next) => {
+  retainedAttributePathTracks: [],
+  retainedKeyPathTracks: [],
+  retainedTitleClipboardOwners: [],
+  retainedTitleClipboardElements: [],
+  retainedTitleClipboardKeys: [],
+  commitProjectEdit: (expectedProject, generation, next) => {
     let error: string | null = null
     set((state) => {
-      if (state.project !== expectedProject || state.projectGeneration !== generation) { error = 'The project changed. Reopen the grading controls.'; return state }
-      if (!sequenceProjectWithinEditBudget(next)) { error = 'The grading edit exceeds project limits.'; return state }
-      error = colorLutCommitError(state, next)
+      if (state.project !== expectedProject || state.projectGeneration !== generation) { error = 'The project changed. Reopen the editing controls.'; return state }
+      if (!sequenceProjectWithinEditBudget(next)) { error = 'The edit exceeds project limits.'; return state }
+      error = projectCommitError(state, next)
       return error ? state : commitProject(state, next)
     })
     return error
@@ -797,6 +813,11 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     project,
     projectGeneration: state.projectGeneration + 1,
     retainedClipboardColorLuts: [],
+    retainedAttributePathTracks: [],
+    retainedKeyPathTracks: [],
+    retainedTitleClipboardOwners: [],
+    retainedTitleClipboardElements: [],
+    retainedTitleClipboardKeys: [],
     ...activeSequenceFor(project, activeSequenceId),
     sequenceNavigation: [],
     past: [],
@@ -807,6 +828,11 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     project: sequenceProjectFromTimeline(doc),
     projectGeneration: state.projectGeneration + 1,
     retainedClipboardColorLuts: [],
+    retainedAttributePathTracks: [],
+    retainedKeyPathTracks: [],
+    retainedTitleClipboardOwners: [],
+    retainedTitleClipboardElements: [],
+    retainedTitleClipboardKeys: [],
     activeSequenceId: doc.id,
     sequenceNavigation: [],
     doc,
@@ -825,7 +851,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       }
       const candidate = replaceProjectSequence(state.project, sequenceId, doc)
       if ((doc !== state.doc && candidate === state.project) || !sequenceProjectWithinEditBudget(candidate)) { error = 'The mask edit exceeds project limits.'; return state }
-      error = colorLutCommitError(state, candidate)
+      error = projectCommitError(state, candidate)
       return error ? state : commit(state, doc)
     })
     return error
@@ -840,7 +866,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       }
       const result = editVideoBus(state.project, target, command, randomSequenceId)
       if (!result.ok) { error = result.reason; return state }
-      error = colorLutCommitError(state, result.project)
+      error = projectCommitError(state, result.project)
       return error ? state : commitProject(state, result.project)
     })
     return error
@@ -857,7 +883,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         ? pasteClipAttributes(state.project, sequenceId, command.targetIds, command.template, command.options, randomSequenceId)
         : resetClipAttributes(state.project, sequenceId, command.targetIds, command.groups, command.selectedEffectIds)
       if (!result.ok) { error = result.reason; return state }
-      error = colorLutCommitError(state, result.project)
+      error = projectCommitError(state, result.project)
       return error ? state : commitProject(state, result.project)
     })
     return error

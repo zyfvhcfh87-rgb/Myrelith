@@ -7,9 +7,10 @@ import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSe
 import { createMaskEffect } from '../domain/effectStack'
 import { editMaskBezierPath } from '../domain/maskPathEdit'
 import { parseMaskBezierPath } from '../domain/maskPath'
-import { attributeClip } from '../test/clipAttributeFixtures'
+import { ATTRIBUTE_ASSET_DESCRIPTOR, attributeClip } from '../test/clipAttributeFixtures'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
+import { useMediaStore } from '../state/mediaStore'
 
 const target = { sequenceId: 'mask-ui', clipId: 'clip', effectId: 'mask' }
 let canvasWidth = 960
@@ -28,6 +29,7 @@ function start(name = 'Move mask') {
   return handle
 }
 beforeEach(() => {
+  useMediaStore.setState({ descriptors: new Map([['asset', ATTRIBUTE_ASSET_DESCRIPTOR]]), collections: [] })
   useTransportStore.getState().resetTransport()
   const doc = structuredClone(createTimelineDoc('Mask UI', DEFAULT_PROJECT_SETTINGS, target.sequenceId))
   const clip = attributeClip('clip'); clip.effects = [createMaskEffect('mask', 'rectangle')]
