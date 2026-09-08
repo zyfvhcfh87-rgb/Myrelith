@@ -31,6 +31,14 @@ Quality, timestamps, remaining lifecycle/offline cases and full resident-memory
 acceptance remain unresolved. The frozen candidate04 manifest and all earlier
 failed raw evidence remain preserved. Product speech stays NO-GO.
 
+Parent-requested research now compares a materially different single-thread
+whisper.cpp WASM route in [WHISPER_CPP_ROUTE_PROPOSAL.md](WHISPER_CPP_ROUTE_PROPOSAL.md).
+Its pinned source/metadata comparison favors multilingual tiny-q8_0 for a future
+source-preparation decision. No alternate weights, build/runtime or native run
+was produced. The448-token whole-window adapter proof, exact toolchain/bundle
+provenance and every measured acceptance gate remain unresolved. The existing
+raw RSS record cannot identify an exact native allocation site as the cause.
+
 ## Measured replacement history through run04
 
 The prior measured isolated-lab candidate kept the exact model revision and seven
