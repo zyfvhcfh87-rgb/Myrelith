@@ -318,6 +318,28 @@ repair preserved invalid parameters. Native tests cover these behaviors and
 recovery. See [Gate 6 evidence](evidence/issue197/gate-6.md) for exact results,
 known baseline failures, source fingerprints and delivery limits.
 
+## Grading extension, issue #196 (2026-09-08)
+
+The [color grading contract](COLOR_GRADING.md) extends the same stack with local
+1D/3D `.cube` LUTs, master/RGB curves and lift/gamma/gain wheels. These stages work
+on clips, adjustments, tracks and master buses, including nested composition.
+LUT/curve strength and wheel scalars can animate on media clips and adjustments;
+point lists and tables stay static, as do text and video buses. Existing numeric
+color-adjust behavior and unsupported descriptor preservation remain unchanged.
+
+Project format 8 embeds immutable table data once per project. Local presets now
+use version 2, with exactly their referenced LUT records and static resolved
+descriptors. Limits are 2 MiB per preset and 8 MiB per library (100 records,
+32 effects each), including corrupt siblings. Version 1 migrates transactionally
+with empty table bundles; future versions stay read-only. Applying a preset
+deduplicates/remaps tables and commits once; deleting it never changes applied
+copies. Preset file exchange remains outside this version. Three first-party
+numeric recipes provide simple starting corrections without third-party assets.
+
+The optional RGB parade did not pass repeated Program presentation timing and
+was removed from production. The existing histogram, waveform and vectorscope
+remain unchanged; the prototype and both timing runs are retained as evidence.
+
 ## Alternatives and external references
 
 The internal clipboard avoids OS permissions and untrusted clipboard parsing;

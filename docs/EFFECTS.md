@@ -101,6 +101,38 @@ descriptor, and bypasses only the unsupported operation. No presets ship in
 this slice: the five bounded defaults plus existing enable, reset, reorder, and
 remove controls are sufficient and avoid an unversioned preset contract.
 
+## Local LUTs, RGB curves and color wheels
+
+Issue #196 adds three version-1 descriptors to the same registry:
+
+| Type | Parameters | Animated media-clip/adjustment values |
+| --- | --- | --- |
+| `builtin.cube-lut` | project-owned `lutId`, strength | strength |
+| `builtin.rgb-curves` | master/red/green/blue point-list strings, strength | strength |
+| `builtin.lift-gamma-gain` | lift/gamma/gain RGB scalars, strength | all ten scalars |
+
+All three stages are available on clips, text, adjustments and static track/master
+buses. Text and bus parameters remain static. Pure domain code defines strict
+`.cube` parsing, linear/tetrahedral interpolation, PCHIP curves and wheel math.
+The shared bounded asynchronous evaluator uses straight nonlinear sRGB, preserves
+alpha, skips hidden RGB at zero alpha and quantizes after each descriptor. A
+ready nonidentity grade uses pixel evaluation in authored order, including trusted
+plugin stages; it never enters the older synchronous pixel helper without its
+runtime owner. Old color-adjust-only and identity behavior remain exact.
+
+Project format 8 stores exact immutable LUT records, with timeline schema 21
+unchanged. Missing or future grading data stays serialized and visibly bypassed
+in preview; enabled unavailable grading blocks export until repaired or explicitly
+bypassed. The local picker reports native size/domain before Apply. Curves have
+keyboard points and numeric lists; wheels have equivalent RGB/brightness fields.
+Gestures use temporary transport documents and one validated release commit;
+stale targets, Escape and keyframe limits leave durable intent untouched.
+
+Version-2 local presets bundle exactly the tables their static descriptors need.
+For precise budgets, formulas, file compatibility, recipes and acceptance evidence,
+see [COLOR_GRADING.md](COLOR_GRADING.md). RGB parade remains deferred after its
+optional repeated presentation-time gate failed; existing scopes are unchanged.
+
 ## Masks and chroma key
 
 Issue #73 adds `builtin.mask` version 1 and `builtin.chroma-key` version 1.

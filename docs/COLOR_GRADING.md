@@ -1,6 +1,6 @@
 # Issue #196: local SDR color grading
 
-Status: approved on 2026-09-08; implementation in progress.
+Status: implemented and accepted locally on 2026-09-08. Optional RGB parade deferred.
 Inspected on 2026-09-07 at merged master `368bd43`, on `codex/issue196`.
 Issue: [#196](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/196).
 
@@ -10,8 +10,10 @@ another approval round. A failed proof must retain its evidence; changing the
 portable representation, color math, supported subset, or acceptance limits
 requires a concrete revised proposal before that affected slice ships.
 
-The user approved the complete plan on 2026-09-08. Gate evidence below will
-distinguish implemented and verified behavior from work still pending.
+The user approved the complete plan on 2026-09-08. The approved design and initial
+inspection below are retained as the gate record. All six gates are complete;
+[final acceptance](evidence/issue196-acceptance.md) distinguishes verified behavior,
+baseline failures and qualification limits.
 
 ## Editing workflow
 
@@ -21,7 +23,7 @@ select a local `.cube`, inspect its name, size and input-domain summary, then
 apply it. Importing and attaching the accepted table is one undoable edit.
 Cancel, parse failure and stale selection leave the project and redo unchanged.
 
-Curves provides Master, Red, Green and Blue tabs with a graph and a numeric
+Curves provides a Master, Red, Green and Blue channel selector with a graph and a numeric
 point list. Lift/Gamma/Gain provides three color wheels, channel values and a
 brightness control for each wheel. All three effect types have strength,
 bypass, reset, reorder and remove controls. Dragging previews temporarily;
@@ -30,7 +32,7 @@ release commits once. Numeric entry and keyboard controls offer the same edits.
 Save preset captures the resolved correction at the playhead, including its
 required LUT data. Applying that preset to another project makes an independent
 portable correction. Existing Copy/Paste attributes continues to work.
-RGB parade joins the current scope tabs if its separate performance gate passes.
+RGB parade remains deferred because its repeated performance gate failed.
 
 The Inspector describes these as SDR adjustments to the displayed sRGB image.
 A LUT file does not reliably identify its intended source encoding. The import
@@ -38,6 +40,9 @@ summary therefore asks the user to apply a LUT intended for this input; it does
 not infer a camera profile, convert log footage automatically, or promise HDR.
 
 ## Verified starting constraints
+
+This table records the pre-implementation base, before project format 8 and
+preset library version 2. Current ownership is documented in ARCHITECTURE.md.
 
 | Current owner | Consequence for this issue |
 | --- | --- |
@@ -530,7 +535,7 @@ Initial new-test failures were a missing helper scope, an incomplete fake Canvas
 source and a timer racing an already completed tiny frame. The final lifecycle
 test delivers replacement from the first readback to exercise active work reliably.
 
-The muted Chromium 151.0.7922.34 CPU matrix passes all 45 cells on macOS 25.6.0,
+The muted Chromium 151.0.7922.34 CPU matrix passes all 45 cells on Darwin 25.6.0,
 arm64 Apple M5 Max, Node 26.8.1. Each uses two warmups and ten recorded samples.
 Worst p95 single/eight-stage times are 19.5/152.3 ms at 720p, 39.1/335.7 ms at
 1080p and 157.4/1261.0 ms at 4K. Mixed eight-stage 4K p95 is 711.6 ms. Delivered
@@ -645,3 +650,41 @@ scope analyzer, output shape and UI. The reproducible
 parade attempt needs a revised measured plan. The first timing harness attempt
 listened for the wrong completion status and was unqualified; it was corrected
 before either retained measurement. No timing ceiling was relaxed.
+
+## Gate 6 evidence, 2026-09-08
+
+The full suite passes 4,200 Vitest tests in 304 files and all 17 runner checks.
+Production build/typecheck, lint and diff checks pass; the production dependency
+audit reports zero vulnerabilities. Build retains its existing chunk-size warning.
+
+All nine issue-specific functional Chromium cases pass, covering import, controls,
+animation, portable presets, recovery/relink, nested scopes, real original-media
+export, cancellation and unavailable LUTs. A final four-case preset rerun passes
+after tightening version-1 migration to transform only valid old records; corrupt
+shapes and records above the old 128 KiB ceiling remain untouched. The 45-cell
+CPU proof from Gate 3 is retained: every recorded evaluator source hash still
+matches, and its timing ceiling was not rerun or relaxed for final acceptance.
+
+The broader Chromium run reports 41 passed, eight failed and three opt-in skips.
+All eight failures reproduce at unchanged base `368bd43`, with the same target
+size, audio duration, missing-ffmpeg fixture error and five scroll assertions.
+This is focused acceptance, not a wholly green browser suite. The final preset
+rerun follows the broader run and is recorded separately.
+
+Final review also makes clip/adjustment gestures preflight all animation growth
+before applying any part of a patch. A full keyframe lane rejects the whole edit
+without changing preview or redo; replacing an existing key at capacity works.
+The UI exposes the same limit. A new real-browser flow reopens a graded project
+offline, relinks its original image without source LUT files, preserves canonical
+project/history data and renders the expected `[191, 64, 96, 255]` pixel.
+
+An additional Codex in-app check at 1280 by 720 visibly confirms a text clip's
+blue curve and red gain changing the live picture, with accessible numeric fields
+and no recorded console warnings/errors. Its native file-picker automation timed
+out, so media import/relink/export claims come from the separate Chromium tests.
+The viewport was restored, the QA tab closed and the temporary server stopped.
+
+Commands, baseline evidence, current source fingerprints and the remaining
+browser/hardware limits are in [final acceptance](evidence/issue196-acceptance.md).
+RGB parade remains absent from production as documented in Gate 5. This completes
+the approved local implementation; publication is separate.

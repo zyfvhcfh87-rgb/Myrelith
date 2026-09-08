@@ -6,6 +6,8 @@ import { sequenceProjectFromTimeline } from '../domain/projectSequences'
 import { DEFAULT_COLOR_WHEELS, COLOR_WHEELS_TYPE } from '../domain/colorWheels'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
+import { MAX_KEYFRAMES_PER_TRACK } from '../domain/clipAnimation'
+import { createAdjustmentItem } from '../domain/adjustmentItems'
 
 const target = { kind: 'clip', sequenceId: 'grading', clipId: 'clip' } as const
 beforeEach(() => {
@@ -67,4 +69,25 @@ test('locked targets and invalid parameters reject without changing undo or redo
   useDocumentStore.getState().setDoc(doc)
   expect(() => beginColorGradingEdit(target, 'grade')).toThrow(/locked/)
   expect(addGradingEffect(target, COLOR_WHEELS_TYPE)).toMatch(/locked/)
+})
+
+test.each(['clip', 'adjustment'] as const)('a full %s keyframe lane rejects the whole gesture and preserves redo', (kind) => {
+  const doc = structuredClone(useDocumentStore.getState().doc), clip = doc.tracks[0].clips[0]
+  const item = kind === 'clip' ? clip : createAdjustmentItem(0, 60, 'Grade')
+  item.effects = clip.effects
+  item.animation = { tracks: [], effectTracks: [{ effectId: 'grade', parameter: 'gainR', keyframes: Array.from({ length: MAX_KEYFRAMES_PER_TRACK }, (_, index) => ({ frame: index * 2, value: 1, easing: { type: 'linear' as const } })) }] }
+  if (kind === 'adjustment') { item.id = 'adjustment'; clip.effects = []; doc.tracks[0].adjustments = [item as ReturnType<typeof createAdjustmentItem>] }
+  useDocumentStore.getState().setDoc(doc)
+  const project = useDocumentStore.getState().project
+  useDocumentStore.setState({ future: [project] })
+  useTransportStore.getState().setPlayheadFrame(1)
+  const editTarget = kind === 'clip' ? target : { kind: 'adjustment' as const, sequenceId: target.sequenceId, adjustmentId: 'adjustment' }
+  const edit = beginColorGradingEdit(editTarget, 'grade')
+  expect(edit.preview({ gainR: 2, gainG: 2 })).toMatch(/keyframe budget/)
+  expect(useTransportStore.getState().colorGradingPreview).toBeNull()
+  expect(useDocumentStore.getState()).toMatchObject({ project, past: [], future: [project] })
+  // Updating an existing key at capacity is still a valid, single edit.
+  useTransportStore.getState().setPlayheadFrame(2)
+  expect(beginColorGradingEdit(editTarget, 'grade').commit({ gainR: 2, gainG: 2 })).toBeNull()
+  expect(useDocumentStore.getState().past).toEqual([project])
 })

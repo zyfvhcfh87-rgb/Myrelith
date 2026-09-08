@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith
+
+
+ Test Files  304 passed (304)
+      Tests  4200 passed (4200)
+   Start at  09:23:07
+   Duration  17.93s (transform 11.58s, setup 17.59s, import 71.89s, tests 46.49s, environment 134.39s)
+
+✔ cold samples each use and close a fresh BrowserContext (0.684041ms)
+✔ source identity rejects end-of-run drift (0.175ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (207.558791ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (119.967666ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.313458ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.769875ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.171584ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.3045ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.138375ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.103458ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.242292ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.537709ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.856917ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.089416ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.141625ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.161792ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.11575ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 521.286084

@@ -84,9 +84,13 @@ describe('bounded local effect presets', () => {
 test('version 1 migrates transactionally to empty bundles and preserves corrupt siblings', () => {
   const { colorLuts: _tables, ...legacy } = preset()
   const corrupt = { name: 'Keep this', nested: { future: ['opaque'] } }
-  const parsed = readEffectPresetLibrary(envelope([legacy, corrupt], 1))
+  const corruptShape = { id: 'invalid', name: 'Broken effects', effects: 'opaque' }
+  const tooLargeForV1 = { id: 'large', name: 'Old invalid entry', effects: [{ id: 'large-effect', type: 'future.effect', version: 1, enabled: false, params: { a: 'a'.repeat(65_500), b: 'b'.repeat(65_500), c: 'c'.repeat(100) } }] }
+  const invalid = [corrupt, corruptShape, tooLargeForV1]
+  const parsed = readEffectPresetLibrary(envelope([legacy, ...invalid], 1))
   expect(parsed.view.presets[0]).toMatchObject({ ...legacy, colorLuts: [] })
-  expect(JSON.parse(parsed.migration!)).toEqual({ version: 2, presets: [{ ...legacy, colorLuts: [] }, corrupt] })
+  expect(JSON.parse(parsed.migration!)).toEqual({ version: 2, presets: [{ ...legacy, colorLuts: [] }, ...invalid] })
+  expect(parsed.view.unavailable).toHaveLength(3)
   expect(readEffectPresetLibrary(envelope([], 99)).migration).toBeUndefined()
 })
 

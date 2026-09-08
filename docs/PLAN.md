@@ -5109,9 +5109,9 @@ The contract and acceptance sequence are in
 
 ## Post-MVP issue #196 - local SDR LUTs, curves and wheels
 
-**PLAN APPROVED; IMPLEMENTATION IN PROGRESS (2026-09-08).**
+**IMPLEMENTED AND ACCEPTED LOCALLY (2026-09-08).**
 
-Contract and proposed gates: [COLOR_GRADING.md](COLOR_GRADING.md).
+Contract and gate evidence: [COLOR_GRADING.md](COLOR_GRADING.md).
 
 - [x] Read #196, verify merged #197 base `368bd43`, and trace effects, presets,
   project/history budgets, shared rendering and post-presentation scopes.
@@ -5133,4 +5133,9 @@ Contract and proposed gates: [COLOR_GRADING.md](COLOR_GRADING.md).
   17 runner checks, build/lint and two Chromium flows. Optional parade deferred
   after its repeated presentation timing exceeded the approved ceiling; existing
   scopes stay unchanged. Both runs and the removed prototype are recorded.
-- [ ] Gate 6: complete tests/build/lint/audit, Chromium acceptance and evidence.
+- [x] Gate 6: complete tests/build/lint/audit, Chromium acceptance and evidence.
+  4,200 Vitest tests + 17 runner checks pass, with all nine issue functional
+  Chromium cases and a final four-case preset regression rerun. The 45-cell
+  grading proof retains matching source hashes. Broader Chromium: 41 pass /
+  eight failures reproduced on unchanged `368bd43` / three opt-in skips. See
+  [final acceptance](evidence/issue196-acceptance.md) for scope and limitations.

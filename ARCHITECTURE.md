@@ -138,6 +138,26 @@ Changes may span multiple modules or layers when that is the smallest complete
 solution. The dependency direction above and all ownership/timing rules remain
 binding across the whole change.
 
+## Portable color grading
+
+Project format 8 owns one immutable `SequenceProject.colorLuts` catalog; timeline
+schema 21 keeps primitive versioned effect descriptors. Files and parser workers
+belong to `app/colorLutController.ts`. Import validates before one table-plus-effect
+commit, and full-file/history/clipboard bounds are checked before clearing redo.
+Ordinary history and sequence edits share table records; missing or future intent
+is preserved and visibly unavailable. Preset library version 2 copies exact
+referenced tables into the receiving project, independently of library deletion.
+
+`pipeline/colorGradingRuntime.ts` owns a serialized 2 MiB/256-entry derived cache
+and disposable task queue for each render owner. Clip, adjustment, track/master,
+expanded child composition and trusted-plugin stages use the same evaluator.
+Replacement and disposal wait for borrowed work; new grading yields every 4,096
+pixels and enters the aggregate frame/surface budget. Enabled unavailable grading
+blocks export. Preview bypass reports its reason without rewriting descriptors.
+App-owned gestures publish temporary data-only documents through transport state,
+then commit one validated edit. See [the grading contract](docs/COLOR_GRADING.md)
+for exact math, supported LUTs, limits and qualification evidence.
+
 ## Optional multicam monitoring
 
 `app/mediaResourceAdmission.ts` is the shared admission authority for the

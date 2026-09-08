@@ -1,0 +1,13 @@
+[WebServer] (node:41155) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 4 tests using 1 worker
+
+(node:41156) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/browser/issue-196-grading-presets.spec.ts:20:1 › a LUT preset survives reload, applies to a fresh project in one edit and owns independent data (6.4s)
+  ✓  2 [chromium] › tests/browser/issue-196-grading-presets.spec.ts:66:1 › real IndexedDB migration aborts atomically on quota and preserves corrupt and future records (929ms)
+  ✓  3 [chromium] › tests/browser/issue-197-effects.spec.ts:255:1 › local presets capture static rendered values, persist across reload, rename and apply atomically (6.9s)
+  ✓  4 [chromium] › tests/browser/issue-197-effects.spec.ts:311:1 › preset corruption, quota abort and future envelopes stay honest and preserve existing data (3.0s)
+
+  4 passed (18.1s)

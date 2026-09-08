@@ -1,7 +1,9 @@
 import type { ColorGradingTarget } from './colorGradingEdits'
 import { isColorGradingType } from './colorGradingEffects'
-import { effectParamsValidationError, effectRegistration } from './effectStack'
-import { effectAppendBudgetError } from './effectBounds'
+import { effectAnimationParameterSpec, effectParamsValidationError, effectRegistration } from './effectStack'
+import { effectAppendBudgetError, effectDescriptorBoundsError, effectReplacementBudgetError } from './effectBounds'
+import { documentAnimationKeyframeGrowthAllowed, MAX_KEYFRAMES_PER_TRACK } from './clipAnimation'
+import { clipSourceTimeMap, sourceTicksAtTimelineOffset } from './sourceTimeMap'
 import { COLOR_CURVES_TYPE } from './colorCurves'
 import { COLOR_WHEELS_TYPE } from './colorWheels'
 import { updateEffectParamsAtFrame } from './operations/effects'
@@ -25,16 +27,33 @@ export function colorGradingOwner(project: SequenceProject, target: ColorGrading
 
 /** Shared preview/commit operation; existing keyframe semantics stay authoritative. */
 export function editColorGradingParams(project: SequenceProject, target: ColorGradingTarget, effectId: string, frame: number, patch: Readonly<Record<string, EffectParamValue>>): SequenceProject {
+  if (!Number.isSafeInteger(frame)) throw new Error('The playhead frame is invalid.')
   const owner = colorGradingOwner(project, target)
   if (owner.locked) throw new Error('This video track is locked.')
   const effect = owner.effects.find((effect) => effect.id === effectId)
   if (!effect || effect.version !== 1 || !isColorGradingType(effect.type)) throw new Error('This grading effect is unavailable.')
-  const error = effectParamsValidationError({ ...effect, params: { ...effect.params, ...patch } })
+  const proposed = { ...effect, params: { ...effect.params, ...patch } }
+  const error = effectDescriptorBoundsError(proposed) ?? effectParamsValidationError(proposed)
   if (error) throw new Error(error)
   const item = owner.clip ?? owner.adjustment
   const keys = item?.animation?.effectTracks ?? []
-  if (item && keys.some((track) => track.effectId === effectId && track.parameter in patch)
-    && (frame < item.timelineRange.startFrame || frame >= item.timelineRange.startFrame + item.timelineRange.durationFrames)) throw new Error('Move the playhead inside this item to edit animated grading.')
+  const animated = keys.filter((track) => track.effectId === effectId && Object.hasOwn(patch, track.parameter))
+  if (item && animated.length) {
+    const localFrame = frame - item.timelineRange.startFrame
+    if (localFrame < 0 || localFrame >= item.timelineRange.durationFrames) throw new Error('Move the playhead inside this item to edit animated grading.')
+    if (owner.clip?.text) throw new Error('Text grading parameters are static.')
+    const growing = animated.filter((track) => !track.keyframes.some((key) => key.frame === localFrame))
+    if (growing.some((track) => track.keyframes.length >= MAX_KEYFRAMES_PER_TRACK)
+      || !documentAnimationKeyframeGrowthAllowed(owner.sequence, growing.length)) throw new Error('This grading edit exceeds the keyframe budget.')
+    for (const track of animated) {
+      const spec = effectAnimationParameterSpec(effect, track.parameter), value = patch[track.parameter]
+      if (!spec || typeof value !== 'number' || !Number.isFinite(value) || value < spec.min || value > spec.max) throw new Error('This grading parameter cannot receive that animation key.')
+    }
+    if (owner.clip) sourceTicksAtTimelineOffset(clipSourceTimeMap(owner.clip), localFrame)
+  }
+  const staticPatch = Object.fromEntries(Object.entries(patch).filter(([parameter]) => !animated.some((track) => track.parameter === parameter)))
+  const replacementError = effectReplacementBudgetError(owner.sequence, effect, { ...effect, params: { ...effect.params, ...staticPatch } })
+  if (replacementError) throw new Error(replacementError)
   let candidate: SequenceProject
   if (target.kind === 'master' || target.kind === 'track') {
     const result = editVideoBus(project, target, { kind: 'params', effectId, patch }, () => '')

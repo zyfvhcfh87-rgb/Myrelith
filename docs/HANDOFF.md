@@ -5643,28 +5643,51 @@ static. Work is committed locally on codex/issue197; publication is separate.
 
 ## Post-MVP issue #196 - LUTs, curves and color wheels
 
-**PLAN APPROVED; IMPLEMENTATION IN PROGRESS (2026-09-08).**
+**IMPLEMENTATION AND LOCAL ACCEPTANCE COMPLETE (2026-09-08).**
 
-The user approved the complete six-gate plan on 2026-09-08. Successful gates
-proceed without repeated approval. The following initial inspection is historical.
+Start with [COLOR_GRADING.md](COLOR_GRADING.md) and
+[final acceptance](evidence/issue196-acceptance.md). The user approved all six
+gates on 2026-09-08. `codex/issue196` starts at merged master `368bd43`, including
+#197 through PR #224. Publication remains separate from this local delivery.
 
-Start with [COLOR_GRADING.md](COLOR_GRADING.md). `codex/issue196` starts at
-merged master `368bd43`, which includes #197 through PR #224. No product code
-has changed for #196. The proposed six gates cover pure color/parser contracts,
-a portable project LUT catalog, shared preview/export execution and resource
-proof, accessible editing, presets/scopes, and complete acceptance.
+Project format 8 embeds immutable LUT data once per project; timeline schema 21
+and primitive versioned descriptors remain. Supported local `.cube` files contain
+one 1D table of 2–4,096 rows or one 3D table of edge 2–33, with fixed linear or
+tetrahedral interpolation. Master/RGB curves use the declared PCHIP contract;
+lift/gamma/gain uses explicit SDR math. Old five-control and identity paths retain
+their pixels. Missing or future data remains preserved and visibly unavailable;
+enabled unavailable grading blocks export until repaired or explicitly bypassed.
 
-The proposed format-8 catalog embeds immutable LUT data once per project and
-keeps existing primitive descriptors and timeline schema 21. The first subset
-supports 1D tables through 4,096 rows and 3D tables through edge 33, with explicit
-interpolation and SDR math. Preset version 2 needs bounded LUT bundles; this is
-part of the approval decision, not an implemented migration. Old five-control
-output and identity paths must remain exact.
+All scopes use the shared serialized runtime, with a 2 MiB/256-entry lookup cache,
+task yields and aggregate render/work admission. Import, whole-project history,
+clipboard and file budgets are distinct. The app owns parser workers and stale
+gesture guards; Inspector controls provide pointer, keyboard and numeric editing.
+LUT/curve strength and wheel scalars animate on media clips/adjustments; text and
+buses stay static. Full keyframe lanes reject a whole gesture and preserve redo.
 
-Initial base checks pass 70 focused tests across eight files, all 17 runner
-checks, build/typecheck and lint. The first runner attempt hit the unaccepted
-Xcode license through Git; using the installed Command Line Tools via
-`DEVELOPER_DIR=/Library/Developer/CommandLineTools` fixes those checks without
-accepting an agreement. Node 26 uses `NODE_OPTIONS=--no-experimental-webstorage`
-for Vitest. No fresh full-suite, grading-browser, performance or audit acceptance
-is claimed. Full commands, proposed budgets and remaining risks are in the plan.
+Local preset version 2 bundles exactly referenced tables, with 2 MiB per preset
+and 8 MiB per library. Valid v1 entries migrate in one IndexedDB transaction;
+corrupt siblings stay raw and future envelopes remain read-only. Apply validates,
+deduplicates/remaps and commits once; deletion leaves applied copies independent.
+Gentle contrast, Lifted shadows and Warm balance are first-party numeric recipes.
+
+The optional RGB parade failed its final repeated presentation timing gate
+(+4.0 ms p95 against 2.0 ms allowed). It was removed from production; existing
+scopes remain unchanged. Both measurements and the reproducible removed prototype
+are retained. The earlier passing run does not override the later failure.
+
+Final validation passes 4,200 Vitest tests in 304 files, all 17 runner checks,
+build/typecheck, lint and the zero-vulnerability production audit. All nine issue
+functional Chromium cases pass; four preset flows pass again after final migration
+hardening. Gate 3's 45 CPU cells retain exact evaluator source hashes. Real tests
+cover save/reopen, native-33 data, IDB recovery, original-media relink, nested order,
+VP9 export and cancellation. In-app text grading was visually checked at 1280×720.
+
+Broader Chromium reports 41 passed / eight failed / three opt-in skips. All eight
+failures reproduce at unchanged `368bd43`: one small command target, one audio
+duration mismatch, one fixture blocked by missing ffmpeg and five scroll checks.
+The broader suite is not green. Headless CPU measurements and injected Canvas
+loss do not qualify other browsers/hardware, real-time 4K or native GPU resets.
+Use `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for Git/test runners and
+`NODE_OPTIONS=--no-experimental-webstorage` for Node 26 Vitest; no Xcode agreement
+was accepted. See final acceptance for commands and the in-app upload limitation.

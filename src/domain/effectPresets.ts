@@ -81,7 +81,13 @@ export function readEffectPresetLibrary(raw: unknown): { library: EffectPresetLi
   if (!record(parsed) || !exactKeys(parsed, ['version', 'presets']) || (parsed.version !== 1 && parsed.version !== 2)) return unavailable('The library envelope is invalid. It remains untouched.')
   if (!Array.isArray(parsed.presets) || parsed.presets.length > EFFECT_PRESET_LIMITS.presets) return unavailable('The local preset library exceeds 100 entries or is invalid. It remains untouched.')
   const legacy = parsed.version === 1
-  const entries = parsed.presets.map((value: unknown) => legacy && record(value) && exactKeys(value, ['id', 'name', 'effects']) ? { ...value, colorLuts: [] } : value)
+  const entries = parsed.presets.map((value: unknown) => {
+    if (!legacy || !record(value) || !exactKeys(value, ['id', 'name', 'effects'])) return value
+    const candidate = { ...value, colorLuts: [] }
+    // Only valid v1 records migrate. Corrupt siblings retain their exact raw
+    // shape, including records that exceeded v1's smaller per-preset bound.
+    return !effectPresetError(candidate) && bytes(JSON.stringify(value)) <= 128 * 1024 ? candidate : value
+  })
   const library: EffectPresetLibrary = { version: 2, presets: entries }
   const migration = legacy ? JSON.stringify(library) : undefined
   if (migration && bytes(migration) > EFFECT_PRESET_LIMITS.libraryBytes) return unavailable('Preset migration exceeds 8 MiB. The original library remains untouched.')

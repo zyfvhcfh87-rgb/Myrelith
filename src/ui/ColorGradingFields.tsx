@@ -5,9 +5,9 @@ import {
   COLOR_LUT_TYPE, COLOR_CURVES_TYPE, COLOR_WHEELS_TYPE, COLOR_CURVE_CHANNELS, COLOR_CURVE_LIMITS,
   COLOR_WHEEL_GROUPS, COLOR_WHEEL_LIMITS, COLOR_RGB, colorCurvesParams, parseColorCurve, compileColorCurve,
   colorWheelsParams, colorWheelAtPosition, colorWheelBrightness, colorWheelPosition, isColorLutV1,
+  effectParamsValidationError,
   type ColorCurve, type ColorCurveChannel, type ColorWheelGroup,
 } from '../state/editorUi'
-import { effectParamsValidationError } from '../domain/effectStack'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import { beginColorGradingEdit, type ColorGradingEditSession, type ColorGradingPatch, type ColorGradingTarget } from '../app/colorGradingController'

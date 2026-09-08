@@ -57,6 +57,7 @@ export {
   COLOR_ADJUST_LIMITS,
   createColorAdjustEffect,
   effectAnimationParameterSpec,
+  effectParamsValidationError,
   resolvePostCompositeEffectStack,
 } from '../domain/effectStack'
 export {
@@ -67,6 +68,8 @@ export {
   clipAnimationPropertyLabel,
   clipAnimationTrack,
   evaluateAnimationTrack,
+  documentAnimationKeyframeGrowthAllowed,
+  MAX_KEYFRAMES_PER_TRACK,
   LINEAR_ANIMATION_EASING,
   MAX_ANIMATED_FINITE_MAGNITUDE,
   MAX_KEYFRAME_FRAME,
