@@ -1,23 +1,35 @@
 # Local speech model decision — replacement lab preflight
 
-Date: 2026-09-08. Status: fourth frozen attempt exceeded the fixed resident-memory ceiling.
+Date: 2026-09-08. Status: fifth frozen attempt exceeded the fixed resident-memory ceiling.
 **Product enablement remains NO-GO pending runtime/offline/lifecycle evidence.**
 This status preserves the separate decision required by issue #201. The
 orchestrator may approve the independent caption implementation after reviewing
 the plan without approving speech enablement.
 
-## Current prepared candidate and outstanding decision
+## Current measured candidate and outstanding decision
 
-Candidate05 is now prepared for source review only, after the historical encoder
-contract was accepted. [ENCODER_COMPOSITE_CANDIDATE_05.md](ENCODER_COMPOSITE_CANDIDATE_05.md)
+Candidate05 completed its single explicitly granted native run after full source
+review; it is **NO-GO**. [LAB_RUN_05.md](LAB_RUN_05.md) preserves the unchanged
+raw result and separate teardown. Incremental complete Chromium RSS reached
+1,107,345,408bytes against the fixed1,073,741,824-byte ceiling before the first
+encoder call returned. Eight initial cases passed, one failed and fourteen were
+not reached. Maximum observed sample gap256ms also exceeds the requested250ms
+gap limit; no sampling-cadence qualification is claimed. The worker was forcibly
+terminated, the browser closed, and only its verified private profile removed.
+All owned recorded PIDs and port5201 are absent; the exclusive slot is released.
+No rerun or production enablement is authorized.
+
+[ENCODER_COMPOSITE_CANDIDATE_05.md](ENCODER_COMPOSITE_CANDIDATE_05.md)
 and [composite-preparation.json](composite-preparation.json) record its explicit
 seven-file local composite: one exact July2023 published encoder plus six
 unchanged current files. The current configuration revision is not represented
 as the source of the older encoder. Model bytes are 43,610,465; runtime bytes
-remain 14,073,343. No candidate05 inference has run and no native grant is active.
-The 25 deterministic source/VM checks pass; resident/quality/offline qualification
-remains unresolved. The frozen candidate04 manifest and all failed raw evidence
-are preserved. Product speech stays NO-GO.
+remain14,073,343. The25 deterministic source/VM checks passed before native
+qualification. Manifest, all9 harness source hashes, original and composite
+model files, runtime, notices and fixtures reverified unchanged after run05.
+Quality, timestamps, remaining lifecycle/offline cases and full resident-memory
+acceptance remain unresolved. The frozen candidate04 manifest and all earlier
+failed raw evidence remain preserved. Product speech stays NO-GO.
 
 ## Measured replacement history through run04
 
@@ -69,7 +81,8 @@ call began but did not complete before the fixed guard stopped it: incremental
 RSS 1,099,415,552 bytes, exceeding the ceiling by 25,673,728. Eight initial cases
 passed, one failed and fourteen remain missing. Candidate04 is also NO-GO.
 Forced shutdown and separate private-profile teardown are documented; the slot
-is released and no further native run is authorized.
+was released without granting another native run. The separately reviewed and
+granted candidate05 attempt is recorded above.
 
 The original 3.8.1 standalone candidate is **superseded for lab execution** after
 the advisory lookup in [candidate-advisories.json](candidate-advisories.json).
