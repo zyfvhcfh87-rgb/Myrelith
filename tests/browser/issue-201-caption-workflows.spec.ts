@@ -5,6 +5,11 @@ test.setTimeout(60_000)
 
 // Canonical portable setup; all tested edits and downloads use visible controls.
 async function enter(page: Page) {
+  // Exercise the real portable download/input path; native OS pickers are unqualified.
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, value: undefined })
+    Object.defineProperty(window, 'showOpenFilePicker', { configurable: true, value: undefined })
+  })
   await page.goto('/')
   await page.getByRole('button', { name: 'Start a new project' }).click()
   await page.getByLabel('Project name').fill('Milestone captions')
