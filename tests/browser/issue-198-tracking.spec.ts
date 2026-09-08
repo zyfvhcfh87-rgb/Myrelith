@@ -93,7 +93,7 @@ async function setup(page: Page) {
   }
   await page.getByRole('tab', { name: 'Animation', exact: true }).click()
   const editor = page.locator('.motion-tracking-editor')
-  await editor.getByLabel('Attach tracking to', { exact: true }).selectOption('mask-effect')
+  await editor.getByRole('combobox', { name: 'Attach tracking to', exact: true }).selectOption('mask-effect')
   await expect(editor.getByLabel('Mask tracking target')).toHaveValue(JSON.stringify([clipId, (await snapshot(page)).clip.effects[0].id]))
   await expect(editor.getByText(/keys interpolate linearly between accepted samples/)).toBeVisible()
   return { problems, sourceFile: { name: filename, mimeType: 'video/mp4', buffer: Buffer.from(bytes) }, editor }
@@ -228,7 +228,7 @@ test('real backward box tracking exposes size and exact replacement consent and 
   test.setTimeout(90_000)
   const { problems, editor } = await setup(page)
   await seek(page, 17)
-  await editor.getByLabel('Direction', { exact: true }).selectOption('backward')
+  await editor.getByRole('combobox', { name: 'Direction', exact: true }).selectOption('backward')
   await pick(page, true)
   await expect(editor.getByText('Selection pinned to project frame 17.')).toBeVisible()
   await analyze(page, 'Clip boundary')
@@ -263,7 +263,7 @@ test('real backward box tracking exposes size and exact replacement consent and 
   await seek(page, 18); expect((await snapshot(page)).preview).toBeNull()
   await seek(page, 17); expect((await snapshot(page)).preview).toBe('mask-tracking')
   await page.screenshot({ path: testInfo.outputPath('tracking-box-review.png') })
-  await editor.getByLabel('Attach tracking to', { exact: true }).selectOption('clip-transform')
+  await editor.getByRole('combobox', { name: 'Attach tracking to', exact: true }).selectOption('clip-transform')
   expect((await snapshot(page)).preview).toBeNull()
   expect((await snapshot(page)).project).toEqual(after.project)
   const idle = await expectTrackingIdle(page)
