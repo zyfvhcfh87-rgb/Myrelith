@@ -30,6 +30,14 @@ const SIZE = { width: 1280, height: 720 }
 const CELL = { ...SIZE, shape: 8, feather: 0.05, invert: false, offCanvas: false } as const
 const PROFILE = { ...DEFAULT_EXPORT_PROFILE, videoBitrate: 2_000_000,
   audioCodec: null, audioChannelLayout: 'off', audioBitrate: null, audioBitrateMode: null } as const
+export { PROFILE as RESOURCE_EXPORT_PROFILE }
+
+export interface ExportFixture {
+  blob: Blob
+  identity: string
+  compareOutput?: (buffer: ArrayBuffer, record: RecordEvidence) => Promise<void>
+  claimSourceRequest?: () => void
+}
 
 async function fixtureVideo(): Promise<Blob> {
   const canvas = new OffscreenCanvas(SIZE.width, SIZE.height), ctx = canvas.getContext('2d')
@@ -59,9 +67,9 @@ function projectIdentity() {
   return JSON.stringify({ project: state.project, past: state.past, future: state.future })
 }
 
-export async function prepareExportFixture(record: RecordEvidence, persist: PersistBinary) {
-  const blob = await fixtureVideo()
-  await persist('source.mp4', await blob.arrayBuffer())
+export async function prepareExportFixture(record: RecordEvidence, persist: PersistBinary, savedSource?: Blob) {
+  const blob = savedSource ?? await fixtureVideo()
+  if (!savedSource) await persist('source.mp4', await blob.arrayBuffer())
   const imported = await importMedia(new File([blob], 'Issue198 resource source.mp4', { type: blob.type, lastModified: 198 }))
   if (imported.status !== 'imported') throw new Error(`Fixture import failed: ${JSON.stringify(imported)}`)
   const asset = useMediaStore.getState().assets.get(imported.assetId)
@@ -79,7 +87,7 @@ export async function prepareExportFixture(record: RecordEvidence, persist: Pers
 }
 
 /** Interface-level observations. Decoder internals remain explicitly unavailable. */
-function observedProductionDeps() {
+function observedProductionDeps(claimSourceRequest?: () => void) {
   const counters = { mediaOpened: 0, mediaClosed: 0, leasesOpened: 0, leasesClosed: 0, liveLeases: 0,
     peakLeases: 0, sourceRequests: 0, sinksOpened: 0, sinksFinalized: 0, sinksCancelled: 0, liveSinks: 0,
     framesAdded: 0, composites: 0, activeComposites: 0, readbacks: 0, liveReadbackBytes: 0,
@@ -123,7 +131,7 @@ function observedProductionDeps() {
         openFrame: async (frame) => {
           const lease = await source.openFrame(frame); counters.leasesOpened++; counters.liveLeases++
           counters.peakLeases = Math.max(counters.peakLeases, counters.liveLeases)
-          return { plan: lease.plan, getFrame: (...request) => { counters.sourceRequests++; return lease.getFrame(...request) },
+          return { plan: lease.plan, getFrame: (...request) => { claimSourceRequest?.(); counters.sourceRequests++; return lease.getFrame(...request) },
             close: async () => { await lease.close(); counters.leasesClosed++; counters.liveLeases-- } }
         },
         close: async () => { await source.close(); counters.mediaClosed++ },
@@ -209,9 +217,9 @@ async function compareOutput(buffer: ArrayBuffer, original: Blob, record: Record
   } finally { canvas.width = canvas.height = oracle.width = oracle.height = 0; output.dispose(); input.dispose() }
 }
 
-export async function measureExportAttempt(index: number, mode: 'complete' | 'cancel' | 'retry', fixture: Awaited<ReturnType<typeof prepareExportFixture>>,
+export async function measureExportAttempt(index: number, mode: 'complete' | 'cancel' | 'retry', fixture: ExportFixture,
   record: RecordEvidence, persist: PersistBinary) {
-  const observer = observedProductionDeps(), started = performance.now(), progress: number[] = []
+  const observer = observedProductionDeps(fixture.claimSourceRequest), started = performance.now(), progress: number[] = []
   let cancellation: Promise<void> | undefined, cancellationAt: number | null = null, timedOut = false
   let progressWrites: Promise<void> = Promise.resolve(), recordFailure: unknown
   const timer = setTimeout(() => { timedOut = true; cancellation = cancelExport() }, EXPORT_TIMEOUT_MS)
@@ -251,7 +259,9 @@ export async function measureExportAttempt(index: number, mode: 'complete' | 'ca
     } else {
       if (!result || result.destination !== 'download' || owners.framesAdded !== EXPORT_FRAMES || owners.sinksFinalized !== 1) throw new Error('Export did not complete exactly 300 frames')
       await persist(`export-${mode}-${index}.mp4`, result.buffer)
-      await compareOutput(result.buffer, fixture.blob, (event) => record({ ...event, index, mode }))
+      const outputRecord: RecordEvidence = (event) => record({ ...event, index, mode })
+      if (fixture.compareOutput) await fixture.compareOutput(result.buffer, outputRecord)
+      else await compareOutput(result.buffer, fixture.blob, outputRecord)
     }
     if (timedOut) throw new Error('Export attempt and parity exceeded the 120-second ceiling')
     await record({ kind: 'export-attempt-complete', index, mode })

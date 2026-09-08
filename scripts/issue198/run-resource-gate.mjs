@@ -10,6 +10,8 @@ import { createConnection } from 'node:net'
 import { dirtyFingerprint, assertSourceIdentityUnchanged, chromiumDeviceMetadata, sampleChromiumProcessMemory } from '../performance/run-benchmark.mjs'
 import { createEvidenceStore } from './evidenceStore.mjs'
 import { bounded, closeOwnedResources, runCommand } from './runnerLifecycle.mjs'
+import { createDiagnosticVite, DIAGNOSTIC_INPUTS, readDiagnosticInput } from './run-export-diagnostic.mjs'
+import { diagnosticEvidence } from './diagnosticEvidence.mjs'
 export { bounded } from './runnerLifecycle.mjs'
 
 const SETUP_TIMEOUT_MS = 30_000
@@ -27,8 +29,9 @@ export function parseOptions(args) {
     else throw new Error(`Unknown option ${args[index]}`)
   }
   if (!/^[0-9a-f]{40}$/.test(options.expectedSha ?? '')) throw new Error('--expected-sha must pin a full commit SHA')
-  if (!['raster', 'export'].includes(options.segment)) throw new Error('--segment must be raster or export')
+  if (!['raster', 'export', 'export-completion'].includes(options.segment)) throw new Error('--segment must be raster, export or export-completion')
   if (!Number.isSafeInteger(options.port) || options.port < 1024 || options.port > 65535) throw new Error('Invalid strict port')
+  if (options.segment === 'export-completion' && options.port !== 5198) throw new Error('Export completion requires strict port 5198')
   return options
 }
 
@@ -66,12 +69,19 @@ export async function run(options) {
   const initial = await sourceIdentity(root)
   if (initial.commit !== options.expectedSha || initial.dirty) throw new Error('The reviewed source SHA must match a clean worktree')
   if (await portIsOpen(options.port)) throw new Error('The strict port is already occupied')
+  const completion = options.segment === 'export-completion', files = new Map()
+  if (completion) for (const expected of DIAGNOSTIC_INPUTS) {
+    files.set(expected.name, await bounded(readDiagnosticInput(join(root, '.tmp/issue198-8129d4e-export-attempt1', expected.name), expected), 5000, 'Pinned completion input'))
+  }
   await mkdir(join(root, '.tmp'), { recursive: true })
   const directory = options.output ? resolve(options.output) : join(root, '.tmp', `issue198-${initial.commit.slice(0, 7)}-${options.segment}-${Date.now()}`)
   if (!directory.startsWith(join(root, '.tmp') + '/')) throw new Error('Evidence output must be a fresh directory under this worktree .tmp')
   const store = await createEvidenceStore(directory), problems = [], capturedPids = new Set()
-  let vite, browserServer, browser, cdp, context, awake, nativeTimer, memoryPending = Promise.resolve(), signalCleanup = Promise.resolve(), failure
+  const evidence = completion ? diagnosticEvidence(store, { directory }) : store
+  let vite, browserServer, browser, cdp, context, awake, nativeTimer, wholeTimer, memoryPending = Promise.resolve(), signalCleanup = Promise.resolve(), failure
   let memoryIndex = 0, nativeBusy = false, stopping = false, measuredMemorySamples = 0, unavailableMemorySamples = 0
+  let servedMediaRequests = 0, producerRecords = 0, binaryBytes = 0
+  const binaryNames = new Set()
   const origin = `http://127.0.0.1:${options.port}`
   const onSignal = () => {
     if (stopping) return
@@ -80,7 +90,11 @@ export async function run(options) {
       .catch((cause) => { problems.push({ kind: 'signal-cleanup', message: cause.message }) })
   }
   process.once('SIGINT', onSignal); process.once('SIGTERM', onSignal)
-  const record = (value) => store.record(value)
+  const record = (value) => {
+    if (completion && ++producerRecords > 19_985) throw new Error('Completion record cap reached; terminal slots reserved')
+    return evidence.record(value)
+  }
+  const terminalRecord = (value) => completion ? evidence.receipt(value) : record(value)
   async function sampleMemory(label) {
     const result = await bounded(sampleChromiumProcessMemory(cdp, memoryIndex++), 10_000, 'Native process sampling')
       .catch((cause) => ({ status: 'unavailable', reason: cause.message }))
@@ -96,7 +110,8 @@ export async function run(options) {
     }
     await record({ kind: 'run-start', options, source: initial, runnerPid: process.pid, awakePid: awake?.pid ?? null,
       host: { node: process.version, platform: platform(), release: release(), arch: arch(), cpus: cpus(), totalMemoryBytes: totalmem() } })
-    vite = await setup(() => createServer({ root, server: { host: '127.0.0.1', port: options.port, strictPort: true }, logLevel: 'warn' }), 'Vite creation')
+    vite = await setup(() => completion ? createDiagnosticVite(root, files, () => ++servedMediaRequests)
+      : createServer({ root, server: { host: '127.0.0.1', port: options.port, strictPort: true }, logLevel: 'warn' }), 'Vite creation')
     await setup(() => vite.listen(), 'Vite listen')
     const launch = { headless: true, args: ['--mute-audio', '--enable-precise-memory-info'], timeout: 30_000 }
     browserServer = await chromium.launchServer(launch)
@@ -107,11 +122,21 @@ export async function run(options) {
     context.setDefaultTimeout(SETUP_TIMEOUT_MS)
     context.setDefaultNavigationTimeout(SETUP_TIMEOUT_MS)
     const page = await setup(() => context.newPage(), 'Browser page')
-    page.on('console', (message) => { if (['warning', 'error'].includes(message.type())) problems.push({ kind: message.type(), message: message.text() }) })
-    page.on('pageerror', (error) => problems.push({ kind: 'pageerror', message: error.message }))
+    page.on('console', (message) => { if (['warning', 'error'].includes(message.type())) { problems.push({ kind: message.type(), message: message.text() }); if (completion) onSignal() } })
+    page.on('pageerror', (error) => { problems.push({ kind: 'pageerror', message: error.message }); if (completion) onSignal() })
     function checkCaller(caller) { if (caller.page !== page || caller.frame !== page.mainFrame() || !caller.frame.url().startsWith(origin + '/')) throw new Error('Evidence binding caller is not the owned page') }
     await setup(() => page.exposeBinding('__issue198Record', async (caller, value) => { checkCaller(caller); await record({ ...value, source: 'browser' }) }), 'Record binding')
-    await setup(() => page.exposeBinding('__issue198Binary', async (caller, part) => { checkCaller(caller); await store.binary(part) }), 'Binary binding')
+    await setup(() => page.exposeBinding('__issue198Binary', async (caller, part) => {
+      checkCaller(caller)
+      if (completion) {
+        if (!binaryNames.has(part.name)) {
+          if (binaryNames.size >= 7 || !Number.isSafeInteger(part.totalBytes) || part.totalBytes <= 0
+            || binaryBytes + part.totalBytes > 128 * 1024 * 1024) throw new Error('Completion aggregate binary cap exceeded')
+          binaryNames.add(part.name); binaryBytes += part.totalBytes
+        }
+        await bounded(store.binary(part), 5000, 'Completion binary write')
+      } else await store.binary(part)
+    }), 'Binary binding')
     await setup(() => page.goto(origin + (options.segment === 'raster' ? '/scripts/issue198/mask-performance-gate.html' : '/'), { waitUntil: 'domcontentloaded' }), 'Initial navigation')
     await record({ kind: 'browser-provenance', version: browser.version(), launch, viewport: page.viewportSize(), gpu: await bounded(chromiumDeviceMetadata(cdp), 10_000, 'GPU provenance')
       .catch((cause) => ({ status: 'unavailable', reason: cause.message })),
@@ -132,6 +157,7 @@ export async function run(options) {
     }, 1000)
     const check = async () => {
       if (stopping) throw new Error('Run interrupted')
+      if (completion && evidence.failure) throw evidence.failure
       if (problems.length) throw new Error(`Browser or evidence problem: ${JSON.stringify(problems)}`)
       assertSourceIdentityUnchanged(initial, await sourceIdentity(root))
     }
@@ -156,11 +182,15 @@ export async function run(options) {
       await setup(() => page.getByLabel('Resolution').selectOption('720'), 'Resolution action')
       await setup(() => page.getByRole('button', { name: 'Create project', exact: true }).click(), 'Create project action')
       await setup(() => page.getByRole('button', { name: 'Commands' }).waitFor(), 'Project ready')
-      const fixture = await bounded(page.evaluateHandle(async () => {
+      if (completion) wholeTimer = setTimeout(() => { problems.push({ kind: 'deadline', message: 'Completion exceeded 1500-second whole-run ceiling' }); onSignal() }, 1_500_000)
+      const fixture = await bounded(page.evaluateHandle(async (completion) => {
         const gate = await import('/scripts/issue198/exportResourceGate.ts'), io = await import('/scripts/issue198/browserIO.ts')
+        if (completion) return (await import('/scripts/issue198/exportCompletionGate.ts')).prepareExportCompletion(io.recordEvidence, io.persistBinary)
         return gate.prepareExportFixture(io.recordEvidence, io.persistBinary)
-      }), 120_000, 'Export fixture preparation')
+      }, completion), completion ? 150_000 : 120_000, 'Export fixture/control preparation')
+      let lifecycleComplete = false
       try {
+        if (completion && servedMediaRequests !== 2) throw new Error('Completion immutable request count differs')
         for (let index = 0; index < 3; index++) for (const mode of ['complete', 'cancel', 'retry']) {
           await check(); await sampleMemory(`export-${index}-${mode}-before`)
           await bounded(page.evaluate(async ({ index, mode, fixture }) => {
@@ -169,7 +199,10 @@ export async function run(options) {
           }, { index, mode, fixture }), 150_000, `Export ${index} ${mode}`)
           await sampleMemory(`export-${index}-${mode}-settled`)
         }
+        lifecycleComplete = true
       } finally {
+        if (completion) await bounded(page.evaluate(async ({ fixture, success }) => fixture.close(success), { fixture, success: lifecycleComplete }), 10_000, 'Completion pixel owner release')
+          .catch((cause) => { problems.push({ kind: 'completion-pixel-release', message: cause.message }) })
         await bounded(fixture.dispose(), 10_000, 'Export fixture handle release')
           .catch((cause) => { problems.push({ kind: 'fixture-release', message: cause.message }) })
       }
@@ -178,15 +211,15 @@ export async function run(options) {
     await record({ kind: 'segment-complete', segment: options.segment, source: await sourceIdentity(root), problems })
   } catch (cause) {
     failure = cause
-    await record({ kind: 'run-failed', error: cause?.stack ?? String(cause), problems })
+    await terminalRecord({ kind: 'run-failed', error: cause?.stack ?? String(cause), problems })
   } finally {
-    stopping = true; clearInterval(nativeTimer)
+    stopping = true; clearInterval(nativeTimer); clearTimeout(wholeTimer)
     await signalCleanup
     await bounded(memoryPending, 15_000, 'Memory sampling teardown').catch((cause) => { failure ??= cause })
     if (browserServer) {
       const owned = processDescendants(browserServer.process().pid)
       if (owned.status === 'measured') for (const entry of owned.processes) capturedPids.add(entry.pid)
-      await record({ kind: 'process-before-close', owned })
+      await terminalRecord({ kind: 'process-before-close', owned })
     }
     const { cleanup, failure: cleanupFailure } = await closeOwnedResources([
       { name: 'context', close: () => context?.close() },
@@ -206,11 +239,14 @@ export async function run(options) {
     if (alive.length || portOpen) failure ??= new Error(`Teardown incomplete: PIDs ${alive}, portOpen=${portOpen}`)
     if (problems.length) failure ??= new Error(`Late browser/evidence problems: ${JSON.stringify(problems)}`)
     try { assertSourceIdentityUnchanged(initial, await sourceIdentity(root)) } catch (cause) { failure ??= cause }
-    await record({ kind: 'run-teardown', cleanup, capturedPids: [...capturedPids], alivePids: alive, portOpen,
+    if (completion) failure ??= evidence.failure
+    await terminalRecord({ kind: 'run-teardown', cleanup, capturedPids: [...capturedPids], alivePids: alive, portOpen,
+      ...(completion ? { servedMediaRequests, binaryBytes, binaryFiles: [...binaryNames], evidence: evidence.snapshot() } : {}),
       problems, error: failure?.stack ?? null, nativeMemory: { measuredMemorySamples, unavailableMemorySamples,
         status: unavailableMemorySamples ? 'incomplete' : 'sampled', exactAllocationPeakProven: false },
       runnerPid: process.pid, runnerExitMustBeVerifiedByParent: true, outcome: failure ? 'failed' : 'segment-complete' })
-    await store.close()
+    await evidence.close().catch((cause) => { failure ??= cause })
+    if (completion) failure ??= evidence.failure
     process.removeListener('SIGINT', onSignal); process.removeListener('SIGTERM', onSignal)
   }
   process.stdout.write(`Evidence: ${directory}\n`)

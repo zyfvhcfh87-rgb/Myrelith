@@ -16,7 +16,7 @@ async function sha256(bytes: ArrayBuffer | DiagnosticPixels) {
   return [...new Uint8Array(hash)].map((value) => value.toString(16).padStart(2, '0')).join('')
 }
 
-async function immutableBlob(input: typeof IMMUTABLE_DIAGNOSTIC_INPUTS[number]) {
+export async function immutableBlob(input: typeof IMMUTABLE_DIAGNOSTIC_INPUTS[number]) {
   const response = await diagnosticBounded(fetch(`/__issue198_diagnostic/${input.name}`, { cache: 'no-store' }), 5000, 'Immutable input read')
   const contentLength = response.headers.get('content-length')
   const details = JSON.stringify({ requestedPath: `/__issue198_diagnostic/${input.name}`, status: response.status,
@@ -114,7 +114,7 @@ async function decodeComparisons(blob: Blob, name: string, owner: DiagnosticPixe
   return selected
 }
 
-function staticOracle(source: DiagnosticPixels, pathIndex: number, owner: DiagnosticPixelOwner) {
+export function staticOracle(source: DiagnosticPixels, pathIndex: number, owner: DiagnosticPixelOwner) {
   const fixture = matrixFixture(DIAGNOSTIC_CELL), pixels = owner.copy(source)
   const effect = { ...fixture.clip.effects[0]!, params: { ...fixture.clip.effects[0]!.params, path: fixture.paths[pathIndex]! } }
   try {

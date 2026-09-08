@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { open, readdir, readFile, rename, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
-const BINARY_NAME = /^(?:source|export-(?:complete|retry)-[0-2])\.mp4$/
+const BINARY_NAME = /^(?:source|codec-control|export-(?:complete|retry)-[0-2])\.mp4$/
 export const MAX_BINARY_BYTES = 128 * 1024 * 1024
 export const MAX_RECORD_BYTES = 2 * 1024 * 1024
 const json = (value) => JSON.stringify(value, (_key, entry) => typeof entry === 'number' && !Number.isFinite(entry)

@@ -65,7 +65,16 @@ test('the runner requires a full immutable SHA and exactly one reviewed segment'
   assert.throws(() => parseOptions([]), /full commit/)
   assert.throws(() => parseOptions(['--expected-sha', 'a'.repeat(40), '--segment', 'all']), /segment/)
   assert.deepEqual(parseOptions(['--expected-sha', 'a'.repeat(40), '--segment', 'raster']), { port: 5198, segment: 'raster', expectedSha: 'a'.repeat(40), output: null })
+  assert.equal(parseOptions(['--expected-sha', 'a'.repeat(40), '--segment', 'export-completion']).segment, 'export-completion')
+  assert.throws(() => parseOptions(['--expected-sha', 'a'.repeat(40), '--segment', 'export-completion', '--port', '5200']), /strict port 5198/)
 })
+test('the single codec-control artifact is retained without permitting arbitrary binary names', async () => directory(async (path) => {
+  const store = await createEvidenceStore(path)
+  await store.binary({ name: 'codec-control.mp4', totalBytes: 2, offset: 0, bytes: [4, 2] })
+  await assert.rejects(store.binary({ name: 'codec-control-retry.mp4', totalBytes: 1, offset: 0, bytes: [1] }), /name/)
+  await store.close()
+  assert.deepEqual([...await readFile(join(path, 'codec-control.mp4'))], [4, 2])
+}))
 test('bounded steps return successful values and reject a stalled step', async () => {
   assert.equal(await bounded(Promise.resolve(17), 100, 'ready'), 17)
   await assert.rejects(bounded(new Promise(() => {}), 5, 'stalled'), /stalled exceeded/)
