@@ -353,10 +353,17 @@ push, PR, merge or issue closure is part of these gates.
 - [x] Existing focused animation/timing checks, build/typecheck and lint passed.
 - [x] Orchestrator approves the plan, retained-byte limits and narrow tracking target proposal.
 - [x] Schema integration order frozen: #199 owns 22, #200 owns 23, #201 owns 24.
-- [ ] #199 shared timing/identity foundation reviewed and consumed.
-- [ ] All product and issue-specific acceptance gates above remain unimplemented/unrun.
+- [x] #199 shared timing/identity foundation reviewed and consumed through schema 22 integration.
+- [ ] Remaining product and whole-issue acceptance gates above complete.
 
-The independent pure foundation is an explicitly authorized reordering of Gate 1
-and the geometry part of Gate 3. Only new domain modules/tests are implemented;
-shared schema/traversal, existing pixel stages and UI remain unchanged. Its next
-decision is internal review and sharing its accepted APIs with #199.
+The accepted independent pure foundation reordered Gate 1 and the geometry part
+of Gate 3 under explicit authorization. That earlier gate added only domain
+modules/tests; shared schema/traversal, pixel stages and UI were unchanged then.
+
+Current continuation: static/open-path authoring and the resize-release correction
+are accepted through integration `6888fd8`. The held-path authoring source gate
+consumes the reviewed shared schema/timing/resolution/admission contracts; see
+[its current evidence and pending browser request](evidence/issue198/held-path-authoring.md).
+The narrow [tracking contract](evidence/issue198/tracking-attachment-contract.md)
+is accepted for later separate implementation; no tracking code is included in
+the held-path gate.

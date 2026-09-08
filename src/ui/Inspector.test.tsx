@@ -30,6 +30,7 @@ import {
 } from '../test/storeFixtures'
 import Inspector from './Inspector'
 import Timeline from './timeline/Timeline'
+import { ATTRIBUTE_ASSET_DESCRIPTOR } from '../test/clipAttributeFixtures'
 
 function makeClip(id: string, tlStart: number, duration: number): Clip {
   return {
@@ -790,6 +791,8 @@ describe('Inspector', () => {
   })
 
   test('edits masks, chroma key, and stable mask keyframes with undo/redo', async () => {
+    const descriptor: PortableAssetDescriptor = { ...ATTRIBUTE_ASSET_DESCRIPTOR, id: 'asset-1', hasAudio: true, audioSampleRate: 48_000, audioChannels: 2, sourceBounds: { video: { status: 'unknown' }, audio: { status: 'unknown' } } }
+    useMediaStore.setState({ descriptors: new Map([[descriptor.id, descriptor]]) })
     const user = userEvent.setup()
     const uuid = vi.spyOn(crypto, 'randomUUID')
       .mockReturnValueOnce('00000000-0000-4000-8000-000000000073')
@@ -822,6 +825,7 @@ describe('Inspector', () => {
     const alternatePath = 'M 0 0 C 0 0 1 1 0 0 Z'
     fireEvent.change(path, { target: { value: alternatePath } })
     fireEvent.blur(path)
+    expect(screen.queryByRole('alert')).toBeNull()
     expect(clipA().effects[0].params.path).toBe(alternatePath)
     act(() => doc().undo())
     expect(screen.getByTestId(`inspector-effect-mask-path-${mask.id}`))

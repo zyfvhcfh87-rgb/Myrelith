@@ -73,3 +73,29 @@ additional integration document retains the earlier failure above.
 This resolves that specific integration finding. Full suite, animated path,
 tracking, broader browser flows, export parity and measured resource gates
 remain pending. No issue is declared complete by this correction.
+
+## Held path authoring integrated
+
+Product f923315628f9d6692de756b3d29c3b5a5bb0907f, test-only correction
+13f0cfe28d2530ef8e0f504156c31b20ec809798 and browser evidence
+125400767b07d3773fb3be5c2b1071adfe95d9f7 passed exact-source review.
+The correction explicitly arranges frame zero in the new test; the shared
+fixture starts at one. Original four tests, product code and all held-key
+assertions stayed unchanged. The earlier four-pass/one-fail evidence is
+preserved in issue198/held-path-authoring.md and its separate local artifacts.
+
+All five muted Chromium checks passed in 15.5 seconds on clean13f0cfe. The
+new test reached actual frame14/15 held pixels, direct control edits, undo,
+key navigation and Clear/undo. All console/page assertions passed. The parent
+inspected the exact log and all six screenshots, including the final two-key
+triangle. Desktop mask controls remain separate from the image handles; the
+small layout has pre-existing surrounding toolbar crowding and needs broader
+workspace acceptance separately. Browser/server teardown and slot release were
+confirmed. This merge has identical src/tests contents to the tested commit.
+
+Independent parent and merged integration checks both pass14files275tests plus
+17runner checks. Integration build/typecheck, lint and diff checks pass; the
+existing Vite chunk advisory remains. Logs are retained in
+/private/tmp/milestone9-held-path-integration-*.log. Tracking, title-owner
+interoperation, shared timing UI, save/reopen/export/playback and measured
+resource/full-suite acceptance remain pending. No entire issue is complete.

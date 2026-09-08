@@ -3,8 +3,10 @@ import ColorGradingFields from './ColorGradingFields'
 import ColorGradingAnimation from './ColorGradingAnimation'
 import EffectBrowser from './EffectBrowser'
 import MaskEditorToggle from './MaskEditorToggle'
+import MaskPathAnimation from './MaskPathAnimation'
+import { commitMaskParams } from '../app/maskEditingController'
 import { SPATIAL_EFFECT_PARAMETERS, spatialEffectKind, spatialEffectParams } from '../state/editorUi'
-import { useEffect, useId, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import type {
   Clip,
   ClipAnimationEasing,
@@ -33,6 +35,7 @@ import {
 } from '../domain/effectStack'
 import { effectAppendBudgetError } from '../domain/effectBounds'
 import { useDocumentStore } from '../state/documentStore'
+import { useTransportStore } from '../state/transportStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { copyClipAttributes, copyClipEffectStack } from '../app/clipAttributeController'
 
@@ -294,13 +297,21 @@ function BezierPathField({
   locked: boolean
 }) {
   const value = String(effect.params.path)
+  const project = useDocumentStore((state) => state.project)
+  const editing = useRef<{ project: typeof project; generation: number; frame: number } | null>(null)
   const [draft, setDraft] = useState(value)
-  useEffect(() => setDraft(value), [value])
+  useEffect(() => { editing.current = null; setDraft(value) }, [value, project, playheadFrame])
+  const [error, setError] = useState('')
   const commit = (): void => {
-    if (draft === value) return
-    const before = useDocumentStore.getState().doc
-    updateAtFrame(clip, effect, playheadFrame, { path: draft })
-    if (useDocumentStore.getState().doc === before) setDraft(value)
+    const started = editing.current; editing.current = null
+    if (!started || draft === value) return
+    const current = useDocumentStore.getState()
+    if (current.project !== started.project || current.projectGeneration !== started.generation || useTransportStore.getState().playheadFrame !== started.frame) {
+      setDraft(value); return
+    }
+    const failure = commitMaskParams({ sequenceId: useDocumentStore.getState().activeSequenceId, clipId: clip.id, effectId: effect.id }, { path: draft })
+    setError(failure ?? '')
+    if (failure) setDraft(value)
   }
   return (
     <label className="inspector-field inspector-field-wide">
@@ -310,16 +321,22 @@ function BezierPathField({
         disabled={locked}
         rows={4}
         data-testid={`inspector-effect-mask-path-${effect.id}`}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) => {
+          const state = useDocumentStore.getState()
+          editing.current ??= { project: state.project, generation: state.projectGeneration, frame: playheadFrame }
+          setDraft(event.target.value)
+        }}
         onBlur={commit}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.preventDefault()
+            editing.current = null
             setDraft(value)
             event.currentTarget.blur()
           }
         }}
       />
+      {error && <span role="alert">{error}</span>}
     </label>
   )
 }
@@ -412,6 +429,7 @@ function MaskFields({
           locked={locked}
         />
       )}
+      <MaskPathAnimation clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />
     </div>
   )
 }
