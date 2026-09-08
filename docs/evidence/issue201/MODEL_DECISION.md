@@ -34,7 +34,7 @@ evidence: eight initial checks passed, the first model initialization failed,
 inference occurred. This error does not prove corrupt weights.
 [INTEROP_CANDIDATE_03.md](INTEROP_CANDIDATE_03.md) proposes only the supported
 `session.disable_quant_qdq='1'` optimization setting with identical assets and
-thresholds. Exact source/manifest evidence and 16 deterministic regressions are
+thresholds. Exact source/manifest evidence and 16 deterministic regressions
 were reviewed for run 03. [LAB_RUN_03.md](LAB_RUN_03.md) records successful model
 initialization and first-window preparation, followed by 1,117,814,784 bytes
 incremental Chromium RSS against the unchanged 1,073,741,824-byte ceiling.
@@ -43,6 +43,15 @@ completed. Candidate 03 is NO-GO under that gate; later cases remain incomplete.
 Forced shutdown and separate removal of only its private browser profile are
 recorded honestly; cooperative cache removal was unavailable. No product speech
 enablement or replacement run has occurred.
+
+[ENCODER_FETCH_CANDIDATE_04.md](ENCODER_FETCH_CANDIDATE_04.md) now proposes a
+adapter scoped to the encoder instance, using ORT's output-selection API to fetch
+only the
+encoder hidden state consumed by generation. The exact graph also exposes four
+unused attention outputs totaling 216,000,000 float32 bytes at batch one. Pinned
+source proves selected fetches omit their WASM-to-JS copies, not that peak RSS
+will fall enough. All decoder outputs, model/runtime bytes, windows and thresholds
+remain unchanged. The candidate is prepared for review; no run 04 is authorized.
 
 The original 3.8.1 standalone candidate is **superseded for lab execution** after
 the advisory lookup in [candidate-advisories.json](candidate-advisories.json).

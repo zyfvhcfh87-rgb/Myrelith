@@ -10,7 +10,7 @@ const modelIdentity = await digest(new TextEncoder().encode(JSON.stringify({ mod
   revision: manifest.model.revision, files: manifest.model.files.map(({ path, bytes, sha256 }) => ({ path, bytes, sha256 })),
   runtime: manifest.runtime.transformerVersion, ort: manifest.runtime.ortVersion,
   artifacts: manifest.runtime.artifacts?.map(({ name, sha256 }) => ({ name, sha256 })),
-  sessionOptions: manifest.runtime.sessionOptions })))
+  sessionOptions: manifest.runtime.sessionOptions, encoderFetchPolicy: manifest.runtime.encoderFetchPolicy })))
 const registryName = 'myrelith-issue201-lab-registry'
 const registryKey = `${location.origin}/model-registry`
 let generation = 1

@@ -5,6 +5,7 @@ import { webcrypto, createHash } from 'node:crypto'
 import { createContext, SourceTextModule, SyntheticModule } from 'node:vm'
 import { assessLabRun, corruptAudioReachedDecode, createLabSampleQueue, declaredLabRequest,
   initializationFailure, LAB_CASE_NAMES, pinnedModelFileLookup, residentCeilingBreached, speechSegments, withinSourceCoverage } from './lab-contract.mjs'
+import { installEncoderFetchPolicy } from './encoder-fetch-policy.mjs'
 
 const flush = () => new Promise((resolve) => setImmediate(resolve))
 async function until(condition) {
@@ -274,17 +275,18 @@ test('overall acceptance cannot pass missing, aborted, failed or unexpected plan
   assert.equal(assessLabRun(complete, [{ type: 'incomplete-memory-sampling' }], null).automatedStatus, 'failed')
 })
 
-test('model cache compatibility changes with session configuration or served runtime bytes', async (t) => {
+test('model cache compatibility includes session settings, runtime bytes and encoder fetch policy', async (t) => {
   const runtime = { artifacts: [{ name: 'runtime.mjs', sha256: 'first' }],
     sessionOptions: { graphOptimizationLevel: 'all', extra: { session: { disable_quant_qdq: '1' } } } }
   const identities = []
   for (const variant of [runtime, { ...runtime, sessionOptions: {} },
-    { ...runtime, artifacts: [{ name: 'runtime.mjs', sha256: 'second' }] }, runtime]) {
+    { ...runtime, artifacts: [{ name: 'runtime.mjs', sha256: 'second' }] },
+    { ...runtime, encoderFetchPolicy: { fetchNames: ['last_hidden_state'] } }, runtime]) {
     const h = await controller(t, 10_000, variant)
     identities.push((await h.lab.cacheFacts()).model.identity)
   }
-  assert.equal(new Set(identities.slice(0, 3)).size, 3)
-  assert.equal(identities[0], identities[3])
+  assert.equal(new Set(identities.slice(0, 4)).size, 4)
+  assert.equal(identities[0], identities[4])
 })
 
 test('actual worker forwards the frozen optimizer setting without mutating its manifest', async () => {
@@ -307,7 +309,9 @@ test('actual worker forwards the frozen optimizer setting without mutating its m
       calls.push({ task, id, options: structuredClone({ ...options, progress_callback: undefined }) })
       // ORT appends defaults to nested session options; the evidence manifest stays fixed.
       options.session_options.extra.session.simulated_runtime_default = '1'
-      return { async dispose() { disposals++ } }
+      return { model: { sessions: { model: { inputNames: ['input_features'], outputNames: manifest.runtime.encoderFetchPolicy.expectedOutputNames,
+        run() { throw new Error('This initialization test must not execute a model') }, release() {} } } },
+      async dispose() { disposals++ } }
     })
   }, { context })
   await runtime.link(() => { throw new Error('Unexpected runtime fake import') })
@@ -315,6 +319,9 @@ test('actual worker forwards the frozen optimizer setting without mutating its m
   const contract = new SourceTextModule(await readFile(new URL('./lab-contract.mjs', import.meta.url), 'utf8'), { context })
   await contract.link(() => { throw new Error('Unexpected contract import') })
   await contract.evaluate()
+  const policyModule = new SourceTextModule(await readFile(new URL('./encoder-fetch-policy.mjs', import.meta.url), 'utf8'), { context })
+  await policyModule.link(() => { throw new Error('Unexpected policy import') })
+  await policyModule.evaluate()
   const media = new SyntheticModule(['ALL_FORMATS', 'AudioSampleSink', 'BlobSource', 'Input'], function () {
     this.setExport('ALL_FORMATS', [])
     for (const name of ['AudioSampleSink', 'BlobSource', 'Input']) {
@@ -330,6 +337,7 @@ test('actual worker forwards the frozen optimizer setting without mutating its m
   })
   await worker.link((specifier) => {
     if (specifier === './lab-contract.mjs') return contract
+    if (specifier === './encoder-fetch-policy.mjs') return policyModule
     assert.equal(specifier, '/assets/mediabunny.mjs')
     return media
   })
@@ -349,4 +357,64 @@ test('actual worker forwards the frozen optimizer setting without mutating its m
   assert.equal(disposals, 1)
   assert.equal(closed, true)
   assert.equal(events.at(-1).ledger.modelOwners, 0)
+})
+
+test('encoder fetch adapter preserves receiver, input/result ownership and every decoder output', async () => {
+  const { runtime: { encoderFetchPolicy: policy } } = JSON.parse(await readFile(new URL('../../docs/evidence/issue201/replacement-manifest.json', import.meta.url)))
+  const hidden = Object.freeze({ type: 'float32', dims: [1, 1500, 384], data: 'same tensor owner' })
+  const feed = Object.freeze({ input_features: Object.freeze({ type: 'float32', dims: [1, 80, 3000], data: 'same feature owner' }) })
+  let releases = 0
+  let requestedBytes = 0
+  const calls = []
+  const events = []
+  const encoder = {
+    inputNames: [...policy.inputNames], outputNames: [...policy.expectedOutputNames],
+    async run(feeds, fetches = this.outputNames) {
+      assert.equal(this, encoder)
+      assert.equal(feeds, feed)
+      calls.push([...fetches])
+      requestedBytes += fetches.filter((name) => name.startsWith('encoder_attentions.')).length * 54_000_000
+      return Object.fromEntries(fetches.map((name) => [name, name === 'last_hidden_state' ? hidden : { omitted: false }]))
+    },
+    async release() { assert.equal(this, encoder); releases++ },
+  }
+  const decoder = { outputNames: ['logits', 'present.0.decoder.key', 'present.0.encoder.value'],
+    async run() { return { logits: 'same logits', 'present.0.decoder.key': 'same cache', 'present.0.encoder.value': 'same encoder cache' } } }
+  const sessions = { model: encoder, decoder_model_merged: decoder }
+  const decoderRun = decoder.run
+  const release = encoder.release
+  installEncoderFetchPolicy(sessions.model, policy, (event) => events.push(event))
+  for (let i = 0; i < 2; i++) assert.equal((await sessions.model.run(feed)).last_hidden_state, hidden)
+  assert.deepEqual(calls, [['last_hidden_state'], ['last_hidden_state']])
+  assert.equal(requestedBytes, 0)
+  assert.equal(sessions.decoder_model_merged, decoder)
+  assert.equal(decoder.run, decoderRun)
+  assert.deepEqual(await decoder.run(), { logits: 'same logits', 'present.0.decoder.key': 'same cache', 'present.0.encoder.value': 'same encoder cache' })
+  assert.equal(encoder.release, release)
+  await encoder.release()
+  assert.equal(releases, 1)
+  assert.deepEqual(encoder.outputNames, policy.expectedOutputNames)
+  assert.deepEqual(events.map((event) => event.type), ['encoder-fetch-start', 'encoder-fetch-complete', 'encoder-fetch-start', 'encoder-fetch-complete'])
+  await assert.rejects(encoder.run(feed, ['encoder_attentions.0']), /contract changed/u)
+  await assert.rejects(encoder.run({ input_features: { type: 'float32', dims: [2, 80, 3000] } }), /feature matrix/u)
+  assert.equal(calls.length, 2)
+})
+
+test('encoder fetch adapter rejects changed IO/policies and propagates runtime failures without fallback', async () => {
+  const { runtime: { encoderFetchPolicy: policy } } = JSON.parse(await readFile(new URL('../../docs/evidence/issue201/replacement-manifest.json', import.meta.url)))
+  const make = () => ({ inputNames: [...policy.inputNames], outputNames: [...policy.expectedOutputNames], async run() { return { last_hidden_state: {} } }, release() {} })
+  for (const session of [null, { ...make(), outputNames: ['last_hidden_state'] }, { ...make(), inputNames: ['wrong'] }]) {
+    assert.throws(() => installEncoderFetchPolicy(session, policy), /interface changed/u)
+  }
+  assert.throws(() => installEncoderFetchPolicy(make(), { ...policy, fetchNames: policy.expectedOutputNames }), /Unrecognized/u)
+  const error = new Error('Native run failed')
+  let calls = 0
+  const session = { ...make(), async run() { calls++; throw error } }
+  installEncoderFetchPolicy(session, policy)
+  const feeds = { input_features: { type: 'float32', dims: [1, 80, 3000] } }
+  await assert.rejects(session.run(feeds), (cause) => cause === error)
+  assert.equal(calls, 1)
+  const unexpected = { ...make(), async run() { return { last_hidden_state: {}, 'encoder_attentions.0': {} } } }
+  installEncoderFetchPolicy(unexpected, policy)
+  await assert.rejects(unexpected.run(feeds), /unexpected outputs/u)
 })

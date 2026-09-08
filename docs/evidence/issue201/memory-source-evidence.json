@@ -1,0 +1,101 @@
+{
+  "qualification": "Source and metadata inspection only, no inference or measured peak reduction",
+  "primarySources": [
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/wasm/api.cc",
+      "path": "onnxruntime/wasm/api.cc",
+      "bytes": 33880,
+      "sha256": "77ff6b88db289afe6de8068f2e9ec66a0bc70dea458f91f56c9b894fae48d2e0"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/framework/sequential_execution_plan.h",
+      "path": "onnxruntime/core/framework/sequential_execution_plan.h",
+      "bytes": 7939,
+      "sha256": "94507bc8e57a3998bee8905ba983683d41e5b80746f8e1d786b59b2feba41d0e"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/framework/allocation_planner.cc",
+      "path": "onnxruntime/core/framework/allocation_planner.cc",
+      "bytes": 124639,
+      "sha256": "2016268006302c38604eaeaaa707b5adc4da9f917f8e1013bfba0753fe702eee"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/framework/execution_frame.cc",
+      "path": "onnxruntime/core/framework/execution_frame.cc",
+      "bytes": 42662,
+      "sha256": "32f826369b1d318d57a3719f109e4525475dd1ebb62f382731839b4345240676"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/framework/session_state.cc",
+      "path": "onnxruntime/core/framework/session_state.cc",
+      "bytes": 86727,
+      "sha256": "170e3c201e18fa4f3e09edc0362d9de455d5e6b85b57a2b28e8eccb749a7e8af"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/onnx/onnx/v1.16.2/onnx/onnx.proto",
+      "path": "onnx.proto",
+      "bytes": 37244,
+      "sha256": "1023c7f39a568f309fdd0b445a81a7a0d90f74046e5967c2e817d4e4e06a5f1b"
+    }
+  ],
+  "archiveMembers": [
+    {
+      "archive": "onnxruntime-web-1.26.0-dev.20260416-b7804b056c.tgz",
+      "sourceMap": "dist/ort.wasm.min.mjs.map",
+      "sourceBasename": "wasm-core-impl.ts",
+      "bytes": 43752,
+      "sha256": "cb3972b09ebef13e6c6da7beb93bd09ac48f7f7cf9df873b46428fa1bcfc30e3"
+    },
+    {
+      "archive": "onnxruntime-web-1.26.0-dev.20260416-b7804b056c.tgz",
+      "sourceMap": "dist/ort.wasm.min.mjs.map",
+      "sourceBasename": "session-handler-inference.ts",
+      "bytes": 5211,
+      "sha256": "fc3bfd42db325a098cd6984d570297a0c3fc11224bd11a7fb07e8efe3c7f53ae"
+    },
+    {
+      "archive": "onnxruntime-web-1.26.0-dev.20260416-b7804b056c.tgz",
+      "sourceMap": "dist/ort.wasm.min.mjs.map",
+      "sourceBasename": "inference-session-impl.ts",
+      "bytes": 9084,
+      "sha256": "465b05b94b27369c3ddc2ee864d01f6844d9cc7053c9e85fb5f12b806ffc7671"
+    },
+    {
+      "archive": "huggingface-transformers-4.2.0.tgz",
+      "member": "package/src/models/modeling_utils.js",
+      "bytes": 69310,
+      "sha256": "0074443f1129e1eb435c1f42a305e747d2ae151e5041a3aa99586b245b80be03"
+    },
+    {
+      "archive": "huggingface-transformers-4.2.0.tgz",
+      "member": "package/src/models/session.js",
+      "bytes": 12429,
+      "sha256": "f17cae95a879be9ab8b2ee3897bbfe37582c1442074cae3e373ecbd18725eae4"
+    },
+    {
+      "archive": "huggingface-transformers-4.2.0.tgz",
+      "member": "package/src/backends/onnx.js",
+      "bytes": 16486,
+      "sha256": "0a69153a59e760bab73d9b64d8e287082fdf0a8882b5f2e2afe75eec55f65b4c"
+    },
+    {
+      "archive": "huggingface-transformers-4.2.0.tgz",
+      "member": "package/src/models/whisper/modeling_whisper.js",
+      "bytes": 22837,
+      "sha256": "d8875ed0801b3ad2ee45c141d748759c98fa5e29aaeb1ef9c8d0d3f7e25961a5"
+    },
+    {
+      "archive": "huggingface-transformers-4.2.0.tgz",
+      "member": "package/src/generation/configuration_utils.js",
+      "bytes": 13550,
+      "sha256": "cd4578f5ba8e5efb264b43c1b01add10c2ced600faf050ba72b45209c5224d08"
+    }
+  ],
+  "modelMetadata": {
+    "file": "pinned-model-graph-metadata.json",
+    "bytes": 28592,
+    "sha256": "d4e04252a7279e806cf1b22c806077eb0f9e597d93bf0ec5ba17645d6c867361"
+  },
+  "encoderAttentionElementsAtBatchOne": 54000000,
+  "encoderAttentionFloat32BytesAtBatchOne": 216000000
+}

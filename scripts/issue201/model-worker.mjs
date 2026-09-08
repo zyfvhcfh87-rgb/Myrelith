@@ -1,6 +1,7 @@
 // Disposable laboratory owner. No production source imports this module.
 import { ALL_FORMATS, AudioSampleSink, BlobSource, Input } from '/assets/mediabunny.mjs'
 import { pinnedModelFileLookup, speechSegments, withinSourceCoverage } from './lab-contract.mjs'
+import { installEncoderFetchPolicy } from './encoder-fetch-policy.mjs'
 
 let manifest
 let transcriber
@@ -73,8 +74,10 @@ async function initialize(message) {
     progress_callback: (progress) => post('progress', { status: progress.status, file: progress.file ?? null }),
   })
   ledger.modelOwners = 1
+  installEncoderFetchPolicy(transcriber.model?.sessions?.model, manifest.runtime.encoderFetchPolicy,
+    (event) => { const { type, ...detail } = event; post(type, detail) })
   post('ready', { loadMs: performance.now() - started, ledger: { ...ledger }, version: env.version,
-    sessionOptions: manifest.runtime.sessionOptions })
+    sessionOptions: manifest.runtime.sessionOptions, encoderFetchPolicy: manifest.runtime.encoderFetchPolicy })
 }
 
 /** Fixed-radius windowed sinc; a bounded window, no full-source PCM retention. */

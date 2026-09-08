@@ -19,7 +19,7 @@ const hash = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', env: { ...process.env, DEVELOPER_DIR: '/Library/Developer/CommandLineTools' } }).trim()
 if (git('status', '--porcelain', '--', 'scripts/issue201', 'docs/evidence/issue201/replacement-manifest.json')) throw new Error('Commit the harness and frozen replacement manifest before timing')
 const source = { commit: git('rev-parse', 'HEAD'), manifestSha256: hash(manifestBytes), files: {} }
-for (const filename of ['prepare-speech-lab.mjs', 'run-speech-lab.mjs', 'lab-client.mjs', 'model-worker.mjs', 'lab-contract.mjs']) {
+for (const filename of ['prepare-speech-lab.mjs', 'run-speech-lab.mjs', 'lab-client.mjs', 'model-worker.mjs', 'lab-contract.mjs', 'encoder-fetch-policy.mjs']) {
   source.files[filename] = hash(await readFile(path.join(root, 'scripts/issue201', filename)))
 }
 if (Object.keys(manifest.runtime.advisories).length) throw new Error('Replacement runtime has unresolved advisory entries')
@@ -34,7 +34,7 @@ for (const artifact of manifest.runtime.artifacts) await add(`/assets/${artifact
 for (const file of manifest.model.files) await add(`/model/${file.path}`, path.join(root, '.tmp/issue201-package-probe/model', file.path), 'application/octet-stream', false, file.sha256)
 for (const fixture of manifest.fixtures) await add(`/fixtures/${fixture.name}.wav`, path.join(labRoot, 'fixtures', `${fixture.name}.wav`), 'audio/wav', true, fixture.sha256)
 for (const fixture of manifest.derivatives) await add(`/fixtures/${fixture.name}`, path.join(labRoot, 'fixtures', fixture.name), 'audio/wav', true, fixture.sha256)
-for (const filename of ['lab-client.mjs', 'model-worker.mjs', 'lab-contract.mjs']) await add(`/${filename}`, path.join(root, 'scripts/issue201', filename), 'text/javascript', true)
+for (const filename of ['lab-client.mjs', 'model-worker.mjs', 'lab-contract.mjs', 'encoder-fetch-policy.mjs']) await add(`/${filename}`, path.join(root, 'scripts/issue201', filename), 'text/javascript', true)
 served.set('/manifest.json', { bytes: manifestBytes, contentType: 'application/json', immutable: true })
 const html = Buffer.from('<!doctype html><meta charset="utf-8"><title>Issue 201 speech laboratory</title><h1>Issue 201 speech laboratory</h1><p id="status">Loading source manifest.</p><script type="module" src="/lab-client.mjs"></script>')
 served.set('/', { bytes: html, contentType: 'text/html', immutable: true })
@@ -100,7 +100,7 @@ try {
   let browserCdp = await context.browser().newBrowserCDPSession()
   runtime = { browserVersion: await browserCdp.send('Browser.getVersion'), platform: process.platform,
     architecture: process.arch, nodeVersion: process.version, threads: manifest.runtime.threads, device: manifest.runtime.device,
-    sessionOptions: manifest.runtime.sessionOptions }
+    sessionOptions: manifest.runtime.sessionOptions, encoderFetchPolicy: manifest.runtime.encoderFetchPolicy }
   async function sampleMemory(label = 'periodic') {
     if (sampling) return
     sampling = true
