@@ -161,4 +161,7 @@ attempt, frame0 for each cancellation), 64 MiB comparison RGBA, six output
 files/128 MiB aggregate. Each attempt keeps its 120-second browser/150-second
 host ceiling; combined work keeps the 1,500-second host ceiling and existing
 separate setup/cleanup bounds. Stop on first exact pre-encode, mean, ownership,
-console or evidence failure. No further codec investigation or resource matrix.
+console or evidence failure. Only the exact observed Canvas2D `willReadFrequently`
+performance advisory is recorded as nonfatal during this lifecycle segment;
+all other warnings/errors stay fatal. Production canvas settings are unchanged.
+No further codec investigation or resource matrix.

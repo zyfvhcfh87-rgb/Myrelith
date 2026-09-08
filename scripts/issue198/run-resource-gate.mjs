@@ -17,6 +17,11 @@ export { bounded } from './runnerLifecycle.mjs'
 const SETUP_TIMEOUT_MS = 30_000
 const setup = (operation, label) => bounded(Promise.resolve().then(operation), SETUP_TIMEOUT_MS, label)
 
+/** The exact advice observed from this test's extra sink readbacks; not a rendering error. */
+export function isObserverReadbackAdvisory(type, message) {
+  return type === 'warning' && message === 'Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently'
+}
+
 export function parseOptions(args) {
   const options = { port: 5198, segment: null, expectedSha: null, output: null }
   for (let index = 0; index < args.length; index += 2) {
@@ -78,7 +83,7 @@ export async function run(options) {
   if (!directory.startsWith(join(root, '.tmp') + '/')) throw new Error('Evidence output must be a fresh directory under this worktree .tmp')
   const store = await createEvidenceStore(directory), problems = [], capturedPids = new Set()
   const evidence = completion ? diagnosticEvidence(store, { directory }) : store
-  let vite, browserServer, browser, cdp, context, awake, nativeTimer, wholeTimer, memoryPending = Promise.resolve(), signalCleanup = Promise.resolve(), failure
+  let vite, browserServer, browser, cdp, context, awake, nativeTimer, wholeTimer, memoryPending = Promise.resolve(), advisoryPending = Promise.resolve(), signalCleanup = Promise.resolve(), failure
   let memoryIndex = 0, nativeBusy = false, stopping = false, measuredMemorySamples = 0, unavailableMemorySamples = 0
   let servedMediaRequests = 0, producerRecords = 0, binaryBytes = 0
   const binaryNames = new Set()
@@ -122,7 +127,15 @@ export async function run(options) {
     context.setDefaultTimeout(SETUP_TIMEOUT_MS)
     context.setDefaultNavigationTimeout(SETUP_TIMEOUT_MS)
     const page = await setup(() => context.newPage(), 'Browser page')
-    page.on('console', (message) => { if (['warning', 'error'].includes(message.type())) { problems.push({ kind: message.type(), message: message.text() }); if (completion) onSignal() } })
+    page.on('console', (message) => {
+      if (completion && isObserverReadbackAdvisory(message.type(), message.text())) {
+        advisoryPending = advisoryPending.then(() => record({ kind: 'observer-performance-advisory', message: message.text(),
+          classification: 'Nonfatal advice caused by test readbacks; production context settings are unchanged.' }))
+          .catch((cause) => { problems.push({ kind: 'advisory-evidence', message: cause.message }); onSignal() })
+        return
+      }
+      if (['warning', 'error'].includes(message.type())) { problems.push({ kind: message.type(), message: message.text() }); if (completion) onSignal() }
+    })
     page.on('pageerror', (error) => { problems.push({ kind: 'pageerror', message: error.message }); if (completion) onSignal() })
     function checkCaller(caller) { if (caller.page !== page || caller.frame !== page.mainFrame() || !caller.frame.url().startsWith(origin + '/')) throw new Error('Evidence binding caller is not the owned page') }
     await setup(() => page.exposeBinding('__issue198Record', async (caller, value) => { checkCaller(caller); await record({ ...value, source: 'browser' }) }), 'Record binding')
@@ -216,6 +229,7 @@ export async function run(options) {
   } finally {
     stopping = true; clearInterval(nativeTimer); clearTimeout(wholeTimer)
     await signalCleanup
+    await bounded(advisoryPending, 10_000, 'Observer advisory evidence teardown').catch((cause) => { failure ??= cause })
     await bounded(memoryPending, 15_000, 'Memory sampling teardown').catch((cause) => { failure ??= cause })
     if (browserServer) {
       const owned = processDescendants(browserServer.process().pid)

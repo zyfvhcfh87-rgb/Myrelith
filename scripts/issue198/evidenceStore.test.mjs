@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { createEvidenceStore } from './evidenceStore.mjs'
-import { bounded, parseOptions } from './run-resource-gate.mjs'
+import { bounded, isObserverReadbackAdvisory, parseOptions } from './run-resource-gate.mjs'
 
 async function directory(run) {
   const parent = await mkdtemp(join(tmpdir(), 'issue198-evidence-'))
@@ -78,4 +78,11 @@ test('the single codec-control artifact is retained without permitting arbitrary
 test('bounded steps return successful values and reject a stalled step', async () => {
   assert.equal(await bounded(Promise.resolve(17), 100, 'ready'), 17)
   await assert.rejects(bounded(new Promise(() => {}), 5, 'stalled'), /stalled exceeded/)
+})
+test('only the exact observed performance warning is nonfatal; errors and other warnings stay fatal', () => {
+  const message = 'Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently'
+  assert.equal(isObserverReadbackAdvisory('warning', message), true)
+  assert.equal(isObserverReadbackAdvisory('error', message), false)
+  assert.equal(isObserverReadbackAdvisory('warning', message + ' Extra failure'), false)
+  assert.equal(isObserverReadbackAdvisory('warning', 'Canvas2D context lost'), false)
 })
