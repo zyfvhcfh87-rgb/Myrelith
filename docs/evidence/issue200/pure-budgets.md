@@ -5,6 +5,9 @@ Date: 2026-09-08. Parent/source integration:
 The orchestrator accepted G1a `381836f` and authorized this bounded completion
 while #199 implements schema22. The branch fast-forwarded cleanly to the exact
 accepted integration. This adds no product-phase approval or runtime wiring.
+The first budget commit `ab4a45ae7924bc918f1100045072d35907d5e49d` required
+review corrections for per-branch history bounds and repeated shared-subtree
+traversal. Their implementation and validation are recorded below.
 
 ## Concrete API
 
@@ -51,14 +54,22 @@ or browser memory**: it excludes object headers, allocator metadata, stores,
 media, layout, surfaces and GPU allocations.
 
 The total must fit **64 MiB**. Original title, track and clipboard roots are
-measured with a call-local reference set and root-size cache, both discarded on
-return. No persistent mutable cache or retained runtime resource is introduced.
+measured with a call-local cache of every complete immutable object/array subtree,
+discarded on return. Each summary records expanded JSON byte size, entry count
+and greatest relative descendant depth. A reused subtree contributes its complete
+size/entries at every serialized occurrence and rechecks depth at the new nesting
+position, while incurring no repeated traversal or retained-data charge. Distinct
+new parent shells still contribute their own primitive data and JSON punctuation.
+Only fully validated acyclic subtrees are memoized. No persistent mutable cache
+or retained runtime resource is introduced.
 The owning caller gets one success or one failure and retains its current state
 on failure; this module cannot prune history or clear redo.
 
 Declared bounds are checked before walking key contents: 256 tracks/title and
 the canonical 1,024 keys/track. Each snapshot projection is at most 100,000
-expanded owners; past plus future keep the inherited 100-history-entry bound.
+expanded owners; past and future each keep their own 100-snapshot bound. The
+canonical store header, `HISTORY_LIMIT`, and undo/redo slices establish this
+contract; a combined 100-snapshot limit would be an unintended new restriction.
 Element/key clipboard projections allow up to 100,000 data roots, while the
 aggregate retained-data cap also applies. Individual clipboard roots must fit
 the same bounded JSON size/shape checks.
@@ -81,7 +92,7 @@ NODE_OPTIONS=--no-experimental-webstorage npm run build
 npm run lint
 ```
 
-Final logs: [focused tests](budget-tests.log), [build/typecheck](budget-build.log),
+Initial logs: [focused tests](budget-tests.log), [build/typecheck](budget-build.log),
 [lint](budget-lint.log), with trailing whitespace/blank EOF lines normalized after
 the first staged diff check flagged generated-log formatting.
 **4 files / 39 Vitest tests and 17 runner tests passed**;
@@ -102,8 +113,29 @@ Boundary fixtures compute real JSON sizes instead of hardcoding expansion costs:
   The next representable two priced bytes reject. Omitting the retained future
   branch would make that candidate pass, demonstrating why it must be counted
   before clearing redo. The helper leaves that branch and clipboard untouched.
-- Legacy-only empty projections with 100 total history entries cost zero.
+- Legacy-only empty projections with 100 entries in each history branch cost zero.
   This is helper evidence; production legacy projection/store proof is pending.
+
+Review correction validation (parent `ab4a45a`): [focused tests](budget-review-tests.log),
+[build/typecheck](budget-review-build.log), [lint](budget-review-lint.log).
+The same focused command now passes **4 files / 42 Vitest tests and 17 runner
+tests**, with build/typecheck and lint passing. The budget file now has 16 tests.
+Generated-log whitespace is normalized; no product source changed after these
+checks. Full suite, browser and timing acceptance remain outside this pure fix.
+
+The deterministic read-count test uses a proxy only to instrument `ownKeys` on
+real frozen 20,000-character payload data. One wrapper and 200 distinct wrappers
+each enumerate that shared payload exactly once per invocation. The orchestrator's
+read-only transpiled probe at `/private/tmp/myrelith-title-budget-review.cjs`
+was also rerun: **1 shared-payload scan, 49,628 retained bytes**, and the separate
+100-entry past/future branches return **0 bytes** for empty legacy projections.
+The old commit enumerated the same shared payload 200 times. This is deterministic
+work-count evidence, not a timing benchmark or production parser acceptance.
+
+Additional regression cases prove memoization still expands serialized byte/entry
+multiplicity, rejects cached data reused too deeply, detects a cycle after a
+successful cache hit, and independently charges new shells and separate copies.
+The existing hostile JSON and exact 1 MiB/64 MiB boundary cases remain intact.
 
 Architecture and committed diff checks are required with this bounded commit.
 No full-suite, audit, browser, pixel, export or performance acceptance is claimed.

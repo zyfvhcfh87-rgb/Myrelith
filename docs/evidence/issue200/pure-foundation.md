@@ -132,8 +132,8 @@ The pure 1 MiB title envelope does not yet count external animation tracks.
 
 Unused new collections and implicit legacy-v1 metadata must remain omitted on
 save. Compact legacy text keeps its inherited 10,000,000-character serialized
-snapshot ceiling, 10,000,000-character project text budget and 100-history-entry
-bound. The proposed 64 MiB retained expanded-title quota is not implemented here
+snapshot ceiling, 10,000,000-character project text budget and 100 snapshots in
+each history branch. The proposed 64 MiB retained expanded-title quota is not implemented here
 and must not be applied retroactively to ordinary legacy edits. The measured
 386-character upgrade projection is fixture evidence, never a runtime constant.
 

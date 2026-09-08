@@ -156,8 +156,55 @@ describe('immutable expanded-title retention', () => {
     // These are the projections of any number/size of valid compact legacy text
     // clips across all sequences. The schema23 traversal must prove that omission.
     const empty: readonly TitleBudgetOwner[] = []
-    expect(retainedTitleDataBudget(retained({ candidate: empty, current: empty, past: Array(50).fill(empty), future: Array(50).fill(empty) }))).toEqual({ ok: true, retainedBytes: 0 })
-    expect(retainedTitleDataBudget(retained({ past: Array(101).fill(empty) })).ok).toBe(false)
+    expect(retainedTitleDataBudget(retained({ candidate: empty, current: empty, past: Array(100).fill(empty), future: Array(100).fill(empty) }))).toEqual({ ok: true, retainedBytes: 0 })
+    expect(retainedTitleDataBudget(retained({ past: Array(101).fill(empty), future: Array(100).fill(empty) })).ok).toBe(false)
+    expect(retainedTitleDataBudget(retained({ past: Array(100).fill(empty), future: Array(101).fill(empty) })).ok).toBe(false)
+  })
+
+  test('scans a shared 20k-character subtree once per invocation for both one and 200 distinct wrappers', () => {
+    let scans = 0
+    const payloadData = Object.freeze({ content: 'x'.repeat(20_000) })
+    // Instrument reads only; the target and all authored values are real immutable data.
+    const payload = new Proxy(payloadData, { ownKeys(target) { scans++; return Reflect.ownKeys(target) } })
+    const owners = Array.from({ length: 200 }, () => ({ title: { version: 2, payload } }))
+    expect(retainedTitleDataBudget(retained({ candidate: owners.slice(0, 1) })).ok).toBe(true)
+    expect(scans).toBe(1)
+    scans = 0
+    const result = retainedTitleDataBudget(retained({ current: owners.slice(0, 100), past: [owners.slice(100)] }))
+    expect(scans).toBe(1)
+    const payloadBytes = bytes(payloadData)
+    const wrapperBytes = bytes({ version: 2, payload: payloadData }) - payloadBytes
+    expect(result).toEqual({ ok: true, retainedBytes: 2 * (payloadBytes + 200 * wrapperBytes) })
+  })
+
+  test('retains per-owner byte and per-root entry multiplicity when cached nested data is shared', () => {
+    const shared = { content: 'a'.repeat(20_000) }
+    const exact = { version: 2, parts: Array(50).fill(shared) }
+    expect(titlePayloadBudget({ title: exact })).toMatchObject({ ok: true, usage: { serializedUtf8Bytes: bytes(exact) } })
+    expect(retainedTitleDataBudget(retained({ candidate: [{ title: exact }] }))).toEqual({
+      ok: true, retainedBytes: 2 * (bytes(exact) - 49 * bytes(shared)),
+    })
+    const over = { version: 2, parts: Array(53).fill(shared) }
+    expect(bytes(over)).toBeGreaterThan(TITLE_LIMITS.serializedBytes)
+    expect(retainedTitleDataBudget(retained({ current: [{ title: { version: 2, shared } }], past: [[{ title: over }]] }))).toMatchObject({ ok: false, reason: expect.stringContaining('1 MiB') })
+    const entries = Array(100_000).fill(0)
+    const tooMany = { version: 2, parts: Array(6).fill(entries) }
+    expect(titlePayloadBudget({ title: tooMany })).toMatchObject({ ok: false, reason: expect.stringContaining('too many entries') })
+  })
+
+  test('rechecks cached subtree height at deeper owners and still rejects cycles after cache hits', () => {
+    const payload = { content: 'shared' }
+    const owner = { title: { version: 2, payload } }
+    const wrap = (levels: number): unknown => {
+      let nested: unknown = payload
+      for (let index = 0; index < levels; index++) nested = { next: nested }
+      return nested
+    }
+    expect(retainedTitleDataBudget(retained({ candidate: [owner], current: [{ title: { version: 2, payload: wrap(6) } }] })).ok).toBe(true)
+    expect(retainedTitleDataBudget(retained({ candidate: [owner], current: [{ title: { version: 2, payload: wrap(7) } }] }))).toMatchObject({ ok: false, reason: expect.stringContaining('eight nested') })
+    const cycle: { version: number; payload: typeof payload; self?: unknown } = { version: 2, payload }
+    cycle.self = cycle
+    expect(retainedTitleDataBudget(retained({ candidate: [owner], current: [{ title: cycle }] }))).toMatchObject({ ok: false, reason: expect.stringContaining('cycles') })
   })
 
   test('admits exact 64 MiB across current/history/clipboard and rejects the next two bytes before redo clearing', () => {

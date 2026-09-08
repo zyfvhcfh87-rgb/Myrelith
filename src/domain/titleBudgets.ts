@@ -7,7 +7,7 @@ import { TITLE_LIMITS, type TitleDefinition, type TitleElementIntent } from './t
 export const TITLE_BUDGET_LIMITS = Object.freeze({
   tracksPerTitle: 256,
   retainedBytes: 64 * 1024 * 1024,
-  retainedSnapshots: 100,
+  historySnapshotsPerBranch: 100,
   ownersPerSnapshot: 100_000,
   clipboardRoots: 100_000,
 })
@@ -50,9 +50,14 @@ export type TitleDataRetentionResult =
 class TitleBudgetError extends Error {}
 function fail(reason: string): never { throw new TitleBudgetError(reason) }
 
+interface JsonSubtreeSize {
+  readonly bytes: number
+  readonly entries: number
+  /** Greatest descendant depth relative to this object's own depth. */
+  readonly height: number
+}
 interface Accounting {
-  readonly seen: WeakSet<object>
-  readonly rootSizes: WeakMap<object, number>
+  readonly subtrees: WeakMap<object, JsonSubtreeSize>
   retainedBytes: number
 }
 
@@ -61,48 +66,59 @@ interface Accounting {
  * title reader's stricter 4,096-entry opaque-title boundary. At least two JSON
  * bytes per entry keep this walk bounded by the 1 MiB payload limit as well.
  */
-function jsonBytes(root: object, accounting?: Accounting): number {
-  const cached = accounting?.rootSizes.get(root)
-  if (cached !== undefined) return cached
+function jsonBytes(root: object, accounting: Accounting): number {
   let bytes = 0
   let entries = 0
   const ancestors = new Set<object>()
   const charge = (amount: number, retained: boolean): void => {
     bytes += amount
     if (bytes > TITLE_LIMITS.serializedBytes) fail('Title payload exceeds 1 MiB including animation data.')
-    if (accounting && retained) {
+    if (retained) {
       // Twice UTF-8 JSON bytes conservatively prices serialized string data;
       // object headers, allocator metadata and media/render resources are excluded.
       accounting.retainedBytes += 2 * amount
       if (accounting.retainedBytes > TITLE_BUDGET_LIMITS.retainedBytes) fail('This edit exceeds 64 MiB of expanded title history and clipboard data.')
     }
   }
-  const walk = (value: unknown, depth: number, retainParent: boolean): void => {
+  const chargeEntries = (amount: number): void => {
+    entries += amount
+    if (entries > TITLE_LIMITS.serializedBytes / 2) fail('Title data has too many entries.')
+  }
+  const walk = (value: unknown, depth: number): number => {
     if (depth > TITLE_LIMITS.jsonDepth) fail('Title data exceeds eight nested levels.')
-    if (value === null || typeof value === 'boolean') { charge(value === null ? 4 : value ? 4 : 5, retainParent); return }
+    if (value === null || typeof value === 'boolean') { charge(value === null ? 4 : value ? 4 : 5, true); return 0 }
     if (typeof value === 'number') {
       if (!Number.isFinite(value)) fail('Title data numbers must be finite.')
-      charge(JSON.stringify(value).length, retainParent)
-      return
+      charge(JSON.stringify(value).length, true)
+      return 0
     }
     if (typeof value === 'string') {
       if (value.length > TEXT_OVERLAY_LIMITS.maxCharacters) fail('Title data string exceeds 20,000 characters.')
-      charge(utf8ByteLength(JSON.stringify(value)), retainParent)
-      return
+      charge(utf8ByteLength(JSON.stringify(value)), true)
+      return 0
     }
     if (typeof value !== 'object') fail('Title data must contain only JSON values.')
     if (ancestors.has(value)) fail('Title data must not contain cycles.')
+    const cached = accounting.subtrees.get(value)
+    if (cached) {
+      // Serialization expands each occurrence even though retention and traversal
+      // share the object. Cached height also protects a later, deeper occurrence.
+      if (depth + cached.height > TITLE_LIMITS.jsonDepth) fail('Title data exceeds eight nested levels.')
+      chargeEntries(cached.entries)
+      charge(cached.bytes, false)
+      return cached.height
+    }
+    const bytesBefore = bytes
+    const entriesBefore = entries
     const array = Array.isArray(value)
     const prototype = Object.getPrototypeOf(value)
     if (array ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) fail('Title data must contain plain JSON objects and arrays.')
     if (array && value.length > TITLE_LIMITS.serializedBytes / 2 - entries) fail('Title data has too many entries.')
     const keys = Reflect.ownKeys(value).filter((key) => !(array && key === 'length'))
-    entries += keys.length
-    if (entries > TITLE_LIMITS.serializedBytes / 2) fail('Title data has too many entries.')
+    chargeEntries(keys.length)
     if (array && keys.length !== value.length) fail('Title data arrays must be dense without extra fields.')
-    const retained = retainParent && !accounting?.seen.has(value)
-    accounting?.seen.add(value)
-    charge(2 + Math.max(0, keys.length - 1), retained)
+    charge(2 + Math.max(0, keys.length - 1), true)
+    let height = 0
     ancestors.add(value)
     try {
       for (let index = 0; index < keys.length; index++) {
@@ -113,23 +129,26 @@ function jsonBytes(root: object, accounting?: Accounting): number {
         } else {
           if (key.length === 0 || key.length > TITLE_LIMITS.jsonKeyCharacters
             || key === '__proto__' || key === 'constructor' || key === 'prototype') fail('Unsafe title data key.')
-          charge(utf8ByteLength(JSON.stringify(key)) + 1, retained)
+          charge(utf8ByteLength(JSON.stringify(key)) + 1, true)
         }
         const descriptor = Object.getOwnPropertyDescriptor(value, key)
         if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) fail('Title data cannot contain accessors or hidden fields.')
-        walk(descriptor.value, depth + 1, retained)
+        height = Math.max(height, 1 + walk(descriptor.value, depth + 1))
       }
     } finally { ancestors.delete(value) }
+    // Publish only a complete, validated subtree. A cached object's entire graph
+    // has already paid its retained contribution in this invocation.
+    accounting.subtrees.set(value, { bytes: bytes - bytesBefore, entries: entries - entriesBefore, height })
+    return height
   }
-  walk(root, 0, true)
-  accounting?.rootSizes.set(root, bytes)
+  walk(root, 0)
   return bytes
 }
 
 /** Called with boundary-admitted immutable title/track data. Budget success does
  * not establish field validity, font availability or animation applicability.
  */
-function payloadUsage(owner: TitleBudgetOwner, accounting?: Accounting): TitlePayloadBudgetUsage {
+function payloadUsage(owner: TitleBudgetOwner, accounting: Accounting = { subtrees: new WeakMap(), retainedBytes: 0 }): TitlePayloadBudgetUsage {
   const tracks = owner.titleTracks ?? []
   if (tracks.length > TITLE_BUDGET_LIMITS.tracksPerTitle) fail('Title payload exceeds 256 animation tracks.')
   let keyframes = 0
@@ -160,8 +179,9 @@ export function titlePayloadBudget(owner: TitleBudgetOwner): TitlePayloadBudgetR
  */
 export function retainedTitleDataBudget(retention: TitleDataRetention): TitleDataRetentionResult {
   try {
-    if (retention.past.length + retention.future.length > TITLE_BUDGET_LIMITS.retainedSnapshots) fail('Title retention projection exceeds the existing 100-history-entry bound.')
-    const accounting: Accounting = { seen: new WeakSet(), rootSizes: new WeakMap(), retainedBytes: 0 }
+    if (retention.past.length > TITLE_BUDGET_LIMITS.historySnapshotsPerBranch
+      || retention.future.length > TITLE_BUDGET_LIMITS.historySnapshotsPerBranch) fail('Title retention projection exceeds the existing 100-entry limit for a history branch.')
+    const accounting: Accounting = { subtrees: new WeakMap(), retainedBytes: 0 }
     const seenSnapshots = new Set<readonly TitleBudgetOwner[]>()
     const seenOwners = new Set<TitleBudgetOwner>()
     const snapshots = [retention.candidate, retention.current, ...retention.past, ...retention.future, retention.clipboards.titles]

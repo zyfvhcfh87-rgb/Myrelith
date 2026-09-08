@@ -1,6 +1,6 @@
 # Issue #200 — reusable titles and animated text
 
-Status: **G1a approved; independent pure budget completion awaiting review;
+Status: **G1a approved; pure budget review corrections awaiting review;
 G1b waits for the approved schema22 foundation**.
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
@@ -433,7 +433,7 @@ changes instances. Library mutations are independent of project history.
 | 4,096 expanded visible title elements/frame | Pure composition-cost preflight includes nested instance multiplicity before layout; this accommodates the existing 4,096-leaf legacy ceiling. No per-frame graph expansion stored in history. |
 | Text geometry/style ranges in the property table; static padding 0…1,024, positive inner box; static anchor/crop/flip unchanged | Checked before layout, including all key envelopes. Hex colors only; shapes are bounded primitives. No canvas sized from an element box. |
 | 512 rendered lines/element; 64 layout entries/context and at most 8 MiB conservative retained string storage/context | Bounded derived cache, clear on owner/font replacement. Reuse the existing project-sized leg/group surfaces; zero per-element canvases. |
-| 64 MiB conservative retained expanded-title payload/track data | Count new title data in current project, past/future snapshots and app element/title/key clipboards by immutable owned references, including dormant sequences. Validate before clearing redo. Reject growth with a reason; never prune history silently. Compact legacy text retains its existing file/text/history bounds rather than acquiring a new upgrade-only quota. Existing 100-history-entry cap remains. |
+| 64 MiB conservative retained expanded-title payload/track data | Count new title data in current project, past/future snapshots and app element/title/key clipboards by immutable owned references, including dormant sequences. Validate before clearing redo. Reject growth with a reason; never prune history silently. Compact legacy text retains its existing file/text/history bounds rather than acquiring a new upgrade-only quota. Existing cap of 100 snapshots in each history branch remains. |
 | 100 local user templates; 1 MiB/template; 8 MiB/library | Includes raw unsupported siblings. Capture and use apply both library and destination bounds; maximum additional retained library allowance is separate and explicit. |
 | Opaque future title: depth 8, 4,096 entries, same aggregate string/byte caps | Bounded non-executing JSON only; supported versions validate exact keys. No getter/prototype traversal of untrusted runtime objects. |
 
@@ -444,7 +444,7 @@ unchanged elements/tracks are shared; gestures keep one disposable draft and one
 commit. The supported compact legacy representation avoids mandatory envelope
 overhead; only an explicit upgrade can introduce it, after the exact size
 preflight above. Existing legacy history remains governed by the unchanged
-100-snapshot/file/text bounds. Do not present the expanded-title quota as a total
+100 snapshots per history branch and existing file/text bounds. Do not present the expanded-title quota as a total
 browser-memory bound, or use it to force an old clip into the new representation.
 
 ## Implementation gates and ownership
@@ -468,6 +468,8 @@ integration, remote publication and issue closure.
    architecture checks, build and lint pass; see the linked G1a evidence.
    Authorized independent completion adds title-plus-track payload sizing and
    reference-aware retained-data admission, with exact 1 MiB/64 MiB fixtures.
+   Review corrections preserve 100 snapshots in each history branch and reuse
+   nested immutable subtree summaries, with deterministic traversal-count proof.
    This is pure foundation work, not approval to enter a new product phase.
 3. **G1b — title ownership, compatibility and upgrade.** After the shared
    foundation is approved, add title-owner schema 23 with retained `Clip.text`,
