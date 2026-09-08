@@ -2,7 +2,8 @@
 
 Read against the actual issue body in the orchestration `issues.json` snapshot
 (issue updated 2026-08-25T21:36:47Z) and `docs/ISSUE_200_PLAN.md`. Current worker
-evidence checkpoint: `f8e7370188c32607050bf399981eee22bcce6690`. This matrix does
+native evidence now includes the final [keyboard result](keyboard-results.md)
+at tested source `9f3dce20909784733d4c4a445a8998d300965f6b`. This matrix does
 not claim final combined-branch acceptance or close the issue.
 Root reports E integrated at `93eb98f7d6af48bdef1cefba4084a3620ec2aae5`, with its
 existing production-source hashes unchanged. Subsequently the supervisor assigned
@@ -32,30 +33,37 @@ Evidence keys:
   [accepted result](first-paint-results.md), five exact settled comparisons,
   nonblank controls, retained success trace and independently verified teardown.
 
+- **F — keyboard and narrow dialogs:** final tested `9f3dce2`;
+  [results](keyboard-results.md), final remainder 3/3 plus preserved wide controls.
+  Native font-popup selection is explicitly UNVERIFIED; all other original
+  keyboard/focus/dialog predicates completed. Failures and corrections retained.
+
 | Actual issue criterion | Existing exact evidence | Remaining acceptance and owner |
 | --- | --- | --- |
 | Existing text migrates identically and remains editable | B preserves compact text, exact file/history/recovery boundaries and explicit upgrade. C compares unchanged legacy/current/upgrade pixels and wrapping. D exercises real Upgrade, edits and Undo/Redo. | Covered in staged evidence; root verifies the final integrated source and engineering gates. No repeat migration redesign or forced expansion. |
 | Element/order/count/string/font/style/geometry budgets reject before allocation | A validates bounded future-safe data, coupled geometry, 1 MiB title-plus-keys and 64 MiB reference-aware retention. B covers actual all-sequence/file/history admission. C covers pre-layout visible-element bounds and bounded scratch/cache ownership. D adds all-five-preview admission. Root's assigned 580de54 includes the accepted shared preview corrections. | Root owns final combined coverage of the five-owner priority/currentness seam. The retention metric remains serialized-data admission, not measured JS heap. |
-| Versioned local templates, fresh identities, no executable content | B proves clone/split/paste/sequence ownership. D and its source tests cover all three builtins, editable lanes, fresh IDs, strict data envelopes, unknown/quota behavior and actual local save/read/use/delete without changing used copies. | Keyboard dialog/selection paths below. Existing real IDB evidence is carried; no duplicate native template lifecycle matrix unless integration changes it. |
-| Roll/crawl and all scalars use exact frames across scrub/playback/export | C covers all 13 scalars, three easings, sequential/arbitrary seeks, nested owners and raw finite export. D covers real two-key Preview/Cancel/Apply and consented Reapply; domain tests cover trim/split/extend semantics. The accepted shared workspace is now synced from 580de54. | #199's single mixed playback/encoded export/reopen gate, including edited title keys and generated crawl. Title-specific false-positive checks are listed below. No second animation editor or duplicate export run. |
+| Versioned local templates, fresh identities, no executable content | B proves clone/split/paste/sequence ownership. D and its source tests cover all three builtins, editable lanes, fresh IDs, strict data envelopes, unknown/quota behavior and actual local save/read/use/delete without changing used copies. | Keyboard dialog/selection paths are covered by F below. Existing real IDB evidence is carried; no duplicate native template lifecycle matrix unless integration changes it. |
+| Roll/crawl and all scalars use exact frames across scrub/playback/export | C covers all 13 scalars, three easings, sequential/arbitrary seeks, nested owners and raw finite export. D covers real two-key Preview/Cancel/Apply and consented Reapply; domain tests cover trim/split/extend semantics. The accepted shared workspace is now synced from 580de54. | Root accepted #199's single mixed playback/encoded export/reopen gate (9/9 checkpoints; evidence 7b671f4). Reused here; no duplicate export run. |
 | Font measurement/wrapping/fallback is deterministic or visibly unavailable; portable intent persists | C covers six generic families, complex text, main/worker/raw-export parity and explicit fallback. D preserves literal family/fallback and exact reopen. E proves actual reopened glyph presentation after its early uninitialized buffer. | Carry qualifications; #199 mixed encoded fixture retains the same explicit intent and strict missing-fallback refusal. No remote font fetch, font-byte identity, complete glyph coverage or historical-cause claim. |
-| Keyboard, focus, reading order, contrast/status, safe areas, responsive dialogs and accessible manipulation alternatives | Source component evidence covers numeric editing, selection/order, keyboard move/resize and StrictMode lifecycle. D covers actual pointer/capture-loss and one 720×800 motion dialog. | **Open #200 native slice:** [keyboard/focus/title-control protocol](keyboard-focus-proposal.md) at 1280×720 and 720×800. Scope is title control reachability/readability and dialogs; surrounding workspace clipping is recorded separately for root disposition. |
-| Real Chromium verifies migrated text, elements, templates, motion, keys, fonts, reopen, export pixels and cleanup | C/D/E jointly cover the listed title paths except final shared #199 UI/encoded integration and the remaining accessibility slice. All completed native runs have explicit cleanup receipts and preserved failures. | Complete the preceding #199 and #200 native slices on their reviewed sources, then root decides combined acceptance. Do not turn focused component evidence into a native UI claim. |
+| Keyboard, focus, reading order, contrast/status, safe areas, responsive dialogs and accessible manipulation alternatives | Source component evidence covers numeric editing, selection/order, keyboard move/resize and StrictMode lifecycle. D covers actual pointer/capture-loss and one 720×800 motion dialog. | **Completed F, qualified:** [keyboard results](keyboard-results.md), staged coverage at 1280×720 and 720×800. Native Mac font-popup selection remains UNVERIFIED; focus, geometry, labels, contrast, status, manipulation and dialog checks passed. Surrounding workspace clipping remains separately scoped to root. |
+| Real Chromium verifies migrated text, elements, templates, motion, keys, fonts, reopen, export pixels and cleanup | C/D/E/F and parent-accepted #199 encoded integration jointly cover the listed title paths with their stated qualifications. All completed native runs have explicit cleanup receipts and preserved failures. | Worker native slices are complete; root decides final combined acceptance. Do not turn focused component evidence into a native UI claim. |
 | Focused/full tests, build/typecheck, lint, production audit and diff checks | Each staged checkpoint has focused results and corresponding build/typecheck/lint where required; E adds source-only diagnostic validation. | Root owns the final combined full suite, production build, lint/audit/diff and any baseline reproductions. No worker duplicate full/build/audit run. |
 
 The feasible first-slice title/lower-third/card presets, ordered text/shape styles,
 editor-only 90%/95% guides and local-only boundary are included in A–D and the
-remaining keyboard slice. No original issue acceptance criterion is dropped.
+completed keyboard slice. Native font-popup selection retains its explicit qualification; no original criterion is silently dropped.
 
 ## Coordination with #199's single mixed export gate
 
 Root relayed the source proposal: one second/30 frames at 1280×720/30 fps, VP9
 video retimed 2× and split at 15, 48 kHz stereo, final VP9 WebM 5 Mbps/Opus 192 kbps.
 Probes 0/7/14/15/22/29 include MOVE text with named intent/explicit serif, a colored
-rectangle, ordinary title tracks and canonical left-crawl keys 0..29. Proposed
+rectangle, ordinary title tracks and canonical left-crawl keys 0..29. The initial proposed
 decoded/Program limits are RGB MAE ≤8, p95 ≤20, glyph centroid ≤3 px and white
-coverage within 15% where present. These remain **unexecuted proposed thresholds**;
-the supervisor must review the executable before any grant.
+coverage within 15% where present. These describe the historical proposal, not
+final measured results. Root subsequently accepted corrected #199 G4 (9/9
+checkpoints, evidence 7b671f4); its final report governs encoded tolerances and
+results. No separate #200 export run is required.
 
 #200's requested safeguards, relayed through root:
 
