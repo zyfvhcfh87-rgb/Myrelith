@@ -48,7 +48,36 @@ original failure log. The parent's full failure screenshot/context/trace remain
 in its integration worktree under
 `.tmp/playwright-issue198/issue-198-static-mask-elli-6b7a4-maller-letterboxed-monitors-chromium/`.
 
-The original browser assertion is unchanged. This source correction has not been
-browser-tested; exact committed review and a new exclusive-slot grant are needed.
-No worker browser/full/performance run or path/tracking feature promotion was
-included in this correction gate.
+## Exact-source browser revalidation
+
+After parent source acceptance and independent 78 tests/four files plus 17 runner
+checks, the parent granted an exclusive slot for clean product source
+`e6b8b71f8d99fb70e0f2d3caabb72cc76fe58b25`. The unchanged browser suite ran with
+strict port 5198, one muted headless Chromium worker and the silent local 720p PNG:
+
+```
+DEVELOPER_DIR=/Library/Developer/CommandLineTools npm run test:browser -- --config=playwright.issue198.config.ts
+```
+
+**4/4 checks passed in 11.4 seconds**: rectangle 2.6s, Bezier 2.8s, ellipse 2.6s
+and open authoring 2.7s. The original immediate viewport-change/pointer-up
+cancellation assertion passed unchanged. The same ellipse check also exercised
+the 768px lower-right handle through native pointer hit testing, one resize
+history entry and exact undo. No browser/page console errors were reported;
+the log contains only the existing NO_COLOR/FORCE_COLOR notices.
+
+Exact log and all five screenshots are retained in `.tmp/issue198-e6b8b71/`:
+`issue198-browser-e6b8b71.log`, `issue198-rectangle.png`, `issue198-bezier.png`,
+`issue198-small.png`, `issue198-open-draft.png` and
+`issue198-open-closed-small.png`. Every screenshot was inspected. The dock remains
+separate from canvas handles at desktop and 768px; the open outline remains
+separate from the unchanged rendered mask, and closed geometry remains visible
+after resize cancellation. Smaller controls scroll within their own dock.
+
+Playwright exited successfully. A subsequent listener check found no process on
+5198 and a process check found no matching Chromium/Playwright/Vite test process.
+The slot was explicitly released to the parent. The original failing integration
+log, screenshot, context and trace remain preserved separately above.
+
+This run qualifies only these four bounded Chromium flows on exact e6b8b71.
+No broader/full/performance run or path/tracking feature promotion was included.
