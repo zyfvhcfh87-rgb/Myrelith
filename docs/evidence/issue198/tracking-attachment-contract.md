@@ -1,17 +1,19 @@
-# Issue #198 mask tracking attachment contract — proposed, not promoted
+# Issue #198 mask tracking attachment contract — accepted
 
-This is the concrete review proposal requested by the orchestrator. It changes
-no production code or canonical architecture text. Reviewed source is integration
+This records the concrete proposal accepted by the orchestrator at
+`e30c27fd3bab90ff198f33d73937bcd0c1a39c7d`. Its original reviewed source was integration
 `125a8c8c69cedb9d3435c39128f94eaf2c54215b`, followed by open-authoring product
 source `ef5c191bf7db65c0ce9adb7b6243b9882f59ea41` and evidence-only `a4bb578`.
-Implementation must wait for explicit contract acceptance and consume #199's
-reviewed schema 22 timing, identity, traversal and retention authorities.
+The separate implementation now consumes #199's reviewed schema 22 timing,
+identity, traversal and retention authorities. The pure planning/operation slice
+promotes only the accepted narrow architecture wording; app/UI acceptance remains
+open. See [tracking implementation evidence](tracking-attachment.md).
 
-## Proposed architecture amendment
+## Accepted architecture amendment
 
-The current tracking paragraph in `ARCHITECTURE.md` at lines 975–994 requires
-distinct source/target clip identities and describes only transform attachment.
-The proposed narrow replacement for its identity/target wording is:
+The former tracking paragraph required distinct source/target clip identities
+and described only transform attachment. The accepted narrow replacement for
+its identity/target wording is:
 
 > Clip-transform attachment requires distinct source and target clip identities.
 > The Inspector must never offer the tracked source as its own transform target.
@@ -172,6 +174,6 @@ provenance or silently rebind the session to permit another same-clip Apply.
   invalidation, accepted-range cleanup, reopen/export parity and the remaining
   reviewed full/render/performance gates before issue completion.
 
-Only source inspection and document diff hygiene qualify this proposal. It is
-ready for contract review; none of the proposed tracking behavior is implemented
-or validated by the separate open-path browser run.
+The original contract commit carried source inspection and document diff hygiene
+only. Subsequent implementation evidence is recorded separately; the earlier
+static/open/held-path browser runs do not validate tracking attachment.
