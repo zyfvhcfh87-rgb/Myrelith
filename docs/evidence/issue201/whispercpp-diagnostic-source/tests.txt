@@ -1,0 +1,13 @@
+✔ factory abort context and the original exception survive the actual protocol message-only reduction (18.860833ms)
+✔ actual protocol diagnostics identify an abort in _speech_model_alloc and retain the cleanup attempt (17.464542ms)
+✔ actual protocol diagnostics identify an abort in _speech_load and retain the cleanup attempt (19.402541ms)
+✔ successful control flow retains module identity, live heap views, arguments, return values and callback forwarding (0.925208ms)
+✔ diagnostics remain bounded, retain the latest fatal tail and never stringify arbitrary objects (0.430792ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 99.909
