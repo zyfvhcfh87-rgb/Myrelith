@@ -8,7 +8,11 @@ The supervisor subsequently assigned integration
 `580de54f85c877d1d746c9a5b201b1aa4ac3ef4d` so this gate includes the actual shared
 Animation workspace and its focus layout. Draft `d7efdde` was preserved first;
 the conflict-free sync is `5bca9bf8041f6dd25d64de2acd87046e13000f4d`. Production
-source matches that assigned integration. This checkpoint changes no product code.
+source originally matched that assigned integration. The later title scroll-padding
+correction is tested at `4727236`; its partial result and closed-select Home failure
+are preserved at `a2bc52c` ([second failure](keyboard-second-failure.md)). This
+revision changes only the native fallback keyboard sequence and its observations;
+all product code matches tested `4727236`.
 
 ## Fixed execution and source ownership
 
@@ -28,7 +32,8 @@ source matches that assigned integration. This checkpoint changes no product cod
 - `verify-keyboard-source.mjs`: requires the exact worker directory/branch and a
   clean tree; freezes all tracked file hashes and HEAD. Production, dependencies,
   other tests and accepted G3/first-paint harness files must match the assigned
-  integration except the explicitly named new keyboard evidence/unit-test files.
+  tested `4727236` checkpoint; only `keyboard.gate.ts` may differ under source/test
+  paths. Earlier CSS and pure regression are now frozen with all product code.
 
 The later grant uses a new external `/private/tmp/issue200-*` artifact directory,
 `ISSUE200_KEYBOARD_ARTIFACTS` and `ISSUE200_KEYBOARD_MANIFEST`. The committed
@@ -73,9 +78,13 @@ The shared command's geometry is retained separately for supervisor disposition.
 Safe guides change no project/history. Both 90%/95% rectangles match observed
 canvas-relative geometry to 0.1 CSS px precision, use dashed strokes and remain
 hidden from accessibility reading order; their checkbox label is captured.
-Keyboard Home selects No fallback. A native select popup (Space, Home, two
-ArrowDown presses, Enter) restores serif; the popup must produce one accepted
-selection edit, not intermediate committed choices. Missing and restored status
+The actual enabled option order is retained and checked: No fallback, sans-serif,
+serif, monospace, cursive, fantasy, system-ui. Starting at serif, Space opens the
+native popup, two ArrowUp presses navigate to No fallback and Enter commits.
+Space, two ArrowDown presses and Enter restore serif. Read-only `:open` predicates
+check opening/closing; exact wire and full history must remain unchanged after
+navigation before each Enter. Each accepted selection still creates exactly one
+edit. DOM value and original literal fallback assertions both apply. Missing and restored status
 text, literal family, exact history increments and restored project wire are checked.
 This is status/keyboard evidence; it repeats no glyph or export matrix.
 

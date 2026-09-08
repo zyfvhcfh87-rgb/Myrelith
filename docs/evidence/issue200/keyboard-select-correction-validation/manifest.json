@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "testedProductHead": "47272362c6d65a1f0a75d4527642d0c8e3de6816",
+  "failureEvidenceHead": "a2bc52cc4e39e824c55eb878e62ebe53e4af61b7",
+  "checks": {
+    "focusedFiles": 2,
+    "focusedTests": 16,
+    "focusedDurationSeconds": 1.29,
+    "canonicalRunnerChecks": 17,
+    "diagnosticTypecheckExit": 0,
+    "lintExit": 0,
+    "guardSyntaxExit": 0,
+    "discoveredCases": 4,
+    "earlierControlsAndPredicatesByteExact": true,
+    "dialogsCleanupCasesByteExact": true,
+    "originalFallbackOutcomeAssertionsRetained": true,
+    "revisedNativeRun": false,
+    "additionalProductionBuild": false
+  },
+  "correctionSources": [
+    {
+      "path": "tests/diagnostics/issue200/keyboard.gate.ts",
+      "bytes": 25955,
+      "sha256": "83d16414c5cb94def0931dcdb8b92fe00e61b1a8e40c13b01f951a4974d6b067"
+    },
+    {
+      "path": "docs/evidence/issue200/verify-keyboard-source.mjs",
+      "bytes": 2382,
+      "sha256": "112158f9871331cdfa6ab4e02184567b960883e75bcea0023b69c307e8f6c31a"
+    },
+    {
+      "path": "docs/evidence/issue200/keyboard-executable-protocol.md",
+      "bytes": 8941,
+      "sha256": "fb50b3216597483907e8663baa7d6a55908a827cc182d5aaab27833bc5b0246b"
+    },
+    {
+      "path": "docs/evidence/issue200/keyboard-select-correction.md",
+      "bytes": 3352,
+      "sha256": "f6912965d7aa6f40d9cc3209d925c79320e2b7db0c05eb4e72f4f80ed7c64273"
+    }
+  ],
+  "frozenSourceComparisons": [
+    {
+      "path": "src/ui/TitleInspector.tsx",
+      "bytes": 13224,
+      "sha256": "5258bdc2a02ab1b13f901de85dc9bafd785a83ea3c1cff13b236b53878c1b002"
+    },
+    {
+      "path": "src/ui/titleEditor.css",
+      "bytes": 2530,
+      "sha256": "07f0a2b6fde019dc015579cafd40fa8777468c0d11de79a2f3c313dab08c6bcf"
+    },
+    {
+      "path": "src/test/titleKeyboardDiagnostic.test.ts",
+      "bytes": 3894,
+      "sha256": "3cf2f2226c227f257f8a9f2d97bfa36374adf75d416b6ceb08b5780eb778cfed"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard-client.ts",
+      "bytes": 12008,
+      "sha256": "2aceaec08e578b150a6579b70de250811bfc7d523d84922f80e15c4c6f98b994"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard-model.ts",
+      "bytes": 4603,
+      "sha256": "f58f3e4b98a9bb44f802bf74233ee352bf54f03112ee01fee01109ee48974319"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard.playwright.config.ts",
+      "bytes": 880,
+      "sha256": "de2266dc283d667db435b62b902438fa9052a48049442b6f9c328a54556045c3"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard-runner_test.py",
+      "bytes": 9814,
+      "sha256": "5dd893bed1fd02fd14cf26d3db5efc0b8909bcbf6092422804fdd801f338c351"
+    },
+    {
+      "path": "docs/evidence/issue200/run-keyboard-browser.py",
+      "bytes": 9346,
+      "sha256": "54dda8d4522ae563ce9ef0389560da9a00f5b1120deed2e824863df06830eb16"
+    },
+    {
+      "path": "playwright.issue200.config.ts",
+      "bytes": 708,
+      "sha256": "75e3e922229af6aea56db0298babe69774b6a750e765352fa8a0c456ed3fdd98"
+    }
+  ],
+  "rawLogs": [
+    {
+      "path": "/private/tmp/issue200-keyboard-select-correction-tests.log",
+      "bytes": 2092,
+      "sha256": "1cb73561a2946722459860cd17104620d2b5e6c1f597aa6c848a2a229f962dc0"
+    },
+    {
+      "path": "/private/tmp/issue200-keyboard-select-correction-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/private/tmp/issue200-keyboard-select-correction-lint.log",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "/private/tmp/issue200-keyboard-select-correction-discovery.log",
+      "bytes": 412,
+      "sha256": "2740be086e5930f84c371bc164a9181573d1580819f48d3405eb275793a77bb7"
+    }
+  ],
+  "rawLogArchive": {
+    "path": "docs/evidence/issue200/keyboard-select-correction-validation/raw-logs.tar.gz",
+    "bytes": 1422,
+    "sha256": "691ce04031bba1421ee4983739c281c0163f53168e564088750b102a062da301"
+  },
+  "qualifications": [
+    "Source-only checks cannot prove popup behavior in the installed Chromium.",
+    "No browser/server/encoder was launched for these checks.",
+    "Existing complete-case failures and unexecuted cases remain pending."
+  ]
+}
