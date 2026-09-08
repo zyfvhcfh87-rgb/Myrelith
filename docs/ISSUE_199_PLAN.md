@@ -1,9 +1,9 @@
 # Issue #199 — unified animation editor plan
 
-Status: Gate 0 proposal incorporating initial orchestrator review; final
-shared-contract freeze and implementation approval remain pending.
-Product implementation has not started. This document does not approve its
-own contract, schema migration, or acceptance gates.
+Status: Gate 0 review permits representation-neutral scalar/timing extraction.
+The first extraction is under validation; schema 22 and feature implementation
+remain gated on reviewed title/path adapter commits. This document does not
+approve its own contract, schema migration, or acceptance gates.
 
 Issue: <https://github.com/zyfvhcfh87-rgb/Myrelith/issues/199>
 
@@ -154,7 +154,7 @@ interface TitleAnimationTrack {
   property: string       // explicit v1 catalog; unknown names remain opaque
   keyframes: ClipAnimationKeyframe[]
 }
-// Additive ClipAnimation.titleTracks; old documents migrate to [].
+// Additive optional ClipAnimation.titleTracks; absent remains canonical for old saves.
 ```
 
 Requested v1 names from #200: `position-x`, `position-y`, `scale-x`, `scale-y`,
@@ -182,9 +182,11 @@ The shared key clipboard participates in both title and path retained-budget
 checks; separate allowances must never omit a shared payload. The general
 clipboard's 128-lane limit is intentionally below the title authoring maximum.
 
-#200 owns legacy text migration and its exact painter/layout parity, including
-its proposed move of transform/visual values into the single migrated element
-while clip opacity/effects/blend remain outside. #199 owns title scalar
+#200 owns legacy text compatibility and its exact painter/layout parity.
+Its reviewed direction retains `Clip.text` as a mutually exclusive supported
+legacy variant; title upgrade is explicit and budget-checked. An accepted
+upgrade moves transform/visual values into a single element while clip
+opacity/effects/blend remain outside. #199 owns title scalar
 evaluation and common timing/batch editing; #200 composes the resolved elements
 through the shared title renderer. Outer clip animation applicability must be
 explicit so a title cannot acquire double transforms: outer clip opacity stays
@@ -235,13 +237,28 @@ proven by #198; this editor adds no inversion claim.
 
 ### Migration and conflict ownership
 
-No final schema number is reserved here. Proposed additive timeline changes are
-crop vocabulary, `titleTracks`, #198's path collection, and any approved plugin
-parameter identity binding. The outer project format changes only if the
-orchestrator's combined contract needs one. #199 owns common animation helpers
+The orchestrator assigned #199 timeline schema **22**, followed by #200's title
+owner schema **23** and #201's caption schema **24**. Do not implement 22 until
+#200's pure title property/type adapters (without a Clip change) and #198's pure
+held-path value adapters have been committed, reviewed and shared. Scalar/timing
+extraction can proceed independently with no wire/runtime compatibility change.
+The proposed additive timeline changes are crop vocabulary, `titleTracks`,
+#198's path collection, and approved plugin parameter identity binding. The
+outer project format changes only if the orchestrator's combined contract needs
+one. #199 owns common animation helpers
 and UI; #200 owns title data/static validation; #198 owns paths. The orchestrator
 shares accepted foundation commits and consolidates ARCHITECTURE/HANDOFF/PLAN.
 All three owners must review traversal changes before their feature gates.
+
+Schema 22 must not add compulsory empty title/path arrays or `propertyVersion: 1`
+to unchanged legacy saves. Absent collections and implicit existing scalar v1
+are canonical compatibility forms; default reads may expose empty lists without
+serializing them. Preserve explicit authored metadata, including unknown data.
+Actual new tracks/future identities alone require new bytes. Keep the current
+10,000,000-character file limit. Test actual production serialization of legacy
+no-animation and scalar-animation files at 9,999,999/10,000,000 characters,
+including equal-length edits. #200's measured old-file proof does not itself
+prove the future schema 22/23 serializer.
 
 ## Portable future/plugin intent
 
@@ -249,7 +266,8 @@ Known built-ins remain keyed by effect type/version and parameter name. A
 future title/path property must survive bounds-only parsing, copying, history,
 split/trim and save/reopen without being treated as a current supported value.
 Proposed clip-scalar wire extension: keep the existing `tracks` collection,
-add `propertyVersion` (v1 for migrated existing tracks), and permit a bounded
+add optional `propertyVersion` (absence means existing v1 without adding bytes),
+and permit a bounded
 nonempty property string in portable parsing. Unknown names/positive versions
 retain ordinary finite scalar keys within the same signed-frame/value/easing
 bounds; there is at most one lane per semantic `property`, so a future
@@ -364,6 +382,8 @@ precedes Gate 0 acceptance.
 1. **Gate 0 — contract and plan.** Commit this proposal and baseline evidence.
    Orchestrator decides shared schema order, title/path identities, crop proof
    and plugin compatibility treatment; request concrete amendments if needed.
+   Initial review has authorized the independent scalar/timing extraction;
+   see [its focused evidence](evidence/issue199/foundation-scalar.md).
 2. **Gate 1 — canonical foundation.** Implement agreed property/typed timing
    traversal, additive migration, bounds and scalar crop/title evaluation.
    Cover unknown intent and every lifecycle operation. Share the accepted
@@ -410,7 +430,7 @@ unrelated. Retain failing attempts and environmental qualification honestly.
 1. Accept/amend the scope, typed scalar/path adapter, atomic collision and
    clipboard time policies, and proposed UI/command limits.
 2. Reconcile this proposal with the committed #198/#200 plans and freeze their
-   exact property/payload/budget tables and initial migration order.
+   exact property/payload/budget tables and assigned 22/23/24 migration order.
 3. Accept/refine the bounded crop interval proof and its failure behavior.
 4. Decide plugin parameter identity and legacy unbound-track treatment before
    claiming that package changes cannot reinterpret existing units.

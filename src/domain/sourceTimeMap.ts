@@ -20,7 +20,8 @@ import type {
   SourceTimeSpeedPoint,
   TimeRange,
 } from './schema'
-import { MAX_KEYFRAME_FRAME } from './clipAnimation'
+import { MAX_KEYFRAME_FRAME } from './scalarAnimation'
+import { mapAnimationTrackKeyframes } from './animationTiming'
 
 export const SOURCE_TIME_TICKS_PER_FRAME = 1_000_000 as const
 export const MIN_SOURCE_TIME_RATE: Readonly<SourceTimeRate> = Object.freeze({
@@ -941,23 +942,11 @@ export function shiftClipAnimationSourceTimeIntent(
   }
   const shiftTracks = <T extends ClipAnimation['tracks'][number] | NonNullable<ClipAnimation['effectTracks']>[number]>(
     sourceTracks: readonly T[],
-  ): T[] | null => {
-    const tracks: T[] = []
-    for (const track of sourceTracks) {
-    const keyframes: typeof track.keyframes = []
-    for (const keyframe of track.keyframes) {
-      const sourceTimeTicks = keyframe.sourceTimeTicks! + sourceDeltaTicks
-      if (!Number.isSafeInteger(sourceTimeTicks)) return null
-      keyframes.push({
-        ...keyframe,
-        sourceTimeTicks,
-        easing: { ...keyframe.easing },
-      })
-    }
-      tracks.push({ ...track, keyframes })
-    }
-    return tracks
-  }
+  ): T[] | null => mapAnimationTrackKeyframes(sourceTracks, (keyframe) => {
+    const sourceTimeTicks = keyframe.sourceTimeTicks! + sourceDeltaTicks
+    if (!Number.isSafeInteger(sourceTimeTicks)) return null
+    return { ...keyframe, sourceTimeTicks, easing: { ...keyframe.easing } }
+  })
   const tracks = shiftTracks(withIntent.tracks)
   const effectTracks = shiftTracks(withIntent.effectTracks ?? [])
   return tracks && effectTracks ? { tracks, effectTracks } : null
@@ -974,44 +963,24 @@ export function retimeClipAnimation(
   }
   const retimeTracks = <T extends ClipAnimation['tracks'][number] | NonNullable<ClipAnimation['effectTracks']>[number]>(
     sourceTracks: readonly T[],
-  ): T[] | null => {
-    const tracks: T[] = []
-    for (const track of sourceTracks) {
-    const remapped = new Map<number, typeof track.keyframes[number]>()
-    for (const keyframe of track.keyframes) {
-      let sourceTicks: number
-      try {
-        sourceTicks = keyframe.sourceTimeTicks
-          ?? sourceTicksAtTimelineOffset(oldMap, keyframe.frame)
-      } catch {
-        return null
-      }
-      if (!Number.isSafeInteger(sourceTicks)) return null
-      const frame = timelineOffsetAtSourceTicks(
-        newMap,
-        sourceTicks,
-        -MAX_KEYFRAME_FRAME,
-        MAX_KEYFRAME_FRAME,
-      )
-      if (frame === null) return null
-      // Integer-frame animation cannot represent two independently authored
-      // source instants on one frame. Reject the whole retime rather than
-      // silently discarding either key; the caller preserves the document.
-      if (remapped.has(frame)) return null
-      remapped.set(frame, {
-        ...keyframe,
-        frame,
-        sourceTimeTicks: sourceTicks,
-        easing: { ...keyframe.easing },
-      })
+  ): T[] | null => mapAnimationTrackKeyframes(sourceTracks, (keyframe) => {
+    let sourceTicks: number
+    try {
+      sourceTicks = keyframe.sourceTimeTicks
+        ?? sourceTicksAtTimelineOffset(oldMap, keyframe.frame)
+    } catch {
+      return null
     }
-      tracks.push({
-      ...track,
-      keyframes: [...remapped.values()].sort((left, right) => left.frame - right.frame),
-    })
-    }
-    return tracks
-  }
+    if (!Number.isSafeInteger(sourceTicks)) return null
+    const frame = timelineOffsetAtSourceTicks(
+      newMap,
+      sourceTicks,
+      -MAX_KEYFRAME_FRAME,
+      MAX_KEYFRAME_FRAME,
+    )
+    if (frame === null) return null
+    return { ...keyframe, frame, sourceTimeTicks: sourceTicks, easing: { ...keyframe.easing } }
+  }, 'sorted-unique')
   const tracks = retimeTracks(animation.tracks)
   const effectTracks = retimeTracks(animation.effectTracks ?? [])
   return tracks && effectTracks ? { tracks, effectTracks } : null
