@@ -361,9 +361,19 @@ of Gate 3 under explicit authorization. That earlier gate added only domain
 modules/tests; shared schema/traversal, pixel stages and UI were unchanged then.
 
 Current continuation: static/open-path authoring and the resize-release correction
-are accepted through integration `6888fd8`. The held-path authoring source gate
-consumes the reviewed shared schema/timing/resolution/admission contracts; see
-[its current evidence and pending browser request](evidence/issue198/held-path-authoring.md).
+are accepted through integration `6888fd8`. Held-path product `f923315`, test
+correction `13f0cfe` and evidence `1254007` passed all five browser flows and
+were accepted through integration `f091560`; see
+[held-path evidence](evidence/issue198/held-path-authoring.md).
 The narrow [tracking contract](evidence/issue198/tracking-attachment-contract.md)
-is accepted for later separate implementation; no tracking code is included in
-the held-path gate.
+is accepted and its separate pure planning/operation slice is committed as
+`9c3cb54`; app review/preview implementation is now tested, with no Inspector
+activation yet. See
+[tracking implementation evidence](evidence/issue198/tracking-attachment.md).
+The shared schema 23 checkpoint `4340f967` is now merged with the canonical title
+guard and all preview owners preserved. Inspector authoring and tracking browser
+acceptance remain open. No tracking code was included in the held-path gate.
+Parent review found three app defects on `8d22cbc`; the corrected project-budget,
+post-cleanup playback and preview-priority boundaries pass the unchanged parent
+reproducer and 253 focused tests. Inspector work is preserved outside production
+source pending this corrected app gate's acceptance.

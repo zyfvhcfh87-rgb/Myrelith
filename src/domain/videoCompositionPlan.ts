@@ -1,3 +1,4 @@
+import { createTitleCompositionPlanner, titleCompositionBudgetError, type TitleComposition } from './titleComposition'
 import { snapshotVideoBusStack } from './videoBusStage'
 /** Pure, explicit visual composition planning for preview and export. */
 
@@ -100,6 +101,17 @@ export interface TextOverlayPlanItem extends VideoBusTrackScope {
   effectStagePlan?: VideoEffectStagePlan
 }
 
+export interface TitleCompositionPlanItem extends VideoBusTrackScope {
+  readonly kind: 'title'
+  readonly trackId: TrackId
+  readonly frame: number
+  readonly clip: Clip
+  readonly opacity: number
+  readonly blendMode: BlendModeResolution
+  readonly title: TitleComposition
+  readonly effectStagePlan?: VideoEffectStagePlan
+}
+
 /** A full-frame post-composite operation at one exact track boundary. */
 export interface AdjustmentCompositionItem {
   kind: 'adjustment'
@@ -145,6 +157,7 @@ export type VideoCompositionItem =
   | VideoBusCompositionItem
   | OrdinaryVideoPlanItem
   | TextOverlayPlanItem
+  | TitleCompositionPlanItem
   | AdjustmentCompositionItem
   | CaptionPlanItem
   | SequenceBackgroundCompositionItem
@@ -171,15 +184,20 @@ function ordinaryItem(
   clip: Clip | null,
   frame: number,
   effectStagePlanner: VideoEffectStagePlanner,
-): OrdinaryVideoPlanItem | TextOverlayPlanItem | null {
+  titlePlanner: ReturnType<typeof createTitleCompositionPlanner>,
+): OrdinaryVideoPlanItem | TextOverlayPlanItem | TitleCompositionPlanItem | null {
   if (!clip) return null
-  // The owner gate admits title data without inventing a media request. Ordered
-  // title painting is supplied by the separately reviewed rendering gate.
-  if (clip.title !== undefined) return null
   const resolvedClip = resolveClipAnimationAtFrame(clip, frame)
   const opacity = clipOpacity(resolvedClip)
   if (opacity <= 0) return null
   const effectStagePlan = effectStagePlanner.planClip(resolvedClip, frame)
+  if (resolvedClip.title !== undefined) {
+    return { kind: 'title', trackId, frame, clip: resolvedClip, opacity,
+      title: titlePlanner.plan(resolvedClip, frame),
+      blendMode: resolveBlendMode(clipBlendModeIntent(resolvedClip)),
+      ...(effectStagePlan === null ? {} : { effectStagePlan }),
+    }
+  }
   if (resolvedClip.text !== undefined) {
     return {
       kind: 'text',
@@ -245,6 +263,7 @@ export function createVideoCompositionPlanner(
   pluginContributions?: PluginVideoEffectContributionSnapshot,
 ): VideoCompositionPlanner {
   const effectStagePlanner = createVideoEffectStagePlanner(pluginContributions)
+  const titlePlanner = createTitleCompositionPlanner()
   const tracks: Array<{
     readonly id: TrackId
     readonly effects: readonly EffectDescriptor[]
@@ -326,6 +345,7 @@ export function createVideoCompositionPlanner(
           track.clips.activeAt(frame),
           frame,
           effectStagePlanner,
+          titlePlanner,
         )
         if (ordinary) items.push(scoped(ordinary))
       }
@@ -340,7 +360,10 @@ export function createVideoCompositionPlanner(
         })
       }
       if (master.length) items.push({ kind: 'video-bus', target: 'master', trackId: '', sequenceId: doc.id, frame, instancePath: [], effects: master })
-      return { frame, items }
+      const plan = { frame, items }
+      const titleError = titleCompositionBudgetError(plan)
+      if (titleError) throw new RangeError(titleError)
+      return plan
     },
   }
 }
@@ -373,6 +396,7 @@ export function videoCompositionRequests(
     }
     if (
       item.kind === 'text'
+      || item.kind === 'title'
       || item.kind === 'video-bus'
       || item.kind === 'caption'
       || item.kind === 'adjustment'

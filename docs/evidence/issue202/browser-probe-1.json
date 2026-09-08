@@ -1,0 +1,624 @@
+{
+  "kind": "issue202-bounded-api-probe",
+  "collectedAt": "2026-09-08T09:07:18.437Z",
+  "browserVersion": "151.0.7922.34",
+  "headless": true,
+  "flags": [
+    "--mute-audio"
+  ],
+  "scriptSha256": "60669c99794d3c42364da199a44d79000651ba55d983bad4e223d987c820b70a",
+  "hostEvidence": "orchestrator-supplied Mac17,6 / Apple M5 Max / 64 GiB; macOS 26.6.2",
+  "qualification": "Tiny raw-frame/canvas readback and configuration probes only. No encode/decode, timings, resident/native/GPU memory measurement or physical monitor qualification.",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+  "mediaQueries": {
+    "dynamicRangeHigh": false,
+    "colorGamutP3": false
+  },
+  "rows": [
+    {
+      "id": "raw-I420P10",
+      "status": "returned",
+      "requestedFormat": "I420P10",
+      "actualFormat": "I420P10",
+      "colorSpace": {
+        "fullRange": true,
+        "matrix": "bt2020-ncl",
+        "primaries": "bt2020",
+        "transfer": "pq"
+      },
+      "allocationBytes": 12,
+      "layout": [
+        {
+          "offset": 0,
+          "stride": 4
+        },
+        {
+          "offset": 8,
+          "stride": 2
+        },
+        {
+          "offset": 10,
+          "stride": 2
+        }
+      ],
+      "lumaMismatches": 0,
+      "chromaMismatches": 0,
+      "uniqueLumaValues": 4,
+      "exactRawCopy": true
+    },
+    {
+      "id": "raw-I444P10",
+      "status": "returned",
+      "requestedFormat": "I444P10",
+      "actualFormat": "I444P10",
+      "colorSpace": {
+        "fullRange": true,
+        "matrix": "bt2020-ncl",
+        "primaries": "bt2020",
+        "transfer": "pq"
+      },
+      "allocationBytes": 12288,
+      "layout": [
+        {
+          "offset": 0,
+          "stride": 2048
+        },
+        {
+          "offset": 4096,
+          "stride": 2048
+        },
+        {
+          "offset": 8192,
+          "stride": 2048
+        }
+      ],
+      "lumaMismatches": 0,
+      "chromaMismatches": 0,
+      "uniqueLumaValues": 1024,
+      "exactRawCopy": true
+    },
+    {
+      "id": "canvas-float16-srgb",
+      "status": "returned",
+      "requested": {
+        "colorSpace": "srgb",
+        "colorType": "float16"
+      },
+      "attributes": {
+        "alpha": true,
+        "colorSpace": "srgb",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "readArray": "Float16Array",
+      "uniqueRedValues": 1024,
+      "sample": [
+        0,
+        -0.125,
+        4,
+        1,
+        0.0009775161743164062,
+        -0.125,
+        4,
+        1
+      ],
+      "drawSample": [
+        0,
+        -0.125,
+        4,
+        1,
+        0.0009775161743164062,
+        -0.125,
+        4,
+        1
+      ],
+      "frameHop": {
+        "format": null,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "rgb",
+          "primaries": "bt709",
+          "transfer": "iec61966-2-1"
+        },
+        "allocationBytes": 8192
+      }
+    },
+    {
+      "id": "canvas-float16-display-p3",
+      "status": "returned",
+      "requested": {
+        "colorSpace": "display-p3",
+        "colorType": "float16"
+      },
+      "attributes": {
+        "alpha": true,
+        "colorSpace": "display-p3",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "readArray": "Float16Array",
+      "uniqueRedValues": 1024,
+      "sample": [
+        0,
+        -0.125,
+        4,
+        1,
+        0.0009775161743164062,
+        -0.125,
+        4,
+        1
+      ],
+      "drawSample": [
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1
+      ],
+      "frameHop": {
+        "format": null,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "rgb",
+          "primaries": "smpte432",
+          "transfer": "iec61966-2-1"
+        },
+        "allocationBytes": 8192
+      }
+    },
+    {
+      "id": "canvas-unorm8-negative-control",
+      "status": "returned",
+      "attributes": {
+        "alpha": true,
+        "colorSpace": "srgb",
+        "colorType": "unorm8",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "uniqueRedValues": 256
+    },
+    {
+      "id": "webgl2-rgba16f-readback",
+      "status": "returned",
+      "framebufferStatus": 36053,
+      "error": 0,
+      "pixels": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        -0.125,
+        0.5,
+        4,
+        1,
+        -0.125,
+        0.5,
+        4,
+        1,
+        -0.125,
+        0.5,
+        4,
+        1
+      ],
+      "renderTargetBytes": 32,
+      "readbackBytes": 64,
+      "floatBlendExtension": true,
+      "exactKnownPixel": true
+    },
+    {
+      "id": "webgpu-extended-config",
+      "status": "rejected",
+      "error": "Error: no-adapter"
+    },
+    {
+      "id": "encoder-config-avc1.6e0028-no-preference",
+      "status": "returned",
+      "requested": {
+        "codec": "avc1.6e0028",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "no-preference"
+      },
+      "supported": false,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "avc1.6e0028",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "no-preference",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "encoder-config-avc1.6e0028-prefer-hardware",
+      "status": "returned",
+      "requested": {
+        "codec": "avc1.6e0028",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "prefer-hardware"
+      },
+      "supported": false,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "avc1.6e0028",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "prefer-hardware",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "encoder-config-avc1.6e0028-prefer-software",
+      "status": "returned",
+      "requested": {
+        "codec": "avc1.6e0028",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "prefer-software"
+      },
+      "supported": false,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "avc1.6e0028",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "prefer-software",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "decoder-config-avc1.6e0028",
+      "status": "returned",
+      "requested": {
+        "codec": "avc1.6e0028",
+        "codedWidth": 1920,
+        "codedHeight": 1080
+      },
+      "supported": true,
+      "returnedConfig": {
+        "codec": "avc1.6e0028",
+        "codedHeight": 1080,
+        "codedWidth": 1920,
+        "flip": false,
+        "hardwareAcceleration": "no-preference",
+        "rotation": 0
+      },
+      "decodedFrames": 0
+    },
+    {
+      "id": "encoder-config-hvc1.2.4.L120.B0-no-preference",
+      "status": "returned",
+      "requested": {
+        "codec": "hvc1.2.4.L120.B0",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "no-preference"
+      },
+      "supported": false,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "hvc1.2.4.L120.B0",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "no-preference",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "encoder-config-hvc1.2.4.L120.B0-prefer-hardware",
+      "status": "returned",
+      "requested": {
+        "codec": "hvc1.2.4.L120.B0",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "prefer-hardware"
+      },
+      "supported": false,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "hvc1.2.4.L120.B0",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "prefer-hardware",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "encoder-config-hvc1.2.4.L120.B0-prefer-software",
+      "status": "returned",
+      "requested": {
+        "codec": "hvc1.2.4.L120.B0",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "prefer-software"
+      },
+      "supported": false,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "hvc1.2.4.L120.B0",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "prefer-software",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "decoder-config-hvc1.2.4.L120.B0",
+      "status": "returned",
+      "requested": {
+        "codec": "hvc1.2.4.L120.B0",
+        "codedWidth": 1920,
+        "codedHeight": 1080
+      },
+      "supported": false,
+      "returnedConfig": {
+        "codec": "hvc1.2.4.L120.B0",
+        "codedHeight": 1080,
+        "codedWidth": 1920,
+        "flip": false,
+        "hardwareAcceleration": "no-preference",
+        "rotation": 0
+      },
+      "decodedFrames": 0
+    },
+    {
+      "id": "encoder-config-vp09.02.40.10.01.09.16.09.00-no-preference",
+      "status": "returned",
+      "requested": {
+        "codec": "vp09.02.40.10.01.09.16.09.00",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "no-preference"
+      },
+      "supported": true,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "vp09.02.40.10.01.09.16.09.00",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "no-preference",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "encoder-config-vp09.02.40.10.01.09.16.09.00-prefer-hardware",
+      "status": "returned",
+      "requested": {
+        "codec": "vp09.02.40.10.01.09.16.09.00",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "prefer-hardware"
+      },
+      "supported": false,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "vp09.02.40.10.01.09.16.09.00",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "prefer-hardware",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "encoder-config-vp09.02.40.10.01.09.16.09.00-prefer-software",
+      "status": "returned",
+      "requested": {
+        "codec": "vp09.02.40.10.01.09.16.09.00",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "prefer-software"
+      },
+      "supported": true,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "vp09.02.40.10.01.09.16.09.00",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "prefer-software",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "decoder-config-vp09.02.40.10.01.09.16.09.00",
+      "status": "returned",
+      "requested": {
+        "codec": "vp09.02.40.10.01.09.16.09.00",
+        "codedWidth": 1920,
+        "codedHeight": 1080
+      },
+      "supported": true,
+      "returnedConfig": {
+        "codec": "vp09.02.40.10.01.09.16.09.00",
+        "codedHeight": 1080,
+        "codedWidth": 1920,
+        "flip": false,
+        "hardwareAcceleration": "no-preference",
+        "rotation": 0
+      },
+      "decodedFrames": 0
+    },
+    {
+      "id": "encoder-config-av01.0.08M.10-no-preference",
+      "status": "returned",
+      "requested": {
+        "codec": "av01.0.08M.10",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "no-preference"
+      },
+      "supported": false,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "av01.0.08M.10",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "no-preference",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "encoder-config-av01.0.08M.10-prefer-hardware",
+      "status": "returned",
+      "requested": {
+        "codec": "av01.0.08M.10",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "prefer-hardware"
+      },
+      "supported": false,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "av01.0.08M.10",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "prefer-hardware",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "encoder-config-av01.0.08M.10-prefer-software",
+      "status": "returned",
+      "requested": {
+        "codec": "av01.0.08M.10",
+        "width": 1920,
+        "height": 1080,
+        "framerate": 30,
+        "bitrate": 8000000,
+        "hardwareAcceleration": "prefer-software"
+      },
+      "supported": false,
+      "returnedConfig": {
+        "alpha": "discard",
+        "bitrate": 8000000,
+        "bitrateMode": "variable",
+        "codec": "av01.0.08M.10",
+        "contentHint": "",
+        "framerate": 30,
+        "hardwareAcceleration": "prefer-software",
+        "height": 1080,
+        "latencyMode": "quality",
+        "width": 1920
+      },
+      "encodedFrames": 0
+    },
+    {
+      "id": "decoder-config-av01.0.08M.10",
+      "status": "returned",
+      "requested": {
+        "codec": "av01.0.08M.10",
+        "codedWidth": 1920,
+        "codedHeight": 1080
+      },
+      "supported": true,
+      "returnedConfig": {
+        "codec": "av01.0.08M.10",
+        "codedHeight": 1080,
+        "codedWidth": 1920,
+        "flip": false,
+        "hardwareAcceleration": "no-preference",
+        "rotation": 0
+      },
+      "decodedFrames": 0
+    }
+  ],
+  "owners": {
+    "framesOpened": 4,
+    "framesClosed": 4,
+    "devicesOpened": 0,
+    "devicesDestroyed": 0
+  },
+  "consoleErrors": []
+}

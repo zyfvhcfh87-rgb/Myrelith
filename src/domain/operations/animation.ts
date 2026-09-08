@@ -14,6 +14,7 @@ import {
   upsertEffectAnimationKeyframe,
 } from '../clipAnimation';
 import { effectAnimationParameterSpec } from '../effectStack';
+import { titleEffectAnimationParameterSpec } from '../titleEffectAnimation';
 import { clipSourceTimeMap, sourceTicksAtTimelineOffset } from '../sourceTimeMap';
 import { locateClip, reject, withTrack, type ClipLocation } from './operationInternals';
 
@@ -207,14 +208,18 @@ function effectAnimationEditLocation(
   parameter: string,
   operation: string,
 ): { loc: ClipLocation; effect: Effect } | null {
-  const loc = animationEditLocation(doc, clipId, operation)
+  // Reuse the video/lock preflight without admitting any geometric property.
+  // The exact title effect eligibility is checked separately below.
+  const loc = animationEditLocation(doc, clipId, operation, 'opacity')
   if (!loc) return null
   const effect = loc.clip.effects.find((candidate) => candidate.id === effectId)
   if (!effect) {
     reject(doc, operation, `effect ${effectId} not found on clip ${clipId}`)
     return null
   }
-  if (!effectAnimationParameterSpec(effect, parameter)) {
+  const spec = loc.clip.title === undefined ? effectAnimationParameterSpec(effect, parameter)
+    : titleEffectAnimationParameterSpec(loc.clip, effect, parameter)
+  if (!spec) {
     reject(doc, operation, `${effect.type}.${parameter} is not keyframeable`)
     return null
   }

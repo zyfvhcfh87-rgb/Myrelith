@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { CAPTION_BATCH_LIMITS, captionReadingSpeed, planCaptionBatch as planBatch, type CaptionBatchOperation, type CaptionBatchScope } from './captionBatch'
 import { CAPTION_LIMITS, createCaptionTrack } from './captions'
 import type { CaptionItem, TimelineDoc } from './schema'
 
 const cue = (id: string, startFrame = 0, durationFrames = 10, text = id): CaptionItem => ({ id, range: { startFrame, durationFrames }, text })
 function doc(items: CaptionItem[] = [cue('a', 0, 10, 'first'), cue('b', 10, 10, 'second'), cue('c', 20, 10, 'third')]): TimelineDoc {
-  return { schemaVersion: 21, id: 'doc', name: 'Batch', frameRate: { num: 25, den: 1 }, width: 1920, height: 1080,
+  return { schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION, id: 'doc', name: 'Batch', frameRate: { num: 25, den: 1 }, width: 1920, height: 1080,
     audioSampleRate: 48000, tracks: [], markers: [], captionTracks: [{ ...createCaptionTrack('captions', 'Captions'), items }] }
 }
 function freeze<T>(value: T): T {

@@ -1,3 +1,4 @@
+import { titleCompositionError } from '../domain/titleComposition'
 import { ColorGradingRuntime, ColorGradingCancelledError, type ColorGradingFrame } from './colorGradingRuntime'
 import type { PortableColorLut } from '../domain/colorLutCatalog'
 /**
@@ -234,6 +235,11 @@ async function compositeAndCloseLease(
   try {
     if (lease.plan.frame !== frame) {
       throw new Error('Export media lease returned a plan for the wrong frame')
+    }
+    for (const item of lease.plan.items) {
+      if (item.kind !== 'title') continue
+      const error = titleCompositionError(item.title)
+      if (error) throw new Error(`Title cannot be exported: ${item.clip.name}: ${error}`)
     }
     const result = await composite(
       doc,
