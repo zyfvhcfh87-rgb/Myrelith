@@ -1,7 +1,8 @@
 # Issue #200 — reusable titles and animated text
 
-Status: **G1a and corrected budgets approved; schema22 accepted at f9945c4;
-G1b title-owner implementation awaiting review. Stop before G2/G3**.
+Status: **G1b accepted; shared schema23/animation integration accepted at
+4340f9675ad56aa320f2498cf107fd55f8819568. G2 rendering/parity authorized and in
+progress. G3 authoring/templates remain gated. Browser slot not yet granted.**
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
 issue last updated 2026-08-25T21:36:47Z. [Issue #200](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/200).
@@ -20,7 +21,9 @@ schema22 gates were accepted; this branch then fast-forwarded to exact
 `f9945c44f75a4818bc939d8b6e63c09db353e669` before the authorized G1b work.
 See [schema23 ownership evidence](evidence/issue200/schema23-owners.md), including
 remaining rendering, template-capture and authoring gates. Product acceptance
-remains open; stop for G1b review before G2/G3.
+remains open. The supervisor accepted G1b and released G2 after the shared
+integration. See [G2 rendering protocol](evidence/issue200/rendering-protocol.md)
+for current scope, compatibility decisions and unrun browser acceptance.
 
 ## Proposed outcome and boundaries
 

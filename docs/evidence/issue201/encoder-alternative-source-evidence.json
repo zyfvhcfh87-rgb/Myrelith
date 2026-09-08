@@ -1,0 +1,165 @@
+{
+  "checkedAt": "2026-09-08",
+  "scope": "Read-only published metadata, license history and bytes; no runtime/model execution or deployment. API snapshots contain mutable metadata, while blob URLs and digests pin file contents.",
+  "sources": [
+    {
+      "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/ce70c25689c3694faf5ec8206517cd53f0cfb03f/README.md",
+      "path": "ce70c256-README.md",
+      "bytes": 501,
+      "sha256": "a48ee7058760c24866e78dbed2f5fc06c1d476680c5dd5c337e22cb254c5eb5e"
+    },
+    {
+      "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/ce70c25689c3694faf5ec8206517cd53f0cfb03f/config.json",
+      "path": "ce70c256-config.json",
+      "bytes": 2215,
+      "sha256": "a3d683c0d60555983502aa9cbd01f8ac92a98179ba4bf65472d01365aab2867e"
+    },
+    {
+      "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/ce70c25689c3694faf5ec8206517cd53f0cfb03f/generation_config.json",
+      "path": "ce70c256-generation_config.json",
+      "bytes": 3575,
+      "sha256": "080f445d23eb2184834f5a2bb81b48aa2fe8443a934823ba34487b5c6c096374"
+    },
+    {
+      "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/ce70c25689c3694faf5ec8206517cd53f0cfb03f/preprocessor_config.json",
+      "path": "ce70c256-preprocessor_config.json",
+      "bytes": 339,
+      "sha256": "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d"
+    },
+    {
+      "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/ce70c25689c3694faf5ec8206517cd53f0cfb03f/tokenizer_config.json",
+      "path": "ce70c256-tokenizer_config.json",
+      "bytes": 835,
+      "sha256": "e082c1ad251541bf277967a703252cddd4bb37a71a43737e03d050c22ec08238"
+    },
+    {
+      "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/README.md",
+      "path": "5332fcc3-README.md",
+      "bytes": 1160,
+      "sha256": "cdd395427d195f122aee69c00e34183f2fadd8bc217aef35ca7c43395b96d29d"
+    },
+    {
+      "url": "https://huggingface.co/openai/whisper-tiny/resolve/ed50ab0ea2fc43b928969fd70d5fe21eefdd350f/README.md",
+      "path": "openai-2023-05-README.md",
+      "bytes": 19787,
+      "sha256": "57a3bbbbf1e79369e4d1ced790812a1723b43a256c1b43fc70cc2f3339ae9881"
+    },
+    {
+      "url": "https://huggingface.co/api/models/openai/whisper-tiny/revision/ed50ab0ea2fc43b928969fd70d5fe21eefdd350f?blobs=true",
+      "path": "openai-2023-05-api.json",
+      "bytes": 9883,
+      "sha256": "1075a35623c2caf487b3af88de7d451b90abef3548bf0c94acf2cbe0cc58e4ef"
+    },
+    {
+      "url": "https://huggingface.co/api/models/Xenova/whisper-tiny/revision/5332fcc35e32a33b86612b9a57a89be7906102b1?blobs=true",
+      "path": "xenova-current-api.json",
+      "bytes": 11504,
+      "sha256": "3627617fa78c8e8d6b7620265fef2c387942f75a66dc529a0a4da7d1408fbe79"
+    },
+    {
+      "url": "https://huggingface.co/api/models/Xenova/whisper-tiny/revision/ce70c25689c3694faf5ec8206517cd53f0cfb03f?blobs=true",
+      "path": "ce70c25689c3694faf5ec8206517cd53f0cfb03f-api.json",
+      "bytes": 6122,
+      "sha256": "e328104c72812d30d5ebb1c2ca1c5de3f2ab893b1ceab29a69363504b09458da"
+    },
+    {
+      "url": "https://huggingface.co/api/models/Xenova/whisper-tiny/commits/main",
+      "path": "xenova-commits.json",
+      "bytes": 5810,
+      "sha256": "80ac5937b03373693127b37a3aa2bd5ef5087acc25075374fc76796d2e3402b5"
+    },
+    {
+      "url": "https://huggingface.co/api/models/openai/whisper-tiny/commits/main",
+      "path": "openai-commits.json",
+      "bytes": 17067,
+      "sha256": "5e4a5bd27501894bee4ef44f427bfd625cc8ceafdedd205a731bcca16a6dd297"
+    },
+    {
+      "url": "https://huggingface.co/api/models/onnx-community/whisper-tiny?blobs=true",
+      "path": "whisper-tiny-api.json",
+      "bytes": 9377,
+      "sha256": "a9f3ea89a0bd4f08214804133142127d9dcc4d13585fbb2bdcd1c7d5a2cf2de4"
+    },
+    {
+      "url": "https://huggingface.co/api/models/onnx-community/whisper-tiny-ONNX?blobs=true",
+      "path": "whisper-tiny-ONNX-api.json",
+      "bytes": 9915,
+      "sha256": "1607a8a0014fa68a8581e79f26736188039d6b6f8335fae690e11463fa0b2179"
+    }
+  ],
+  "historicalCardLicenseField": null,
+  "currentCardLicenseField": "apache-2.0",
+  "originalOpenaiCardBeforeEncoderExport": {
+    "revision": "ed50ab0ea2fc43b928969fd70d5fe21eefdd350f",
+    "commitDate": "2023-05-05T14:20:57.000Z",
+    "licenseField": "apache-2.0"
+  },
+  "configDifferencesByKey": {
+    "config.json": [
+      "median_filter_width",
+      "transformers_version"
+    ],
+    "generation_config.json": [
+      "transformers_version"
+    ],
+    "preprocessor_config.json": [],
+    "tokenizer_config.json": [
+      "added_tokens_decoder",
+      "additional_special_tokens",
+      "bos_token",
+      "eos_token",
+      "pad_token",
+      "trust_remote_code",
+      "unk_token"
+    ]
+  },
+  "publishedHistoricalFiles": [
+    {
+      "rfilename": "config.json",
+      "size": 2215,
+      "blobId": "1444cea6cce5eb872880c22e9ad2a2cf53ea3ee0"
+    },
+    {
+      "rfilename": "generation_config.json",
+      "size": 3575,
+      "blobId": "7160971ad5c0422a6af9e3771fda43881d0da5db"
+    },
+    {
+      "rfilename": "onnx/decoder_model_merged_quantized.onnx",
+      "size": 50584327,
+      "blobId": "0a56f4ad69629785b8d5b288bc4fc86a0b7c66a0",
+      "lfs": {
+        "sha256": "3630e9e28169f8664cdaed6d2b0f00abae079bae7e4336c249308022635721b4",
+        "size": 50584327,
+        "pointerSize": 133
+      }
+    },
+    {
+      "rfilename": "onnx/encoder_model_quantized.onnx",
+      "size": 10113248,
+      "blobId": "c10d8f27b6b37c58f954a1d349ef2fc8603cc158",
+      "lfs": {
+        "sha256": "ca9d7bb2836193704b7e2435e3bbadbed985ac3a79ab7406b244b8865ab1a5c0",
+        "size": 10113248,
+        "pointerSize": 133
+      }
+    },
+    {
+      "rfilename": "preprocessor_config.json",
+      "size": 339,
+      "blobId": "91876762a536a746d268353c5cba57286e76b058"
+    },
+    {
+      "rfilename": "tokenizer.json",
+      "size": 2203267,
+      "blobId": "bf6209fe6e4b97b328214a778b969591e55be84b"
+    },
+    {
+      "rfilename": "tokenizer_config.json",
+      "size": 835,
+      "blobId": "0009400790fd6ae115b0c4fa1e7bf19140bcc5fc"
+    }
+  ],
+  "nativeSourceReference": "memory-source-evidence.json: allocation_planner.cc at exact ORT b7804b056c30aa35c1748f8e4e239d0e2ff25d6d, lines 693-694 and 1572-1574",
+  "comparisonSha256": "8221f3ae2af3279c3149b5c1cd27d25e53d27b8e567985d43bcb1e38ed750459"
+}

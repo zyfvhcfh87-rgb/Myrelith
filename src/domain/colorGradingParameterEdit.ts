@@ -1,6 +1,7 @@
 import type { ColorGradingTarget } from './colorGradingEdits'
 import { isColorGradingType } from './colorGradingEffects'
 import { effectAnimationParameterSpec, effectParamsValidationError, effectRegistration } from './effectStack'
+import { titleEffectAnimationParameterSpec } from './titleEffectAnimation'
 import { effectAppendBudgetError, effectDescriptorBoundsError, effectReplacementBudgetError } from './effectBounds'
 import { documentAnimationKeyframeGrowthAllowed, MAX_KEYFRAMES_PER_TRACK } from './clipAnimation'
 import { clipSourceTimeMap, sourceTicksAtTimelineOffset } from './sourceTimeMap'
@@ -46,7 +47,9 @@ export function editColorGradingParams(project: SequenceProject, target: ColorGr
     if (growing.some((track) => track.keyframes.length >= MAX_KEYFRAMES_PER_TRACK)
       || !documentAnimationKeyframeGrowthAllowed(owner.sequence, growing.length)) throw new Error('This grading edit exceeds the keyframe budget.')
     for (const track of animated) {
-      const spec = effectAnimationParameterSpec(effect, track.parameter), value = patch[track.parameter]
+      const spec = owner.clip?.title === undefined ? effectAnimationParameterSpec(effect, track.parameter)
+        : titleEffectAnimationParameterSpec(owner.clip, effect, track.parameter)
+      const value = patch[track.parameter]
       if (!spec || typeof value !== 'number' || !Number.isFinite(value) || value < spec.min || value > spec.max) throw new Error('This grading parameter cannot receive that animation key.')
     }
     if (owner.clip) sourceTicksAtTimelineOffset(clipSourceTimeMap(owner.clip), localFrame)

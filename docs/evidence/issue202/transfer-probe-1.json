@@ -1,0 +1,887 @@
+{
+  "kind": "issue202-tiny-canvas-transfer-diagnostic",
+  "collectedAt": "2026-09-08T09:17:58.878Z",
+  "browserVersion": "151.0.7922.34",
+  "scriptSha256": "9d1c4523011d077812c2b6ac84ee7a74d5d37dfc1c598bb07956dd94b3d21f77",
+  "commandLine": {
+    "unavailable": "Error: cdpSession.send: Protocol error (Browser.getBrowserCommandLine): Command line not returned because --enable-automation not set.",
+    "requestedAdditionalFlags": [
+      "--mute-audio"
+    ]
+  },
+  "gpu": {
+    "devices": [
+      {
+        "vendorId": 65535,
+        "deviceId": 65535,
+        "vendorString": "Google Inc. (Google)",
+        "deviceString": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+        "driverVendor": "SwANGLE",
+        "driverVersion": "5.0.0"
+      }
+    ],
+    "featureStatus": {
+      "2d_canvas": "unavailable_software",
+      "direct_rendering_display_compositor": "disabled_off_ok",
+      "gpu_compositing": "disabled_software",
+      "multiple_raster_threads": "enabled_on",
+      "opengl": "disabled_off",
+      "rasterization": "disabled_software",
+      "raw_draw": "disabled_off_ok",
+      "skia_graphite": "disabled_off",
+      "trees_in_viz": "disabled_off",
+      "video_decode": "disabled_software",
+      "video_encode": "disabled_software",
+      "webgl": "unavailable_software",
+      "webgpu": "unavailable_software",
+      "webnn": "unavailable_software"
+    },
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+    "version": "OpenGL ES 3.0 (ANGLE 2.1.28222 git hash: 6dab7c7e742b)",
+    "vendor": "Google Inc. (Google)"
+  },
+  "qualification": "Headless tiny storage/transfer probe only. No configured codecs, native hardware timing or physical HDR monitor qualification.",
+  "rows": [
+    {
+      "id": "srgb-standard-standard",
+      "sourceAttributes": {
+        "alpha": true,
+        "colorSpace": "srgb",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "destinationAttributes": {
+        "alpha": true,
+        "colorSpace": "srgb",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "before": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "after": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "exactCanvasCopy": true,
+      "frameResult": {
+        "format": null,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "rgb",
+          "primaries": "bt709",
+          "transfer": "iec61966-2-1"
+        },
+        "native": {
+          "bytes": 16,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 16
+            }
+          ],
+          "sampleBytes": [
+            0,
+            176,
+            0,
+            56,
+            0,
+            68,
+            0,
+            60,
+            0,
+            52,
+            0,
+            172,
+            0,
+            60,
+            0,
+            56
+          ],
+          "qualifiedFloatingInterpretation": false
+        },
+        "RGBA": {
+          "bytes": 8,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 8
+            }
+          ],
+          "sampleBytes": [
+            0,
+            128,
+            255,
+            255,
+            64,
+            0,
+            255,
+            128
+          ],
+          "qualifiedFloatingInterpretation": false
+        }
+      },
+      "owners": {
+        "framesOpened": 1,
+        "framesClosed": 1
+      }
+    },
+    {
+      "id": "srgb-standard-extended",
+      "sourceAttributes": {
+        "alpha": true,
+        "colorSpace": "srgb",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "destinationAttributes": {
+        "alpha": true,
+        "colorSpace": "srgb",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "before": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "after": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "exactCanvasCopy": true,
+      "frameResult": {
+        "format": null,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "rgb",
+          "primaries": "bt709",
+          "transfer": "iec61966-2-1"
+        },
+        "native": {
+          "bytes": 16,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 16
+            }
+          ],
+          "sampleBytes": [
+            0,
+            176,
+            0,
+            56,
+            0,
+            68,
+            0,
+            60,
+            0,
+            52,
+            0,
+            172,
+            0,
+            60,
+            0,
+            56
+          ],
+          "qualifiedFloatingInterpretation": false
+        },
+        "RGBA": {
+          "bytes": 8,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 8
+            }
+          ],
+          "sampleBytes": [
+            0,
+            128,
+            255,
+            255,
+            64,
+            0,
+            255,
+            128
+          ],
+          "qualifiedFloatingInterpretation": false
+        }
+      },
+      "owners": {
+        "framesOpened": 1,
+        "framesClosed": 1
+      }
+    },
+    {
+      "id": "srgb-extended-standard",
+      "sourceAttributes": {
+        "alpha": true,
+        "colorSpace": "srgb",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "destinationAttributes": {
+        "alpha": true,
+        "colorSpace": "srgb",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "before": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "after": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "exactCanvasCopy": true,
+      "frameResult": {
+        "format": null,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "rgb",
+          "primaries": "bt709",
+          "transfer": "iec61966-2-1"
+        },
+        "native": {
+          "bytes": 16,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 16
+            }
+          ],
+          "sampleBytes": [
+            0,
+            176,
+            0,
+            56,
+            0,
+            68,
+            0,
+            60,
+            0,
+            52,
+            0,
+            172,
+            0,
+            60,
+            0,
+            56
+          ],
+          "qualifiedFloatingInterpretation": false
+        },
+        "RGBA": {
+          "bytes": 8,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 8
+            }
+          ],
+          "sampleBytes": [
+            0,
+            128,
+            255,
+            255,
+            64,
+            0,
+            255,
+            128
+          ],
+          "qualifiedFloatingInterpretation": false
+        }
+      },
+      "owners": {
+        "framesOpened": 1,
+        "framesClosed": 1
+      }
+    },
+    {
+      "id": "srgb-extended-extended",
+      "sourceAttributes": {
+        "alpha": true,
+        "colorSpace": "srgb",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "destinationAttributes": {
+        "alpha": true,
+        "colorSpace": "srgb",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "before": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "after": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "exactCanvasCopy": true,
+      "frameResult": {
+        "format": null,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "rgb",
+          "primaries": "bt709",
+          "transfer": "iec61966-2-1"
+        },
+        "native": {
+          "bytes": 16,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 16
+            }
+          ],
+          "sampleBytes": [
+            0,
+            176,
+            0,
+            56,
+            0,
+            68,
+            0,
+            60,
+            0,
+            52,
+            0,
+            172,
+            0,
+            60,
+            0,
+            56
+          ],
+          "qualifiedFloatingInterpretation": false
+        },
+        "RGBA": {
+          "bytes": 8,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 8
+            }
+          ],
+          "sampleBytes": [
+            0,
+            128,
+            255,
+            255,
+            64,
+            0,
+            255,
+            128
+          ],
+          "qualifiedFloatingInterpretation": false
+        }
+      },
+      "owners": {
+        "framesOpened": 1,
+        "framesClosed": 1
+      }
+    },
+    {
+      "id": "display-p3-standard-standard",
+      "sourceAttributes": {
+        "alpha": true,
+        "colorSpace": "display-p3",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "destinationAttributes": {
+        "alpha": true,
+        "colorSpace": "display-p3",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "before": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "after": [
+        0,
+        0.501953125,
+        1,
+        1,
+        0.5,
+        0,
+        1.9921875,
+        0.501953125
+      ],
+      "exactCanvasCopy": false,
+      "frameResult": {
+        "format": null,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "rgb",
+          "primaries": "smpte432",
+          "transfer": "iec61966-2-1"
+        },
+        "native": {
+          "bytes": 16,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 16
+            }
+          ],
+          "sampleBytes": [
+            0,
+            176,
+            0,
+            56,
+            0,
+            68,
+            0,
+            60,
+            0,
+            52,
+            0,
+            172,
+            0,
+            60,
+            0,
+            56
+          ],
+          "qualifiedFloatingInterpretation": false
+        },
+        "RGBA": {
+          "bytes": 8,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 8
+            }
+          ],
+          "sampleBytes": [
+            0,
+            130,
+            255,
+            255,
+            71,
+            0,
+            255,
+            128
+          ],
+          "qualifiedFloatingInterpretation": false
+        }
+      },
+      "owners": {
+        "framesOpened": 1,
+        "framesClosed": 1
+      }
+    },
+    {
+      "id": "display-p3-standard-extended",
+      "sourceAttributes": {
+        "alpha": true,
+        "colorSpace": "display-p3",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "destinationAttributes": {
+        "alpha": true,
+        "colorSpace": "display-p3",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "before": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "after": [
+        0,
+        0.501953125,
+        1,
+        1,
+        0.5,
+        0,
+        1.9921875,
+        0.501953125
+      ],
+      "exactCanvasCopy": false,
+      "frameResult": {
+        "format": null,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "rgb",
+          "primaries": "smpte432",
+          "transfer": "iec61966-2-1"
+        },
+        "native": {
+          "bytes": 16,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 16
+            }
+          ],
+          "sampleBytes": [
+            0,
+            176,
+            0,
+            56,
+            0,
+            68,
+            0,
+            60,
+            0,
+            52,
+            0,
+            172,
+            0,
+            60,
+            0,
+            56
+          ],
+          "qualifiedFloatingInterpretation": false
+        },
+        "RGBA": {
+          "bytes": 8,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 8
+            }
+          ],
+          "sampleBytes": [
+            0,
+            130,
+            255,
+            255,
+            71,
+            0,
+            255,
+            128
+          ],
+          "qualifiedFloatingInterpretation": false
+        }
+      },
+      "owners": {
+        "framesOpened": 1,
+        "framesClosed": 1
+      }
+    },
+    {
+      "id": "display-p3-extended-standard",
+      "sourceAttributes": {
+        "alpha": true,
+        "colorSpace": "display-p3",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "destinationAttributes": {
+        "alpha": true,
+        "colorSpace": "display-p3",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "before": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "after": [
+        0,
+        0.501953125,
+        1,
+        1,
+        0.5,
+        0,
+        1.9921875,
+        0.501953125
+      ],
+      "exactCanvasCopy": false,
+      "frameResult": {
+        "format": null,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "rgb",
+          "primaries": "smpte432",
+          "transfer": "iec61966-2-1"
+        },
+        "native": {
+          "bytes": 16,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 16
+            }
+          ],
+          "sampleBytes": [
+            0,
+            176,
+            0,
+            56,
+            0,
+            68,
+            0,
+            60,
+            0,
+            52,
+            0,
+            172,
+            0,
+            60,
+            0,
+            56
+          ],
+          "qualifiedFloatingInterpretation": false
+        },
+        "RGBA": {
+          "bytes": 8,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 8
+            }
+          ],
+          "sampleBytes": [
+            0,
+            130,
+            255,
+            255,
+            71,
+            0,
+            255,
+            128
+          ],
+          "qualifiedFloatingInterpretation": false
+        }
+      },
+      "owners": {
+        "framesOpened": 1,
+        "framesClosed": 1
+      }
+    },
+    {
+      "id": "display-p3-extended-extended",
+      "sourceAttributes": {
+        "alpha": true,
+        "colorSpace": "display-p3",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "destinationAttributes": {
+        "alpha": true,
+        "colorSpace": "display-p3",
+        "colorType": "float16",
+        "desynchronized": false,
+        "toneMapping": {
+          "mode": "standard"
+        },
+        "willReadFrequently": true
+      },
+      "before": [
+        -0.125,
+        0.5,
+        4,
+        1,
+        0.5,
+        -0.125,
+        2,
+        0.5
+      ],
+      "after": [
+        0,
+        0.501953125,
+        1,
+        1,
+        0.5,
+        0,
+        1.9921875,
+        0.501953125
+      ],
+      "exactCanvasCopy": false,
+      "frameResult": {
+        "format": null,
+        "colorSpace": {
+          "fullRange": true,
+          "matrix": "rgb",
+          "primaries": "smpte432",
+          "transfer": "iec61966-2-1"
+        },
+        "native": {
+          "bytes": 16,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 16
+            }
+          ],
+          "sampleBytes": [
+            0,
+            176,
+            0,
+            56,
+            0,
+            68,
+            0,
+            60,
+            0,
+            52,
+            0,
+            172,
+            0,
+            60,
+            0,
+            56
+          ],
+          "qualifiedFloatingInterpretation": false
+        },
+        "RGBA": {
+          "bytes": 8,
+          "layout": [
+            {
+              "offset": 0,
+              "stride": 8
+            }
+          ],
+          "sampleBytes": [
+            0,
+            130,
+            255,
+            255,
+            71,
+            0,
+            255,
+            128
+          ],
+          "qualifiedFloatingInterpretation": false
+        }
+      },
+      "owners": {
+        "framesOpened": 1,
+        "framesClosed": 1
+      }
+    }
+  ],
+  "consoleErrors": []
+}

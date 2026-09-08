@@ -1,3 +1,4 @@
+import { projectPreviewTitleNotices } from './previewTitleStatus'
 import type { PortableColorLut } from '../domain/colorLutCatalog'
 import { colorGradingAdditionalBytes, documentGradingEffects } from '../domain/colorGradingBudget'
 import { currentColorGradingContext } from './colorLutController'
@@ -682,6 +683,7 @@ function scheduleRender(deps: PreviewDeps): void {
     const seen = new Set<AssetId>()
     const visualPlan = state.visualPlanner?.planFrame(transport.playheadFrame)
     if (!visualPlan) return
+    previewStatus.setTitleNotices(projectPreviewTitleNotices(visualPlan))
     const requests = videoCompositionRequests(visualPlan)
     // Separate clips can open distinct lanes even when they share one asset.
     state.maxVideoRequests = Math.max(state.maxVideoRequests, requests.length)

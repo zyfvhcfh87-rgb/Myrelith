@@ -1,4 +1,6 @@
 import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
+import { expandedTitleProject } from '../test/titleOwnerFixtures'
+import { createVideoCompositionPlanner } from '../domain/videoCompositionPlan'
 /**
  * pipeline/export.test.ts — video-only CFR export orchestration.
  *
@@ -350,6 +352,21 @@ describe('createDirectFileExportResult', () => {
 })
 
 describe('exportTimeline CFR scheduling', () => {
+  test('unavailable title intent in an injected lease fails before composition or encoding and closes every owner', async () => {
+    const doc = expandedTitleProject().sequences[0]
+    doc.tracks[0].clips[0].title = { version: 99 }
+    const h = makeHarness()
+    h.openFrame.mockImplementationOnce(async (frame) => ({ plan: createVideoCompositionPlanner(doc, new Map()).planFrame(frame),
+      getFrame: async () => null, close: () => h.leaseClose(frame),
+    }))
+    await expect(drain(exportTimeline(doc, SETTINGS, h.media, h.deps))).rejects.toThrow(/Title cannot be exported/)
+    expect(h.composite).not.toHaveBeenCalled()
+    expect(h.addFrame).not.toHaveBeenCalled()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.leaseClose).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+    expect(h.cancel).toHaveBeenCalledOnce()
+  })
   test('renders every document frame in order and returns the finalized result', async () => {
     const doc = makeDoc(3)
     const h = makeHarness()

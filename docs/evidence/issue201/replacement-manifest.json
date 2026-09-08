@@ -1,0 +1,372 @@
+{
+  "kind": "issue201-speech-lab-assets-v1",
+  "preparedAt": "2026-09-08T09:27:00.722Z",
+  "qualification": "Static package/import/notice/advisory/fixture preflight only; inference/offline/memory not yet qualified.",
+  "runtime": {
+    "transformerVersion": "4.2.0",
+    "ortVersion": "1.26.0-dev.20260416-b7804b056c",
+    "commonVersion": "1.24.0-dev.20251116-b39e144322",
+    "device": "wasm",
+    "dtype": "q8",
+    "threads": 1,
+    "originalImportSpecifiers": [
+      "onnxruntime-web/webgpu",
+      "onnxruntime-common"
+    ],
+    "embeddedTransformerDependencies": [
+      "@huggingface+tokenizers@0.1.3",
+      "@huggingface+jinja@0.5.6"
+    ],
+    "ortWasmSources": [
+      "../../common/lib/backend-impl.ts",
+      "../../common/lib/backend.ts",
+      "../../common/lib/version.ts",
+      "../../common/lib/env-impl.ts",
+      "../../common/lib/env.ts",
+      "../../common/lib/tensor-conversion-impl.ts",
+      "../../common/lib/tensor-factory-impl.ts",
+      "../../common/lib/tensor-impl-type-mapping.ts",
+      "../../common/lib/tensor-utils-impl.ts",
+      "../../common/lib/tensor-impl.ts",
+      "../../common/lib/tensor.ts",
+      "../../common/lib/trace.ts",
+      "../../common/lib/inference-session-impl.ts",
+      "../../common/lib/inference-session.ts",
+      "../../common/lib/tensor-conversion.ts",
+      "../../common/lib/tensor-factory.ts",
+      "../../common/lib/onnx-model.ts",
+      "../../common/lib/onnx-value.ts",
+      "../../common/lib/index.ts",
+      "../lib/wasm/wasm-utils-env.ts",
+      "../lib/wasm/proxy-worker/main.ts",
+      "../lib/wasm/wasm-utils-import.ts",
+      "../lib/wasm/wasm-factory.ts",
+      "../lib/wasm/wasm-utils.ts",
+      "../lib/wasm/run-options.ts",
+      "../lib/wasm/session-options.ts",
+      "../lib/wasm/wasm-common.ts",
+      "../lib/wasm/wasm-utils-load-file.ts",
+      "../lib/wasm/wasm-core-impl.ts",
+      "../lib/wasm/proxy-wrapper.ts",
+      "../lib/wasm/session-handler-inference.ts",
+      "../lib/backend-wasm.ts",
+      "../lib/index.ts",
+      "../lib/version.ts"
+    ],
+    "ortWasmMapSha256": "7906581c1113825cbc5c038ada81af3fc7b31b7a458cd1915fc2ec80f29ddc68",
+    "artifacts": [
+      {
+        "name": "transformers.local.mjs",
+        "bytes": 431648,
+        "gzipBytes": 120673,
+        "sha256": "7d013bf9afa553c171127dd62a4484b78a635af8555bb376005ce987175559c3",
+        "source": "@huggingface/transformers@4.2.0/dist/transformers.web.min.js",
+        "originalSha256": "0a96dcf4c48981b7d05f53827e6975ec239132606ad0d526bbc2db0fcdbc4ded",
+        "transform": "Only replace the two AST-located external module specifiers with ./ort.wasm.min.mjs; no library logic edits."
+      },
+      {
+        "name": "ort.wasm.min.mjs",
+        "bytes": 50069,
+        "gzipBytes": 16185,
+        "sha256": "b5974e68e7974bbadf4f6aab6539ea50f74c6fb40a0e8bb95b3b0fa8b7efde75",
+        "source": "onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist/ort.wasm.min.mjs"
+      },
+      {
+        "name": "ort-wasm-simd-threaded.mjs",
+        "bytes": 24180,
+        "gzipBytes": 9090,
+        "sha256": "5f2cd914554830762579c372d0211614c1e3f40ab3f6c0cfcf0900343229071d",
+        "source": "onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist/ort-wasm-simd-threaded.mjs"
+      },
+      {
+        "name": "ort-wasm-simd-threaded.wasm",
+        "bytes": 12942611,
+        "gzipBytes": 3321755,
+        "sha256": "f4f290847a4df02d0b93cdbf39b4b0e71acefbe80573e7e6b9342a7abd7b290a",
+        "source": "onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist/ort-wasm-simd-threaded.wasm"
+      },
+      {
+        "name": "mediabunny.mjs",
+        "bytes": 624835,
+        "gzipBytes": 159759,
+        "sha256": "a7e7e14265b787de0daf23d379a8b4afa4b36b74711d71a2f5e075bff6a671a6",
+        "source": "Existing private baseline node_modules/mediabunny@1.50.9/dist/bundles/mediabunny.min.mjs; lab audio adapter support asset."
+      }
+    ],
+    "totalRawBytes": 14073343,
+    "totalGzipBytes": 3627462,
+    "licenses": [
+      {
+        "name": "@huggingface/transformers",
+        "version": "4.2.0",
+        "license": "Apache-2.0",
+        "packageIntegrity": "sha512-8BRCoBMH0XsWaEIamuR0LrJGAfftgHAfb2Vrffy0VKlSAE/MnUJ5/h/zTfEP3fDIft+nk7TqB8xXEyABGitBjQ==",
+        "metadataUrl": "https://registry.npmjs.org/@huggingface/transformers/4.2.0",
+        "metadataSha256": "293d93ddc217064b78f685d0a1b345c4bf5136a026afcdd1b8dbaf16eba6efa4"
+      },
+      {
+        "name": "@huggingface/tokenizers",
+        "version": "0.1.3",
+        "license": "Apache-2.0",
+        "packageIntegrity": "sha512-8rF/RRT10u+kn7YuUbUg0OF30K8rjTc78aHpxT+qJ1uWSqxT1MHi8+9ltwYfkFYJzT/oS+qw3JVfHtNMGAdqyA==",
+        "metadataUrl": "https://registry.npmjs.org/@huggingface/tokenizers/0.1.3",
+        "metadataSha256": "f7b5959c4de994758e421579d62dfbdd3ef7eb3a5aa62ef7f40e55861520e6ac"
+      },
+      {
+        "name": "@huggingface/jinja",
+        "version": "0.5.6",
+        "license": "MIT",
+        "packageIntegrity": "sha512-MyMWyLnjqo+KRJYSH7oWNbsOn5onuIvfXYPcc0WOGxU0eHUV7oAYUoQTl2BMdu7ml+ea/bu11UM+EshbeHwtIA==",
+        "metadataUrl": "https://registry.npmjs.org/@huggingface/jinja/0.5.6",
+        "metadataSha256": "ef6c676eb21c3c29df39c7e65766025047d4891fd05fb1ff2e78518883da8a9a"
+      },
+      {
+        "name": "onnxruntime-web",
+        "version": "1.26.0-dev.20260416-b7804b056c",
+        "license": "MIT",
+        "packageIntegrity": "sha512-MD6Ss4GSpQBo6zqoJzyT9LRbKYs7x/JVN23FT24EcEvlqF4VuzPOeH6X38orZPKHQDbprn7K+SBpu0/mj2CQiw==",
+        "metadataUrl": "https://registry.npmjs.org/onnxruntime-web/1.26.0-dev.20260416-b7804b056c",
+        "metadataSha256": "1626257ef600dfefdbcd3f5e273b2ca5e9c93eaadd1607f82dd82d27a21adc46"
+      },
+      {
+        "name": "onnxruntime-common",
+        "version": "1.24.0-dev.20251116-b39e144322",
+        "license": "MIT",
+        "packageIntegrity": "sha512-BOoomdHYmNRL5r4iQ4bMvsl2t0/hzVQ3OM3PHD0gxeXu1PmggqBv3puZicEUVOA3AtHHYmqZtjMj9FOfGrATTw==",
+        "metadataUrl": "https://registry.npmjs.org/onnxruntime-common/1.24.0-dev.20251116-b39e144322",
+        "metadataSha256": "7fdcf29a8d48cdae809c00b6306b7472dd391af916c347248303bf5d13490f2d"
+      },
+      {
+        "name": "mediabunny",
+        "version": "1.50.9",
+        "license": "MPL-2.0",
+        "packageIntegrity": "sha512-dkv2xPuW7WxmiZrhV4yDzgqhdQcHdQ9g5xRyVIDNoxe8Bo+jnK71bdKMYj12LzJf5YV9hcsufBG9R41TFKfg9g==",
+        "metadataUrl": "https://registry.npmjs.org/mediabunny/1.50.9",
+        "metadataSha256": "7f562b94971560e02fd873fd13afe649b25a9a1457409a6bdde5019dfdfd753b"
+      }
+    ],
+    "notices": [
+      {
+        "name": "transformers-LICENSE.txt",
+        "url": "https://raw.githubusercontent.com/huggingface/transformers.js/4.2.0/LICENSE",
+        "bytes": 11358,
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      {
+        "name": "onnxruntime-LICENSE.txt",
+        "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c/LICENSE",
+        "bytes": 1073,
+        "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+      },
+      {
+        "name": "onnxruntime-ThirdPartyNotices.txt",
+        "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c/ThirdPartyNotices.txt",
+        "bytes": 325054,
+        "sha256": "0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2"
+      },
+      {
+        "name": "jinja-LICENSE.txt",
+        "source": "@huggingface/jinja@0.5.6/LICENSE",
+        "bytes": 1069,
+        "sha256": "d6e7b19451c1b3d1d66353bb4b1274138953b3bfd9ae60c56e77b1f548796982"
+      },
+      {
+        "name": "tokenizers-LICENSE.txt",
+        "source": "@huggingface/tokenizers@0.1.3/LICENSE",
+        "bytes": 11357,
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      },
+      {
+        "name": "mediabunny-LICENSE.txt",
+        "source": "Existing mediabunny@1.50.9/LICENSE",
+        "bytes": 16726,
+        "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+      }
+    ],
+    "advisoryInput": {
+      "@huggingface/transformers": [
+        "4.2.0"
+      ],
+      "@huggingface/tokenizers": [
+        "0.1.3"
+      ],
+      "@huggingface/jinja": [
+        "0.5.6"
+      ],
+      "onnxruntime-web": [
+        "1.26.0-dev.20260416-b7804b056c"
+      ],
+      "onnxruntime-common": [
+        "1.24.0-dev.20251116-b39e144322"
+      ],
+      "mediabunny": [
+        "1.50.9"
+      ]
+    },
+    "advisories": {},
+    "sessionOptions": {
+      "graphOptimizationLevel": "all",
+      "extra": {
+        "session": {
+          "disable_quant_qdq": "1"
+        }
+      }
+    },
+    "encoderFetchPolicy": {
+      "sessionKey": "model",
+      "inputNames": [
+        "input_features"
+      ],
+      "expectedOutputNames": [
+        "last_hidden_state",
+        "encoder_attentions.0",
+        "encoder_attentions.1",
+        "encoder_attentions.2",
+        "encoder_attentions.3"
+      ],
+      "fetchNames": [
+        "last_hidden_state"
+      ]
+    }
+  },
+  "model": {
+    "id": "Xenova/whisper-tiny",
+    "revision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+    "metadataUrl": "https://huggingface.co/api/models/Xenova/whisper-tiny/revision/5332fcc35e32a33b86612b9a57a89be7906102b1?blobs=true",
+    "declaredLicense": "apache-2.0",
+    "files": [
+      {
+        "path": "config.json",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/config.json",
+        "bytes": 2248,
+        "sha256": "2b2e4e519084e0ea028b19b153f95202735a971870d6844aa26e559edd292e94",
+        "upstreamBlobId": "dea913aa8ec7d53db029e97c97a766d534c8da04"
+      },
+      {
+        "path": "generation_config.json",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/generation_config.json",
+        "bytes": 3716,
+        "sha256": "68ac791fcb4999461a313472125042934656240ba1cba7d1c2627fcbb19ac24c",
+        "upstreamBlobId": "72e54ad7340e05287aa731f9d8556b5368be3fe0"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/preprocessor_config.json",
+        "bytes": 339,
+        "sha256": "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d",
+        "upstreamBlobId": "91876762a536a746d268353c5cba57286e76b058"
+      },
+      {
+        "path": "tokenizer.json",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/tokenizer.json",
+        "bytes": 2480466,
+        "sha256": "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566",
+        "upstreamBlobId": "1e95340ff836fad1b5932e800fb7b8c5e6d78a74"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/tokenizer_config.json",
+        "bytes": 282683,
+        "sha256": "2a4c4281cf9f51ac6ccc406fdc711a087afe6530f671fa7b80953edc498275ce",
+        "upstreamBlobId": "d13b786c04765fb1a06492b53587752cd67665ea"
+      },
+      {
+        "path": "onnx/encoder_model_quantized.onnx",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/onnx/encoder_model_quantized.onnx",
+        "bytes": 10124910,
+        "sha256": "fd9d995b9dcb0520f0dbf6cf68651af639fc385f594d9d876e69ca2802dc438e",
+        "upstreamBlobId": "bc85a2a21d7fd466db9ac0de3a4cde551f893511"
+      },
+      {
+        "path": "onnx/decoder_model_merged_quantized.onnx",
+        "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/onnx/decoder_model_merged_quantized.onnx",
+        "bytes": 30727765,
+        "sha256": "6c0c125986b007d2e3734bec84c18bda0152071b90b87fadac6d7764499927a0",
+        "upstreamBlobId": "821b00e81a7e5525da5cadaf0d40b0efd2bb5f9f"
+      }
+    ],
+    "totalBytes": 43622127
+  },
+  "fixtures": [
+    {
+      "name": "english",
+      "dataset": "hf-internal-testing/librispeech_asr_dummy",
+      "revision": "5be91486e11a2d616f4ec5db8d3fd248585ac07a",
+      "config": "clean",
+      "split": "validation",
+      "row": 0,
+      "originalId": "1272-128104-0000",
+      "sourceUrl": "https://datasets-server.huggingface.co/assets/hf-internal-testing/librispeech_asr_dummy/--/5be91486e11a2d616f4ec5db8d3fd248585ac07a/--/clean/validation/0/audio/audio.wav",
+      "metadataUrl": "https://datasets-server.huggingface.co/first-rows?dataset=hf-internal-testing%2Flibrispeech_asr_dummy&config=clean&split=validation",
+      "license": "CC-BY-4.0",
+      "licenseUrl": "https://www.openslr.org/12",
+      "transcript": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL",
+      "bytes": 187404,
+      "sha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46",
+      "codec": 1,
+      "channels": 1,
+      "rate": 16000,
+      "bits": 16,
+      "frames": 93680,
+      "durationSeconds": 5.855
+    },
+    {
+      "name": "french",
+      "dataset": "PolyAI/minds14",
+      "revision": "40ce77cb32a384e4d50a568e1ec39ac804019d33",
+      "config": "fr-FR",
+      "split": "train",
+      "row": 0,
+      "originalId": "fr-FR~ADDRESS/response_4.wav",
+      "sourceUrl": "https://datasets-server.huggingface.co/assets/PolyAI/minds14/--/40ce77cb32a384e4d50a568e1ec39ac804019d33/--/fr-FR/train/0/audio/audio.wav",
+      "metadataUrl": "https://datasets-server.huggingface.co/first-rows?dataset=PolyAI%2Fminds14&config=fr-FR&split=train",
+      "license": "CC-BY-4.0",
+      "licenseUrl": "https://huggingface.co/datasets/PolyAI/minds14",
+      "transcript": "je souhaite changer mon adresse",
+      "bytes": 30096,
+      "sha256": "84defdc828ef59cec10364354fbc284bc2cc683fdd4a5edd5863b7bb2c6123a8",
+      "codec": 7,
+      "channels": 1,
+      "rate": 8000,
+      "bits": 8,
+      "frames": 30037,
+      "durationSeconds": 3.754625
+    }
+  ],
+  "derivatives": [
+    {
+      "name": "english-300.wav",
+      "bytes": 9600044,
+      "sha256": "a9860cf9ff8c6a5bbe1959abb5d94fcebd4de35fac70937b7ec2977d02c6d6d9",
+      "description": "300 seconds repeating the pinned English recording with 0.5 seconds digital silence between repeats; the final repeat may be cut at the exact limit. Workload stress, not a natural long-form quality fixture."
+    },
+    {
+      "name": "silence.wav",
+      "bytes": 32044,
+      "sha256": "643f8a8dc8bd9c19225afffad2becfec5426180b3749cb208abdf1a6c8354efc",
+      "description": "Exactly one second of digital silence; no audible tone."
+    },
+    {
+      "name": "corrupt.wav",
+      "bytes": 43,
+      "sha256": "87bf5c6e2799bb64bab80cbdb8b0f4d0707f05d7156cf7f7fa471b393dcabc1e",
+      "description": "Deliberately malformed data for decoder rejection."
+    }
+  ],
+  "thresholds": {
+    "maxWindowSeconds": 30,
+    "maxJobSeconds": 300,
+    "maxNewTokens": 448,
+    "maxWindowWallMs": 120000,
+    "terminationFallbackMs": 100,
+    "maxIncrementalResidentBytes": 1073741824,
+    "maxPcmBytes": 3840000,
+    "maxPreparationScratchBytes": 2097152,
+    "modelCacheByteLimit": 100663296,
+    "englishMaximumWordErrorRate": 0.2,
+    "frenchMaximumWordErrorRate": 0.4,
+    "timestampPolicy": "Finite positive ordered segment intervals within source coverage; missing endpoints stay visible and prohibit automatic cue apply.",
+    "silencePolicy": "All-zero PCM yields empty output without calling inference; this is not a general VAD claim.",
+    "repeatPolicy": "Complete 300-second bounded-window workload plus repeated jobs; report residual process memory, do not equate GC timing to live-owner leaks."
+  }
+}
