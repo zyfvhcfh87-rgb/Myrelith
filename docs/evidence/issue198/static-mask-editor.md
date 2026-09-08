@@ -125,4 +125,27 @@ A focused Preview test checks the separate dock and stable canvas identity.
 53 focused tests plus 17 runner checks pass; build/typecheck and lint passed.
 The browser follow-up adds native hit testing and a real lower-right pointer
 resize at 768px, asserting larger width/height, one history entry, exact undo
-and a screenshot. This corrected layout awaits its committed Chromium run.
+and a screenshot.
+
+The orchestrator granted a new exclusive slot for exact clean
+`13ae292eb89860bc802549225e20b46d409bd28f`. The same three tests passed in
+**9.7s**, including native hit testing and a real pointer resize of the previously
+covered lower-right corner at 768px. Width and height increased, exactly one
+history entry was created, and undo restored the complete prior project.
+Rectangle temporary pixel/history/Escape and Bezier point/fractional numeric
+checks passed again on this final layout.
+
+All three final screenshots were inspected. The toolbar is below the manipulation
+panel, and the 768px lower corner handles are visibly unobstructed. Thus the
+specific narrow-layout concern recorded above is resolved on this tested source.
+The dock reduces available canvas size on small monitors; authored geometry is
+unchanged and CSS coordinate alignment remains tested.
+
+Final evidence is retained under `.tmp/issue198-13ae292/`:
+`issue198-browser-13ae292.log`, `issue198-rectangle.png`,
+`issue198-bezier.png`, and `issue198-small.png`. Initial failures and earlier
+screenshots remain in their separate directories. No page/console errors or
+framework overlays were reported. The runner exited 0, no port 5198 listener or
+matching browser/server process remained, and the exclusive slot was released.
+This completes the requested static-slice validation; integration and later
+issue gates still require the orchestrator's review.
