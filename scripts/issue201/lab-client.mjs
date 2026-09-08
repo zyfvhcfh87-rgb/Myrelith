@@ -189,9 +189,12 @@ async function transcribeFixture(name, { seconds, language, repeatSeconds = null
     let loadMs = null
     let phaseDeadline = null
     const deadline = setTimeout(() => { cancel('job-deadline').then(() => reject(new Error('Job deadline exceeded'))) }, 2_000_000)
-    const fail = (error) => {
+    const fail = (error, recordParentError = true) => {
       clearTimeout(deadline)
       clearTimeout(phaseDeadline)
+      error.code ??= loadMs === null ? 'initialization-failed' : 'worker-runtime-failed'
+      error.phase ??= phase
+      if (recordParentError) record({ type: 'error', origin: 'parent', code: error.code, phase: error.phase, message: error.message })
       worker.terminate()
       if (owner === current) owner = null
       phase = 'idle'
@@ -222,7 +225,12 @@ async function transcribeFixture(name, { seconds, language, repeatSeconds = null
         phase = 'idle'
         resolve({ loadMs, ...completed, finalLedger: data.ledger })
       }
-      if (data.type === 'error') fail(new Error(data.message))
+      if (data.type === 'error') {
+        const error = new Error(data.message)
+        error.code = data.code
+        error.phase = data.phase
+        fail(error, false)
+      }
     }
     worker.onerror = (event) => fail(new Error(event.message))
     worker.onmessageerror = () => fail(new Error('Worker message decoding failed'))

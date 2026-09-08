@@ -7,7 +7,7 @@ import { gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { chromium } from '@playwright/test'
-import { createLabSampleQueue, declaredLabRequest, residentCeilingBreached } from './lab-contract.mjs'
+import { assessLabRun, corruptAudioReachedDecode, createLabSampleQueue, declaredLabRequest, initializationFailure, residentCeilingBreached } from './lab-contract.mjs'
 
 if (process.env.ISSUE201_EXCLUSIVE_SLOT !== '1') throw new Error('Obtain the orchestrator exclusive slot before running inference; then set ISSUE201_EXCLUSIVE_SLOT=1')
 const root = fileURLToPath(new URL('../../', import.meta.url))
@@ -70,6 +70,7 @@ let runtime = null
 let memoryAssessment = null
 let baselineMemory = null
 let stopReason = null
+let finalCleanup = null
 const expect = (condition, message) => { if (!condition) throw new Error(message) }
 const words = (text) => text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').trim().split(/\s+/u).filter(Boolean)
 function wordErrorRate(expected, actual) {
@@ -133,6 +134,7 @@ try {
   sampler = setInterval(() => { void takeSample() }, 250)
   async function check(name, action) {
     if (stopReason) throw new Error(`Laboratory stopped: ${stopReason.type}`)
+    await page.evaluate(() => globalThis.lab?.resetEvents())
     process.stdout.write(`Starting ${name}\n`)
     const requestStart = serverRequests.length
     const began = Date.now()
@@ -143,9 +145,22 @@ try {
     } catch (error) {
       const failedState = await page.evaluate(() => globalThis.lab?.state()).catch((cause) => ({ inspectionError: cause.message }))
       results.push({ name, passed: false, elapsedMs: Date.now() - began, error: error.message, failedState, serverRequests: serverRequests.slice(requestStart) })
+      const prerequisite = initializationFailure(failedState?.events ?? [])
+      if (prerequisite && !stopReason) {
+        stopReason = { type: 'model-prerequisite', case: name, at: Date.now(), prerequisite }
+        problems.push(stopReason)
+      }
       await page.evaluate(() => globalThis.lab?.cancel('test-failed')).catch(() => {})
     }
     process.stdout.write(`${results.at(-1).passed ? 'PASS' : 'FAIL'} ${name}\n`)
+  }
+  async function waitForJobPhase(expected) {
+    await page.waitForFunction((phase) => {
+      const state = lab.state()
+      return state.phase === phase || state.events.some((event) => event.type === 'error' || event.type === 'complete')
+    }, expected, { timeout: 120_000, polling: 10 })
+    const state = await page.evaluate(() => lab.state())
+    expect(state.phase === expected, `Job finished or failed before cancellation could observe ${expected}`)
   }
   await check('no-model-and-lazy-runtime', async () => {
     const failure = await page.evaluate(() => lab.transcribeFixture('english').then(() => null, (error) => error.message))
@@ -228,15 +243,17 @@ try {
     return { result, cleanup: await page.evaluate(() => lab.cancel('minimum-window')) }
   })
   await check('corrupt-audio-rejection', async () => {
-    const error = await page.evaluate(() => lab.transcribeFixture('corrupt').then(() => null, (cause) => cause.message))
+    const error = await page.evaluate(() => lab.transcribeFixture('corrupt').then(() => null,
+      (cause) => ({ message: cause.message, code: cause.code, phase: cause.phase })))
     const state = await page.evaluate(() => lab.state())
-    expect(error && state.workerOwners === 0, 'Corrupt audio did not terminate its worker')
+    expect(corruptAudioReachedDecode(error, state),
+      'Corrupt audio did not reach initialized-model decode rejection')
     return { error, state }
   })
   for (const phase of ['model-load', 'prepare', 'infer']) {
     await check(`cancel-${phase}`, async () => {
       await page.evaluate(() => { globalThis.pending = lab.transcribeFixture('english', { repeatSeconds: 300 }).then((value) => ({ value }), (error) => ({ error: error.message })) })
-      await page.waitForFunction((expected) => lab.state().phase === expected, phase, { timeout: 120_000, polling: 10 })
+      await waitForJobPhase(phase)
       const state = await page.evaluate(() => lab.cancel('phase-cancel'))
       const completion = await page.evaluate(() => globalThis.pending)
       expect(completion.error && state.workerOwners === 0, 'Cancel did not reject/terminate the active worker')
@@ -245,7 +262,7 @@ try {
   }
   await check('project-replacement', async () => {
     await page.evaluate(() => { globalThis.pending = lab.transcribeFixture('english', { repeatSeconds: 300 }).then((value) => ({ value }), (error) => ({ error: error.message })) })
-    await page.waitForFunction(() => lab.state().phase === 'infer', null, { timeout: 120_000, polling: 10 })
+    await waitForJobPhase('infer')
     const state = await page.evaluate(() => lab.replaceProject())
     const completion = await page.evaluate(() => globalThis.pending)
     expect(completion.error && state.workerOwners === 0, 'Project replacement accepted a stale result')
@@ -325,13 +342,34 @@ try {
 } finally {
   clearInterval(sampler)
   await sampleQueue?.drain()
+  const page = context?.pages()[0]
+  if (page && !page.isClosed()) {
+    let timer
+    try {
+      finalCleanup = await Promise.race([
+        page.evaluate(async () => {
+          const state = await lab.clearModel()
+          const cache = await lab.cacheFacts()
+          const clean = state.workerOwners === 0 && state.acquisitionOwners === 0
+            && cache.model.error === 'No local speech model is installed'
+            && cache.cacheNames.every((name) => name === 'myrelith-issue201-lab-registry')
+          return { status: clean ? 'verified' : 'failed', state, cache }
+        }),
+        new Promise((resolve) => { timer = setTimeout(() => resolve({ status: 'timed-out' }), 1_000) }),
+      ])
+    } catch (error) { finalCleanup = { status: 'unavailable', reason: error.message } }
+    finally { clearTimeout(timer) }
+  } else finalCleanup = { status: 'unavailable', reason: 'Browser already closed; no cooperative cache-cleanup claim' }
   await context?.close()
   await new Promise((resolve) => server.close(resolve))
+  if (finalCleanup.status !== 'verified') problems.push({ type: 'final-cleanup-unverified', ...finalCleanup })
+  const acceptance = assessLabRun(results, problems, stopReason)
+  if (acceptance.automatedStatus !== 'passed') process.exitCode = 1
   const artifact = { kind: 'issue201-speech-lab-result-v1', recordedAt: new Date().toISOString(), source,
     qualification: 'Isolated laboratory only; production editor integration and broader audio/browser/language configurations are not qualified.',
-    runtime, results, problems, stopReason, memoryAssessment, memory, network, serverRequests }
+    runtime, acceptance, results, problems, stopReason, finalCleanup, memoryAssessment, memory, network, serverRequests }
   await writeFile(path.join(labRoot, 'results.json'), `${JSON.stringify(artifact, null, 2)}\n`)
-  process.stdout.write(JSON.stringify({ output: path.join(labRoot, 'results.json'), passed: results.filter((result) => result.passed).length,
+  process.stdout.write(JSON.stringify({ output: path.join(labRoot, 'results.json'), acceptance, passed: results.filter((result) => result.passed).length,
     failed: results.filter((result) => !result.passed).length, problems: problems.length }) + '\n')
 }
 if (results.some((result) => !result.passed) || problems.length) process.exitCode = 1

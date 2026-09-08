@@ -48,3 +48,45 @@ export function createLabSampleQueue(capture, stopped) {
   }
   return { take, drain: () => tail ?? Promise.resolve() }
 }
+
+/** Exact aliases for the already verified pinned files, never a basename fallback. */
+export function pinnedModelFileLookup(model, origin) {
+  return new Map(model.files.flatMap((file) => [
+    [file.url, file],
+    [`${origin}/models/${model.id}/${file.path}`, file],
+    [`/models/${model.id}/${file.path}`, file],
+    [`${model.id}/${file.path}`, file],
+  ]))
+}
+
+export function initializationFailure(events) {
+  return events.find((event) => event.type === 'error' && event.code === 'initialization-failed') ?? null
+}
+
+export function corruptAudioReachedDecode(error, state) {
+  return error?.code === 'transcription-failed' && error.phase === 'decode-setup'
+    && state.workerOwners === 0
+    && state.events.some((event) => event.type === 'ready' && event.ledger?.modelOwners === 1)
+}
+
+export const LAB_CASE_NAMES = Object.freeze([
+  'no-model-and-lazy-runtime', 'cancel-acquisition', 'verified-model-install',
+  'cancel-cache-write-restores-committed-model', 'cancel-cache-commit-restores-committed-model',
+  'corrupt-cache-rejected-before-inference', 'selected-local-files-install', 'capacity-rejection-preserves-model',
+  'transcribe-english-8', 'transcribe-english-9', 'transcribe-french-10', 'transcribe-silence-11',
+  'one-second-speech-window', 'corrupt-audio-rejection', 'cancel-model-load', 'cancel-prepare', 'cancel-infer',
+  'project-replacement', '300-second-bounded-workload', 'offline-loaded-app-and-fresh-worker',
+  'offline-page-reload', 'offline-persistent-browser-reopen', 'remove-model-and-offline-no-model',
+])
+
+export function assessLabRun(results, problems, stopReason) {
+  const seen = new Set(results.map((result) => result.name))
+  const missing = LAB_CASE_NAMES.filter((name) => !seen.has(name))
+  const failed = results.filter((result) => !result.passed).map((result) => result.name)
+  const unexpected = results.filter((result) => !LAB_CASE_NAMES.includes(result.name)).map((result) => result.name)
+  const duplicateNames = results.length !== seen.size
+  return { automatedStatus: missing.length || stopReason ? 'failed-incomplete'
+    : failed.length || problems.length || unexpected.length || duplicateNames ? 'failed' : 'passed',
+  expectedCases: LAB_CASE_NAMES.length, completedCases: results.length, missing, failed, unexpected, duplicateNames,
+  qualification: 'Automatic laboratory checks only; no production/model enablement verdict.' }
+}

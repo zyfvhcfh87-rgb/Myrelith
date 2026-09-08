@@ -3,7 +3,8 @@ import { test } from 'node:test'
 import { readFile } from 'node:fs/promises'
 import { webcrypto, createHash } from 'node:crypto'
 import { createContext, SourceTextModule } from 'node:vm'
-import { createLabSampleQueue, declaredLabRequest, residentCeilingBreached, speechSegments, withinSourceCoverage } from './lab-contract.mjs'
+import { assessLabRun, corruptAudioReachedDecode, createLabSampleQueue, declaredLabRequest,
+  initializationFailure, LAB_CASE_NAMES, pinnedModelFileLookup, residentCeilingBreached, speechSegments, withinSourceCoverage } from './lab-contract.mjs'
 
 const flush = () => new Promise((resolve) => setImmediate(resolve))
 async function until(condition) {
@@ -35,6 +36,8 @@ async function controller(t, terminationFallbackMs = 10_000) {
   let peakLive = 0
   let completeJobs = true
   let autoDispose = false
+  let initializeError = null
+  let moduleError = null
   const zero = { modelOwners: 0, inputOwners: 0, sampleOwners: 0, pcmBytes: 0 }
   class FakeWorker {
     constructor() { this.alive = true; this.disposeRequests = 0; workers.push(this); live++; peakLive = Math.max(peakLive, live) }
@@ -42,7 +45,12 @@ async function controller(t, terminationFallbackMs = 10_000) {
     terminate() { if (this.alive) { this.alive = false; live-- } }
     acknowledgeDisposal() { this.emit({ type: 'disposed', ledger: zero }) }
     postMessage(message) {
-      if (message.type === 'initialize') queueMicrotask(() => this.emit({ type: 'ready', loadMs: 0 }))
+      if (message.type === 'initialize') queueMicrotask(() => {
+        if (moduleError) this.onerror?.({ message: moduleError })
+        else this.emit(initializeError
+          ? { type: 'error', code: 'initialization-failed', phase: 'model-load', message: initializeError, ledger: zero }
+          : { type: 'ready', loadMs: 0, ledger: { ...zero, modelOwners: 1 } })
+      })
       else if (message.type === 'transcribe') {
         this.emit({ type: 'phase', phase: 'infer' })
         if (completeJobs) queueMicrotask(() => {
@@ -80,7 +88,8 @@ async function controller(t, terminationFallbackMs = 10_000) {
   })
   await lab.installModel()
   return { lab, workers, get live() { return live }, get peakLive() { return peakLive },
-    set completeJobs(value) { completeJobs = value }, set autoDispose(value) { autoDispose = value } }
+    set completeJobs(value) { completeJobs = value }, set autoDispose(value) { autoDispose = value },
+    set initializeError(value) { initializeError = value }, set moduleError(value) { moduleError = value } }
 }
 
 test('retiring idle owner remains reserved while concurrent requests await one disposal', async (t) => {
@@ -208,4 +217,59 @@ test('a stop during the periodic observation prevents queued named captures', as
   await queue.drain()
   await Promise.all([periodic, closed])
   assert.deepEqual(observed, ['periodic'])
+})
+
+test('pinned model lookup includes the observed local key and rejects other revisions/files/queries', () => {
+  const file = { path: 'config.json', url: 'https://huggingface.co/Xenova/whisper-tiny/resolve/pinned/config.json' }
+  const lookup = pinnedModelFileLookup({ id: 'Xenova/whisper-tiny', files: [file] }, 'http://127.0.0.1:5201')
+  for (const key of [file.url, '/models/Xenova/whisper-tiny/config.json',
+    'http://127.0.0.1:5201/models/Xenova/whisper-tiny/config.json', 'Xenova/whisper-tiny/config.json']) {
+    assert.equal(lookup.get(key), file)
+  }
+  for (const key of ['https://huggingface.co/Xenova/whisper-tiny/resolve/main/config.json',
+    '/models/other/whisper-tiny/config.json', '/models/Xenova/whisper-tiny/config.json?revision=other',
+    '/models/Xenova/whisper-tiny/unknown.json']) assert.equal(lookup.get(key), undefined)
+})
+
+test('actual controller preserves structured initialization failure and can retry without overlapping owners', async (t) => {
+  const h = await controller(t)
+  h.initializeError = 'Missing pinned file'
+  const error = await h.lab.transcribeFixture('english').then(() => null, (cause) => cause)
+  assert.equal(error.code, 'initialization-failed')
+  assert.equal(error.phase, 'model-load')
+  assert.equal(initializationFailure(h.lab.state().events)?.message, 'Missing pinned file')
+  assert.equal(h.lab.state().workerOwners, 0)
+  assert.equal(h.live, 0)
+  h.initializeError = null
+  await h.lab.transcribeFixture('english')
+  assert.equal(h.peakLive, 1)
+})
+
+test('an unrelated loader error cannot pass corrupt-audio decoding acceptance', () => {
+  const state = { workerOwners: 0, events: [{ type: 'error', code: 'initialization-failed' }] }
+  assert.equal(corruptAudioReachedDecode({ code: 'initialization-failed', phase: 'model-load' }, state), false)
+  assert.equal(corruptAudioReachedDecode({ code: 'transcription-failed', phase: 'decode-setup' }, state), false)
+  state.events.push({ type: 'ready', ledger: { modelOwners: 1 } })
+  assert.equal(corruptAudioReachedDecode({ code: 'transcription-failed', phase: 'decode-setup' }, state), true)
+})
+
+test('worker module startup errors also produce a terminal initialization prerequisite', async (t) => {
+  const h = await controller(t)
+  h.moduleError = 'Worker module unavailable'
+  const error = await h.lab.transcribeFixture('english').then(() => null, (cause) => cause)
+  assert.equal(error.code, 'initialization-failed')
+  assert.equal(initializationFailure(h.lab.state().events)?.origin, 'parent')
+  assert.equal(h.live, 0)
+})
+
+test('overall acceptance cannot pass missing, aborted, failed or unexpected planned cases', () => {
+  const complete = LAB_CASE_NAMES.map((name) => ({ name, passed: true }))
+  assert.equal(assessLabRun(complete, [], null).automatedStatus, 'passed')
+  const partial = assessLabRun(complete.slice(0, 8), [], null)
+  assert.equal(partial.automatedStatus, 'failed-incomplete')
+  assert.equal(partial.missing.length, LAB_CASE_NAMES.length - 8)
+  assert.equal(assessLabRun(complete, [], { type: 'model-prerequisite' }).automatedStatus, 'failed-incomplete')
+  assert.equal(assessLabRun([{ ...complete[0], passed: false }, ...complete.slice(1)], [], null).automatedStatus, 'failed')
+  assert.equal(assessLabRun([...complete, { name: 'unknown-case', passed: true }], [], null).automatedStatus, 'failed')
+  assert.equal(assessLabRun(complete, [{ type: 'incomplete-memory-sampling' }], null).automatedStatus, 'failed')
 })

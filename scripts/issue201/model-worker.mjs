@@ -1,15 +1,19 @@
 // Disposable laboratory owner. No production source imports this module.
 import { ALL_FORMATS, AudioSampleSink, BlobSource, Input } from '/assets/mediabunny.mjs'
-import { speechSegments, withinSourceCoverage } from './lab-contract.mjs'
+import { pinnedModelFileLookup, speechSegments, withinSourceCoverage } from './lab-contract.mjs'
 
 let manifest
 let transcriber
 let active = false
 let disposed = false
 let inputOwner = null
+let phase = 'created'
 const ledger = { modelOwners: 0, inputOwners: 0, sampleOwners: 0, acquiredSamples: 0,
   closedSamples: 0, pcmBytes: 0, maxPcmBytes: 0, windows: 0 }
-const post = (type, value = {}) => self.postMessage({ type, ...value })
+const post = (type, value = {}) => {
+  if (type === 'phase') phase = value.phase
+  self.postMessage({ type, ...value })
+}
 const updatePcm = (bytes) => {
   ledger.pcmBytes = bytes
   ledger.maxPcmBytes = Math.max(ledger.maxPcmBytes, bytes)
@@ -20,11 +24,7 @@ async function initialize(message) {
   if (manifest || disposed) throw new Error('Worker initialization is single use')
   manifest = message.manifest
   const cache = await caches.open(message.modelCache)
-  const files = new Map(manifest.model.files.flatMap((file) => [
-    [file.url, file],
-    [`${location.origin}/models/${manifest.model.id}/${file.path}`, file],
-    [`${manifest.model.id}/${file.path}`, file],
-  ]))
+  const files = pinnedModelFileLookup(manifest.model, location.origin)
   const runtimeUrls = new Set(manifest.runtime.artifacts.map((asset) => `${location.origin}/assets/${asset.name}`))
   const nativeFetch = globalThis.fetch.bind(globalThis)
   globalThis.fetch = async (request, options) => {
@@ -149,6 +149,7 @@ async function transcribe(message) {
     || !Number.isFinite(message.seconds) || message.seconds < 1 || message.seconds > 300
     || !['english', 'french'].includes(message.language)) throw new Error('Invalid bounded laboratory request')
   active = true
+  post('phase', { phase: 'decode-setup' })
   const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(message.blob) })
   inputOwner = input
   ledger.inputOwners = 1
@@ -206,6 +207,8 @@ self.onmessage = async ({ data }) => {
       self.close()
     } else throw new Error('Unknown laboratory message')
   } catch (error) {
-    post('error', { message: error instanceof Error ? error.message : String(error), ledger: { ...ledger } })
+    post('error', { code: data.type === 'initialize' ? 'initialization-failed'
+      : data.type === 'transcribe' ? 'transcription-failed' : 'disposal-failed', phase,
+    message: error instanceof Error ? error.message : String(error), ledger: { ...ledger } })
   }
 }
