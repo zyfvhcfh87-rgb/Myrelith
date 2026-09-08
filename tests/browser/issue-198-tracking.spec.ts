@@ -1,10 +1,20 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test, type Page } from '@playwright/test'
+import { observePresentations, presentedAction } from './issue-198-presentation-fixture.js'
 
 const filename = 'Mask tracking source.mp4'
 const clipId = 'mask-tracking-source'
 const previewLabel = 'Preview accepted mask tracking at the playhead'
 const luminance = (rgba: number[]) => rgba[0]! + rgba[1]! + rgba[2]!
+
+test.afterEach(async ({ page }, testInfo) => {
+  if (page.isClosed()) return
+  const records = await page.evaluate(() => {
+    const probe = window.__issue198Presentation
+    try { return probe?.records ?? [] } finally { probe?.dispose(); delete window.__issue198Presentation }
+  })
+  await testInfo.attach('program-presentations', { body: JSON.stringify(records, null, 2), contentType: 'application/json' })
+})
 
 function snapshot(page: Page) {
   return page.evaluate(async () => {
@@ -16,11 +26,21 @@ function snapshot(page: Page) {
   })
 }
 async function seek(page: Page, frame: number) {
-  await page.evaluate(async (value) => { const t = '/src/state/transportStore.ts'; (await import(t)).useTransportStore.getState().setPlayheadFrame(value) }, frame)
+  await presentedAction(page, frame, () => page.evaluate(async (value) => {
+    const t = '/src/state/transportStore.ts', transport = (await import(t)).useTransportStore
+    window.__issue198Presentation!.mark(); transport.getState().setPlayheadFrame(value)
+  }, frame), { allowCurrent: true })
   await expect.poll(async () => (await snapshot(page)).frame).toBe(frame)
 }
 async function history(page: Page, operation: 'undo' | 'redo') {
-  await page.evaluate(async (key) => { const d = '/src/state/documentStore.ts'; (await import(d)).useDocumentStore.getState()[key]() }, operation)
+  const frame = (await snapshot(page)).frame
+  await presentedAction(page, frame, () => page.evaluate(async (key) => {
+    const d = '/src/state/documentStore.ts', document = (await import(d)).useDocumentStore
+    window.__issue198Presentation!.mark(); document.getState()[key]()
+  }, operation))
+}
+async function visualAction(page: Page, action: () => Promise<unknown>, event: 'click' | 'change' = 'click') {
+  await presentedAction(page, (await snapshot(page)).frame, action, { event })
 }
 async function pixel(page: Page) {
   return page.getByTestId('preview-canvas').evaluate((element) => {
@@ -67,6 +87,7 @@ async function setup(page: Page) {
   await page.getByLabel('Resolution').selectOption('720')
   await page.getByRole('button', { name: 'Create project', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Commands' })).toBeVisible()
+  await observePresentations(page)
   const bytes = await page.evaluate(async ({ name, id }) => {
     const fixture = '/src/dev/issue198/maskTrackingFixture.ts', importer = '/src/app/mediaImportController.ts'
     const media = '/src/state/mediaStore.ts', d = '/src/state/documentStore.ts'
@@ -96,6 +117,7 @@ async function setup(page: Page) {
   await editor.getByRole('combobox', { name: 'Attach tracking to', exact: true }).selectOption('mask-effect')
   await expect(editor.getByLabel('Mask tracking target')).toHaveValue(JSON.stringify([clipId, (await snapshot(page)).clip.effects[0].id]))
   await expect(editor.getByText(/keys interpolate linearly between accepted samples/)).toBeVisible()
+  await seek(page, 0)
   return { problems, sourceFile: { name: filename, mimeType: 'video/mp4', buffer: Buffer.from(bytes) }, editor }
 }
 async function pick(page: Page, box = false) {
@@ -131,17 +153,17 @@ test('real point tracking previews, applies once, saves/reopens through UI and m
   await seek(page, 17)
   await expect.poll(async () => luminance(await pixel(page))).toBeGreaterThan(30)
   const staticPixel = await pixel(page)
-  await editor.getByLabel(previewLabel).check()
+  await visualAction(page, () => editor.getByLabel(previewLabel).check())
   await expect.poll(async () => (await snapshot(page)).preview).toBe('mask-tracking')
   expect((await snapshot(page)).project).toEqual(before.project)
   expect((await snapshot(page)).past).toBe(before.past)
   await expect.poll(async () => luminance(await pixel(page))).toBeLessThan(8)
   await seek(page, 18); expect((await snapshot(page)).preview).toBeNull()
   await seek(page, 17); expect((await snapshot(page)).preview).toBe('mask-tracking')
-  await editor.getByLabel(previewLabel).uncheck()
+  await visualAction(page, () => editor.getByLabel(previewLabel).uncheck())
   await expect.poll(() => pixel(page)).toEqual(staticPixel)
-  await editor.getByLabel(previewLabel).check()
-  await editor.getByRole('button', { name: 'Apply mask tracking', exact: true }).click()
+  await visualAction(page, () => editor.getByLabel(previewLabel).check())
+  await visualAction(page, () => editor.getByRole('button', { name: 'Apply mask tracking', exact: true }).click())
   const after = await snapshot(page)
   expect(after.past).toBe(before.past + 1); expect(after.preview).toBeNull()
   const tracks = after.clip.animation.effectTracks
@@ -173,11 +195,11 @@ test('real point tracking previews, applies once, saves/reopens through UI and m
   await page.getByRole('button', { name: 'Projects', exact: true }).click()
   await page.getByRole('button', { name: 'Open a project', exact: true }).click()
   await page.getByLabel('Choose a Myrelith project file', { exact: true }).setInputFiles(downloadPath)
-  await page.getByRole('button', { name: 'Open with 1 offline', exact: true }).click()
+  await presentedAction(page, 0, () => page.getByRole('button', { name: 'Open with 1 offline', exact: true }).click(), { event: 'click', connected: false })
   await expect(page.getByRole('button', { name: 'Commands' })).toBeVisible()
   expect((await snapshot(page)).clip.animation.effectTracks).toEqual(tracks)
   expect((await snapshot(page)).past).toBe(0)
-  await page.getByLabel(`Relink ${filename}`, { exact: true }).setInputFiles(sourceFile)
+  await presentedAction(page, 0, () => page.getByLabel(`Relink ${filename}`, { exact: true }).setInputFiles(sourceFile), { event: 'change' })
   await expect.poll(() => page.evaluate(async () => {
     const m = '/src/state/mediaStore.ts'
     return [...(await import(m)).useMediaStore.getState().assets.values()].some((asset: { objectUrl: string | null }) => !!asset.objectUrl)
@@ -234,9 +256,9 @@ test('real backward box tracking exposes size and exact replacement consent and 
   await analyze(page, 'Clip boundary')
   await expect(editor.getByText('Box size uses project-axis bounds. The mask does not follow rotation.')).toBeVisible()
   const before = await snapshot(page)
-  await editor.getByLabel(previewLabel).check()
+  await visualAction(page, () => editor.getByLabel(previewLabel).check())
   expect((await snapshot(page)).project).toEqual(before.project)
-  await editor.getByRole('button', { name: 'Apply mask tracking' }).click()
+  await visualAction(page, () => editor.getByRole('button', { name: 'Apply mask tracking' }).click())
   const after = await snapshot(page)
   expect(after.past).toBe(before.past + 1)
   const tracks = after.clip.animation.effectTracks
@@ -259,11 +281,11 @@ test('real backward box tracking exposes size and exact replacement consent and 
   const positionConsent = editor.getByLabel('Replace all Left and Top keys on Tracking source · Mask 1 (source clip), including keys outside the accepted range', { exact: true })
   await expect(positionConsent).not.toBeChecked()
   await expect(editor.getByRole('button', { name: 'Apply mask tracking' })).toBeDisabled()
-  await positionConsent.check(); await editor.getByLabel(previewLabel).check()
+  await positionConsent.check(); await visualAction(page, () => editor.getByLabel(previewLabel).check())
   await seek(page, 18); expect((await snapshot(page)).preview).toBeNull()
   await seek(page, 17); expect((await snapshot(page)).preview).toBe('mask-tracking')
   await page.screenshot({ path: testInfo.outputPath('tracking-box-review.png') })
-  await editor.getByRole('combobox', { name: 'Attach tracking to', exact: true }).selectOption('clip-transform')
+  await visualAction(page, () => editor.getByRole('combobox', { name: 'Attach tracking to', exact: true }).selectOption('clip-transform'), 'change')
   expect((await snapshot(page)).preview).toBeNull()
   expect((await snapshot(page)).project).toEqual(after.project)
   const idle = await expectTrackingIdle(page)
