@@ -214,7 +214,7 @@
       "url": "https://raw.githubusercontent.com/emscripten-core/emscripten/aeb67926e7de656da38bc807d83050af93578758/tools/settings.py"
     },
     {
-      "name": "emscripten-src-settings_internal.js",
+      "name": "emscripten-src-settings_internal.js.txt",
       "bytes": 10719,
       "sha256": "ec90a484ea7436130b29045251c7bf827c52c74a1266ddd15142967079f9fef0",
       "url": "https://raw.githubusercontent.com/emscripten-core/emscripten/aeb67926e7de656da38bc807d83050af93578758/src/settings_internal.js"
