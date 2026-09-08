@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { expandedTitleProject, legacyTitleProject } from '../test/titleOwnerFixtures'
@@ -9,6 +10,7 @@ import { useTitleTemplateStore } from '../state/titleTemplateStore'
 import { readTitleElement } from '../domain/titleElements'
 import { planTitleEdit } from '../domain/titleEditing'
 import { builtInTitleTemplates } from '../domain/titleTemplates'
+import { beginTitleEdit } from '../app/titleEditingController'
 import { titleTemplateController } from '../app/titleTemplateController'
 import TitleInspector from './TitleInspector'
 import TitleMotionDialog from './TitleMotionDialog'
@@ -79,32 +81,82 @@ describe('title authoring surfaces', () => {
     act(() => useDocumentStore.getState().undo())
     expect(useTitleEditorStore.getState().ids).toEqual(['root-element'])
   })
-  test('motion preview cancels without history; Apply records two ordinary keys once', () => {
+  test('StrictMode motion preview cancels without history; Apply records two ordinary keys once', () => {
+    const before = useDocumentStore.getState().project
     const clip = useDocumentStore.getState().doc.tracks[0].clips[0], close = vi.fn()
-    const rendered = render(<TitleMotionDialog target={target} ids={['root-element']} clip={clip} onClose={close} />)
+    const rendered = render(<StrictMode><TitleMotionDialog target={target} ids={['root-element']} clip={clip} onClose={close} /></StrictMode>)
+    expect(screen.getByRole('button', { name: 'Preview motion' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Preview motion' }))
     expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('title-authoring')
     expect(useDocumentStore.getState().past).toHaveLength(0)
     rendered.unmount(); expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
-    render(<TitleMotionDialog target={target} ids={['root-element']} clip={clip} onClose={close} />)
+    render(<StrictMode><TitleMotionDialog target={target} ids={['root-element']} clip={clip} onClose={close} /></StrictMode>)
+    expect(screen.getByRole('button', { name: 'Apply motion' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Apply motion' }))
     expect(close).toHaveBeenCalledOnce()
     expect(useDocumentStore.getState().past).toHaveLength(1)
     expect(useDocumentStore.getState().doc.tracks[0].clips[0].animation!.titleTracks![0].keyframes.map((key) => key.frame)).toEqual([0, 99])
+    act(() => useDocumentStore.getState().undo())
+    expect(useDocumentStore.getState().project).toBe(before)
   })
-  test('motion Reapply displays the complete replacement list and requires its checkbox', () => {
+  test('StrictMode motion Reapply displays the complete replacement list and requires its checkbox', () => {
     const project = planTitleEdit(expandedTitleProject(), target, { kind: 'motion', ids: ['root-element'], direction: 'up', start: 0, end: 99, replace: false }, () => 'unused')
     useDocumentStore.getState().setProject(project)
-    render(<TitleMotionDialog target={target} ids={['root-element']} clip={useDocumentStore.getState().doc.tracks[0].clips[0]} onClose={vi.fn()} />)
+    render(<StrictMode><TitleMotionDialog target={target} ids={['root-element']} clip={useDocumentStore.getState().doc.tracks[0].clips[0]} onClose={vi.fn()} /></StrictMode>)
     expect(screen.getByText(/root-element · position-y · 2 keys/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reapply motion' })).toBeDisabled()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Replace all listed movement tracks' }))
+    expect(screen.getByRole('button', { name: 'Reapply motion' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Reapply motion' }))
     expect(useDocumentStore.getState().past).toHaveLength(1)
   })
+  test.each(['selection', 'project', 'playhead'] as const)('StrictMode keeps real %s invalidation terminal', (change) => {
+    render(<StrictMode><TitleMotionDialog target={target} ids={['root-element']} clip={useDocumentStore.getState().doc.tracks[0].clips[0]} onClose={vi.fn()} /></StrictMode>)
+    expect(screen.getByRole('button', { name: 'Preview motion' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Preview motion' }))
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('title-authoring')
+    act(() => {
+      if (change === 'selection') useTitleEditorStore.getState().select('root-text', [])
+      if (change === 'project') useDocumentStore.getState().setProject(expandedTitleProject())
+      if (change === 'playhead') useTransportStore.getState().setPlayheadFrame(1)
+    })
+    expect(screen.getByRole('status')).toHaveTextContent('This review has ended')
+    expect(screen.getByRole('button', { name: 'Preview motion' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Apply motion' })).toBeDisabled()
+    expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+    const afterChange = useDocumentStore.getState()
+    // Returning a cursor/selection to its prior value cannot revive this review.
+    act(() => { useTransportStore.getState().setPlayheadFrame(0); useTitleEditorStore.getState().select('root-text', ['root-element']) })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply motion' }))
+    expect(useDocumentStore.getState()).toBe(afterChange)
+    expect(screen.getByRole('button', { name: 'Apply motion' })).toBeDisabled()
+  })
+  test('StrictMode dialog teardown releases only its own session after another title editor takes over', () => {
+    const mounted = render(<StrictMode><TitleMotionDialog target={target} ids={['root-element']} clip={useDocumentStore.getState().doc.tracks[0].clips[0]} onClose={vi.fn()} /></StrictMode>)
+    expect(screen.getByRole('button', { name: 'Preview motion' })).toBeEnabled()
+    let replacement!: ReturnType<typeof beginTitleEdit>
+    act(() => { replacement = beginTitleEdit(target); expect(replacement.preview({ kind: 'values', ids: ['root-element'], values: { opacity: 0.5 } })).toBeNull() })
+    const preview = useTransportStore.getState().effectDocumentPreview
+    expect(preview?.owner).toBe('title-authoring')
+    mounted.unmount()
+    expect(useTransportStore.getState().effectDocumentPreview).toBe(preview)
+    expect(useDocumentStore.getState().past).toHaveLength(0)
+    act(() => replacement.cancel())
+  })
+  test('StrictMode template dialog remains usable and commits one independent copy', () => {
+    useTransportStore.getState().setPlayheadFrame(200)
+    const before = useDocumentStore.getState().project
+    render(<StrictMode><TitleTemplateDialog onClose={vi.fn()} /></StrictMode>)
+    expect(screen.getByRole('button', { name: 'Apply template' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Apply template' }))
+    expect(useDocumentStore.getState().past).toHaveLength(1)
+    expect(useDocumentStore.getState().doc.tracks[0].clips).toHaveLength(2)
+    act(() => useDocumentStore.getState().undo())
+    expect(useDocumentStore.getState().project).toBe(before)
+  })
   test('template conversion is reviewed before insertion and a changed project rejects Apply', () => {
     useTransportStore.getState().setPlayheadFrame(200)
-    render(<TitleTemplateDialog onClose={vi.fn()} />)
+    render(<StrictMode><TitleTemplateDialog onClose={vi.fn()} /></StrictMode>)
     expect(screen.getByText(/Same canvas; geometry is preserved/)).toBeInTheDocument()
     expect(screen.getByText(/Insert at frame 200/)).toBeInTheDocument()
     act(() => useDocumentStore.getState().setProject(expandedTitleProject()))

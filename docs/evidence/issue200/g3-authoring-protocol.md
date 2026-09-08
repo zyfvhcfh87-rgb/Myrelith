@@ -7,10 +7,11 @@ the caption owner correction, all four existing preview owners, and the accepted
 shared animation APIs. It adds a fifth named title-authoring preview owner.
 
 G3 implementation is authorized; this document requests review of source and the
-following six-flow observable protocol. The granted run at1fff897 failed its first
-flow and stopped; all failure evidence is preserved in g3-first-authoring-failure.md.
-This fixture/selector correction has **not run in a browser** and requires fresh
-source review and an exclusive grant. No full/performance gate has run. #199's final shared
+following six-flow observable protocol. The first run at1fff897 failed flow1; the
+fixture/selector-corrected cd24868 run passed flows1–2 and failed flow3. Both runs
+and complete first-failure evidence remain preserved in g3-first-authoring-failure.md
+and g3-motion-strictmode-failure.md. The motion effect-lifecycle correction has
+**not run in a browser** and requires fresh source review and an exclusive grant. No full/performance gate has run. #199's final shared
 animation workspace has not been integrated. Its property/dope-sheet wiring is
 explicitly pending the supervisor's accepted sync; no second key editor is added.
 

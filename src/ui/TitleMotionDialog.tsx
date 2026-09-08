@@ -13,8 +13,22 @@ export default function TitleMotionDialog({ target, ids, clip, onClose }: { targ
   useEffect(() => {
     const node = dialog.current, prior = document.activeElement
     if (node?.showModal) node.showModal(); else node?.setAttribute('open', '')
-    try { session.current = beginTitleEdit(pinnedTarget, () => { session.current = null; setStale(true) }) } catch (cause) { setError(String(cause)); setStale(true) }
-    return () => { session.current?.cancel(); if (prior instanceof HTMLElement) prior.focus() }
+    let live = true, owned: TitleEditSession | null = null
+    try {
+      owned = beginTitleEdit(pinnedTarget, () => {
+        if (!live) return
+        session.current = null; setStale(true)
+      })
+      session.current = owned; setStale(false); setError('')
+    } catch (cause) { setError(String(cause)); setStale(true) }
+    return () => {
+      // Effect teardown (including StrictMode rehearsal) releases this owner;
+      // only an end while the effect is live invalidates the visible review.
+      live = false
+      if (session.current === owned) session.current = null
+      owned?.cancel()
+      if (prior instanceof HTMLElement) prior.focus()
+    }
   }, [pinnedTarget])
   const replacements = titleMotionReplacements(clip, ids, direction)
   const command: TitleEditCommand = { kind: 'motion', ids, direction, start, end, replace }
