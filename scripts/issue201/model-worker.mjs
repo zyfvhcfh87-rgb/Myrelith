@@ -1,5 +1,6 @@
 // Disposable laboratory owner. No production source imports this module.
 import { ALL_FORMATS, AudioSampleSink, BlobSource, Input } from '/assets/mediabunny.mjs'
+import { speechSegments, withinSourceCoverage } from './lab-contract.mjs'
 
 let manifest
 let transcriber
@@ -156,7 +157,7 @@ async function transcribe(message) {
     const track = await input.getPrimaryAudioTrack()
     if (!track || !await track.canDecode()) throw new Error('Fixture audio cannot decode')
     const coverage = await track.computeDuration()
-    if (message.seconds > coverage + 0.0001) throw new Error('Requested window exceeds fixture coverage')
+    if (!withinSourceCoverage(message.seconds, coverage)) throw new Error('Requested window exceeds fixture coverage')
     for (let start = 0; start < message.seconds; start += 25) {
       const end = Math.min(message.seconds, start + 30)
       post('phase', { phase: 'prepare', start, end })
@@ -170,18 +171,7 @@ async function transcribe(message) {
       })
       const elapsed = performance.now() - began
       if (elapsed > manifest.thresholds.maxWindowWallMs) throw new Error('Inference window exceeded its wall-time ceiling')
-      if (typeof result.text !== 'string' || result.text.length > 20_000 || !Array.isArray(result.chunks) || result.chunks.length > 1_000) throw new Error('Unbounded or malformed inference result')
-      let chunkCharacters = 0
-      let previousEnd = 0
-      const chunks = result.chunks.map((chunk) => {
-        if (typeof chunk.text !== 'string' || chunk.text.length > 4_000 || !Array.isArray(chunk.timestamp) || chunk.timestamp.length !== 2) throw new Error('Malformed speech segment')
-        chunkCharacters += chunk.text.length
-        if (chunkCharacters > 20_000) throw new Error('Speech segment aggregate exceeded its character budget')
-        const [from, to] = chunk.timestamp
-        const timed = Number.isFinite(from) && Number.isFinite(to) && from >= previousEnd && to > from && to <= end - start + 0.02
-        if (timed) previousEnd = to
-        return { text: chunk.text, timestamp: [from, to], timed }
-      })
+      const chunks = speechSegments(result, end - start)
       windows.push({ start, end, elapsedMs: elapsed, text: result.text, chunks, digitalSilenceSkipped: zero })
       ledger.windows++
       audio = null

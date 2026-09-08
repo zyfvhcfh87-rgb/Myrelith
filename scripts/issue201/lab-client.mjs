@@ -120,16 +120,17 @@ async function installModel({ byteLimit = manifest.thresholds.modelCacheByteLimi
 async function closeWorker(reason) {
   const current = owner
   if (!current) return
-  owner = null
+  if (current.cleanupPromise) return current.cleanupPromise
   const started = performance.now()
   if (!current.idle) {
     current.worker.terminate()
     current.reject?.(new Error(`Worker terminated: ${reason}`))
     lastCleanup = { mode: 'terminated-active', reason, elapsedMs: performance.now() - started, cooperativeZero: false }
     record({ type: 'cleanup', ...lastCleanup })
+    if (owner === current) owner = null
     return
   }
-  await new Promise((resolve) => {
+  current.cleanupPromise = new Promise((resolve) => {
     let settled = false
     const finish = (mode, ledger = null) => {
       if (settled) return
@@ -143,8 +144,12 @@ async function closeWorker(reason) {
     }
     const timer = setTimeout(() => finish('terminated-deadline'), manifest.thresholds.terminationFallbackMs)
     current.onDispose = (ledger) => finish('cooperative', ledger)
-    current.worker.postMessage({ type: 'dispose' })
+    try { current.worker.postMessage({ type: 'dispose' }) }
+    catch { finish('terminated-post-error') }
+  }).finally(() => {
+    if (owner === current) owner = null
   })
+  return current.cleanupPromise
 }
 
 async function cancel(reason = 'cancel') {
@@ -174,7 +179,7 @@ async function transcribeFixture(name, { seconds, language, repeatSeconds = null
   }
   if (boundGeneration !== generation || operation !== operationSequence) throw new Error('Stale source preparation')
   const worker = new Worker('/model-worker.mjs', { type: 'module' })
-  const current = { worker, generation, idle: false, reject: null, onDispose: null }
+  const current = { worker, generation, idle: false, reject: null, onDispose: null, cleanupPromise: null }
   owner = current
   phase = 'worker-created'
   const requestId = ++requestSequence

@@ -142,8 +142,10 @@ and verifies script hashes again at completion. Any failure output is retained.
   preparation-scratch allowance is separate from runtime/native allocations.
 - **Result bounds:** at most 20,000 transcript characters and 1,000 segments per
   window, 4,000 characters per segment and 20,000 aggregate segment characters.
-  Finite positive ordered segment times within the source interval are required
-  for fixture timestamp acceptance. Missing endpoints remain explicit failures
+  Finite positive ordered segment times within the source interval are required,
+  with no 20 ms timestamp or 0.1 ms source-coverage tolerance. Even one floating
+  value above the source endpoint remains unavailable; exact-end values pass.
+  Missing endpoints remain explicit failures
   of that acceptance, not invented cue timing. Long-window overlap reconciliation
   and integer-frame/editor apply are later product gates.
 - **Accuracy:** normalized Unicode word edit distance ≤0.20 for the English
@@ -169,15 +171,22 @@ and verifies script hashes again at completion. Any failure output is retained.
   acceptance test. No model action must cause zero model/runtime requests.
 - **Ownership/cancellation:** acquisition, model-load, preparation and inference
   cancellation; project replacement; corrupt input; retry and removal. Log exact
-  generations and ownership. Idle disposal must acknowledge zero model/input/
+  generations and ownership. A retiring idle worker retains its reservation and
+  one shared cleanup promise through disposal acknowledgement or termination;
+  all competing transcription, installation and cancellation operations await
+  that same drain. Superseded operations reject before a replacement worker can
+  be created. Idle disposal must acknowledge zero model/input/
   sample/PCM owners within the deadline. Active termination is labelled forced
   cleanup, never a cooperative zero ledger. Short preparation phases may require
   a separately frozen instrumented test if real phase observation misses them.
 - **Offline:** no Playwright routing (which disables the HTTP cache). Independently
   block networking for a loaded page plus fresh worker, page reload, and a closed/
   reopened persistent browser profile. Runtime dynamic imports are checked by
-  observed browser requests as well as the worker fetch allowlist. Any unlisted
-  outbound request fails the lab. Failure to boot offline is recorded as failure,
+  observed browser requests as well as the worker fetch allowlist. Each browser
+  request must match an exact frozen served URL and GET method (plus the explicit
+  favicon rule), including same-origin requests; extra paths/queries fail. Known
+  optional model misses stay visible in worker events without a network request.
+  Failure to boot offline is recorded as failure,
   not worked around by pretending a warm worker proves the deployment can reopen.
 
 The host identity supplied by the orchestrator is Mac17,6, 64 GiB, Apple M5 Max.
@@ -199,6 +208,18 @@ Only after the orchestrator grants the exclusive inference slot:
 
 ```sh
 DEVELOPER_DIR=/Library/Developer/CommandLineTools ISSUE201_EXCLUSIVE_SLOT=1 node scripts/issue201/run-speech-lab.mjs
+```
+
+The sampler cancels the active job on the first observed resident-ceiling breach,
+then closes its browser after at most 100 ms waiting for that cancellation. The
+case runner stops before another case and retains partial memory/network/failure
+evidence. This does not claim that an OS sampler catches every instantaneous peak.
+
+Deterministic tests run the unmodified controller in a Node VM with fake browser
+resources and a deferred-dispose worker; they do not import/run the model:
+
+```sh
+node --experimental-vm-modules --test scripts/issue201/lab-review.test.mjs
 ```
 
 Syntax checks and repository lint cover the committed harness; the byte-preflight

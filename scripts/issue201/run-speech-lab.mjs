@@ -7,6 +7,7 @@ import { gzipSync } from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { chromium } from '@playwright/test'
+import { declaredLabRequest, residentCeilingBreached } from './lab-contract.mjs'
 
 if (process.env.ISSUE201_EXCLUSIVE_SLOT !== '1') throw new Error('Obtain the orchestrator exclusive slot before running inference; then set ISSUE201_EXCLUSIVE_SLOT=1')
 const root = fileURLToPath(new URL('../../', import.meta.url))
@@ -18,7 +19,7 @@ const hash = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', env: { ...process.env, DEVELOPER_DIR: '/Library/Developer/CommandLineTools' } }).trim()
 if (git('status', '--porcelain', '--', 'scripts/issue201', 'docs/evidence/issue201/replacement-manifest.json')) throw new Error('Commit the harness and frozen replacement manifest before timing')
 const source = { commit: git('rev-parse', 'HEAD'), manifestSha256: hash(manifestBytes), files: {} }
-for (const filename of ['prepare-speech-lab.mjs', 'run-speech-lab.mjs', 'lab-client.mjs', 'model-worker.mjs']) {
+for (const filename of ['prepare-speech-lab.mjs', 'run-speech-lab.mjs', 'lab-client.mjs', 'model-worker.mjs', 'lab-contract.mjs']) {
   source.files[filename] = hash(await readFile(path.join(root, 'scripts/issue201', filename)))
 }
 if (Object.keys(manifest.runtime.advisories).length) throw new Error('Replacement runtime has unresolved advisory entries')
@@ -33,13 +34,15 @@ for (const artifact of manifest.runtime.artifacts) await add(`/assets/${artifact
 for (const file of manifest.model.files) await add(`/model/${file.path}`, path.join(root, '.tmp/issue201-package-probe/model', file.path), 'application/octet-stream', false, file.sha256)
 for (const fixture of manifest.fixtures) await add(`/fixtures/${fixture.name}.wav`, path.join(labRoot, 'fixtures', `${fixture.name}.wav`), 'audio/wav', true, fixture.sha256)
 for (const fixture of manifest.derivatives) await add(`/fixtures/${fixture.name}`, path.join(labRoot, 'fixtures', fixture.name), 'audio/wav', true, fixture.sha256)
-for (const filename of ['lab-client.mjs', 'model-worker.mjs']) await add(`/${filename}`, path.join(root, 'scripts/issue201', filename), 'text/javascript', true)
+for (const filename of ['lab-client.mjs', 'model-worker.mjs', 'lab-contract.mjs']) await add(`/${filename}`, path.join(root, 'scripts/issue201', filename), 'text/javascript', true)
 served.set('/manifest.json', { bytes: manifestBytes, contentType: 'application/json', immutable: true })
 const html = Buffer.from('<!doctype html><meta charset="utf-8"><title>Issue 201 speech laboratory</title><h1>Issue 201 speech laboratory</h1><p id="status">Loading source manifest.</p><script type="module" src="/lab-client.mjs"></script>')
 served.set('/', { bytes: html, contentType: 'text/html', immutable: true })
+const servedUrls = new Set([...served.keys()].map((entry) => `http://127.0.0.1:5201${entry}`))
 const serverRequests = []
 const server = createServer((request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1:5201')
+  if (!declaredLabRequest(url.href, request.method, servedUrls)) { response.writeHead(404); response.end(); return }
   if (url.pathname === '/favicon.ico') { response.writeHead(204); response.end(); return }
   const asset = served.get(url.pathname)
   if (!asset) { response.writeHead(404); response.end(); return }
@@ -62,8 +65,11 @@ const network = []
 let context
 let sampler
 let sampling = false
+let pendingSample = null
 let runtime = null
 let memoryAssessment = null
+let baselineMemory = null
+let stopReason = null
 const expect = (condition, message) => { if (!condition) throw new Error(message) }
 const words = (text) => text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').trim().split(/\s+/u).filter(Boolean)
 function wordErrorRate(expected, actual) {
@@ -86,7 +92,7 @@ try {
     context.on('request', (request) => {
       const url = request.url()
       network.push({ url, method: request.method() })
-      if (!url.startsWith('http://127.0.0.1:5201/')) problems.push({ type: 'outbound-request', url })
+      if (!declaredLabRequest(url, request.method(), servedUrls)) problems.push({ type: 'undeclared-request', url, method: request.method() })
     })
   }
   observePage()
@@ -104,19 +110,38 @@ try {
       const complete = pids.every((pid) => rows.some(([id, rss]) => id === pid && Number.isFinite(rss)))
       memory.push({ at: Date.now(), label, complete, bytes: complete ? rows.reduce((sum, [, rss]) => sum + rss * 1024, 0) : null,
         processes: table.processInfo.map((entry) => ({ id: entry.id, type: entry.type })), rss: rows })
+      const snapshot = memory.at(-1)
+      if (label === 'idle-baseline' && complete) baselineMemory = snapshot.bytes
+      if (!stopReason && complete && residentCeilingBreached(baselineMemory, snapshot.bytes, manifest.thresholds.maxIncrementalResidentBytes)) {
+        stopReason = { type: 'resident-ceiling', at: Date.now(), baseline: baselineMemory, sample: snapshot.bytes,
+          incremental: snapshot.bytes - baselineMemory, action: 'cancel job then close browser; no further cases' }
+        problems.push(stopReason)
+        clearInterval(sampler)
+        await Promise.race([page.evaluate(() => globalThis.lab?.cancel('resident-ceiling')).catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 100))])
+        await context.close().catch(() => {})
+        stopReason.browserClosedAt = Date.now()
+      }
     } catch (error) { memory.push({ at: Date.now(), label, complete: false, error: error.message }) }
     finally { sampling = false }
   }
+  function takeSample(label) {
+    if (pendingSample) return pendingSample
+    pendingSample = sampleMemory(label).finally(() => { pendingSample = null })
+    return pendingSample
+  }
   await page.goto('http://127.0.0.1:5201/')
   await page.waitForFunction(() => Boolean(globalThis.lab))
-  await sampleMemory('idle-baseline')
-  sampler = setInterval(() => { void sampleMemory() }, 250)
+  await takeSample('idle-baseline')
+  sampler = setInterval(() => { void takeSample() }, 250)
   async function check(name, action) {
+    if (stopReason) throw new Error(`Laboratory stopped: ${stopReason.type}`)
     process.stdout.write(`Starting ${name}\n`)
     const requestStart = serverRequests.length
     const began = Date.now()
     try {
       const data = await action()
+      if (stopReason) throw new Error(`Laboratory stopped: ${stopReason.type}`)
       results.push({ name, passed: true, elapsedMs: Date.now() - began, data, serverRequests: serverRequests.slice(requestStart) })
     } catch (error) {
       const failedState = await page.evaluate(() => globalThis.lab?.state()).catch((cause) => ({ inspectionError: cause.message }))
@@ -196,7 +221,7 @@ try {
       if (fixture) expect(result.windows.every((window) => window.chunks.length > 0 && window.chunks.every((chunk) => chunk.timed)), 'Fixture timestamps were missing, unordered or outside source coverage')
       const cleanup = await page.evaluate(() => lab.cancel('completed-job'))
       expect(cleanup.workerOwners === 0 && cleanup.lastCleanup?.cooperativeZero, 'Idle model did not cooperatively dispose within the frozen deadline')
-      await sampleMemory(`closed-${name}`)
+      await takeSample(`closed-${name}`)
       return { result, wordErrorRate: wer, cleanup }
     })
   }
@@ -233,7 +258,7 @@ try {
     const result = await page.evaluate(() => lab.transcribeFixture('english', { repeatSeconds: 300 }))
     expect(result.windows.length === 12 && result.finalLedger.maxPcmBytes <= manifest.thresholds.maxPcmBytes, 'Long job breached its bounded window plan')
     const cleanup = await page.evaluate(() => lab.cancel('long-job-complete'))
-    await sampleMemory('closed-300-second')
+    await takeSample('closed-300-second')
     return { result, cleanup }
   })
   await check('offline-loaded-app-and-fresh-worker', async () => {
@@ -258,14 +283,15 @@ try {
   })
   await check('offline-persistent-browser-reopen', async () => {
     clearInterval(sampler)
+    await pendingSample
     await context.close()
     context = await chromium.launchPersistentContext(profile, { headless: true,
       args: ['--mute-audio', '--disable-background-networking', '--disable-component-update'], acceptDownloads: false })
     page = context.pages()[0] ?? await context.newPage()
     observePage()
     browserCdp = await context.browser().newBrowserCDPSession()
-    await sampleMemory('reopened-idle')
-    sampler = setInterval(() => { void sampleMemory() }, 250)
+    await takeSample('reopened-idle')
+    sampler = setInterval(() => { void takeSample() }, 250)
     await context.setOffline(true)
     try {
       await page.goto('http://127.0.0.1:5201/')
@@ -286,7 +312,7 @@ try {
       return { error, state: await page.evaluate(() => lab.state()) }
     } finally { await context.setOffline(false) }
   })
-  await sampleMemory('final-idle')
+  await takeSample('final-idle')
   const baseline = memory.find((entry) => entry.label === 'idle-baseline' && entry.complete)?.bytes
   const peak = Math.max(...memory.filter((entry) => entry.complete).map((entry) => entry.bytes))
   expect(Number.isFinite(baseline), 'Complete process baseline memory unavailable')
@@ -301,11 +327,12 @@ try {
   for (const [filename, digest] of Object.entries(source.files)) expect(hash(await readFile(path.join(root, 'scripts/issue201', filename))) === digest, 'Laboratory source changed during qualification')
 } finally {
   clearInterval(sampler)
+  await pendingSample
   await context?.close()
   await new Promise((resolve) => server.close(resolve))
   const artifact = { kind: 'issue201-speech-lab-result-v1', recordedAt: new Date().toISOString(), source,
     qualification: 'Isolated laboratory only; production editor integration and broader audio/browser/language configurations are not qualified.',
-    runtime, results, problems, memoryAssessment, memory, network, serverRequests }
+    runtime, results, problems, stopReason, memoryAssessment, memory, network, serverRequests }
   await writeFile(path.join(labRoot, 'results.json'), `${JSON.stringify(artifact, null, 2)}\n`)
   process.stdout.write(JSON.stringify({ output: path.join(labRoot, 'results.json'), passed: results.filter((result) => result.passed).length,
     failed: results.filter((result) => !result.passed).length, problems: problems.length }) + '\n')
