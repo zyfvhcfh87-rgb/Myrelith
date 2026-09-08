@@ -1,0 +1,304 @@
+Myrelith
+Animation observable fixture
+Unsaved changes
+Recovery copy updated
+S splits at playhead · Del ripple-deletes
+Commands
+Ctrl/⌘+K
+Projects
+Save
+Save As
+Captions
+Plugins
+Export
+Workspace
+Edit
+Inspect
+Media
+Custom
+Media
+Inspector
+Timeline
+Focus Inspector
+Sequence
+Animation observable fixture · Root
+dormant
+Root: Animation observable fixture
+New
+Create compound
+Back to parent
+Duplicate
+Rename
+Make root
+Delete
+Media
+Relink folder & remember
+Relink folder once
+Import
+
+Import stores a browser-only file permission and its label. Myrelith never copies or uploads the file.
+
+SEARCH
+TYPE
+All types
+Video
+Audio
+Still images
+STATUS
+All statuses
+Ready media
+Offline media
+Checking media
+Limited media
+Unsupported media
+Media errors
+2 of 2
+THUMBNAIL SIZE
+Small
+Medium
+Large
+SORT
+Project order
+Name
+Kind
+Duration
+Last modified
+Size
+Proxies
+0 · 0 B
+Stills
+s
+Future imports only
+COLLECTIONS
+All media
+2
+
+Relink finished · 1 of 1 checked · 1 connected · 0 skipped
+
+fixture.mp4
+1920×1080 · 00:00:30:00
+OFFLINE · RELINK NEEDED
+Relink & remember
+Relink once
+Details and actions
+silent-offline.wav
+48 kHz · 00:00:30:00
+CONNECTEDDetails and actions
+Use arrow keys, Home, End, Page Up, and Page Down to move the Media Pool selection. Tab moves into that row's relink, collection, proxy, and remove actions.
+Selected fixture.mp4
+2 items
+SCOPES
+QUALITY
+Auto
+Full
+Half
+Quarter
+Arrow keys adjust the focused control. Hold Shift for larger steps. Drag to preview; releasing commits one edit.
+Use arrow keys to move one pixel. Hold Shift to move ten pixels. Use the resize handle arrow keys to change the text box.
+Visual sources are offline. Reconnect them in the Media panel.
+Multicam
+New multicam
+Track and master video effects
+Inspector
+Native curve title
+Video clip
+Transform
+Crop
+Effects
+Animation
+Link selected audio and video clips
+Select one more clip with Ctrl/Cmd-click, or focus it and press Ctrl/Cmd+Enter.
+Timing
+Reset
+Speed at playhead
+0% (Freeze)
+25%
+50%
+75%
+100%
+125%
+150%
+175%
+200%
+225%
+250%
+275%
+300%
+325%
+350%
+375%
+400%
+Clip frame 0. Add a later positive speed boundary before choosing 0% (Freeze).
+Whole clip speed
+25%
+50%
+75%
+100%
+125%
+150%
+175%
+200%
+225%
+250%
+275%
+300%
+325%
+350%
+375%
+400%
+Timeline 100 frames · source 100 frames.
+Audio stays enabled at 100% speed.
+Add boundary at playhead
+Clear ramp
+
+Choose a speed at the playhead or add a boundary to start a timed section. The current whole-clip speed becomes frame 0.
+
+Playhead: clip frame 0. A 0% freeze must be bounded by a later positive point.
+
+Copy attributes
+Paste attributes…
+Reset attributes…
+VIDEO · NATIVE CURVE TITLE
+Transform
+Reset
+Position X
+Position Y
+Scale X
+Scale Y
+Lock scale ratio
+Rotation °
+Anchor X (%)
+Anchor Y (%)
+Flip horizontally
+Flip vertically
+Compositing
+Reset
+Blend mode
+Normal
+Multiply
+Screen
+Overlay
+Darken
+Lighten
+Difference
+Exclusion
+Normal is applied after transform, crop, and opacity.
+Opacity
+Reset
+Opacity
+Clip audio effects
+Add EQ
+Add compressor
+Add limiter
+Add noise gate
+Voice preset
+Music preset
+Podcast preset
+Audio effects run in authored order at this mix stage. Live playback and export share the same processors; bypass, reorder, reset, and unknown descriptors are preserved.
+No audio effects on this stack.
+V1 audio effects
+Add EQ
+Add compressor
+Add limiter
+Add noise gate
+Voice preset
+Music preset
+Podcast preset
+Audio effects run in authored order at this mix stage. Live playback and export share the same processors; bypass, reorder, reset, and unknown descriptors are preserved.
+No audio effects on this stack.
+Master audio effects
+Add EQ
+Add compressor
+Add limiter
+Add noise gate
+Voice preset
+Music preset
+Podcast preset
+Audio effects run in authored order at this mix stage. Live playback and export share the same processors; bypass, reorder, reset, and unknown descriptors are preserved.
+No audio effects on this stack.
+Loudness
+Measure
+Measurement range
+Full timeline
+Timeline In/Out
+Measurement is derived from the mixed program. It never writes gain. Incomplete coverage cannot claim a complete reading.
+Selected range: 0–180 (end exclusive).
+Normalize master to -16 LUFS
+Insert
+Overwrite
+Lift
+Extract
+Replace
+Playback is paused
+L
+R
+M
+0
+Animation
+Dope sheet
+Curve
+Selected items
+Animated only
+All properties
+Clip / audio
+Effects
+Title elements
+Held paths
+Back to Timeline
+First
+Previous
+Next
+Last
+-10f
+-1f
++1f
++10f
+Copy
+Cut
+Paste
+Paste original time
+Map paste…
+Delete
+X−
+X+
+←
+→
+Fit keys
+Reset view
+Track / item / property
+0
+14
+28
+42
+56
+70
+84
+multiplier
+Y+
+Y−
+↑
+↓
+Fit values
+V1 / Native curve title, Opacity, local frame 0, scalar editing available
+Opacity
+V1 / Native curve title
+Set key at playhead
+Key local frame
+Key value (multiplier)
+Outgoing easing
+Linear
+Hold
+Ease in
+Ease out
+Ease in/out
+Custom Bézier
+Bézier x1
+Bézier y1
+Bézier x2
+Bézier y2
+Offset frames
+Move
+Duplicate
+1 lanes · 23 keys · 1 selected
+Keyboard help
+Bézier handles updated.
