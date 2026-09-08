@@ -142,7 +142,11 @@ export function captionTrackValidationError(track: CaptionTrack): string | null 
 
 /** Validate global ids, resource limits, and the bounded overlap contract. */
 export function captionDocumentValidationError(doc: TimelineDoc): string | null {
-  const tracks = doc.captionTracks ?? []
+  return captionTracksValidationError(doc.captionTracks ?? [])
+}
+
+/** Shared caption-only admission for file proposals and complete documents. */
+export function captionTracksValidationError(tracks: readonly CaptionTrack[]): string | null {
   if (tracks.length > CAPTION_LIMITS.maxTracks) {
     return `Project exceeds ${CAPTION_LIMITS.maxTracks} caption tracks`
   }
