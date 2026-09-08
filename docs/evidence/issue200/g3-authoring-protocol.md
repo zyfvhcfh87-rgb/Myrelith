@@ -1,0 +1,80 @@
+# G3 authoring: source review and bounded observable protocol
+
+G2 remains accepted with the qualifications recorded in g2-observable-results.md.
+The exact approved integration e6a64a7898111a2c230c57eee890832a74fb88b3 was merged
+cleanly at 05b370a88d76791a9481da320fc2e73205968f91. This gate preserves schema24,
+the caption owner correction, all four existing preview owners, and the accepted
+shared animation APIs. It adds a fifth named title-authoring preview owner.
+
+G3 implementation is authorized; this document requests review of source and the
+following six-flow observable protocol. **Browser/native/full/performance runs
+are not yet authorized or executed for this source.** #199's final shared
+animation workspace has not been integrated. Its property/dope-sheet wiring is
+explicitly pending the supervisor's accepted sync; no second key editor is added.
+
+The source implements accessible ordered element selection, static numeric/style
+editing, multi-edit, add/duplicate/delete/reorder, explicit compact Upgrade,
+persisted font fallback, transformed monitor movement/resize with keyboard
+alternatives, and ephemeral 90% title/95% action guides. Animated gestures use
+planSetAnimationKey; roll/crawl uses planAnimationInsertions and the canonical
+element resolver. Reapply lists every owned replacement lane and refuses future
+movement versions. Both offscreen endpoints use transformed crop bounds, including
+rotation, anchor, flips and scale. Templates retain editable title lanes, allocate
+fresh clip/element/orphan identities, and disclose uniform centered fitting and
+unchanged frame-number timing. Local IDB writes complete only with their owning
+transaction; errors/unknown records/future envelopes are surfaced and preserved.
+Only bounded serializable summaries enter the template store. Supported lookup and
+delete bind to the validated record; same-ID future siblings survive in either order.
+
+A title session pins project identity/generation, sequence, clip and element
+selection, playhead, reset revision and media envelope. Cancellation releases its
+subscriptions and captured project. Replacement releases the old draft without
+reacquiring preview priority. All five named previews, including hidden owners, are projected by the shared app
+admission facade and actual store commit boundary. Candidate and sampled-preview retention are checked
+against current, both history branches and clipboards; commits repeat the portable
+file and store admission checks. A sampled motion preview resolves the title at
+an explicit local integer frame without moving the playhead or authoring keys.
+
+## Proposed six-flow browser run
+
+One muted headless Chromium worker, port5200, no retries, maxFailures1, each test
+at most60seconds. Exclusive supervisor slot required before launch. Source is
+frozen: a clean checkpoint manifest is recorded with verify-g3-source.mjs and
+verified immediately before/after. No source edits, peer sync, package change or
+parallel browser/performance workload during the run. Historical G2 baseline and
+proof archives/guards remain untouched; they are not misapplied to this new tree.
+
+1. Real compact Upgrade, content, added shape, multi-opacity, stable-ID reorder,
+   and command-palette Undo/Redo. Check exact history increments and portable wire state.
+2. Actual Program pointer movement and Escape cancellation; safe-guide visibility
+   with identical project serialization and history. Retain guide/handle screenshot.
+3. Roll/crawl dialog Preview/Cancel, two-key Apply, explicit replacement listing,
+   confirmation and Reapply with edited range. Retain complete review screenshot.
+4. Unavailable literal font fixture, real generic fallback control, preview status,
+   actual serialize/parse/reopen and retained original family. Retain screenshot.
+5. Real origin-local IndexedDB save, reread/select/use and delete via UI. Check one
+   inserted independent copy, remapped IDs and unchanged project on library delete.
+6. 720×800 dialog reachability and stale review rejection. This qualifies the title
+   dialog only; shared workspace clipping observed in G2 is not relabeled fixed.
+
+Fixtures are inserted through test-only production-module imports after entering
+the real editor through its new-project UI. All task mutations use actual UI;
+imports are for fixture construction, positioning, stale-context injection,
+serialization/reopen and read-only evidence. This is an authoring gate, not another
+2772-comparison rendering parity run or an encoded-export/performance claim.
+
+The observer records warnings, console errors, page errors, URL/title/body identity,
+Vite overlays and viewport/bounds through the final screenshot of every test.
+Any warning/error fails this G3 authoring run; no warning is filtered or suppressed.
+The G2 Canvas2D readback advisories remain historical and qualified, and no
+production canvas setting is changed to hide them. Failure preserves trace,
+screenshots and full observations; no weakening or silent retry is allowed.
+
+run-g3-browser.py owns the launcher/Vite/Chromium descendants by PID, start time
+and command identity, preserves stdout and process ancestry, and records observer
+exceptions. Teardown affects only that run's owned processes. After the run,
+record fresh complete native process/listener evidence, visually inspect each
+requested screenshot, audit all observations and assertions, verify source again,
+and explicitly release port5200/native/browser slot to the supervisor. Archive
+results with SHA256/member hashes before any subsequent sync. G4 full-suite and
+performance/final integration acceptance remain separate.

@@ -1,4 +1,5 @@
 import VideoBusInspector from './VideoBusInspector'
+import TitleInspector from './TitleInspector'
 /**
  * Contextual Inspector composition root. Focused panels live under ui/inspector.
  * Layering remains ui/ -> state/ + domain selectors only.
@@ -177,6 +178,7 @@ function ClipInspector() {
           locked={videoLocked}
         />
       )}
+      {videoClip && (videoClip.text || videoClip.title) && <TitleInspector key={`title:${videoClip.id}`} clip={videoClip} locked={videoLocked} />}
       {displayedVideoClip && (
         <VideoInspectorSections
           doc={timelineDoc}
@@ -193,7 +195,7 @@ function ClipInspector() {
           aria-labelledby="inspector-animation-tab"
           hidden={activeVideoTab !== 'animation'}
         >
-          {videoClip.text
+          {videoClip.title ? <span className="inspector-note">Use Title elements to edit base values or generate roll / crawl motion.</span> : videoClip.text
             ? <span className="inspector-note">Animation controls are not available for text overlays yet.</span>
             : animationSurfaceOpened && (
                 <LazySurfaceBoundary

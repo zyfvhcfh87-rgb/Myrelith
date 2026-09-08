@@ -1,3 +1,4 @@
+import { animationRetentionError } from './projectAnimationRetention'
 import { editMaskParamsAtFrame, editMaskPathAnimation, maskEditingTarget, type MaskEditPatch, type MaskEditTarget } from '../domain/maskEditing'
 import { replaceProjectSequence } from '../domain/projectSequences'
 import { useDocumentStore } from '../state/documentStore'
@@ -53,6 +54,8 @@ export function beginMaskEdit(target: MaskEditTarget, onEnd?: () => void): MaskE
         if (error) return error
         return useDocumentStore.getState().commitMaskEdit(document.project, document.projectGeneration, target.sequenceId, next)
       }
+      const retention = animationRetentionError(useDocumentStore.getState(), replaceProjectSequence(document.project, target.sequenceId, next))
+      if (retention) return retention
       useTransportStore.getState().setMaskPreview({ sequenceId: target.sequenceId, effectId: target.effectId, params: { ...patch } as Record<string, number | string | boolean>, document: next })
       return null
     } catch (cause) { cancel(); return cause instanceof Error ? cause.message : 'Could not edit this mask.' }

@@ -1,8 +1,10 @@
 # Issue #200 — reusable titles and animated text
 
-Status: **G1b accepted; shared schema23/animation integration accepted at
-4340f9675ad56aa320f2498cf107fd55f8819568. G2 rendering/parity authorized and in
-progress. G3 authoring/templates remain gated. Browser slot not yet granted.**
+Status: **G2 accepted with its recorded readback-warning/narrow-layout qualifications.
+Evidence24eb4e2 is accepted; exact approved schema24/tracking integration e6a64a7
+merged cleanly at05b370a. G3 authoring/templates/motion implementation is authorized
+and preparing its source-review checkpoint. No G3 browser/native/full/performance
+grant has been used. Final shared #199 workspace wiring awaits supervisor sync.**
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
 issue last updated 2026-08-25T21:36:47Z. [Issue #200](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/200).

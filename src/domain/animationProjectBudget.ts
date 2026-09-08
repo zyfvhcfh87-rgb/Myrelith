@@ -1,4 +1,5 @@
 /** All-sequence path projections for the shared history/clipboard admission boundary. */
+import type { TimelineDoc } from './schema'
 import { retainedTitleDataBudget, titlePayloadBudget, TITLE_BUDGET_LIMITS, type TitleBudgetOwner } from './titleBudgets'
 import type { TitleElementIntent } from './titleElements'
 import type { SequenceProject } from './projectSequences'
@@ -22,6 +23,7 @@ export function projectPathAnimationSnapshot(project: SequenceProject): MaskPath
 }
 
 export interface AnimationRetentionState {
+  readonly retainedTitlePreviewDocuments?: readonly TimelineDoc[]
   readonly project: SequenceProject
   readonly past: readonly SequenceProject[]
   readonly future: readonly SequenceProject[]
@@ -46,6 +48,7 @@ export function animationRetentionError(
   })
   if (pathError) return pathError
   const result = retainedTitleDataBudget({
+    previews: state.retainedTitlePreviewDocuments?.map((document) => projectTitleAnimationOwners({ sequences: [document] })),
     candidate: projectTitleAnimationOwners('sequences' in candidate ? candidate : state.project),
     current: projectTitleAnimationOwners(state.project),
     past: state.past.map(projectTitleAnimationOwners), future: state.future.map(projectTitleAnimationOwners),
@@ -55,7 +58,7 @@ export function animationRetentionError(
 }
 
 /** Pair real title payloads with their lanes; retain tracks-only orphan owners. */
-export function projectTitleAnimationOwners(project: SequenceProject): TitleBudgetOwner[] {
+export function projectTitleAnimationOwners(project: Pick<SequenceProject, 'sequences'>): TitleBudgetOwner[] {
   const owners: TitleBudgetOwner[] = []
   for (const sequence of project.sequences) for (const track of sequence.tracks) for (const clip of track.clips) {
     if (clip.title !== undefined) owners.push({ title: clip.title, titleTracks: clip.animation?.titleTracks })

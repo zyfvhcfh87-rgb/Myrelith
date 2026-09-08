@@ -30,7 +30,7 @@ import {
   type MotionTrackingSource,
   type MotionTrackingSamplePlan,
 } from '../domain/motionTracking'
-import { animationRetentionError } from '../domain/animationProjectBudget'
+import { animationRetentionError } from './projectAnimationRetention'
 import { createMaskTrackingPlan, type MaskTrackingPlan, type MaskTrackingTarget } from '../domain/maskTracking'
 import { applyMaskTrackingWithResult } from '../domain/operations/maskTracking'
 import { replaceProjectSequence, sequenceProjectWithinEditBudget } from '../domain/projectSequences'
@@ -804,6 +804,10 @@ export function beginMaskMotionTrackingReview(session: MotionTrackingSession, ta
     const frame = useTransportStore.getState().playheadFrame
     const visible = enabled ? frame >= plan.firstAcceptedGlobalFrame && frame <= plan.lastAcceptedGlobalFrame : null
     if (published === visible) return
+    if (visible !== null) {
+      const error = admissionError()
+      if (error) { cancel(); return error }
+    }
     published = visible
     // A range exit hides this owner's pixels but retains the review's activation.
     // Only explicit disable/cancel releases it; passive reentry cannot steal focus.
@@ -815,7 +819,7 @@ export function beginMaskMotionTrackingReview(session: MotionTrackingSession, ta
       if (!current()) { cancel(); return 'The tracking review changed. Review the attachment again.' }
       const error = admissionError()
       if (error) { cancel(); return error }
-      enabled = next; updatePreview(); return null
+      enabled = next; return updatePreview() ?? null
     },
     apply: (replacementConsent) => {
       const fail = (reason: string) => { cancel(); return { ok: false as const, reason } }
