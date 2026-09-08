@@ -1,0 +1,48 @@
+{
+  "toolchainRevision": "aeb67926e7de656da38bc807d83050af93578758",
+  "archive": "wasm-binaries-arm64.tar.xz",
+  "archiveBytes": 273726956,
+  "archiveSha256": "63ec9acba14b67a925f7da9730395c84ce6ca1f5412ebcc4149b40fc43228385",
+  "sources": [
+    {
+      "name": "tools-settings.py.gz",
+      "archiveMember": "install/emscripten/tools/settings.py",
+      "bytes": 7246,
+      "sha256": "79b73f73edd782e8bd6a5e4cfbed157da6b1ffb971b93cb03b74d3dd108e471c",
+      "decodedBytes": 21656,
+      "decodedSha256": "9f2c5feab6a19831cda4d5be84baa1d6632651f8c7a2ba4d516941a8539aaa43"
+    },
+    {
+      "name": "tools-cmdline.py.gz",
+      "archiveMember": "install/emscripten/tools/cmdline.py",
+      "bytes": 9744,
+      "sha256": "c17a8702d5d02d1eddb7b1163e47a6ec58b08ef5a2005084687fd5b2318bac97",
+      "decodedBytes": 30569,
+      "decodedSha256": "d0ceb94f413f873db7cc5eedf71651c59c279b3bae7ee875580c36b420ba0a25"
+    },
+    {
+      "name": "tools-link.py.gz",
+      "archiveMember": "install/emscripten/tools/link.py",
+      "bytes": 39120,
+      "sha256": "3708b2e0e6992133ab5576271c5a9917fc326dbe39aaeb38db9b0a60f9a1a2e9",
+      "decodedBytes": 133054,
+      "decodedSha256": "c5332e4fbdfbc9c7223c57ae8b34bcc28921fef2daefd8470d0583e7bfdf0efc"
+    },
+    {
+      "name": "src-settings.js.gz",
+      "archiveMember": "install/emscripten/src/settings.js",
+      "bytes": 36405,
+      "sha256": "527b3af386632be318c141cc800c6d7a7ae6b829c0ce75caef0d1227392e3163",
+      "decodedBytes": 104750,
+      "decodedSha256": "51883b14014de59beae82df827a08f48d32baabd4b629fbf2e2b77ddd7a8f854"
+    },
+    {
+      "name": "src-settings_internal.js.gz",
+      "archiveMember": "install/emscripten/src/settings_internal.js",
+      "bytes": 4414,
+      "sha256": "d8934f2abcb4e946111ca62a97b663bda9dfc12c15abf91ecd286549ac3b589e",
+      "decodedBytes": 10719,
+      "decodedSha256": "ec90a484ea7436130b29045251c7bf827c52c74a1266ddd15142967079f9fef0"
+    }
+  ]
+}

@@ -105,7 +105,7 @@ test('wrapper uses only single-context full, fixed guard and complete-output adm
 });
 test('build recipe fixes non-shared CPU SIMD memory and excludes demo/runtime alternatives', () => {
   const recipe = local('CMakeLists.txt');
-  for (const text of ['WHISPER_WASM_PTHREADS OFF', 'GGML_WASM_SINGLE_THREAD ON', '-sPTHREADS=0', '-sFILESYSTEM=0', '-sDYNAMIC_EXECUTION=0',
+  for (const text of ['WHISPER_WASM_PTHREADS OFF', 'GGML_WASM_SINGLE_THREAD ON', '-sFILESYSTEM=0', '-sDYNAMIC_EXECUTION=0',
     '-sINITIAL_MEMORY=67108864', '-sMAXIMUM_MEMORY=536870912', '-msimd128', 'GGML_OPENMP', 'GGML_CPU_REPACK']) assert.ok(recipe.includes(text));
   assert.equal(LAB_CASE_NAMES.length, 23); // Shared list imported, never forked.
 });

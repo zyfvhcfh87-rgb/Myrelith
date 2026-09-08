@@ -1,0 +1,5 @@
+{
+  "status": "failed-closed-no-retry",
+  "error": "Stopped after unsuccessful/unfinished command: compile-link",
+  "runtimeExecuted": false
+}

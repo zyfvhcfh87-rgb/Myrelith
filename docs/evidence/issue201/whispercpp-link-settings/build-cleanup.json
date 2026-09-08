@@ -1,0 +1,56 @@
+{
+  "status": "compile-slot-released",
+  "checkedAt": "2026-09-08T18:17:22Z",
+  "configure": {
+    "label": "configure",
+    "command": [
+      "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/cmake/cmake-4.4.3-macos-universal/CMake.app/Contents/bin/cmake",
+      "-S",
+      "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/recipe",
+      "-B",
+      "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/output",
+      "-G",
+      "Ninja",
+      "-DCMAKE_MAKE_PROGRAM=/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/ninja/ninja",
+      "-DCMAKE_TOOLCHAIN_FILE=/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "-DWHISPER_SOURCE_DIR=/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/source/whisper.cpp-371b5a7561823ab2bb32142d2751e35e7534727b",
+      "-DCMAKE_CROSSCOMPILING_EMULATOR=/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/config/deny-runtime.sh",
+      "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+      "-DFETCHCONTENT_UPDATES_DISCONNECTED=ON"
+    ],
+    "timeoutSeconds": 180,
+    "startedAt": "2026-09-08T17:47:05Z",
+    "pid": 93965,
+    "processGroup": 93965,
+    "exitCode": 0,
+    "remainingGroupTerminated": false,
+    "elapsedSeconds": 5.518,
+    "logBytes": 7586,
+    "logSha256": "19b33712103c192c65ad8c7a9bfbd43674d09cc692c08d874e49170a55a65e42"
+  },
+  "compileAndLink": {
+    "label": "compile-link",
+    "command": [
+      "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/cmake/cmake-4.4.3-macos-universal/CMake.app/Contents/bin/cmake",
+      "--build",
+      "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/output",
+      "--parallel",
+      "2",
+      "--verbose"
+    ],
+    "timeoutSeconds": 600,
+    "startedAt": "2026-09-08T17:47:10Z",
+    "pid": 94176,
+    "processGroup": 94176,
+    "exitCode": 1,
+    "remainingGroupTerminated": false,
+    "elapsedSeconds": 8.669,
+    "logBytes": 189748,
+    "logSha256": "66927f1d82a49cbe3785bb0227dfe618c6aae6f6a79761326c178d86df745a9d"
+  },
+  "ownedProcessesRemaining": [],
+  "wasmExecuted": false,
+  "reason": "Final link rejects command-line internal setting PTHREADS; first build attempt consumed, no retry.",
+  "runnerAndAwakeHelperRecheckedAt": "2026-09-08T18:18:25Z",
+  "ownedRunnerAwakeCompilerProcessesRemaining": []
+}

@@ -1,0 +1,20 @@
+{
+  "label": "compile-link",
+  "command": [
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/cmake/cmake-4.4.3-macos-universal/CMake.app/Contents/bin/cmake",
+    "--build",
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/output",
+    "--parallel",
+    "2",
+    "--verbose"
+  ],
+  "timeoutSeconds": 600,
+  "startedAt": "2026-09-08T17:47:10Z",
+  "pid": 94176,
+  "processGroup": 94176,
+  "exitCode": 1,
+  "remainingGroupTerminated": false,
+  "elapsedSeconds": 8.669,
+  "logBytes": 189748,
+  "logSha256": "66927f1d82a49cbe3785bb0227dfe618c6aae6f6a79761326c178d86df745a9d"
+}

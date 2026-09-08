@@ -47,9 +47,7 @@ target_link_options(myrelith-whisper PRIVATE
     "-sWASM=1" "-sSINGLE_FILE=0" "-sSOURCE_PHASE_IMPORTS=0" "-sWASM_ESM_INTEGRATION=0"
     "-sWASM_ASYNC_COMPILATION=1" "-sWASM_WORKERS=0" "-sPROXY_TO_PTHREAD=0"
     "-sFETCH=0" "-sWASMFS=0" "-sALLOW_TABLE_GROWTH=0"
-    # PTHREADS is internal in the pinned SDK: no -pthread/OpenMP inputs enable it.
-    # Generated WASM must still prove one defined, unshared, bounded memory.
-    "-sALLOW_MEMORY_GROWTH=1" "-sIMPORTED_MEMORY=0"
+    "-sPTHREADS=0" "-sALLOW_MEMORY_GROWTH=1" "-sIMPORTED_MEMORY=0"
     "-sINITIAL_MEMORY=67108864" "-sMAXIMUM_MEMORY=536870912"
     "-sMEMORY_GROWTH_GEOMETRIC_STEP=0" "-sMEMORY_GROWTH_LINEAR_STEP=16777216"
     "-sSTACK_SIZE=5242880" "-sEXIT_RUNTIME=0" "-sMALLOC=dlmalloc"
