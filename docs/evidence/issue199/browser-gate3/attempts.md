@@ -40,6 +40,36 @@ a separate commit; all other accepted workspace contracts remain intact.
 
 The separately committed handle correction is documented in
 handle-correction.md with independent red/green proof and final source hashes.
-No further browser run occurred after attempt2; the exclusive slot remains
-released. Entry547adc9 plus the containing handle-fix commit need source review
-and a new rerun grant before any observable acceptance can proceed.
+At that checkpoint no further browser run had occurred; the exclusive slot was
+released and entry547adc9 plus handle42eb93b awaited review and a fresh grant.
+
+## Accepted corrections and early rerun
+
+Root accepted exact42eb93b and then accepted the repinned early harness8f3cd77
+with242 verified source hashes. It granted only that unchanged early segment.
+
+3. Harness8f3cd77 / product42eb93b: sandbox-only invocation failed before any
+   browser launch because loopback5199 listen returned EPERM. Server PID62750
+   exited1; no steps executed. Preserve the result/server/build logs as an
+   environment preflight failure, not a product result. Required loopback
+   escalation was approved for the identical granted harness.
+
+4. Harness8f3cd77 / product42eb93b / Chromium151.0.7922.34 / SwiftShader:
+   real portable entry, native1440x900 Animation click, first-use lazy JS/CSS,
+   desktop/720x900 layout, native input/IME containment and six no-motion clicks
+   on both handles at center/+2/-2px passed. All six preserved exact project,
+   undo and redo counts. The720px check resized the open dock; it does not
+   independently certify a second native entry at that width. Console/page
+   problems were empty. Final Back-to-Timeline check preserved exact zoom,
+   origin and clip selection, then failed because focus became BODY.
+
+   Stopped at that first product failure. No continuation/native drag/cancel,
+   mapping, persistence,100000-key/performance or later gate ran. Browser closed;
+   server PID62995 exited143, port5199 has no listener. Captured server/browser/
+   GPU/network PIDs62750/62995/62996/62997/62998 are absent, verified separately
+   with read-only ps/lsof. Slot explicitly released. Raw result, ten screenshots,
+   DOM and trace remain at the paths and hashes in attempt4-artifacts.json.
+
+The containing source correction is described in focus-correction.md. The
+original native assertion and accepted harness remain unchanged; they need
+reviewed repinning and a fresh grant before testing the focus fix in Chromium.

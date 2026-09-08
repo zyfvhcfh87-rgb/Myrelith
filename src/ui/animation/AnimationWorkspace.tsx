@@ -9,7 +9,7 @@ import AnimationGrid from './AnimationGrid'
 import AnimationKeyControls from './AnimationKeyControls'
 import './animation.css'
 
-export default function AnimationWorkspace() {
+export default function AnimationWorkspace({ onClose = closeAnimationWorkspace }: { onClose?: () => void }) {
   const document = useDocumentStore((state) => state.doc)
   const context = useSyncExternalStore(subscribeAnimationDeclarations, getAnimationEditorContext)
   const index = useMemo(() => buildAnimationLaneIndex(document, context), [document, context])
@@ -135,7 +135,7 @@ export default function AnimationWorkspace() {
       <label><input type="checkbox" checked={selectedOnly} onChange={(event) => setSelectedOnly(event.target.checked)} />Selected items</label>
       <label><input type="checkbox" checked={animatedOnly} onChange={(event) => setAnimatedOnly(event.target.checked)} />Animated only</label>
       <select aria-label="Animation lane kind" value={kind} onChange={(event) => setKind(event.target.value as AnimationLaneFilter['kind'])}><option value="all">All properties</option><option value="scalar">Clip / audio</option><option value="effect">Effects</option><option value="title">Title elements</option><option value="path">Held paths</option></select>
-      <button type="button" onClick={closeAnimationWorkspace}>Back to Timeline</button>
+      <button type="button" onClick={onClose}>Back to Timeline</button>
     </div>
     <div className="animation-toolbar animation-tools" aria-label="Animation commands">
       <button type="button" onClick={() => navigate('first')}>First</button><button type="button" onClick={() => navigate('previous')}>Previous</button><button type="button" onClick={() => navigate('next')}>Next</button><button type="button" onClick={() => navigate('last')}>Last</button>

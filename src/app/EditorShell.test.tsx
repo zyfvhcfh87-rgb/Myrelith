@@ -313,6 +313,68 @@ describe('EditorShell', () => {
     expect(entry).toHaveAttribute('aria-expanded', 'true')
   })
 
+  test.each(['Timeline', 'Inspector'])('returns focus to the Timeline Animation entry after closing from %s', async (source) => {
+    useTransportStore.getState().setSelectedClip('clipA')
+    render(<EditorShell closing={false} />)
+    const entry = screen.getByRole('button', { name: 'Animation' })
+    const project = useDocumentStore.getState().project
+    if (source === 'Inspector') {
+      fireEvent.click(screen.getByRole('tab', { name: 'Animation' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Open Animation workspace' }))
+    } else fireEvent.click(entry)
+    expect(await screen.findByRole('region', { name: 'Animation workspace' })).toBeInTheDocument()
+    const close = screen.getByRole('button', { name: 'Back to Timeline' })
+    close.focus()
+    expect(close).toHaveFocus()
+    const before = useTransportStore.getState()
+
+    fireEvent.click(close)
+
+    expect(screen.queryByRole('region', { name: 'Animation workspace' })).not.toBeInTheDocument()
+    expect(entry).toHaveFocus()
+    expect(entry).toHaveAttribute('aria-expanded', 'false')
+    expect(useDocumentStore.getState().project).toBe(project)
+    expect(useTransportStore.getState()).toMatchObject({
+      selectedClipIds: before.selectedClipIds,
+      zoom: before.zoom,
+      timelineOriginFrame: before.timelineOriginFrame,
+    })
+  })
+
+  test('does not restore Animation focus into an inert editor while the project closes', async () => {
+    const { rerender } = render(<EditorShell closing={false} />)
+    const entry = screen.getByRole('button', { name: 'Animation' })
+    fireEvent.click(entry)
+    expect(await screen.findByRole('region', { name: 'Animation workspace' })).toBeInTheDocument()
+    screen.getByRole('button', { name: 'Back to Timeline' }).focus()
+    rerender(<EditorShell closing />)
+    act(() => useTransportStore.getState().setAnimationWorkspaceOpen(false))
+    expect(entry).not.toHaveFocus()
+  })
+
+  test('does not steal focus when transport teardown closes Animation without the Back command', async () => {
+    render(<EditorShell closing={false} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Animation' }))
+    expect(await screen.findByRole('region', { name: 'Animation workspace' })).toBeInTheDocument()
+    const commands = screen.getByRole('button', { name: 'Commands' })
+    commands.focus()
+    act(() => useTransportStore.getState().setAnimationWorkspaceOpen(false))
+    expect(commands).toHaveFocus()
+  })
+
+  test.each(['playback', 'viewport'])('does not move focus during unrelated %s updates with Animation open', async (change) => {
+    render(<EditorShell closing={false} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Animation' }))
+    expect(await screen.findByRole('region', { name: 'Animation workspace' })).toBeInTheDocument()
+    const commands = screen.getByRole('button', { name: 'Commands' })
+    commands.focus()
+    act(() => {
+      if (change === 'playback') useTransportStore.getState().setIsPlaying(true)
+      else useTransportStore.getState().setZoom(3)
+    })
+    expect(commands).toHaveFocus()
+  })
+
   test('owns and releases document-to-selection reconciliation', () => {
     useTransportStore.getState().setSelectedClip('clipA')
     useTransportStore.getState().toggleClipSelection('clipB')
