@@ -1,0 +1,5 @@
+
+> myrelith@0.2.0-alpha.1 lint
+> oxlint
+
+scripts/issue201/whispercpp-lab/run-lab.mjs:3:10: warning eslint(no-unused-vars): Identifier 'readFile' is imported but never used. help: Consider removing this import.

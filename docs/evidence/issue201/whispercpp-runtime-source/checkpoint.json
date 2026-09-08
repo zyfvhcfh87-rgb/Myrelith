@@ -1,0 +1,460 @@
+{
+  "parentHead": "26370ca81410aaf797cf9c71f84b0928c38fa68a",
+  "status": "runtime-source-review-ready-unexecuted",
+  "sourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp-lab/candidate.mjs",
+      "bytes": 3478,
+      "sha256": "bfa04969b2fe76230a843dd7450748326da482357d0dd9baa595db4ff9ab227f"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/client.test.mjs",
+      "bytes": 5714,
+      "sha256": "c30f3e65df01fed11e083473d3672333482317008327d888022750c8ca7d6e15"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/host-limits.mjs",
+      "bytes": 875,
+      "sha256": "2e7f4dc9457ca9126d7fc1f1aa27bfd4b5bc1d7a1ce7c9468b941b1a0c17c91b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/lab-client.mjs",
+      "bytes": 13987,
+      "sha256": "6557e298323ae411894bbb122c44297962b1b3684aa6e3b2ff51c74fe61d30d8"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/model-worker.mjs",
+      "bytes": 12676,
+      "sha256": "2cb7538d514927fcf58c8c92a9b43d34d770944794e59628fcaf02e87ee3fcfd"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/preflight.mjs",
+      "bytes": 3995,
+      "sha256": "490442fc63c4be166645b02c863d8cee23dc8809bdc41658ba3ee8c928fc6426"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/resident-monitor.mjs",
+      "bytes": 3519,
+      "sha256": "93a7d21b4a1624abbe69b0df7c78f2f2386e6554f4c2bd11025b1eb1fa6d7ebb"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/run-lab.mjs",
+      "bytes": 41165,
+      "sha256": "8f071673b2f9de2a258e3b580b87130400d99ccaf632e0fb5f23781151da7e17"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/runner.test.mjs",
+      "bytes": 14429,
+      "sha256": "2cac5076d9a78ca436bc7d86e0d22a7fd32dbf2aa8bc399d5a14adb8da04f9d0"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/source.test.mjs",
+      "bytes": 13578,
+      "sha256": "4e0a0e469447f2671fce40af21c5f0030273086f11a015f0e8e4ca97d4b42fe6"
+    },
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_RUNTIME_PROTOCOL.md",
+      "bytes": 10355,
+      "sha256": "5dd85ddff1457e3437bbfa1b368cf3dd242aec64a67c9662503c51079f2a89b7"
+    }
+  ],
+  "referenceFiles": [
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_GENERATED_REVIEW.md",
+      "bytes": 9706,
+      "sha256": "7269493d10f298477ecf7724758840946ca30047617af001d912ace1e66aa432"
+    },
+    {
+      "path": "docs/evidence/issue201/replacement-manifest.json",
+      "bytes": 18578,
+      "sha256": "c68800d6b46bcecd9bbdfe7ed8abc853bcb8cf194bbe98dc3fd39518f37c8804"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-build-preparation/extraction-inventory.json.gz",
+      "bytes": 1864139,
+      "sha256": "ba24ca7b38f5f82b909da0214bcf7983e2f693e9f1db9e63ba2967270a6f2d10"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/CMakeCache.txt.gz",
+      "bytes": 6832,
+      "sha256": "d5280cbba6b1c38566ba50dcefb26fb4a86b9b0de71feb743ee8b09fe7c07863"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/actual-link-command.txt",
+      "bytes": 1928,
+      "sha256": "83b8475393be723b445e045d502440ba5775dcf9c857f3cbcb770c96bde763cb"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/artifacts.json",
+      "bytes": 814,
+      "sha256": "521d5185f474f39a02e8ff6d8337814fa7eb8d96045cb9b4475c3e490f6e7981"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/binary-inspection.json",
+      "bytes": 22239,
+      "sha256": "4bedffebcd4ed241220c3d97e9a2dd614b651714185a2120993671b78b12cb7e"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/build.ninja.gz",
+      "bytes": 6022,
+      "sha256": "89f65688fa60c60edd00d3c16f760f96546200d6a3e3dbea40d4a3641f60d551"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/checkpoint.json",
+      "bytes": 8101,
+      "sha256": "0ad4cf6dbf53d3493e8a00df97bd0fe02880176cb599aee3c29ad02aa2230ece"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/compile_commands.json.gz",
+      "bytes": 1555,
+      "sha256": "0e09808116e7d94ef03647f7c5a28f64c8cb22ebb8d04ca20edf446e76ea7aad"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/glue-inspection.json",
+      "bytes": 34257,
+      "sha256": "476e4ec5c453a5198ccc05174e26c358905f3486f05a779e4c846cfce8ba1245"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/link-settings-attempt.json",
+      "bytes": 718,
+      "sha256": "7566d2187aa72af602ef60e0509b268208c38ef0b007d9033472308dc1a11e1f"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/link-settings-cleanup.json",
+      "bytes": 2790,
+      "sha256": "cc3869ab48a94d41d6fb75900030053c7f80e6ecfdf222db75aa0ba68d8f3518"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/link-settings-compile-link.json",
+      "bytes": 728,
+      "sha256": "2931eca7b418c20b1f497ef030c96057a73715418a481209d7b226acbaffff1c"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/link-settings-compile-link.txt.gz",
+      "bytes": 8339,
+      "sha256": "6dd2ad9470e9d096811e40cf326ab7a44efa79ec9d218ac0ac26df626f2204bb"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/link-settings-configure.json",
+      "bytes": 1658,
+      "sha256": "961646d95b4a6c12aecbf869ee816ed67d1511f4ed71decb8a74fd35878bba5f"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/link-settings-configure.txt.gz",
+      "bytes": 1529,
+      "sha256": "5b773bf71fdbff666220655909cfcba0cc7aed4d271da18bf89208b929b2a505"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/link-settings-result.json",
+      "bytes": 102,
+      "sha256": "cbb23fe38eb16dbd501fd428e3ecbe4ca7e1889dcd28194ffc3cec36d56e035c"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/lint.txt",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.mjs.gz",
+      "bytes": 5556,
+      "sha256": "68f30b568d3724ccfe1184920c6f1e7157c8b503290a30d15b1994698ad0447d"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.wasm.gz",
+      "bytes": 386503,
+      "sha256": "5d54071f2d88478c3ba721f92b8220d00974ef4652f288d091fa1c297b750b78"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/notice-verification.json",
+      "bytes": 138,
+      "sha256": "768ab4e3792a4c6bf1b0e4343677de54c437234bcc31f859b0fefc523df1e2b1"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/outer-launch.txt",
+      "bytes": 2254,
+      "sha256": "3b158e5c6230e6678799d7eff16b13e29f470c177d7aaa719aedb8dbc9a4d012"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/preflight.json",
+      "bytes": 1170,
+      "sha256": "28a66df936d91459689255d1be5fd7830cce1fa975b15d9fba7acdb795fbbb33"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/runtime-notices.json",
+      "bytes": 2606,
+      "sha256": "148e16482ce2b1740051ab3c12a0d26a8af17acb969992af92844b1a1e3fb11c"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/runtime-notices.zip",
+      "bytes": 108332,
+      "sha256": "ad255711c323ac01457bbd1fe8cd72c5a6d1eda1be67446ae916bb604d37af17"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/source-tests-final-seven.txt",
+      "bytes": 977,
+      "sha256": "c24d14e20921374154f4917f942a195b8ba4c0e17c8d14b952893b897436661d"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/source-tests-initial-five.txt",
+      "bytes": 761,
+      "sha256": "fbac4ecb6c1373cbfcaa0db3fb3c4191d902f49883f54af775e153e674e86e1c"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/source-tests-intermediate-six.txt",
+      "bytes": 868,
+      "sha256": "04d7d39b94a4c77177025c14b49894cb970ff1539fe9f4e6676ab38e7dc05bd5"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/system-libraries-source.json",
+      "bytes": 429,
+      "sha256": "73318f37abd61a961b7ee2f7328510918edf6d8e1de7d5092dac775c29dd5a51"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/system_libs.py.gz",
+      "bytes": 24430,
+      "sha256": "239c71a2394397a5fd1665f85b5059bdb03aae5512b28b9f10146829d08f8c3a"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-link-retry/checkpoint.json",
+      "bytes": 1280,
+      "sha256": "16aa86eb86493aea2ab99840f577444d9ebfb6617c770b0043ecd2af6584dd23"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-link-settings/checkpoint.json",
+      "bytes": 6235,
+      "sha256": "a0e423b220967a42586a9f4601671d5cccecb8cc8feeb9a6550d5df0ccee5386"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-preparation/assets.json",
+      "bytes": 12965,
+      "sha256": "704c2c1fb852be2966ff505b26a58330d15a613c1162b60032baefd91254f279"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-preparation/model-format.json",
+      "bytes": 29516,
+      "sha256": "66a751f0f21b3ebbf5132e99f83d1224b431c248f72084931ae198e75a9d1400"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-preparation/openai-whisper-LICENSE",
+      "bytes": 1063,
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-preparation/whisper-LICENSE",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 120905,
+      "sha256": "affe6090fa9a422aeadf6dd2e06ff65dd55f31457d7645ac9bf3f33e13bc44df"
+    },
+    {
+      "path": "package.json",
+      "bytes": 2694,
+      "sha256": "8b42c90b07c4cab70c4a5203a2bbe596c02c9a4e27c8d130fd38c40086df54c6"
+    },
+    {
+      "path": "scripts/issue201/lab-client.mjs",
+      "bytes": 13386,
+      "sha256": "9677d056f1ac30308d0459c8d68d28c25b212ccc57f5f878af9fa9bbdb8f4e2d"
+    },
+    {
+      "path": "scripts/issue201/lab-contract.mjs",
+      "bytes": 4604,
+      "sha256": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba"
+    },
+    {
+      "path": "scripts/issue201/model-worker.mjs",
+      "bytes": 11369,
+      "sha256": "46bc2c2fae2a6cc22bf1ba51735cd48dba6f33dae9f45b1e06e2055920ee8466"
+    },
+    {
+      "path": "scripts/issue201/run-speech-lab.mjs",
+      "bytes": 26258,
+      "sha256": "3e630ef0c0e2a6e77420fa1d622a25fa81940a945a021e4ed8037c8601ea781e"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-review/generated.test.mjs",
+      "bytes": 7502,
+      "sha256": "b0a43f7f9c95b321c53c42933632bc464472a7eb0afed724458a0923654b6458"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-review/inspect-binary.mjs",
+      "bytes": 6115,
+      "sha256": "5bba9c9457e9fdbb58558e11b77fff2d11fb33d5e089350529d67194405c2405"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-review/inspect-glue.mjs",
+      "bytes": 8318,
+      "sha256": "e900944457e000a97a1d303dc5d1107cac981c428b257fc5e61f00b71f37f372"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-review/verify-generated.mjs",
+      "bytes": 2916,
+      "sha256": "4dd03817b93b4d9b8813383a363447e1cacc0cc3a0e3beb6be62465d695c2321"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-review/verify-notices.py",
+      "bytes": 1765,
+      "sha256": "4408c8d371278132f276b16475ef40f8522ef03f4af85a6ae1eaab394e7a2f7f"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/02-whole-call-token-budget.patch",
+      "bytes": 3471,
+      "sha256": "4d3e0d398bfbe5cb61a814b1ac94555efd11abeeed37ec4a50b3b4e2677937f3"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/CMakeLists.txt",
+      "bytes": 3550,
+      "sha256": "bc68e94197b6e819f8d5257a536b02bd0a5931c525005b994c2046fad80ba0a6"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/adapter.cpp",
+      "bytes": 6827,
+      "sha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/deny-wasm.cjs",
+      "bytes": 467,
+      "sha256": "4c9ba6b9267a14db07ec6ed901ddde8eaef0f314b3b53aa7dd10128c4bd9f764"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/loader-startup.test.mjs",
+      "bytes": 7036,
+      "sha256": "309830f5580afa8a60796149868a60a994b696f04feb2aff635bd52ede2f651c"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/model-format.mjs",
+      "bytes": 4193,
+      "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/myrelith-token-budget.h",
+      "bytes": 403,
+      "sha256": "e0dc2d7ec04a52e47214de3536ca479f710b6957d422260eb5bc87b7bfe9ff9b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/patch-identities.json",
+      "bytes": 1172,
+      "sha256": "74a2fb69113d229b172d073cebe6b37087bcf49999945bd3be28783922952a7b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/preparation.test.mjs",
+      "bytes": 17829,
+      "sha256": "db0932c26a3922544ca3eb4ac06b5f05c9ac745810eda453e8bb141f1f72d044"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/private-build-retry.test.py",
+      "bytes": 5648,
+      "sha256": "d41a4134f06c2620cacb505ca23f6375d890c939920e148349f3fa7bd1db9d8d"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/private-build.py",
+      "bytes": 18043,
+      "sha256": "4a58a09a560daf3ec47e58639ee1b58f50caa84695289cafcbe3fb20e89ae110"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/private-build.test.mjs",
+      "bytes": 1910,
+      "sha256": "cec57efe408581ace8ce2bc2f14dbceb98cd21ce759a8967aa010b168d810551"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/resident-coverage.mjs",
+      "bytes": 2809,
+      "sha256": "96114f08b414309ae94b76777327257b75d96bfa6555da96ec189d3c4a1cd7bf"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/settings-source-audit.py",
+      "bytes": 4729,
+      "sha256": "6e0ba87acbe56b6ee8c9c28d7c29088d42092c1803ddc359187330c1ecbbbe12"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/settings-source-audit.test.mjs",
+      "bytes": 3994,
+      "sha256": "e3fef57e65806229049bc2ba2497aecabe32bd9142e90ca85685c9d6bf3625eb"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/worker-owner.mjs",
+      "bytes": 3602,
+      "sha256": "f9ae85d3fb3593ccbf219a058218ad672133b5bd3af56f75683c2a976dfe32f5"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/worker-protocol.mjs",
+      "bytes": 8077,
+      "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b"
+    }
+  ],
+  "records": [
+    {
+      "path": "input-assets.json",
+      "bytes": 2623,
+      "sha256": "9ebdfbf3684c01cea06c57e277729e0699a15512389d0a5df4ccd5d4fa7111c9"
+    },
+    {
+      "path": "lint-final.txt",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "lint-initial-warning.txt",
+      "bytes": 210,
+      "sha256": "1845bc7c9286bdcbdbbebc60bee4cd32fd9ec676dfd88aa42e5aaec7c5e59cba"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 6324,
+      "sha256": "048a935b4bd798295a4493cf7b1a8e6afb8966883923f73b3040e0dbc84ebcd4"
+    },
+    {
+      "path": "tests-final-68.txt",
+      "bytes": 7667,
+      "sha256": "53f713e0fc0451be9146407ea6310c73eb1792beb2f1f242569a3d234cf12752"
+    },
+    {
+      "path": "tests-host-guard-fixed-14.txt",
+      "bytes": 1930,
+      "sha256": "92404ffad58eb9b5dfe78eb70a914c0e832235763a2724613c9cb99eb23df969"
+    },
+    {
+      "path": "tests-host-guard-syntax-failure.txt",
+      "bytes": 7053,
+      "sha256": "04052c1593d1c554faffc2ad7b4ab304d2801aadc3821b719971caa01461da1a"
+    },
+    {
+      "path": "tests-initial-14.txt",
+      "bytes": 1924,
+      "sha256": "f0451b4ec63018f1aa78842efaf81aaff9e307add206af1d291954c3959c344c"
+    },
+    {
+      "path": "tests-integrated-64.txt",
+      "bytes": 7053,
+      "sha256": "8cd42fa1fb0e950b5be9ad7f8d9d1c7770d29cfc8efdee2a9ac74859e7131f1a"
+    },
+    {
+      "path": "tests-overall-22.txt",
+      "bytes": 2765,
+      "sha256": "f2749221791fbad00845c52b1855ff0d58ff5a278080f602feda5cbc1ba69ad6"
+    },
+    {
+      "path": "tests-partial-sample-20.txt",
+      "bytes": 2570,
+      "sha256": "cbfd7af4a7e41e7e484b196b9c47036e119779f8e972c1623e05a9e64e65a2c1"
+    },
+    {
+      "path": "tests-stalls-19.txt",
+      "bytes": 2453,
+      "sha256": "0ad2c84061dd0c668195a6e9a839b0ebc7fdfda70f685b1fdcae85ba24720928"
+    }
+  ],
+  "focusedSourceTestsPassed": 68,
+  "newInertTestsPassed": 26,
+  "lintPassed": true,
+  "sharedHeavySlotHeld": false,
+  "generatedFactoryExecuted": false,
+  "wasmExecuted": false,
+  "browserLaunched": false,
+  "runtimeQualified": false,
+  "speechProductionGo": false,
+  "supervisorProtocolAcceptancePending": true
+}

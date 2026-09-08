@@ -1,0 +1,26 @@
+(node:22207) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ the real runner refuses an absent exclusive grant before server, browser or attempt writes (1.795916ms)
+✔ the real runner stops on its first failed case and retains raw process samples and owned cleanup (3.557125ms)
+✔ process churn stops before any acceptance case without discarding the incomplete raw observation (2.096291ms)
+✔ an already existing profile is not adopted or removed after mkdir rejects (1.483917ms)
+✔ the attempt marker prevents a second run after an earlier failure (2.603125ms)
+(node:22208) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ exact candidate identity includes both generated artifacts and all unchanged fixture/acceptance limits (1.34325ms)
+✔ continuous epochs retain all samples and distinguish verified browser absence from model work (0.266666ms)
+✔ late samples, process churn, missing RSS, ceilings and unverified shutdown remain failures (0.196333ms)
+✔ reopen cannot reset away the original resident baseline (0.06725ms)
+✔ original bounded native audio preparation is byte-identical in the separate worker (0.108875ms)
+✔ worker seam verifies glue before import and sends the exact WASM bytes to the existing core authority (6.149916ms)
+✔ worker rejects changed candidate metadata or changed glue before generated module import (5.695917ms)
+✔ worker seam keeps twelve bounded windows, charges the C PCM copy, and closes every fake native sample (315.114667ms)
+✔ a core work-budget failure discards completion and releases audio owners in finally (4.819333ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 366.827792
