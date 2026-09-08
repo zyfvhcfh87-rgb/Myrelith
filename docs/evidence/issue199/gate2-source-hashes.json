@@ -8,7 +8,7 @@
     "src/app/animationAdmission.test.ts": "f6533a5951e3ff10c75e685b2962c9e7cd81e45f986e353fca84ad611dc46825",
     "src/app/animationBindingController.test.ts": "daa90860d9803a1c4f15ff32d742bf4c68a06a8d1b6ef8f342555237a34d9f2a",
     "src/app/animationBindingController.ts": "250b938b0bb1b4372c5d5b460a5c31193a8a6ea85ae11f7025cbbf1a71db0e41",
-    "src/app/animationEditingController.test.ts": "8e0422982b1d4427a9bb38bd8882ce403338f9fb43e24e868d9e61b6dbad3c39",
+    "src/app/animationEditingController.test.ts": "db8bdd9f6a734fbf5c7ffcf496adac5ef563ee33313bd48004a43feed27b1cd4",
     "src/app/animationEditingController.ts": "b8e0859d724038925baf0146a88bd2d02322048836af48aad95c6d887bc562d7",
     "src/app/animationEditorController.ts": "02df3f5e3e851712dcb8a3e38f3fa5bee261402536525e3a704eb4538153adf2",
     "src/app/animationFileBoundary.test.ts": "66020b7b610d9c3205c832c13ca648842a4b56927378182a7be045144a735381",
@@ -45,9 +45,9 @@
     "src/domain/adjustmentItems.ts": "dceb9bc1e5125e8f4ea412c56cba8fc106cebf3405c0a69eecd878518b36b341",
     "src/domain/adjustmentProjectFile.test.ts": "ae54257db5fb667e5b733b3aafc538cd4408c8b22f625a5fb706f05ce69a8ef7",
     "src/domain/animationAddresses.ts": "e332af7a45c1144c5a6bf5f85d3bbf7242bf8066404e4f68da176d8167823fe3",
-    "src/domain/animationBatch.test.ts": "77411a290b4bbb9fc0024acc21d73c41c640870e26f53c6807af3523bdff8da2",
+    "src/domain/animationBatch.test.ts": "e8440f9c87fa105b0d04128e78638282b3ea8d1453912195b2c48da2d0f73a26",
     "src/domain/animationBatch.ts": "d0f3a419fe43150b40f4a3078d5e1b49db34cf9c1c90263719246c6056aa66b5",
-    "src/domain/animationClipboard.ts": "b8d6944a47083b2265b8e63bd5ee0471c7cc3bd6b72067e803c3095a8b82f5a7",
+    "src/domain/animationClipboard.ts": "8b7315ceeeb4bb1e0fa9898f9c4fd6290ca3bb57947fe3a8aac56844714fd591",
     "src/domain/animationCollections.ts": "47958d99840e9be3ed660c4260ee0f5e2ce1f4f1629c555f1b6624d5d360ec53",
     "src/domain/animationFoundation.test.ts": "98f4303ceace85b07f58e4c4b0e1e1a091b259c5f3ba3cf6ac98a0302d6635f6",
     "src/domain/animationLifecycle.test.ts": "ec80432e06ad11127368a44db78499f6a5e3efcc5cf739821d2c0fbcf52d2250",
@@ -191,5 +191,6 @@
     "src/ui/timeline/trackheader.test.tsx": "1d7da8a840490c42dddc2c3fbf79602702e740efe1939b3dcc0b5f30b6973a9d",
     "src/ui/timeline/transitions.test.tsx": "789b02286293bf7efd456fd3767b9954854c597bb713581a84540f7a8adb4d52",
     "src/workers/render.worker.test.ts": "e8a15d85fd015822cd7f5d8bc3f2707770430876c325c9db83bb463ce21769b8"
-  }
+  },
+  "reviewCorrectionBase": "ec12258dcbf1e9a47abb5c16883be8ae9b294f86"
 }

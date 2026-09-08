@@ -3,11 +3,14 @@ import { createAnimationEditingController } from './animationEditingController'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import { useMediaStore } from '../state/mediaStore'
-import { animationCatalog, ATTRIBUTE_ASSET_DESCRIPTOR, foundationProject, scalarKey } from '../test/animationFoundationFixtures'
+import { animationCatalog, ATTRIBUTE_ASSET_DESCRIPTOR, foundationProject, scalarKey, pathTrack } from '../test/animationFoundationFixtures'
 import { animationLaneAddress } from '../domain/animationOwners'
 import { projectPathAnimationSnapshot, animationRetentionError } from '../domain/animationProjectBudget'
 import { maskPathAnimationSnapshotBudget, MASK_PATH_ANIMATION_LIMITS } from '../domain/maskPathAnimation'
 import { TITLE_BUDGET_LIMITS } from '../domain/titleBudgets'
+import { colorGradingRegistrations } from '../domain/colorGradingEffects'
+import { createMaskEffect } from '../domain/effectStack'
+import { commitPortableProjectEdit } from './portableProjectEdit'
 import type { AnimationKeyAddress, AnimationLaneAddress } from '../domain/animationAddresses'
 
 const lane: AnimationLaneAddress = { owner: { kind: 'clip', id: 'clip' }, kind: 'scalar', property: 'opacity', propertyVersion: 1 }
@@ -197,6 +200,45 @@ describe('animation clipboard ownership', () => {
     expect(controller.paste()).toBeNull()
     expect(useTransportStore.getState().animationSelection).toEqual([key(20), key(30)])
     expect(useDocumentStore.getState().future).toEqual([])
+  })
+
+  test.each(['effect', 'path'] as const)('refusing same-ID %s owner type drift preserves clipboard, selection and both history branches', (kind) => {
+    const source = foundationProject(), clip = source.sequences[0].tracks[0].clips[0]
+    const curves = colorGradingRegistrations().find((effect) => effect.type === 'builtin.rgb-curves')!
+    const wheels = colorGradingRegistrations().find((effect) => effect.type === 'builtin.lift-gamma-gain')!
+    let address: AnimationLaneAddress
+    if (kind === 'effect') {
+      const track = { effectId: 'same-id', parameter: 'strength', keyframes: [scalarKey(0, 0.4)] }
+      clip.effects = [{ id: 'same-id', type: curves.type, version: 1, enabled: true, params: { ...curves.defaultParams } }]
+      clip.animation = { tracks: [], effectTracks: [track] }
+      address = animationLaneAddress({ kind: 'clip', id: clip.id }, track)
+    } else {
+      const track = { ...pathTrack('same-id'), valueVersion: 9 }
+      clip.effects = [createMaskEffect('same-id', 'bezier')]
+      clip.animation = { tracks: [], effectTracks: [], effectPathTracks: [track] }
+      address = animationLaneAddress({ kind: 'clip', id: clip.id }, track)
+    }
+    useDocumentStore.getState().setProject(source)
+    useTransportStore.getState().setAnimationSelection([{ lane: address, frame: 0 }])
+    expect(controller.copy()).toBeNull()
+    const clipboard = controller.getClipboard(), original = useDocumentStore.getState()
+    const changed = structuredClone(original.project)
+    changed.sequences[0].tracks[0].clips[0].effects = [{ id: 'same-id', type: wheels.type, version: 1, enabled: true, params: { ...wheels.defaultParams } }]
+    expect(commitPortableProjectEdit(original.project, original.projectGeneration, changed)).toBeNull()
+    useDocumentStore.getState().setClipVolume('clip', 0.5); useDocumentStore.getState().undo()
+    useTransportStore.getState().setPlayheadFrame(20)
+    const before = useDocumentStore.getState(), selection = useTransportStore.getState().animationSelection
+    expect(before.past.length).toBeGreaterThan(0)
+    expect(before.future).toHaveLength(1)
+    expect(controller.paste()).toMatch(/effect type/)
+    expect(controller.getClipboard()).toBe(clipboard)
+    expect(useDocumentStore.getState()).toBe(before)
+    expect(useTransportStore.getState().animationSelection).toBe(selection)
+    expect(useTransportStore.getState().animationPreview).toBeNull()
+    // Restoring the original type also restores compatibility with the same clipboard.
+    before.undo()
+    expect(controller.paste()).toBeNull()
+    expect(controller.getClipboard()).toBe(clipboard)
   })
 
   test('same-id project reload and unmount clear copied data and pending gesture ownership', () => {

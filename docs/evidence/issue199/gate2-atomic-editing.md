@@ -103,6 +103,31 @@ key edit is rejected before changing the exact store object or populated redo.
 The earlier parse/migration/serialize, mask, undo/redo and 10,000,001-character
 rejection assertions remain active.
 
+## Gate 2 review correction — same-ID effect type drift
+
+The supervisor reproduced a contract defect at `ec12258`: copying the built-in
+RGB-curves `strength` lane, then replacing its descriptor with Lift / Gamma /
+Gain under the same effect ID, incorrectly allowed paste because numeric bounds
+matched. Exact lane identity did not include the owner effect type. The same
+bypass also admitted unavailable path data after its same-ID owner changed type.
+
+Paste now compares the captured effect type with the destination descriptor for
+both scalar-effect and path lanes, including exact-address paste. It rejects
+changed, removed or newly appeared effect types before constructing insertions.
+Unchanged same-type descriptors still paste. Unavailable future and orphan data
+still support copying and timing edits; an exact orphan paste remains allowed
+when both copied and destination descriptors are absent. This correction adds
+no value applicability or schema fields.
+
+Four regression cases first failed against the unchanged `ec12258` product
+code (40 passed / 4 failed), then all 44 domain/controller tests passed after
+the fix. Tests cover equal-bound built-in type drift, same-type acceptance,
+unavailable path owner drift, unchanged future/missing owner preservation,
+and app refusal with the exact old clipboard, selection, project and populated
+past/future history unchanged. Undoing the descriptor replacement restores
+compatibility with that same clipboard. Final full focused evidence below is
+refreshed for the correction; the 188-file source manifest also matches it.
+
 ## #200 integration handoff
 
 The pure `AnimationTitleOwnerAdapter` accepts `isTitleClip(clip)` and
@@ -122,7 +147,7 @@ fixed local source intent even when a timed-media map would differ.
 
 ## Validation and remaining gates
 
-- **50 focused files / 674 Vitest tests**, plus **17/17 runner checks**, pass on
+- **50 focused files / 678 Vitest tests**, plus **17/17 runner checks**, pass on
   the final source. `gate2-focused-files.txt` lists the exact verified paths;
   `gate2-final-tests.log` records the expanded command and result.
 - TypeScript and Vite production build pass; the existing large-chunk advisory

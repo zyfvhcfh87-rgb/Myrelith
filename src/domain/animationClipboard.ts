@@ -133,14 +133,18 @@ export function planAnimationPaste(project: SequenceProject, sequenceId: string,
       if (!destination) return reject('A copied lane has no destination mapping.')
       const owner = owners.get(animationOwnerKey(destination.owner))
       if (!owner) return reject('A destination animation owner no longer exists.')
+      if (lane.address.kind !== destination.kind) return reject('Scalar and path lane kinds cannot be interchanged.')
+      // An exact lane address does not bind the effect type behind its ID.
+      // Two still-missing owners compare equal, preserving opaque orphan intent.
+      if ((destination.kind === 'effect' || destination.kind === 'path')
+        && lane.effectType !== owner.item.effects.find((effect) => effect.id === destination.effectId)?.type) return reject('The effect type must match the copied lane, even at its original address.')
       const existing = findAnimationLane(owner, destination)
       const exact = animationLaneKey(destination) === animationLaneKey(lane.address)
       const metadata = trackAtAddress(lane.track, destination)
       const destinationContract = contractFor(owner, destination, existing ?? metadata, context)
       if (!sameContract(lane.contract, destinationContract) && !(exact && existing && lane.contract === null && destinationContract === null)) return reject('The destination property kind, version, units or bounds do not match the copied lane.')
-      if (lane.address.kind !== destination.kind) return reject('Scalar and path lane kinds cannot be interchanged.')
       if (lane.address.kind === 'effect' && destination.kind === 'effect') {
-        if (!exact && (lane.effectType !== owner.item.effects.find((effect) => effect.id === destination.effectId)?.type || lane.address.parameter !== destination.parameter)) return reject('The effect type and parameter must match for cross-lane paste.')
+        if (lane.address.parameter !== destination.parameter) return reject('The effect parameter must match the copied lane.')
         const left = lane.address.parameterIdentity, right = destination.parameterIdentity
         if ((left === undefined) !== (right === undefined) || (left && right && !animationParameterIdentityMatches(left, right) && !exact)) return reject('Plugin declaration identities do not match.')
       }

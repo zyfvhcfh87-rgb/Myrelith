@@ -10,6 +10,7 @@ import { resolveClipAnimationAtFrame } from './clipAnimation'
 import { defaultClipTransform, defaultClipVisualSettings } from './clipInspector'
 import { defaultTextProps } from './textOverlay'
 import { createMaskEffect } from './effectStack'
+import { colorGradingRegistrations } from './colorGradingEffects'
 import type { TitleTextElementV1 } from './titleElements'
 
 function project() {
@@ -214,6 +215,46 @@ describe('global-time internal key clipboard', () => {
     expect(planAnimationPaste(source, source.rootSequenceId, { ...clipboard, lanes: [{ ...clipboard.lanes[0], globalFrames: [-5, 11] }] }, 20)).toMatchObject({ ok: false })
     expect(planAnimationPaste(source, source.rootSequenceId, clipboard, Number.MAX_SAFE_INTEGER)).toMatchObject({ ok: false })
     expect(planAnimationPaste(source, source.rootSequenceId, clipboard, 20, {}, [{ from, to: scalar('clip', 'future\0y', 7) }])).toMatchObject({ ok: false })
+  })
+
+  test('exact-address paste rejects a different built-in effect type with identical scalar bounds', () => {
+    const source = project(), clip = source.sequences[0].tracks[0].clips[0]
+    const curves = colorGradingRegistrations().find((effect) => effect.type === 'builtin.rgb-curves')!
+    const wheels = colorGradingRegistrations().find((effect) => effect.type === 'builtin.lift-gamma-gain')!
+    const makeEffect = (registration: typeof curves) => ({ id: 'same-id', type: registration.type, version: 1, enabled: true, params: { ...registration.defaultParams } })
+    const track = { effectId: 'same-id', parameter: 'strength', keyframes: [scalarKey(0, 0.4)] }
+    clip.effects = [makeEffect(curves)]; clip.animation!.effectTracks = [track]
+    const address = animationLaneAddress({ kind: 'clip', id: clip.id }, track)
+    const clipboard = copied(source, [key(0, address)])
+    clip.effects = [makeEffect(curves)]
+    expect(planAnimationPaste(source, source.rootSequenceId, clipboard, 20)).toMatchObject({ ok: true })
+    clip.effects = [makeEffect(wheels)]
+    const unchanged = JSON.stringify(source)
+    expect(planAnimationPaste(source, source.rootSequenceId, clipboard, 20)).toMatchObject({ ok: false, project: source, reason: expect.stringContaining('effect type') })
+    expect(JSON.stringify(source)).toBe(unchanged)
+  })
+
+  test('exact path paste checks owner type even when both versions are unavailable', () => {
+    const source = project(), clip = source.sequences[0].tracks[0].clips[0]
+    const track = { ...pathTrack('same-id'), valueVersion: 9 }
+    clip.effects = [createMaskEffect('same-id', 'bezier')]; clip.animation!.effectPathTracks = [track]
+    const address = animationLaneAddress({ kind: 'clip', id: clip.id }, track)
+    const clipboard = copied(source, [key(0, address)])
+    expect(clipboard.lanes[0].contract).toBeNull()
+    clip.effects = [createMaskEffect('same-id', 'bezier')]
+    expect(planAnimationPaste(source, source.rootSequenceId, clipboard, 20)).toMatchObject({ ok: true })
+    clip.effects = [{ id: 'same-id', type: 'future.mask-owner', version: 9, enabled: true, params: {} }]
+    expect(planAnimationPaste(source, source.rootSequenceId, clipboard, 20)).toMatchObject({ ok: false, project: source, reason: expect.stringContaining('effect type') })
+    // Existing unavailable data can still be copied, timed and pasted under its unchanged owner.
+    const futureClipboard = copied(source, [key(0, address)])
+    expect(planAnimationPaste(source, source.rootSequenceId, futureClipboard, 20)).toMatchObject({ ok: true })
+    expect(planAnimationBatch(source, source.rootSequenceId, [key(0, address)], { kind: 'move', deltaFrames: 3 })).toMatchObject({ ok: true })
+    clip.effects = []
+    expect(planAnimationPaste(source, source.rootSequenceId, futureClipboard, 20)).toMatchObject({ ok: false })
+    const orphanClipboard = copied(source, [key(0, address)])
+    expect(planAnimationPaste(source, source.rootSequenceId, orphanClipboard, 20)).toMatchObject({ ok: true })
+    clip.effects = [createMaskEffect('same-id', 'bezier')]
+    expect(planAnimationPaste(source, source.rootSequenceId, orphanClipboard, 20)).toMatchObject({ ok: false })
   })
 
   test('does not invent plugin binding or apply a copied declaration after package drift', () => {

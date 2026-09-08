@@ -7,27 +7,27 @@
 
 
  Test Files  50 passed (50)
-      Tests  674 passed (674)
-   Start at  13:29:55
-   Duration  11.78s (transform 1.34s, setup 743ms, import 4.60s, tests 6.86s, environment 8.87s)
+      Tests  678 passed (678)
+   Start at  13:49:50
+   Duration  12.16s (transform 1.36s, setup 800ms, import 4.74s, tests 6.93s, environment 9.22s)
 
-✔ cold samples each use and close a fresh BrowserContext (0.602708ms)
-✔ source identity rejects end-of-run drift (0.155291ms)
-✔ dirty fingerprint streams a tracked diff larger than one MiB (188.762333ms)
-✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (103.95675ms)
-✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.23175ms)
-✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.6495ms)
-✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.099167ms)
-✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.22425ms)
-✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.116417ms)
-✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.090709ms)
-✔ benchmark build runs the repository TypeScript gate before Vite (0.2ms)
-✔ successful benchmark build and preview preserve dist and remove the temporary output (1.462541ms)
-✔ failed benchmark build preserves dist and removes the partial temporary output (0.801583ms)
-✔ TypeScript gate uses the repository compiler in build mode (0.08725ms)
-✔ runner rejects durations beyond the continuously encoded source plan (0.136375ms)
-✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.144667ms)
-✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.103416ms)
+✔ cold samples each use and close a fresh BrowserContext (0.5865ms)
+✔ source identity rejects end-of-run drift (0.148708ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (187.883333ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (104.294208ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.239458ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.646958ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.099583ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.220666ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.11825ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.09225ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.209791ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.550958ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.771417ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.085875ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.134625ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.153584ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.105ms)
 ℹ tests 17
 ℹ suites 0
 ℹ pass 17
@@ -35,4 +35,4 @@
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 461.594791
+ℹ duration_ms 457.568042
