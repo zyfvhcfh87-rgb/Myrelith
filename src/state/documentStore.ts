@@ -249,6 +249,8 @@ export interface DocumentState {
   setDoc: (doc: TimelineDoc) => void
   /** Commit a prevalidated whole-document gesture without clearing history. */
   setDocWithHistory: (doc: TimelineDoc) => void
+  /** Freshly validated mask gesture; rejection must retain both history branches. */
+  commitMaskEdit: (expectedProject: SequenceProject, generation: number, sequenceId: string, doc: TimelineDoc) => string | null
   /** Validate and commit an entire attribute batch once against its opening snapshot. */
   applyClipAttributes: (expectedProject: SequenceProject, sequenceId: string, command: ClipAttributeCommand) => string | null
   /** Navigate without persistence, dirty state, or history. */
@@ -814,6 +816,20 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   setDocWithHistory: (doc) =>
     set((state) => commit(state, doc)),
+
+  commitMaskEdit: (expectedProject, generation, sequenceId, doc) => {
+    let error: string | null = null
+    set((state) => {
+      if (state.project !== expectedProject || state.projectGeneration !== generation || state.activeSequenceId !== sequenceId || doc.id !== sequenceId) {
+        error = 'The project changed. Start the mask edit again.'; return state
+      }
+      const candidate = replaceProjectSequence(state.project, sequenceId, doc)
+      if ((doc !== state.doc && candidate === state.project) || !sequenceProjectWithinEditBudget(candidate)) { error = 'The mask edit exceeds project limits.'; return state }
+      error = colorLutCommitError(state, candidate)
+      return error ? state : commit(state, doc)
+    })
+    return error
+  },
 
   editVideoBus: (expectedProject, target, command) => {
     let error: string | null = null

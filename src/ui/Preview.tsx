@@ -26,6 +26,7 @@ import TextOverlayControls from './TextOverlayControls'
 import VideoScopesPanel from './VideoScopesPanel'
 import VisualOverlayControls from './VisualOverlayControls'
 import MotionTrackingOverlay from './MotionTrackingOverlay'
+import MaskOverlayControls from './MaskOverlayControls'
 import { focusProgramMonitor } from '../app/sequenceEditController'
 
 export default function Preview() {
@@ -163,6 +164,7 @@ export default function Preview() {
       <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
       <MotionTrackingOverlay canvasRef={canvasRef} panelRef={panelRef} />
       <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+      <MaskOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
       {scopesEnabled ? <VideoScopesPanel /> : null}
       {offlineVisualAssetIds.length > 0 ? (
         <div className="preview-hint preview-hint-offline" role="status">
