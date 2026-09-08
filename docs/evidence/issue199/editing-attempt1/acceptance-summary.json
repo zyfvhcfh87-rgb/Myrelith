@@ -1,0 +1,111 @@
+{
+  "harnessHead": "a70d0c24a57ca04fa488f3ae0a8819b4fc995f19",
+  "unchangedObservationHarness": "d16cca49617a8a32cc820d63345404133b70eb12",
+  "productSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "startedAt": "2026-09-08T18:43:43.397Z",
+  "finishedAt": "2026-09-08T18:43:58.663Z",
+  "durationMs": 15266,
+  "stepsPassed": 13,
+  "steps": [
+    {
+      "name": "production launcher identity",
+      "status": "passed"
+    },
+    {
+      "name": "canonical mixed fixture and native selection",
+      "status": "passed"
+    },
+    {
+      "name": "720x900 native Timeline and Inspector entry keep the full Animation controls reachable",
+      "status": "passed"
+    },
+    {
+      "name": "native input select/copy/paste/undo does not trigger Animation or global document commands",
+      "status": "passed"
+    },
+    {
+      "name": "full-sequence filters, exact out-of-clip keys, Shift range and native toggle",
+      "status": "passed"
+    },
+    {
+      "name": "create/value/easing/invalid drafts with native numeric input and button activation",
+      "status": "passed"
+    },
+    {
+      "name": "native keyboard moves/duplicate/delete and audio scalar values stay inside Animation",
+      "status": "passed"
+    },
+    {
+      "name": "held paths and unavailable/future/title-effect intent retain their own editing limits",
+      "status": "passed"
+    },
+    {
+      "name": "complete cross-owner mapping, incompatible mapping refusal, collision refusal and undo",
+      "status": "passed"
+    },
+    {
+      "name": "title key cut/paste original time and relative paste preserve authored spacing",
+      "status": "passed"
+    },
+    {
+      "name": "explicit clip-effect to adjustment-effect mapping preserves parameter identity and spacing",
+      "status": "passed"
+    },
+    {
+      "name": "locked track refuses native keyboard edits without replacing document/history/clipboard",
+      "status": "passed"
+    },
+    {
+      "name": "canonical portable save/reopen after mixed native edits preserves complete project payload",
+      "status": "passed"
+    }
+  ],
+  "strictConsoleProblems": [],
+  "dialogs": [
+    {
+      "step": "canonical portable save/reopen after mixed native edits preserves complete project payload",
+      "type": "confirm",
+      "message": "This project has unsaved changes. Leave them behind and return to Projects?"
+    }
+  ],
+  "observedBounds": {
+    "observations": 16,
+    "maxRows": 14,
+    "maxGlyphsIncludingGhosts": 8,
+    "maxCurveSamples": 252,
+    "horizontalOverflow": false,
+    "viewports": [
+      720,
+      1440
+    ]
+  },
+  "roundTrip": {
+    "file": "/private/tmp/issue199-continuation/2026-09-08T18-43-43.397Z-editing/animation-authored-roundtrip.myrelith",
+    "sha256": "3547859f01dccdba870d49250864813b159cbf5fd498fe2c219d3cb0a57d5751",
+    "bytes": 13765,
+    "source": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+    "sourceTimeIntent": {
+      "negativeLocalFrame": -150,
+      "negativeSourceTimeTicks": -150000000,
+      "sourceTimeMap": {
+        "rate": {
+          "denominator": 1,
+          "numerator": 1
+        },
+        "sourceDurationTicks": 60000000,
+        "sourceStartTicks": 0,
+        "speedCurve": {
+          "originFrame": 0,
+          "points": []
+        }
+      }
+    },
+    "method": "Canonical domain APIs followed by real portable file-open UI; no OS picker assertion"
+  },
+  "imagesInspected": [
+    "step-03.png",
+    "compact-mapping.png",
+    "portable-roundtrip.png"
+  ],
+  "qualification": "Editing segment only. Canonical host snapshot/serialize/parse followed by actual file-open UI, not native OS Save picker or media export. Large/integrated Gate3/4/5 remain separately gated."
+}

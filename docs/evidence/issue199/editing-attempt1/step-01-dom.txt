@@ -1,0 +1,57 @@
+Plugin safety
+
+Start without loading third-party plugins. Built-in effects and saved plugin records stay available.
+
+Enter safe mode
+
+Installed plugins aren't checked here. Safe mode keeps every third-party package inactive.
+
+Myrelith
+M
+y
+r
+e
+l
+i
+t
+h
+Browser video editor
+Your footage. Your space. Your cut.
+Your footage.
+Your space.
+Your cut.
+
+Edit locally in your browser—no upload, no account, no rush.
+
+Start a new project
+Open a project
+From first frame to final cut.
+Back to your projects
+Refresh
+Recent projects
+Recovery copies
+0
+
+No recent project shortcuts yet.
+
+Local storage
+
+Project files stay separate from browser recovery and cache.
+
+0 B of 10 GB
+Project files
+Portable .myrelith · on your disk
+Recovery
+0 copies · 0 B protected
+Remembered access
+0 project shortcuts · files aren't copied
+Cache & proxies
+0 B · empty
+Clear cache & proxies
+
+Projects and source media stay on your device. Recovery copies contain no source media; cache and proxies are disposable.
+
+Private by design. Portable by default.
+Privacy
+Licenses
+GitHub

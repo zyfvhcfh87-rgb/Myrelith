@@ -1,0 +1,143 @@
+{
+  "rawDirectory": "/private/tmp/issue199-continuation/2026-09-08T18-43-43.397Z-editing",
+  "copies": [
+    {
+      "name": "acceptance-summary.json",
+      "mode": "exact JSON/portable bytes",
+      "rawSha256": "9d692329acfc6128a2a0eea92f6a7147e4b0247f419cb52ed5462b8a7c00d0a9",
+      "copySha256": "9d692329acfc6128a2a0eea92f6a7147e4b0247f419cb52ed5462b8a7c00d0a9"
+    },
+    {
+      "name": "animation-authored-roundtrip.myrelith",
+      "mode": "exact JSON/portable bytes",
+      "rawSha256": "3547859f01dccdba870d49250864813b159cbf5fd498fe2c219d3cb0a57d5751",
+      "copySha256": "3547859f01dccdba870d49250864813b159cbf5fd498fe2c219d3cb0a57d5751"
+    },
+    {
+      "name": "build.log",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "7268faecd777fb4b16be033f1e8da4b56f2f578b42a8c6cae30e691ad3564889",
+      "copySha256": "82024ec1ff8f51932db734a7cdc07033c0198c3ef6f443dad1d7b74543a19703"
+    },
+    {
+      "name": "console.log",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "7fcefca7177f92e33d88639a3265c900e16521d9a224a6b456e199bc4f245542",
+      "copySha256": "7fcefca7177f92e33d88639a3265c900e16521d9a224a6b456e199bc4f245542"
+    },
+    {
+      "name": "independent-cleanup-source.json",
+      "mode": "exact JSON/portable bytes",
+      "rawSha256": "ddaa211a697ce9a6f9357d7a5d563b50a31384b8032a59319ea55e6237344d42",
+      "copySha256": "ddaa211a697ce9a6f9357d7a5d563b50a31384b8032a59319ea55e6237344d42"
+    },
+    {
+      "name": "prelaunch-source.json",
+      "mode": "exact JSON/portable bytes",
+      "rawSha256": "37b7ea070e6d756bb038cd23180f75240bada1d37df24595706556e93b6e02bb",
+      "copySha256": "37b7ea070e6d756bb038cd23180f75240bada1d37df24595706556e93b6e02bb"
+    },
+    {
+      "name": "result.json",
+      "mode": "exact JSON/portable bytes",
+      "rawSha256": "8d2aefacd9c911998363b9a03e90d68588e9f4cad2a7bd2242f037b7ce679ae2",
+      "copySha256": "8d2aefacd9c911998363b9a03e90d68588e9f4cad2a7bd2242f037b7ce679ae2"
+    },
+    {
+      "name": "server.log",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d",
+      "copySha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d"
+    },
+    {
+      "name": "step-01-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "391e96e976bb2729c502f64bb5e09dc362aab8be1361f10d9a8d6d3ec49301a2",
+      "copySha256": "747a4aca46360283a50cdf047cb3cd7877437042c233e323c5208eb29d4ed4de"
+    },
+    {
+      "name": "step-02-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "ee9208c86b51fa695fe3875cab342075e81d87d47334964df7f005bc1e907b3d",
+      "copySha256": "cd48d70c3905e22126521c6f42e6a8484aec379fd6577933a5312e78fb72a68e"
+    },
+    {
+      "name": "step-03-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "79cbff02329069c3ec4cfa00584fc1869c97053aadd92d7eea3a7ca19661b84b",
+      "copySha256": "a3608eec407636adf34fb87826f55885c937996b5027a5fbd84345bdc997e33d"
+    },
+    {
+      "name": "step-04-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "9db9882379f56cd6efd02ee94d0d83ea19db09c3f5e000123898cc2130c245e6",
+      "copySha256": "620b827fb46391a1aa66debc71c111d39f1cd40660f3df72f06878a743bd9f9d"
+    },
+    {
+      "name": "step-05-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "9696085020e0b3f692d2aa11945465d47eac8154813251bf9c050b0df9892d4f",
+      "copySha256": "e873f099b42244bccdbccaeb2f550035b522c64e7e2b2e09b7243849520649bf"
+    },
+    {
+      "name": "step-06-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "075389e127f172b6c05a077c45cf32b804998dddf99c31841a7330890397252d",
+      "copySha256": "3834e0a98a3ab1034b713d7c19e12e9785b024a54e8c50f355790086819cc920"
+    },
+    {
+      "name": "step-07-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "b157307b75d26fe2d539d7e760c3bb3ed7e57dd78a133bf780f51400589b431e",
+      "copySha256": "430ca39dff6fda3cd07fee1248fe7f2781765d5a82d36c569d54ee287e539f1e"
+    },
+    {
+      "name": "step-08-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "9414ebf7f0d67b5b921ae579417cd3a84752ad05717b61b63727f34091332428",
+      "copySha256": "f95de051ca23f818c477325697d86cc098b3ba861e7cf923d5d891cfe4f8f03d"
+    },
+    {
+      "name": "step-09-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "516936266ac5bc468bd4b1c0d01497439be62a1dbfba8fa09694db3db5baf657",
+      "copySha256": "a55e6762f999359586a21339abea438b97c119d20eb93b0a733d1e798f841ef2"
+    },
+    {
+      "name": "step-10-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "5d76785c8f0bf3d9a0ff57b13442e4079c180aacf56d94f3386c3a89bcfe8fc6",
+      "copySha256": "fdb4d3559be47d3079107b044f2ecdd470e6170885e336c5534c99e8dbe789f8"
+    },
+    {
+      "name": "step-11-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "c346a158331d88241a34c1d9a6587b5e0b621f9b1ebb8e4a9098186e8d38abfd",
+      "copySha256": "3c50183c721bc0c8c939f945a0a0e6151efeb17b4376f6f424f88400bd846e23"
+    },
+    {
+      "name": "step-12-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "81aa1bdcf5ee8099a0d75ac9319146d02ee85712d61e2e71c561bb88cf5dd1f4",
+      "copySha256": "a35b12a41cb20d45fbec1ccd155dc1a25741ffddef98554480c34f58d4b627ad"
+    },
+    {
+      "name": "step-13-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "5f41d6c928f7942e2ff05f342bda65dbd882b74c886eba59dcb307df10f4a926",
+      "copySha256": "85bd614105543dbf555ff42561f8352785d84382ef5181ac016b0274808e492f"
+    },
+    {
+      "name": "wrapper-identities.json",
+      "mode": "exact JSON/portable bytes",
+      "rawSha256": "c1f25e6197b7f6dbc41b9148df1d2207a7c28544772bc069f5cd38998167d4fb",
+      "copySha256": "c1f25e6197b7f6dbc41b9148df1d2207a7c28544772bc069f5cd38998167d4fb"
+    },
+    {
+      "name": "artifacts.json",
+      "mode": "exact JSON/portable bytes",
+      "rawSha256": "59d88e32303007168271dc14b5be969cf7b0a560fc57b3015b5ed68139df2111",
+      "copySha256": "59d88e32303007168271dc14b5be969cf7b0a560fc57b3015b5ed68139df2111"
+    }
+  ]
+}

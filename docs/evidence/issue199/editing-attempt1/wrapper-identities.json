@@ -1,0 +1,8 @@
+{
+  "at": "2026-09-08T18:44:00.605Z",
+  "wrapperPid": 960,
+  "rows": [
+    "  960 24121 Tue Sep  8 20:43:43 2026     node scripts/issue199/run-animation-continuation.mjs --segment editing",
+    "  983   960 Tue Sep  8 20:43:43 2026     /usr/bin/caffeinate -is node scripts/issue199/run-animation-continuation.mjs --segment editing"
+  ]
+}
