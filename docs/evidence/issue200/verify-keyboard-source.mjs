@@ -3,15 +3,14 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 const [mode, output] = process.argv.slice(2)
-const baseline = '16e36881d550db0813be4dce1f4cc80a7b9f4284'
+const baseline = 'a1547a3b1abedc0754ac5274d1fe3d9afa9cfedd'
 const root = '/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue200'
 if (!['record', 'verify'].includes(mode) || !output?.startsWith('/private/tmp/issue200-')) throw new Error('Use record|verify and a fresh external /private/tmp/issue200-* manifest')
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim()
 if (process.cwd() !== root || git('branch', '--show-current') !== 'codex/issue200') throw new Error('Wrong keyboard worktree/branch')
 if (git('status', '--porcelain', '--untracked-files=all')) throw new Error('Keyboard checkpoint must be clean')
 const allowed = new Set([
-  'tests/diagnostics/issue200/keyboard.gate.ts',
-  'tests/diagnostics/issue200/keyboard.playwright.config.ts',
+  'src/ui/titleEditor.css',
 ])
 const changed = git('diff', '--name-only', baseline, '--', 'src', 'tests', 'package.json', 'package-lock.json', 'vite.config.ts', 'playwright.issue200.config.ts',
   'docs/evidence/issue200/run-g3-browser.py', 'docs/evidence/issue200/verify-g3-source.mjs', 'docs/evidence/issue200/g3-authoring-protocol.md',
