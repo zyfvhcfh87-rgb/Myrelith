@@ -3,7 +3,8 @@
 > tsc -b && vite build
 
 vite v8.1.2 building client environment for production...
-[2Ktransforming...✓ 5064 modules transformed.
+[2K
+transforming...✓ 5064 modules transformed.
 rendering chunks...
 computing gzip size...
 dist/assets/rolldown-runtime-BHe-jwch.js                  0.95 kB
@@ -48,7 +49,7 @@ dist/assets/EditorShell-CJ-_l9jG.js                     579.15 kB │ gzip: 152.
 dist/assets/mediabunny-ac3-SXo27NEx.js                1,144.14 kB │ gzip: 303.58 kB
 dist/assets/index-DVKAzjYe.js                         1,238.43 kB │ gzip: 337.05 kB
 
-[plugin builtin:vite-reporter] 
+[plugin builtin:vite-reporter]
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting

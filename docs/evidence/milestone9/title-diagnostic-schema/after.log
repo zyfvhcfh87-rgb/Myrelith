@@ -32,4 +32,3 @@ AssertionError: expected [ Array(1) ] to deeply equal []
       Tests  1 failed | 17 passed (18)
    Start at  20:58:01
    Duration  1.24s (transform 426ms, setup 61ms, import 1.23s, tests 58ms, environment 432ms)
-
