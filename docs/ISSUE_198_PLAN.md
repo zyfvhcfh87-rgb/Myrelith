@@ -1,12 +1,13 @@
 # Issue #198: direct masks and bounded manual path animation
 
-Status: **plan approved; independent pure value/geometry gate implemented for review.**
+Status: **static/open/held authoring accepted; tracking Inspector source gate ready for review.**
 
 Prepared on `codex/issue198` from `ce91074c276ca6892a74addb7dd673b9a19c7eeb`.
 The Milestone 9 orchestrator owns approval, migration ordering, integration and
 publication. The orchestrator approved the independent pure gate before shared
 integration and assigned timeline schema 22 to #199; no separate mask migration
-is needed. Product UI, shared traversal and rendering integration remain pending.
+is needed. Shared traversal, rendering and direct mask authoring are now integrated;
+the tracking Inspector and remaining whole-issue acceptance are tracked below.
 
 Independent gate evidence and concrete APIs:
 [pure foundation](evidence/issue198/pure-foundation.md).
@@ -367,13 +368,20 @@ were accepted through integration `f091560`; see
 [held-path evidence](evidence/issue198/held-path-authoring.md).
 The narrow [tracking contract](evidence/issue198/tracking-attachment-contract.md)
 is accepted and its separate pure planning/operation slice is committed as
-`9c3cb54`; app review/preview implementation is now tested, with no Inspector
-activation yet. See
+`9c3cb54`; the corrected app review/preview implementation is accepted. See
 [tracking implementation evidence](evidence/issue198/tracking-attachment.md).
 The shared schema 23 checkpoint `4340f967` is now merged with the canonical title
-guard and all preview owners preserved. Inspector authoring and tracking browser
-acceptance remain open. No tracking code was included in the held-path gate.
+guard and all preview owners preserved. Inspector source review and tracking
+browser acceptance remain open. No tracking code was included in the held-path gate.
 Parent review found three app defects on `8d22cbc`; the corrected project-budget,
 post-cleanup playback and preview-priority boundaries pass the unchanged parent
-reproducer and 253 focused tests. Inspector work is preserved outside production
-source pending this corrected app gate's acceptance.
+reproducer and 253 focused tests. Parent accepted correction `8cc1fe9` and the
+complete controller gate, integrated at `08805c57`. The subsequent Inspector
+slice now exposes the accepted mask review and passes 324 focused tests across
+19 files plus 17 runner checks, build/typecheck and lint. It also exercises real
+10-million-character tracking/history admission. See the
+[Inspector source evidence](evidence/issue198/tracking-inspector.md) and
+[preregistered browser/export/resource protocol](evidence/issue198/tracking-browser-protocol.md).
+Seven browser checks are discovered but the new tracking flows have not run;
+source review and an exclusive slot precede execution. Full/performance/resource
+and cross-feature acceptance remain open.
