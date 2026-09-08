@@ -10,6 +10,14 @@ describe('keyboard evidence rejects false positives', () => {
     expect(inside({ ...box, x: NaN }, viewport)).toBe(false)
     expect(inside(box, clippedRegion(viewport, { ...viewport, width: 15 }))).toBe(false)
   })
+  test('the retained safe-guide checkbox fits while its inline label remains clipped', () => {
+    // Unchanged b2fc657 native run: automatic Tab scroll exposes the input alone.
+    const region = { x: 761, y: 101, width: 518, height: 218 }
+    const checkbox = { x: 793, y: 305.171875, width: 13, height: 13 }
+    const label = { x: 789, y: 306.171875, width: 222.75, height: 15 }
+    expect(inside(checkbox, region)).toBe(true)
+    expect(inside(label, region)).toBe(false)
+  })
   test('both traversal bounds are independently enforced', () => {
     requireTabBudget(128, 512)
     for (const [target, total] of [[129, 200], [1, 513], [2, 1], [1.5, 2], [-1, 2]]) expect(() => requireTabBudget(target, total)).toThrow()
