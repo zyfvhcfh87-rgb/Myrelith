@@ -81,6 +81,25 @@ describe('title authoring surfaces', () => {
     act(() => useDocumentStore.getState().undo())
     expect(useTitleEditorStore.getState().ids).toEqual(['root-element'])
   })
+  test.each(['motion', 'save', 'library'] as const)('%s dialog wraps Tab without editing the project', (kind) => {
+    // jsdom has no layout; expose the rendered controls to the visibility filter.
+    vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([new DOMRect(0, 0, 10, 10)] as unknown as DOMRectList)
+    const close = vi.fn(), before = useDocumentStore.getState()
+    const mounted = render(kind === 'motion'
+      ? <TitleMotionDialog target={target} ids={['root-element']} clip={before.doc.tracks[0].clips[0]} onClose={close} />
+      : <TitleTemplateDialog captureTarget={kind === 'save' ? target : undefined} onClose={close} />)
+    const first = kind === 'motion' ? screen.getByRole('combobox', { name: 'Direction' })
+      : kind === 'save' ? screen.getByRole('textbox', { name: 'Template name' }) : screen.getByRole('button', { name: builtInTitleTemplates()[0].name })
+    const last = screen.getByRole('button', { name: 'Cancel' })
+    first.focus(); expect(fireEvent.keyDown(first, { key: 'Tab', shiftKey: true })).toBe(false); expect(last).toHaveFocus()
+    expect(fireEvent.keyDown(last, { key: 'Tab' })).toBe(false); expect(first).toHaveFocus()
+    expect(fireEvent.keyDown(first, { key: 'Tab' })).toBe(true)
+    expect(fireEvent.keyDown(first, { key: 'Escape' })).toBe(true)
+    expect(close).not.toHaveBeenCalled()
+    expect(useDocumentStore.getState().project).toBe(before.project)
+    expect(useDocumentStore.getState().past).toBe(before.past); expect(useDocumentStore.getState().future).toBe(before.future)
+    mounted.unmount()
+  })
   test('StrictMode motion preview cancels without history; Apply records two ordinary keys once', () => {
     const before = useDocumentStore.getState().project
     const clip = useDocumentStore.getState().doc.tracks[0].clips[0], close = vi.fn()

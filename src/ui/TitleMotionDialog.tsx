@@ -3,6 +3,7 @@ import type { Clip } from '../domain/schema'
 import type { TitleEditCommand, TitleEditTarget } from '../domain/titleEditing'
 import { beginTitleEdit, type TitleEditSession } from '../app/titleEditingController'
 import { titleMotionReplacements } from '../state/titleEditorStore'
+import { containTitleDialogKey } from './titleDialogFocus'
 import './titleEditor.css'
 export default function TitleMotionDialog({ target, ids, clip, onClose }: { target: TitleEditTarget; ids: readonly string[]; clip: Clip; onClose(): void }) {
   const [pinnedTarget] = useState(target)
@@ -33,7 +34,7 @@ export default function TitleMotionDialog({ target, ids, clip, onClose }: { targ
   const replacements = titleMotionReplacements(clip, ids, direction)
   const command: TitleEditCommand = { kind: 'motion', ids, direction, start, end, replace }
   const ready = !stale && (!replacements.length || replace)
-  return <dialog ref={dialog} className="title-dialog" aria-labelledby="title-motion-heading" onCancel={(event) => { event.preventDefault(); onClose() }} onKeyDown={(event) => event.stopPropagation()}>
+  return <dialog ref={dialog} className="title-dialog" aria-labelledby="title-motion-heading" onCancel={(event) => { event.preventDefault(); onClose() }} onKeyDown={containTitleDialogKey}>
     <h2 id="title-motion-heading">Roll / crawl</h2>
     <p>Generate two linear position keys per selected element. The group starts and ends fully offscreen; its spacing is preserved. Keys remain editable and keep their frame numbers after trimming.</p>
     <label className="title-field">Direction<select value={direction} onChange={(event) => { setDirection(event.target.value as typeof direction); setReplace(false) }}><option value="up">Roll up</option><option value="down">Roll down</option><option value="left">Crawl left</option><option value="right">Crawl right</option></select></label>

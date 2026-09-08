@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "packagedAt": "2026-09-08T21:13:11.735288+00:00",
+  "testedNativeHead": "b2fc657040e34643a77ea5b5d0cf18b6cdc4d8a8",
+  "failureEvidenceHead": "f3af949fa05636fde39e12f4b4ad22807e4c709f",
+  "checks": {
+    "validatedBeforeUserPause": true,
+    "preservedCorrectionUnchangedOnResume": true,
+    "focused": {
+      "exitCode": 0,
+      "files": 4,
+      "tests": 46,
+      "durationSeconds": 3.03
+    },
+    "appTypecheck": 0,
+    "diagnosticTypecheck": 0,
+    "lint": 0,
+    "guardSyntax": 0,
+    "nativeFilesUnchangedFromTestedHead": true,
+    "correctedNativeRun": false,
+    "productionBuild": false,
+    "fullSuite": false
+  },
+  "correctionSources": [
+    {
+      "path": "src/ui/titleEditor.css",
+      "bytes": 2530,
+      "sha256": "07f0a2b6fde019dc015579cafd40fa8777468c0d11de79a2f3c313dab08c6bcf"
+    },
+    {
+      "path": "src/test/titleKeyboardDiagnostic.test.ts",
+      "bytes": 3894,
+      "sha256": "3cf2f2226c227f257f8a9f2d97bfa36374adf75d416b6ceb08b5780eb778cfed"
+    },
+    {
+      "path": "docs/evidence/issue200/verify-keyboard-source.mjs",
+      "bytes": 2407,
+      "sha256": "4c34031d96061b15cce12385b088891cd6965a7923ae81c09759aa0a6e34bfaa"
+    },
+    {
+      "path": "docs/evidence/issue200/keyboard-focus-correction.md",
+      "bytes": 3922,
+      "sha256": "cad57d8fc4b9845460610854910550a09aa2911d38eae1ce1f8120f8cdd4bd51"
+    }
+  ],
+  "frozenNativeSources": [
+    {
+      "path": "tests/diagnostics/issue200/keyboard.gate.ts",
+      "bytes": 24712,
+      "sha256": "c3aa8591acb70f5155407e49abc7cc0f563c9b6a3009595842102713de90ec30"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard-client.ts",
+      "bytes": 12008,
+      "sha256": "2aceaec08e578b150a6579b70de250811bfc7d523d84922f80e15c4c6f98b994"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard-model.ts",
+      "bytes": 4603,
+      "sha256": "f58f3e4b98a9bb44f802bf74233ee352bf54f03112ee01fee01109ee48974319"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard.playwright.config.ts",
+      "bytes": 880,
+      "sha256": "de2266dc283d667db435b62b902438fa9052a48049442b6f9c328a54556045c3"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard-runner_test.py",
+      "bytes": 9814,
+      "sha256": "5dd893bed1fd02fd14cf26d3db5efc0b8909bcbf6092422804fdd801f338c351"
+    },
+    {
+      "path": "docs/evidence/issue200/run-keyboard-browser.py",
+      "bytes": 9346,
+      "sha256": "54dda8d4522ae563ce9ef0389560da9a00f5b1120deed2e824863df06830eb16"
+    },
+    {
+      "path": "docs/evidence/issue200/keyboard-executable-protocol.md",
+      "bytes": 8221,
+      "sha256": "82045873df01ebf9d06bfe2eb4db2e4d5b481bf91feed940f2e88c98482fd298"
+    },
+    {
+      "path": "playwright.issue200.config.ts",
+      "bytes": 708,
+      "sha256": "75e3e922229af6aea56db0298babe69774b6a750e765352fa8a0c456ed3fdd98"
+    }
+  ],
+  "logs": [
+    {
+      "path": "issue200-keyboard-focus-correction-tests.log",
+      "bytes": 266,
+      "sha256": "df47201ab8db1391e61b52b171688fba1feb4421be49630c686b53ad261345f1"
+    },
+    {
+      "path": "issue200-keyboard-focus-correction-app-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "issue200-keyboard-focus-correction-diagnostic-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "issue200-keyboard-focus-correction-lint.log",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    }
+  ],
+  "archive": {
+    "path": "raw-logs.tar.gz",
+    "bytes": 550,
+    "sha256": "48678db98e34eb347a9ee9a53bb27da21b2c6b17f8c328c8fe5804f6d4910f20"
+  },
+  "retainedGeometry": {
+    "path": "retained-geometry.json",
+    "bytes": 8103,
+    "sha256": "d40ad3b4b156e0bafef726cfe8164dcfde56c62804d1f3ae0be43aaf1ea98a1b"
+  }
+}

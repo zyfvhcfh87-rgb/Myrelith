@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "archive": "keyboard-4727236-second-failure.tar.gz",
+  "testedHead": "47272362c6d65a1f0a75d4527642d0c8e3de6816",
+  "bytes": 16216690,
+  "members": 71,
+  "verifiedMemberHashes": 70,
+  "sha256": "ff448397b664ebf28fdb30d1d4d9f0ea5adf6790505618464635a7e2b0c9084b",
+  "result": "Build passed. Native: 0 complete cases passed; 1 failed on closed-select Home; 3 unrun; no retry.",
+  "qualifications": [
+    "Safe-guide full-label visibility, actual Space activation and both guide geometries passed original assertions at 1280x720.",
+    "Closed-select Home reached trusted target79 but left serif, project and full history unchanged. This alone does not establish a product bug.",
+    "No completed font/status, dialog or narrow-case acceptance.",
+    "Captured build owner processes were released; transient build descendants were not all individually observed. PID24121 is shared Codex infrastructure, not an owned build process."
+  ]
+}
