@@ -1,0 +1,26 @@
+{
+  "kind": "issue202-r3-completion-correction-evidence",
+  "runCommit": "cd47ab73b2027a5f59be062dae2f1efb26fd22e0",
+  "rawPreserved": true,
+  "preview1080p": "pass-bounded-resident-stage-only",
+  "preview4k": "no-go-recorded-deadline-envelope",
+  "incompletePair": "unqualified-incomplete-pair-does-not-erase-absolute-no-go",
+  "files": [
+    {
+      "path": "r3-completed-run-1.json",
+      "sha256": "250e58426d16ffc3e29bd668f4913bd122f0187e4290b4483654f042d524801c"
+    },
+    {
+      "path": "r3-completed-analysis-1.json",
+      "sha256": "2f1bae17500d6a8f049a63f8be51f64c113a1d3dfc4ea58a71ff215a41d80fcd"
+    },
+    {
+      "path": "verify-r3-completed.mjs",
+      "sha256": "6142a7c8d0f0783413cd75b0e53262dba99e97dc72dff3b5601b29690ad32249"
+    },
+    {
+      "path": "r3-completed-results.md",
+      "sha256": "c637346dae50d33e71fabc50d70895015e1c16fc8ab87993a229e31907ccf9eb"
+    }
+  ]
+}

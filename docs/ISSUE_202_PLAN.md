@@ -1,6 +1,6 @@
 # Issue #202 — managed 10-bit and HDR research
 
-Status: **R1/bounded R2 accepted; R3 run 1 retained with preview limitation; narrow completion correction prepared; R4 open**.
+Status: **R4 research decision ready for orchestrator review: no-go for product promotion; all experiment slots released**.
 Baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue202`, inspected 2026-09-08. Scope comes from
 [#202](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/202) and the Milestone 9
@@ -9,15 +9,17 @@ coordination contract. Advanced SDR grading is present through merged #196.
 This issue produces a decision and reproducible evidence. It changes no
 production source, dependency, UI, export preset, project format, plugin ABI,
 or existing SDR math. An evidence-backed no-go is a completed research outcome;
-an incomplete experiment is not. The orchestrator reviews this initial gate
-before continuing the laboratory. Only the orchestrator publishes or integrates.
+an incomplete experiment is not. The [final six-criterion decision](evidence/issue202/final-decision.md)
+records the qualified subsets, failed gates, remaining unknowns and bounded
+follow-up proposals. Only the orchestrator accepts, publishes or integrates.
 
 On 2026-09-08 the orchestrator approved R0 commit `8ce3742` for the R1
 independent numerical oracle/candidate and bounded R2 capability/metadata
 experiments. The color model remains a research candidate. The original limits
 stand; substantial decode/encode, timings and full suites require an exclusive
-slot. Two bounded codec sessions and one R3 session have completed and released
-their slots; the completion correction has no execution grant. Host identity supplied by the orchestrator is
+slot. Two bounded codec sessions, the original R3 session and its separately
+reviewed completion correction have completed and released their slots. No
+further execution is pending. Host identity supplied by the orchestrator is
 recorded in the evidence inventory and does not qualify HDR presentation.
 
 The [R1/R2 evidence](evidence/issue202/r1-r2-results.md) records 118/118 scalar
@@ -60,8 +62,16 @@ Candidate preview completion is unqualified because Chromium's version-pinned
 The slot was released after teardown. A
 [narrow completion correction](evidence/issue202/r3-completed-protocol.md)
 adds a charged one-pixel preview readback and completed setup boundary without
-changing models, topology, goldens or thresholds. Fourteen pure/static checks
-pass; corrected execution requires review and a fresh exclusive slot.
+changing models, topology, goldens or thresholds. Fourteen pure checks and the
+static compilation passed before the parent accepted exact commit `cd47ab7`
+and granted one bounded 20-job run. The [corrected results](evidence/issue202/r3-completed-results.md)
+retain 1,399 measured rows: all three 1080p resident-preview repetitions pass;
+the first 4K repetition stops at 79 frames with two deadline misses, an absolute
+no-go under the unchanged rule. Its incomplete paired ratio does not erase that
+failure. Tiny readback/retry and lifecycle checks pass, with all twenty workers
+terminated, zero owned ledgers and awaited browser/server teardown. Full-size
+pixel correctness, the complete video pipeline and HDR output remain unqualified.
+The slot was released before the saved-result audit and R4 decision.
 
 ## Gates and deliverables
 
