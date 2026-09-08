@@ -26,13 +26,13 @@ describe('bounded animation view planning', () => {
     expect(glyphs).toBeLessThanOrEqual(512)
   })
 
-  test('available title properties use the real owner adapter while stored title effects remain visibly unavailable', () => {
+  test('available title properties use the real owner adapter while missing effect owners remain visibly unavailable', () => {
     const source = foundationProject().sequences[0], clip = expandedTitleProject().sequences[0].tracks[0].clips[0]
     source.tracks[0].clips = [clip]
     clip.animation = { tracks: [], effectTracks: [{ effectId: 'missing', parameter: 'amount', keyframes: [scalarKey(0, 0.4)] }] }
     const index = buildAnimationLaneIndex(source, context)
     expect(index.lanes.some((lane) => lane.address.kind === 'title' && lane.status === 'scalar')).toBe(true)
-    expect(index.lanes.find((lane) => lane.address.kind === 'effect')).toMatchObject({ status: 'unavailable', reason: expect.stringContaining('title effect') })
+    expect(index.lanes.find((lane) => lane.address.kind === 'effect')).toMatchObject({ status: 'unavailable', reason: 'The effect owner or stage is unavailable.' })
     expect(index.lanes.filter((lane) => lane.address.kind === 'scalar').map((lane) => lane.label)).toEqual(['Opacity'])
   })
 
