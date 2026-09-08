@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /**
  * Browser-free three-point and sequence-edit planner.
  *
@@ -651,7 +652,7 @@ function replaceTargets(input: SequenceEditInput): ClipId[] | SequenceEditReject
       || (track.kind === 'audio' && track.id === input.audioTargetTrackId)
     )
     if (!targeted) return 'replace-target-missing'
-    if (selected.text !== undefined) return 'replace-text-clip'
+    if (isProceduralTitleClip(selected)) return 'replace-text-clip'
     return [input.selectedClipId]
   }
 
@@ -665,7 +666,7 @@ function replaceTargets(input: SequenceEditInput): ClipId[] | SequenceEditReject
       && input.playheadFrame < rangeEnd(candidate.timelineRange)
     ))
     if (clip) {
-      if (clip.text !== undefined) return 'replace-text-clip'
+      if (isProceduralTitleClip(clip)) return 'replace-text-clip'
       return [clip.id]
     }
   }
@@ -884,7 +885,8 @@ export function applySequenceEdit(
   plan: SequenceEditPlan,
   asset: MediaAsset | null = null,
   catalog: SourceBoundsCatalog = new Map(),
+  allocateTitleId?: () => string,
 ): TimelineDoc {
   if (plan.status === 'reject') return doc
-  return applyAcceptedSequenceEdit(doc, plan, asset, catalog)
+  return applyAcceptedSequenceEdit(doc, plan, asset, catalog, allocateTitleId)
 }

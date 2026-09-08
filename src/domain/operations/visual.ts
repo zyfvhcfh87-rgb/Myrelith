@@ -186,6 +186,9 @@ export function updateClipVisual(
   const transformUnchanged = [...TRANSFORM_KEYS].every(
     (key) => nextTransform[key] === loc.clip.transform[key],
   )
+  if (loc.clip.title !== undefined && (!transformUnchanged || !sameVisual(nextVisual, currentVisual))) {
+    return reject(doc, op, 'expanded title geometry belongs to its elements')
+  }
   if (
     transformUnchanged
     && opacity === loc.clip.opacity

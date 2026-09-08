@@ -17,6 +17,7 @@
 import type { LensCorrectionIntent } from './lensCorrection'
 import type { EffectPathAnimationTrack } from './maskPathAnimation'
 import type { AnimationParameterIdentity } from './animationParameterIdentity'
+import type { TitleDefinition } from './titleElements'
 
 /* ------------------------------------------------------------------ */
 /* Time primitives                                                      */
@@ -565,8 +566,10 @@ export interface Clip {
    * portable schema-18 files always write the array, empty when unused.
    */
   audioEffects?: AudioEffectDescriptor[]
-  /** Present only on text clips; such clips render text instead of media. */
+  /** Compact legacy text, mutually exclusive with expanded title ownership. */
   text?: TextProps
+  /** Versioned procedural composition; geometry belongs to its elements. */
+  title?: TitleDefinition
   /**
    * Clips sharing this id are LINKED: edits follow the link at the store
    * layer (moving/trimming/splitting/deleting one member applies the same

@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /** Property adapters choose meaning; the scalar leaf remains the only interpolator. */
 import { MAX_TITLE_ANIMATION_TRACKS } from './animationCollections'
 import type { Clip, EffectDescriptor, TitleAnimationTrack, TrackKind } from './schema'
@@ -32,7 +33,7 @@ export function resolveScalarAnimationProperty(target: ScalarAnimationPropertyTa
   if (target.kind === 'clip') {
     const spec = clipScalarPropertySpec(target.property, target.propertyVersion ?? 1)
     if (!spec) return { status: 'unavailable', reason: 'This clip property name or version is unavailable; its keys are preserved.' }
-    if (target.clip.text !== undefined && spec.property !== 'opacity') return { status: 'unavailable', reason: 'Title clips expose only outer opacity; edit the title element geometry.' }
+    if (isProceduralTitleClip(target.clip) && spec.property !== 'opacity') return { status: 'unavailable', reason: 'Title clips expose only outer opacity; edit the title element geometry.' }
     if (target.trackKind === 'audio' && spec.property !== 'volume' && spec.property !== 'balance') return { status: 'unavailable', reason: 'Audio clips expose only volume and balance.' }
     return { status: 'available', spec, fallback: readClipScalarProperty(target.clip, spec.property) }
   }

@@ -3,7 +3,7 @@ import { createTextClip } from '../domain/operations/creation'
 import { updateTextClip } from '../domain/operations/audioText'
 import { proceduralTextAssetId } from '../domain/textOverlay'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
-import { createProjectFileSnapshot, parseProjectFile, serializeProjectFile, PROJECT_FILE_LIMITS } from '../domain/projectFile'
+import { createProjectFileSnapshot, parseProjectFile, serializeProjectFile, PROJECT_FILE_LIMITS, CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { attributeClip } from '../test/clipAttributeFixtures'
@@ -40,7 +40,7 @@ function exactLegacyFile(characters: number, scalar: boolean): string {
   }
   expect(remaining).toBe(0)
   // Real old wire shape: migration changes two digits only, adding no track fields.
-  const encoded = serializeProjectFile(file).replaceAll('"schemaVersion":22', '"schemaVersion":21')
+  const encoded = serializeProjectFile(file).replaceAll(`"schemaVersion":${CURRENT_TIMELINE_SCHEMA_VERSION}`, '"schemaVersion":21')
   expect(encoded.length).toBe(characters)
   expect(encoded).not.toMatch(/titleTracks|effectPathTracks|propertyVersion|parameterIdentity/)
   return encoded
@@ -61,7 +61,7 @@ describe('schema22 production file and history boundary', () => {
     expect(PROJECT_FILE_LIMITS.maxSerializedCharacters).toBe(10_000_000)
     const legacy = exactLegacyFile(characters, scalar), file = parseProjectFile(legacy)
     const migrated = serializeProjectFile(file)
-    expect(migrated === legacy.replaceAll('"schemaVersion":21', '"schemaVersion":22')).toBe(true)
+    expect(migrated === legacy.replaceAll('"schemaVersion":21', `"schemaVersion":${CURRENT_TIMELINE_SCHEMA_VERSION}`)).toBe(true)
     expect(migrated.length).toBe(characters)
     if (characters === 10_000_000) {
       const oneOver = { ...file, name: `${file.name}x` }

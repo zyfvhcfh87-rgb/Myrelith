@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /**
  * domain/linking.ts — Linked A/V clip pairs: pure functions over a
  * TimelineDoc. Phase 4.3.8.
@@ -606,7 +607,7 @@ export function linkedRetimeClip(
   if (members.length === 0) return retimeClip(doc, clipId, rate)
   if (
     members.some(
-      (member) => member.sourceMode === 'still' || member.text !== undefined,
+      (member) => member.sourceMode === 'still' || isProceduralTitleClip(member),
     )
   ) return doc
   return applyConstantRetimeWithRoom(doc, members, rate, 'linkedRetimeClip')
@@ -632,7 +633,7 @@ export function linkedRetimeClips(
     if (members.length === 0) return reject(doc, op, `clip ${clipId} not found`)
     if (
       members.some(
-        (member) => member.sourceMode === 'still' || member.text !== undefined,
+        (member) => member.sourceMode === 'still' || isProceduralTitleClip(member),
       )
     ) continue
     for (const member of members) {
@@ -663,7 +664,7 @@ export function linkedSetClipSpeedPoint(
   const members = groupMembers(doc, clipId)
   if (
     members.some(
-      (member) => member.sourceMode === 'still' || member.text !== undefined,
+      (member) => member.sourceMode === 'still' || isProceduralTitleClip(member),
     )
   ) return doc
   let next = doc
@@ -771,7 +772,7 @@ export function linkedSlipClip(
   // as an atomicity failure.
   if (
     groupMembers(doc, clipId).some(
-      (member) => member.sourceMode === 'still' || member.text !== undefined,
+      (member) => member.sourceMode === 'still' || isProceduralTitleClip(member),
     )
   ) {
     return doc
@@ -827,10 +828,11 @@ export function linkedSplitClipAtFrame(
   doc: TimelineDoc,
   clipId: ClipId,
   frame: number,
+  allocateTitleId?: () => string,
 ): TimelineDoc {
   const op = 'linkedSplitClipAtFrame'
 
-  const afterTarget = splitClipAtFrame(doc, clipId, frame)
+  const afterTarget = splitClipAtFrame(doc, clipId, frame, allocateTitleId)
   if (afterTarget === doc) return afterTarget // reuse splitClipAtFrame's own rejection + warning
 
   const newRightHalfIds = newIdsAfterSplit(doc, afterTarget)
@@ -841,7 +843,7 @@ export function linkedSplitClipAtFrame(
     if (frame <= tl.startFrame || frame >= rangeEnd(tl)) continue // doesn't strictly contain frame
 
     const before = working
-    working = splitClipAtFrame(before, partner.id, frame)
+    working = splitClipAtFrame(before, partner.id, frame, allocateTitleId)
     if (working === before) return reject(doc, op, 'partner could not follow')
     newRightHalfIds.push(...newIdsAfterSplit(before, working))
   }

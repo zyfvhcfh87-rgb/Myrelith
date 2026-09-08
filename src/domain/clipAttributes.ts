@@ -224,6 +224,9 @@ function editTargets(
         if (groups.some((group) => !supportedClipAttributeGroups(track.kind).includes(group))) {
           throw new Error(`"${clip.name}" cannot receive all selected attribute groups.`)
         }
+        if (clip.title !== undefined && groups.some((group) => !['opacity', 'blend', 'effects'].includes(group))) {
+          throw new Error('Expanded title geometry belongs to its elements; choose opacity, blend or effects.')
+        }
         const next = edit(clip)
         const animation = clipAnimation(next)
         const error = clipAnimationValidationError(animation)

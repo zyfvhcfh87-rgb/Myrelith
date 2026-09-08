@@ -173,6 +173,9 @@ function ordinaryItem(
   effectStagePlanner: VideoEffectStagePlanner,
 ): OrdinaryVideoPlanItem | TextOverlayPlanItem | null {
   if (!clip) return null
+  // The owner gate admits title data without inventing a media request. Ordered
+  // title painting is supplied by the separately reviewed rendering gate.
+  if (clip.title !== undefined) return null
   const resolvedClip = resolveClipAnimationAtFrame(clip, frame)
   const opacity = clipOpacity(resolvedClip)
   if (opacity <= 0) return null

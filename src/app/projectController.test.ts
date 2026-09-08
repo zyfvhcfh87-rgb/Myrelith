@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { exactLegacyTitleFile } from '../test/titleFileBoundaryFixtures'
+import { expandedTitleProject } from '../test/titleOwnerFixtures'
 import {
   CURRENT_PROJECT_FORMAT_VERSION,
   PROJECT_FILE_FORMAT,
   serializeProjectFile,
+  createProjectFileSnapshot,
+  CURRENT_TIMELINE_SCHEMA_VERSION,
   type PortableAssetDescriptor,
   type ProjectFile,
 } from '../domain/projectFile'
@@ -1312,6 +1316,32 @@ describe('portable project resume', () => {
       projectBindingId: 'local-project:recovery',
     })
   })
+
+  test('recovery preserves exact-cap compact text and actual expanded owners without media inspection', async () => {
+    const sources = [
+      exactLegacyTitleFile(10_000_000, 22, false),
+      serializeProjectFile(createProjectFileSnapshot(expandedTitleProject(), [])),
+    ]
+    for (const [index, source] of sources.entries()) {
+      const id = index === 0 ? 'title-boundary' : 'title-project'
+      const record: RecoveryJournalRecord = {
+        version: LOCAL_PROJECT_RECORD_VERSION, journalId: `title-journal-${index}`, documentId: id,
+        projectName: 'Recovered titles', projectFileName: 'Titles.myrelith', updatedAt: 100,
+        generations: [{ snapshotId: `title-snapshot-${index}`, capturedAt: 100, serializedProject: source, projectBindingId: `local-project:title-${index}` }],
+        projectBindingId: `local-project:title-${index}`,
+      }
+      const deps = makeDeps({ getRecoveryJournal: vi.fn(() => record) })
+      await expect(openRecoveryProject(record.journalId, deps)).resolves.toEqual({ status: 'ready' })
+      await expect(activateResumedProject(deps)).resolves.toEqual({ status: 'activated' })
+      const media = useMediaStore.getState()
+      const encoded = serializeProjectFile(createProjectFileSnapshot(useDocumentStore.getState().project, media.descriptors.values(), media.collections))
+      expect(encoded).toBe(source.replaceAll('"schemaVersion":22', `"schemaVersion":${CURRENT_TIMELINE_SCHEMA_VERSION}`))
+      expect(deps.inspectMedia).not.toHaveBeenCalled()
+      const clip = useDocumentStore.getState().doc.tracks[0].clips[0]
+      expect(clip.title !== undefined).toBe(index === 1)
+      expect(clip.text !== undefined).toBe(index === 0)
+    }
+  }, 30_000)
 
   test('recovery fallback never applies a newer journal binding to an older generation', async () => {
     const savedProject = makeLegacyTwoTrackProject('Recovered project')
