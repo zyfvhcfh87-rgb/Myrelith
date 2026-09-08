@@ -2,7 +2,7 @@
 import { test, expect, type Page, type TestInfo, type Locator } from '@playwright/test'
 import { writeFile } from 'node:fs/promises'
 import type * as Client from './keyboard-client'
-import { inside, requireSessionLedger, requireTabBudget } from './keyboard-model'
+import { inside, requireNativeKeys, requireSessionLedger, requireTabBudget } from './keyboard-model'
 
 type State = ReturnType<typeof Client.snapshot>
 type Run = { warnings: unknown[]; errors: unknown[]; pageErrors: string[]; cleanupErrors: string[]; events: unknown[]; tabs: number; images: string[]; probe: boolean }
@@ -46,6 +46,11 @@ function textElement(value: State) {
   if (!e || e.version !== 1 || e.kind !== 'text') throw new Error('Original text element missing')
   return e
 }
+function onlyElementsChange(before: State, after: State, expected: ReturnType<typeof elements>) {
+  const project = structuredClone(before.project)
+  project.sequences[0].tracks[0].clips[0].title = { version: 1, elements: expected }
+  expect(after.project).toEqual(project)
+}
 async function recordFocus(page: Page, label: string) {
   const focus = await call(page, 'active')
   run().events.push({ kind: 'focus', label, focus })
@@ -69,6 +74,7 @@ async function screenshot(page: Page, label: string) {
   const info = test.info(), path = info.outputPath(`${run().images.length.toString().padStart(2, '0')}-${label}.png`)
   await page.screenshot({ path }); run().images.push(path)
   await info.attach(label, { path, contentType: 'image/png' })
+  await json(info, 'keyboard-evidence.json', run())
 }
 async function focused(page: Page, target: Locator, label: string, backwards = false) {
   await seek(page, target, label, backwards)
@@ -83,6 +89,7 @@ async function focused(page: Page, target: Locator, label: string, backwards = f
   for (const item of evidence.labels) {
     expect(item.fullyVisible, `${label} label clipped`).toBe(true)
     expect(item.paint.measured.ratio, `${label} label contrast`).toBeGreaterThanOrEqual(4.5)
+    for (const inline of item.inlineText) { expect(inline.fullyVisible).toBe(true); expect(inline.paint.measured.ratio).toBeGreaterThanOrEqual(4.5) }
   }
   for (const item of layout.containers) expect(item.scrollWidth, `${item.className} horizontal overflow`).toBeLessThanOrEqual(item.width + 1)
   return evidence
@@ -145,12 +152,15 @@ async function status(page: Page, expected: string, label: string) {
 async function controls(page: Page) {
   await enter(page)
   const initial = await state(page, 'initial'), textChoice = page.getByRole('checkbox', { name: 'Text text', exact: true })
+  const disabled = { deleteOnlyElement: await button(page, 'Delete elements').isDisabled(), moveFirstBackward: await button(page, 'Move Text backward').isDisabled(), moveLastForward: await button(page, 'Move Text forward').isDisabled() }
+  run().events.push({ kind: 'disabled-boundaries', disabled }); expect(disabled).toEqual({ deleteOnlyElement: true, moveFirstBackward: true, moveLastForward: true })
   await focused(page, textChoice, 'text-selection')
   expect(initial.selectedElements).toEqual(['root-element'])
   await activate(page, 'Add rectangle')
   const added = await state(page, 'added'); oneEdit(initial, added)
   const addedElements = elements(added), rectId = addedElements[1].id
   expect(addedElements.map((e) => e.kind)).toEqual(['text', 'rectangle']); expect(rectId).not.toBe('root-element')
+  onlyElementsChange(initial, added, [...elements(initial), addedElements[1]])
   await focused(page, page.getByRole('checkbox', { name: 'Rectangle rectangle', exact: true }), 'rectangle-selection', true)
   await page.keyboard.press('Space')
   const multi = await state(page, 'selected-both'); unchanged(added, multi); expect(multi.selectedElements).toEqual(['root-element', rectId])
@@ -158,21 +168,29 @@ async function controls(page: Page) {
   const selected = await state(page, 'selected-rectangle'); unchanged(multi, selected); expect(selected.selectedElements).toEqual([rectId])
   await activate(page, 'Move Rectangle backward')
   const ordered = await state(page, 'ordered'); oneEdit(selected, ordered); expect(elements(ordered).map((e) => e.id)).toEqual([rectId, 'root-element'])
+  onlyElementsChange(selected, ordered, [addedElements[1], addedElements[0]])
   await activate(page, 'Delete elements')
   const deleted = await state(page, 'deleted'); oneEdit(ordered, deleted); expect(elements(deleted)).toEqual(elements(initial))
+  expect(deleted.project).toEqual(initial.project)
   await focused(page, page.getByRole('spinbutton', { name: 'Position X', exact: true }), 'position-x')
   await type(page, '20'); await page.keyboard.press('Enter')
   const entered = await state(page, 'number-enter'); oneEdit(deleted, entered); expect(textElement(entered).transform.x).toBe(20)
+  onlyElementsChange(deleted, entered, [{ ...textElement(deleted), transform: { ...textElement(deleted).transform, x: 20 } }])
   await tab(page, 1); unchanged(entered, await state(page, 'number-blur'))
   await focused(page, page.getByRole('spinbutton', { name: 'Position X', exact: true }), 'position-x-cancel', true)
   await type(page, '45'); await page.keyboard.press('Escape'); await tab(page, 1)
   unchanged(entered, await state(page, 'number-escape'))
   await focused(page, button(page, 'Move title element Text'), 'move-title', true)
   await page.keyboard.press('ArrowRight'); const right = await state(page, 'move-right'); oneEdit(entered, right); expect(textElement(right).transform.x).toBe(21)
+  onlyElementsChange(entered, right, [{ ...textElement(entered), transform: { ...textElement(entered).transform, x: 21 } }])
   await page.keyboard.press('Shift+ArrowUp'); const up = await state(page, 'move-up'); oneEdit(right, up); expect(textElement(up).transform.y).toBe(-10)
+  onlyElementsChange(right, up, [{ ...textElement(right), transform: { ...textElement(right).transform, y: -10 } }])
   await focused(page, button(page, 'Resize title element Text'), 'resize-title')
   await page.keyboard.press('ArrowRight'); const resized = await state(page, 'resize-right'); oneEdit(up, resized); expect(textElement(resized).text.boxWidthPx).toBe(802)
-  await activate(page, 'Commands', true)
+  onlyElementsChange(up, resized, [{ ...textElement(up), text: { ...textElement(up).text, boxWidthPx: 802 } }])
+  await seek(page, button(page, 'Commands'), 'shared-undo-command', true)
+  run().events.push({ kind: 'surrounding-workspace-command', focus: await call(page, 'active'), layout: await call(page, 'titleLayout') })
+  await screenshot(page, 'shared-command'); await page.keyboard.press('Enter')
   await expect(page.getByRole('searchbox', { name: 'Search commands' })).toBeFocused()
   await page.keyboard.type('Undo'); await page.keyboard.press('ArrowDown')
   await expect(button(page, 'Undo')).toBeFocused(); await page.keyboard.press('Enter')
@@ -192,6 +210,7 @@ async function controls(page: Page) {
   await focused(page, fallback, 'fallback', true)
   await page.keyboard.press('Home')
   const missing = await state(page, 'no-fallback'); oneEdit(guided, missing); expect(textElement(missing).font).toEqual({ family: 'Missing Keyboard Face', fallbackFamily: null })
+  onlyElementsChange(guided, missing, [{ ...textElement(guided), font: { family: 'Missing Keyboard Face', fallbackFamily: null } }])
   await status(page, 'Missing Keyboard Face is unavailable', 'font-unavailable')
   // Open the native select popup; intermediate navigation must not create edits.
   await page.keyboard.press('Space'); await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter')
@@ -207,14 +226,26 @@ async function dialogCycle(page: Page, label: string) {
   expect(modal.scrollWidth).toBeLessThanOrEqual(modal.clientWidth + 1)
   expect(modal.controls.length).toBeGreaterThan(1)
   const first = await recordFocus(page, `${label}-initial`), seen: number[] = []
+  const initialIndex = modal.controls.findIndex((control) => control.id === first?.id)
+  expect(initialIndex).toBeGreaterThanOrEqual(0)
   for (let i = 1; i <= modal.controls.length; i++) {
     const next = await tab(page, i); if (!next) throw new Error('Focus disappeared')
     expect((await call(page, 'modal')).focusInside).toBe(true); seen.push(next.id)
+    expect(next.id).toBe(modal.controls[(initialIndex + i) % modal.controls.length].id)
+    const evidence = await call(page, 'inspectFocused')
+    run().events.push({ kind: 'dialog-traversed-control', label, evidence })
+    expect(evidence.fullyVisible).toBe(true); expect(evidence.focusVisible).toBe(true)
+    for (const item of evidence.labels) { expect(item.fullyVisible).toBe(true); expect(item.paint.measured.ratio).toBeGreaterThanOrEqual(4.5) }
+    expect(evidence.outline.width).toBeGreaterThan(0); expect(evidence.outline.style).not.toBe('none')
+    expect(evidence.outline.measured.ratio).toBeGreaterThanOrEqual(3)
+    if (evidence.text.trim() || evidence.value) expect(evidence.paint.measured.ratio).toBeGreaterThanOrEqual(4.5)
+    await screenshot(page, `${label}-control-${i}`)
   }
   expect(seen.at(-1)).toBe(first?.id)
   expect(new Set(seen)).toEqual(new Set(modal.controls.map((c) => c.id)))
   for (let i = 1; i <= modal.controls.length; i++) {
-    await tab(page, i, true); expect((await call(page, 'modal')).focusInside).toBe(true)
+    const next = await tab(page, i, true); expect((await call(page, 'modal')).focusInside).toBe(true)
+    expect(next?.id).toBe(modal.controls[(initialIndex - i + modal.controls.length) % modal.controls.length].id)
   }
   expect((await call(page, 'active'))?.id).toBe(first?.id)
   await screenshot(page, `${label}-focus-wrap`)
@@ -228,7 +259,9 @@ async function dialogs(page: Page) {
   await page.keyboard.press('ArrowDown'); await expect(page.getByRole('combobox', { name: 'Direction', exact: true })).toHaveValue('down')
   await focused(page, page.getByRole('spinbutton', { name: 'Preview local frame', exact: true }), 'motion-frame')
   await type(page, '48'); await tab(page, 1)
-  await activate(page, 'Preview motion'); expect((await state(page, 'motion-preview')).previewOwner).toBe('title-authoring')
+  await expect(page.getByRole('spinbutton', { name: 'Preview local frame', exact: true })).toHaveValue('48')
+  await activate(page, 'Preview motion'); const previewed = await state(page, 'motion-preview')
+  unchanged(before, previewed); expect(previewed.previewOwner).toBe('title-authoring')
   await page.keyboard.press('Escape'); await expect(motion).toBeFocused()
   const cancelled = await state(page, 'motion-escape'); unchanged(before, cancelled); expect(cancelled.previewOwner).toBeNull()
   await page.keyboard.press('Enter'); await expect(page.getByRole('dialog', { name: 'Roll / crawl', exact: true })).toBeVisible()
@@ -276,7 +309,8 @@ test.afterEach(async ({ page }, info) => {
         } catch (cause) { value.cleanupErrors.push(`Project cleanup: ${String(cause)}`) }
         try {
           const released = await call(page, 'sessionEvidence', true); value.events.push({ kind: 'observer-release', released })
-          requireSessionLedger(released.events, released.dropped, released.issues); expect(released.subscriptions).toBe(0); expect(released.disposed).toBe(true)
+          requireSessionLedger(released.events, released.dropped, released.issues); requireNativeKeys(released.keys, released.droppedKeys)
+          expect(released.subscriptions).toBe(0); expect(released.disposed).toBe(true)
         } catch (cause) { value.cleanupErrors.push(`Observer cleanup: ${String(cause)}`) }
       }
       try { await page.close() } catch (cause) { value.cleanupErrors.push(`Page cleanup: ${String(cause)}`) }

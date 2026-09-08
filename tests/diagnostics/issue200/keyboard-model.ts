@@ -2,6 +2,7 @@
 export const MAX_TARGET_TABS = 128
 export const MAX_CASE_TABS = 512
 export const MAX_SESSION_EVENTS = 256
+export const MAX_NATIVE_KEYS = 2048
 export type Rect = { x: number; y: number; width: number; height: number }
 export type Color = readonly [number, number, number, number]
 export type PaintLayer = { background: string; opacity: number; image: string }
@@ -59,4 +60,7 @@ export function healthySession(s: { error: unknown; saveError: unknown; recovery
 }
 export function requireSessionLedger(events: readonly { healthy: boolean }[], dropped: number, issues: readonly string[]) {
   if (!events.length || events.some((event) => !event.healthy) || dropped || issues.length) throw new Error('Incomplete or unhealthy session evidence')
+}
+export function requireNativeKeys(events: readonly { trusted: boolean }[], dropped: number) {
+  if (!events.length || dropped || events.some((event) => !event.trusted)) throw new Error('Missing, synthetic or truncated native-key evidence')
 }

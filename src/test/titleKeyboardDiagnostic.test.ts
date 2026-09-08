@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { clippedRegion, contrast, healthySession, inside, parseColor, requireSessionLedger, requireTabBudget } from '../../tests/diagnostics/issue200/keyboard-model'
+import { clippedRegion, contrast, healthySession, inside, parseColor, requireNativeKeys, requireSessionLedger, requireTabBudget } from '../../tests/diagnostics/issue200/keyboard-model'
 
 describe('keyboard evidence rejects false positives', () => {
   const box = { x: 10, y: 10, width: 20, height: 20 }, viewport = { x: 0, y: 0, width: 100, height: 100 }
@@ -41,5 +41,11 @@ describe('keyboard evidence rejects false positives', () => {
     expect(healthySession({ ...good, recoveryPhase: 'error' })).toBe(false)
     requireSessionLedger([{ healthy: true }], 0, [])
     for (const [events, dropped, issues] of [[[], 0, []], [[{ healthy: false }, { healthy: true }], 0, []], [[{ healthy: true }], 1, []], [[{ healthy: true }], 0, ['observer failed']]] as const) expect(() => requireSessionLedger(events, dropped, issues)).toThrow()
+  })
+  test('synthetic, missing and truncated keyboard ledgers cannot qualify traversal', () => {
+    requireNativeKeys([{ trusted: true }], 0)
+    expect(() => requireNativeKeys([], 0)).toThrow()
+    expect(() => requireNativeKeys([{ trusted: false }, { trusted: true }], 0)).toThrow()
+    expect(() => requireNativeKeys([{ trusted: true }], 1)).toThrow()
   })
 })

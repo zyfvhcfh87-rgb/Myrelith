@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "checks": {
+    "draft": {
+      "head": "d7efdde",
+      "typecheck": 0,
+      "focused": {
+        "exitCode": 0,
+        "files": 1,
+        "tests": 6
+      }
+    },
+    "assignedSync": {
+      "head": "5bca9bf8041f6dd25d64de2acd87046e13000f4d",
+      "parent": "580de54f85c877d1d746c9a5b201b1aa4ac3ef4d",
+      "conflicts": 0,
+      "focused": {
+        "exitCode": 0,
+        "files": 4,
+        "tests": 66,
+        "durationSeconds": 5.41
+      },
+      "appTypecheck": 0,
+      "diagnosticTypecheck": 0,
+      "lint": 0
+    },
+    "executable": {
+      "focused": {
+        "exitCode": 0,
+        "files": 2,
+        "tests": 15,
+        "durationSeconds": 1.45
+      },
+      "inertRunner": {
+        "exitCode": 0,
+        "tests": 12,
+        "durationSeconds": 0.006
+      },
+      "appTypecheck": 0,
+      "diagnosticTypecheck": 0,
+      "lint": 0,
+      "discovery": {
+        "exitCode": 0,
+        "cases": 4
+      },
+      "pythonSyntax": 0,
+      "nodeSyntax": 0,
+      "acceptedRunnerTestsConfigNormalizedEquivalence": true,
+      "finalPreviewAssertionTypecheck": 0,
+      "finalPreviewAssertionDiscovery": {
+        "exitCode": 0,
+        "cases": 4
+      }
+    },
+    "nativeLaunched": false,
+    "productionBuildRun": false,
+    "fullSuiteRun": false
+  },
+  "logs": [
+    {
+      "path": "issue200-keyboard-draft-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "issue200-keyboard-draft-tests.log",
+      "bytes": 260,
+      "sha256": "30b84149371e4dde2caeed84f47a08c01e99001c9f825f48bf41224e4b7f26ad"
+    },
+    {
+      "path": "issue200-keyboard-sync-focused.log",
+      "bytes": 266,
+      "sha256": "626d32a5ee1380560b0f1e16beef765bd03a9517699f41fbbdd6afb5e433a3d6"
+    },
+    {
+      "path": "issue200-keyboard-sync-app-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "issue200-keyboard-sync-diagnostic-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "issue200-keyboard-sync-lint.log",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "issue200-keyboard-final-focused.log",
+      "bytes": 265,
+      "sha256": "2fbed10dda9fe06bde09a7e4f7612245852a6c3a8d2cc44c421eb412fdb76b2c"
+    },
+    {
+      "path": "issue200-keyboard-final-app-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "issue200-keyboard-final-diagnostic-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "issue200-keyboard-final-runner.log",
+      "bytes": 111,
+      "sha256": "8d792d81c28f14e81434cb2a175feb8a800363e60faf05e9aa008104cb37a9c2"
+    },
+    {
+      "path": "issue200-keyboard-final-lint.log",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "issue200-keyboard-final-discovery.log",
+      "bytes": 412,
+      "sha256": "c4ade957b92368b50ba3bd5a85e71f2b14321ba61649bcaa2d8f2db3dda6de87"
+    },
+    {
+      "path": "issue200-keyboard-final-preview-typecheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "issue200-keyboard-final-preview-discovery.log",
+      "bytes": 412,
+      "sha256": "c4ade957b92368b50ba3bd5a85e71f2b14321ba61649bcaa2d8f2db3dda6de87"
+    }
+  ],
+  "archive": {
+    "path": "raw-logs.tar.gz",
+    "bytes": 1158,
+    "sha256": "e51e1d1777f1a76c2aea67ddf24b10aaff65c24f6e86794ed102cecbbdd661c5"
+  },
+  "sources": [
+    {
+      "path": "src/test/titleKeyboardDiagnostic.test.ts",
+      "bytes": 3413,
+      "sha256": "a0f569957cd6dbdf8db677ab6cedcc9c20d47287d3f59f9ea8cf937f9efe7195"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard-model.ts",
+      "bytes": 4603,
+      "sha256": "f58f3e4b98a9bb44f802bf74233ee352bf54f03112ee01fee01109ee48974319"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard-client.ts",
+      "bytes": 12008,
+      "sha256": "2aceaec08e578b150a6579b70de250811bfc7d523d84922f80e15c4c6f98b994"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard.gate.ts",
+      "bytes": 24712,
+      "sha256": "c3aa8591acb70f5155407e49abc7cc0f563c9b6a3009595842102713de90ec30"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard.playwright.config.ts",
+      "bytes": 880,
+      "sha256": "de2266dc283d667db435b62b902438fa9052a48049442b6f9c328a54556045c3"
+    },
+    {
+      "path": "tests/diagnostics/issue200/keyboard-runner_test.py",
+      "bytes": 9814,
+      "sha256": "5dd893bed1fd02fd14cf26d3db5efc0b8909bcbf6092422804fdd801f338c351"
+    },
+    {
+      "path": "docs/evidence/issue200/run-keyboard-browser.py",
+      "bytes": 9346,
+      "sha256": "54dda8d4522ae563ce9ef0389560da9a00f5b1120deed2e824863df06830eb16"
+    },
+    {
+      "path": "docs/evidence/issue200/verify-keyboard-source.mjs",
+      "bytes": 2599,
+      "sha256": "d53bd02b42f2d0ef8f3052668a57346e4bbb4d2bea3e92472ee755aac5a886de"
+    },
+    {
+      "path": "docs/evidence/issue200/keyboard-executable-protocol.md",
+      "bytes": 8221,
+      "sha256": "82045873df01ebf9d06bfe2eb4db2e4d5b481bf91feed940f2e88c98482fd298"
+    },
+    {
+      "path": "docs/evidence/issue200/remaining-acceptance-matrix.md",
+      "bytes": 8672,
+      "sha256": "ee39cb4b0ea98c9276fb1124a7556531a4e07f04d97f6eeb9db43df25e9d7492"
+    },
+    {
+      "path": "docs/ISSUE_200_PLAN.md",
+      "bytes": 39409,
+      "sha256": "b8cea30a205c19c30cd339d9b2990518490fae31c643ae163c63baf757080c4e"
+    },
+    {
+      "path": "docs/evidence/issue200/keyboard-source-results.md",
+      "bytes": 2818,
+      "sha256": "532feedcb9f273a8f73f0bc382908667c7e8d13a395547c234734b042ea74db3"
+    }
+  ]
+}

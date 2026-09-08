@@ -6,7 +6,9 @@ at f8e7370: an early blank canvas followed by exact automatic glyph rendering in
 the same unchanged run. Remaining title keyboard/focus/narrow-controls acceptance,
 the shared #199 key/encoded gate and root final engineering checks remain open.**
 See the [current evidence matrix](evidence/issue200/remaining-acceptance-matrix.md).
-No further source fix, integration sync or native/build run is authorized here.
+The remaining protocol was accepted; its executable harness is preparing for
+source review against explicitly assigned integration 580de54 (merged at5bca9bf).
+No product correction or native/build run is authorized here.
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
 issue last updated 2026-08-25T21:36:47Z. [Issue #200](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/200).

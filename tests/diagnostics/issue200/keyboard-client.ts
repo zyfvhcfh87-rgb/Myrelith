@@ -7,7 +7,7 @@ import { useTransportStore } from '../../../src/state/transportStore'
 import { useTitleEditorStore } from '../../../src/state/titleEditorStore'
 import { useProjectSessionStore } from '../../../src/state/projectSessionStore'
 import { useTitleTemplateStore } from '../../../src/state/titleTemplateStore'
-import { clippedRegion, contrast, healthySession, inside, MAX_SESSION_EVENTS, requireSessionLedger, type PaintLayer, type Rect } from './keyboard-model'
+import { clippedRegion, contrast, healthySession, inside, MAX_NATIVE_KEYS, MAX_SESSION_EVENTS, requireSessionLedger, type PaintLayer, type Rect } from './keyboard-model'
 
 export function fixture() {
   const project = expandedTitleProject(), clip = project.sequences[0].tracks[0].clips[0]
@@ -83,7 +83,9 @@ export function inspectFocused() {
   if (!(node instanceof HTMLElement)) throw new Error('No active HTML control')
   const result = describe(node), style = getComputedStyle(node)
   const labels = 'labels' in node ? [...(node as HTMLInputElement).labels ?? []] : []
-  const labelEvidence = labels.map((label) => ({ text: label.textContent?.trim(), ...bounds(label), paint: paintedText(label) }))
+  const labelEvidence = labels.map((label) => ({ text: label.textContent?.trim(), ...bounds(label), paint: paintedText(label),
+    inlineText: [...label.querySelectorAll('small,span')].filter((child) => child.textContent?.trim() && !child.classList.contains('visually-hidden'))
+      .map((child) => ({ text: child.textContent?.trim(), ...bounds(child), paint: paintedText(child) })) }))
   const outlineLayers = styleLayers(node.parentElement), outline = { style: style.outlineStyle, width: Number.parseFloat(style.outlineWidth), offset: style.outlineOffset,
     color: style.outlineColor, shadow: style.boxShadow, measured: contrast(style.outlineColor, outlineLayers), layers: outlineLayers,
     backdropScope: node.closest('.title-canvas-controls') ? 'computed DOM ancestors; canvas overlay requires retained screenshot review' : 'computed DOM ancestors' }
@@ -119,19 +121,28 @@ export function guides() {
 let observer: ReturnType<typeof createObserver> | null = null
 function createObserver() {
   const events: Array<{ at: number; healthy: boolean; session: ReturnType<typeof snapshot>['session'] }> = [], issues: string[] = []
-  let dropped = 0, disposed = false
+  const keys: Array<{ at: number; key: string; trusted: boolean; targetId: number | null; shift: boolean; control: boolean; meta: boolean; alt: boolean }> = []
+  let dropped = 0, droppedKeys = 0, disposed = false
+  const keydown = (event: KeyboardEvent) => {
+    if (keys.length >= MAX_NATIVE_KEYS) { droppedKeys++; return }
+    keys.push({ at: performance.now(), key: event.key, trusted: event.isTrusted, targetId: event.target instanceof Element ? id(event.target) : null,
+      shift: event.shiftKey, control: event.ctrlKey, meta: event.metaKey, alt: event.altKey })
+  }
+  document.addEventListener('keydown', keydown, true)
   const record = () => {
     try {
       const session = snapshot().session
+      const libraryError = useTitleTemplateStore.getState().error
+      if (libraryError) issues.push(`Template library error: ${libraryError}`)
       if (events.length >= MAX_SESSION_EVENTS) { dropped++; return }
       events.push({ at: performance.now(), healthy: healthySession(session), session })
     } catch (cause) { issues.push(String(cause)) }
   }
-  const stop = useProjectSessionStore.subscribe(record)
+  const stops = [useProjectSessionStore.subscribe(record), useTitleTemplateStore.subscribe(record), () => document.removeEventListener('keydown', keydown, true)]
   record()
-  return { summary() { return { events, issues, dropped, disposed, subscriptions: disposed ? 0 : 1 } },
+  return { summary() { return { events, issues, dropped, keys, droppedKeys, disposed, subscriptions: stops.length } },
     check() { requireSessionLedger(events, dropped, issues) },
-    dispose() { if (!disposed) { record(); stop(); disposed = true } return this.summary() } }
+    dispose() { if (!disposed) { record(); for (const stop of stops.splice(0)) stop(); disposed = true } return this.summary() } }
 }
 export function observe() { if (observer) throw new Error('Observer already installed'); observer = createObserver(); return observer.summary() }
 export function sessionEvidence(dispose = false) { if (!observer) throw new Error('Observer missing'); return dispose ? observer.dispose() : observer.summary() }
