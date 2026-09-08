@@ -1,0 +1,13 @@
+{"archive": "whisper-371b5a7.tar.gz", "archiveBytes": 9136244, "archiveSha256": "89051d8fca516a3ad1f5c2f8f9d2fccb089afbaec338fca3f8731999babc6f81", "directory": "source", "prefix": "whisper.cpp-371b5a7561823ab2bb32142d2751e35e7534727b", "entries": 2156, "unpackedBytes": 37075784}
+{"archive": "wasm-binaries-arm64.tar.xz", "archiveBytes": 273726956, "archiveSha256": "63ec9acba14b67a925f7da9730395c84ce6ca1f5412ebcc4149b40fc43228385", "directory": "toolchain", "prefix": "install", "entries": 20468, "unpackedBytes": 1496703699}
+{"archive": "cmake-4.4.3-macos-universal.tar.gz", "archiveBytes": 89445170, "archiveSha256": "0c5d65251c14cc884bfa16bdbed3c263ce5bffe2e21c0d0d00962cb0610464fa", "directory": "cmake", "prefix": "cmake-4.4.3-macos-universal", "entries": 9043, "unpackedBytes": 252680565}
+{"archive": "ninja-1.13.2-mac.zip", "archiveBytes": 314051, "archiveSha256": "c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b", "directory": "ninja", "prefix": "ninja", "entries": 1, "unpackedBytes": 828128}
+{"archive": "node-v24.19.0-darwin-arm64.tar.gz", "archiveBytes": 52234372, "archiveSha256": "8294b7aa9b03997481c06babf1e8b270c859358f27da57a11509afe537ac381d", "directory": "node", "prefix": "node-v24.19.0-darwin-arm64", "entries": 5779, "unpackedBytes": 193841259}
+{"archive": "python-3.13.3-0-macos-arm64.tar.gz", "archiveBytes": 44280478, "archiveSha256": "2b0899d7ade9463b0c909ef23aeea27546a4f412637998d817a49718bc2bac19", "directory": "python", "prefix": "python-3.13.3-0", "entries": 4282, "unpackedBytes": 122898014}
+Extracted and rehashed: whisper-371b5a7.tar.gz
+Extracted and rehashed: wasm-binaries-arm64.tar.xz
+Extracted and rehashed: cmake-4.4.3-macos-universal.tar.gz
+Extracted and rehashed: ninja-1.13.2-mac.zip
+Extracted and rehashed: node-v24.19.0-darwin-arm64.tar.gz
+Extracted and rehashed: python-3.13.3-0-macos-arm64.tar.gz
+{"status": "extracted-no-contents-executed", "entries": 41729, "unpackedBytes": 2104027449, "inventoryBytes": 11515286, "inventorySha256": "f31fa5defa181a94390bfd3b98e2f9afd0bc9ef6feee8fc08730043690dcde60"}

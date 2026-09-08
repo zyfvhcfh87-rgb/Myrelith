@@ -1,0 +1,4 @@
+clang version 24.0.0git (https:/github.com/llvm/llvm-project 4bfd08c2d769736841ae4f5705d76fa6daa39027)
+Target: unknown
+Thread model: posix
+InstalledDir: /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/bin

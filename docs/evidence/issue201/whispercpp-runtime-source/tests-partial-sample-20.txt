@@ -1,0 +1,32 @@
+(node:23397) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ the real runner refuses an absent exclusive grant before server, browser or attempt writes (2.12625ms)
+✔ the real runner stops on its first failed case and retains raw process samples and owned cleanup (3.803875ms)
+✔ process churn stops before any acceptance case without discarding the incomplete raw observation (2.5145ms)
+✔ an already existing profile is not adopted or removed after mkdir rejects (1.555208ms)
+✔ the attempt marker prevents a second run after an earlier failure (3.115375ms)
+✔ actual runner reaches final evidence and bounded release when page-operation never settles (31.794209ms)
+✔ actual runner reaches final evidence and bounded release when setup-cdp never settles (3.456416ms)
+✔ actual runner reaches final evidence and bounded release when browser-close never settles (5.304958ms)
+✔ actual runner reaches final evidence and bounded release when server-close never settles (5.412042ms)
+✔ the actual guarded proxy preserves explicit 120s phase waits within the case deadline (1.433083ms)
+✔ an after-inventory timeout retains the actual before inventory and RSS rows in partial evidence (3.277708ms)
+(node:23398) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ exact candidate identity includes both generated artifacts and all unchanged fixture/acceptance limits (1.543208ms)
+✔ continuous epochs retain all samples and distinguish verified browser absence from model work (0.306875ms)
+✔ late samples, process churn, missing RSS, ceilings and unverified shutdown remain failures (0.198042ms)
+✔ reopen cannot reset away the original resident baseline (0.129708ms)
+✔ original bounded native audio preparation is byte-identical in the separate worker (0.212875ms)
+✔ worker seam verifies glue before import and sends the exact WASM bytes to the existing core authority (6.834834ms)
+✔ worker rejects changed candidate metadata or changed glue before generated module import (6.297792ms)
+✔ worker seam keeps twelve bounded windows, charges the C PCM copy, and closes every fake native sample (342.850666ms)
+✔ a core work-budget failure discards completion and releases audio owners in finally (5.315084ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 401.009042

@@ -1,0 +1,116 @@
+{
+  "workerCheckpoint": "078be7be7c9e64caee554dfbc8afba15fd9badc3",
+  "qualification": "Original issue checkpoint hashes describe frozen issue-branch bytes preserved in this archive. Integration readable copies only strip trailing whitespace and empty final lines. The single source file changes only an extra final blank line; no executable tokens change.",
+  "archive": {
+    "path": "originals.tar.gz",
+    "bytes": 4784,
+    "sha256": "7c8df2343fd46491d901735ce6737cebaa7e9eed42e9b54cb6e7a083145b4acf"
+  },
+  "files": [
+    {
+      "path": "docs/evidence/issue201/caption-paint-resolution/first-painter-fixture-failure.txt",
+      "originalBytes": 1398,
+      "originalSha256": "876fa09bc653a7aafea34922dcedb712a6668a3c0f0578187bb04d162760e9da",
+      "readableBytes": 1397,
+      "readableSha256": "5204c1766d698d5555d450688ec23afa98753387ed16a34d1f48c05d89d67585"
+    },
+    {
+      "path": "docs/evidence/issue201/caption-paint-resolution/first-wiring-test-failure.txt",
+      "originalBytes": 1566,
+      "originalSha256": "c01302c0ef4f8d09d33635894cc33997fe0625b6966976f9d602eae8e12448ae",
+      "readableBytes": 1565,
+      "readableSha256": "5c9871bbfa6ca522b65e4fbcd8d426446554369c6e89bc892ac9d14942be2c0d"
+    },
+    {
+      "path": "docs/evidence/issue201/caption-paint-resolution/focused-tests.txt",
+      "originalBytes": 269,
+      "originalSha256": "f7d3be2c3392a5de09a4aee840b030d2b9ff6f97c0658a3a3f1947d7e4043020",
+      "readableBytes": 268,
+      "readableSha256": "06cbfb328e8635331dd361a7a39078c116e8f7ad1de7f096376943cd35c2cdc3"
+    },
+    {
+      "path": "docs/evidence/issue201/caption-paint-resolution/lint.txt",
+      "originalBytes": 41,
+      "originalSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "readableBytes": 40,
+      "readableSha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c"
+    },
+    {
+      "path": "docs/evidence/issue201/caption-paint-resolution/production-build.txt",
+      "originalBytes": 3853,
+      "originalSha256": "9c0bb29031083f6b15e976632aeeaf5b6c40af725ca56f46590e3b1bb75df9fb",
+      "readableBytes": 3852,
+      "readableSha256": "b39cd5f95e79bb34ba7718ef2d8e60fd25ef9863934fd4edd5c6f140371c8539"
+    },
+    {
+      "path": "docs/evidence/issue201/caption-review-controller/lint.txt",
+      "originalBytes": 41,
+      "originalSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "readableBytes": 40,
+      "readableSha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c"
+    },
+    {
+      "path": "docs/evidence/issue201/caption-review-controller/tests-first-preview-failure.txt",
+      "originalBytes": 1564,
+      "originalSha256": "8266d30f420f80dd7135d33d843e5c25a1008bf981ee7c1d466f6b7b56373427",
+      "readableBytes": 1563,
+      "readableSha256": "0ada30b3bd696e8b355cbe4a13732e268dd7104eb70ba3b29a01d49bb66239f0"
+    },
+    {
+      "path": "docs/evidence/issue201/caption-review-controller/tests-initial-owner.txt",
+      "originalBytes": 266,
+      "originalSha256": "cd917c389df35437209d2bc722809e8224989f69ec72787b627046c7e9b867c6",
+      "readableBytes": 265,
+      "readableSha256": "6f98de84ed081891a7fd9d3627f4ec5e805ac4d5aee8e8989105f4f096259174"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-diagnostic-source/lint.txt",
+      "originalBytes": 41,
+      "originalSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "readableBytes": 40,
+      "readableSha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/lint.txt",
+      "originalBytes": 41,
+      "originalSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "readableBytes": 40,
+      "readableSha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-link-settings/lint.txt",
+      "originalBytes": 41,
+      "originalSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "readableBytes": 40,
+      "readableSha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-link-settings/second-harness-failure.txt",
+      "originalBytes": 1685,
+      "originalSha256": "b632cec9bcd42d2a8f74219583e747cef067f5afa221eca516daf964e91df6cb",
+      "readableBytes": 1681,
+      "readableSha256": "b3678b1ecb24db6feecb229f09c7ec77532200bcf4503213ee292ecfddec38ab"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-runtime-source/lint-final.txt",
+      "originalBytes": 41,
+      "originalSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "readableBytes": 40,
+      "readableSha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-toolchain-provenance/lint.txt",
+      "originalBytes": 41,
+      "originalSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "readableBytes": 40,
+      "readableSha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c"
+    },
+    {
+      "path": "src/domain/sequenceFrameCoverage.ts",
+      "originalBytes": 1202,
+      "originalSha256": "371c1533eeba01a4618e52f735a7d9d90ca3548752e3aa84bb47cc7ba82d59bd",
+      "readableBytes": 1201,
+      "readableSha256": "d2447f67b87a6b98c0f793db7dac3d3f22b964236797d32f93b53be5a938e571"
+    }
+  ]
+}

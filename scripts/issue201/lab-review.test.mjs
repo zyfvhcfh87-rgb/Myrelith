@@ -5,6 +5,7 @@ import { webcrypto, createHash } from 'node:crypto'
 import { createContext, SourceTextModule, SyntheticModule } from 'node:vm'
 import { assessLabRun, corruptAudioReachedDecode, createLabSampleQueue, declaredLabRequest,
   initializationFailure, LAB_CASE_NAMES, pinnedModelFileLookup, residentCeilingBreached, speechSegments, withinSourceCoverage } from './lab-contract.mjs'
+import { modelBundlePayload, modelCachePayload } from './composite-model.mjs'
 import { installEncoderFetchPolicy } from './encoder-fetch-policy.mjs'
 
 const flush = () => new Promise((resolve) => setImmediate(resolve))
@@ -16,9 +17,12 @@ async function until(condition) {
 /** Evaluate the actual unmodified controller module with browser resource fakes. */
 async function controller(t, terminationFallbackMs = 10_000, runtimeOverrides = {}) {
   const bytes = new Uint8Array([1, 2, 3, 4])
-  const file = { path: 'config.json', url: 'https://test.invalid/model/config.json', bytes: bytes.length,
+  const file = { path: 'config.json', sourceRepository: 'test/model', sourceRevision: 'a'.repeat(40), upstreamPath: 'config.json', localPath: '.tmp/fake/config.json',
+    url: `https://huggingface.co/test/model/resolve/${'a'.repeat(40)}/config.json`, bytes: bytes.length,
     sha256: createHash('sha256').update(bytes).digest('hex') }
-  const manifest = { model: { id: 'test/model', revision: 'frozen', totalBytes: bytes.length, files: [file] },
+  const model = { kind: 'local-composite-v1', id: 'test/model', configurationRevision: 'a'.repeat(40), totalBytes: bytes.length, files: [file], licenseProvenance: { scope: 'synthetic deterministic unit fixture only' } }
+  model.bundleId = 'sha256:' + createHash('sha256').update(modelBundlePayload(model)).digest('hex')
+  const manifest = { model,
     runtime: { transformerVersion: 'fake', ortVersion: 'fake', ...runtimeOverrides },
     fixtures: [{ name: 'english', durationSeconds: 1 }],
     thresholds: { modelCacheByteLimit: 1_000, terminationFallbackMs, maxWindowWallMs: 10_000 } }
@@ -77,7 +81,9 @@ async function controller(t, terminationFallbackMs = 10_000, runtimeOverrides = 
     } })
   const source = await readFile(new URL('./lab-client.mjs', import.meta.url), 'utf8')
   const module = new SourceTextModule(source, { context, identifier: 'actual-lab-client.mjs' })
-  await module.link(() => { throw new Error('Unexpected controller import') })
+  const composite = new SourceTextModule(await readFile(new URL('./composite-model.mjs', import.meta.url), 'utf8'), { context })
+  await composite.link(() => { throw new Error('Unexpected composition import') })
+  await module.link((specifier) => { assert.equal(specifier, './composite-model.mjs'); return composite })
   await module.evaluate()
   const lab = context.lab
   t.after(async () => {
@@ -88,7 +94,7 @@ async function controller(t, terminationFallbackMs = 10_000, runtimeOverrides = 
     assert.equal(live, 0)
   })
   await lab.installModel()
-  return { lab, workers, get live() { return live }, get peakLive() { return peakLive },
+  return { lab, workers, caches, get live() { return live }, get peakLive() { return peakLive },
     set completeJobs(value) { completeJobs = value }, set autoDispose(value) { autoDispose = value },
     set initializeError(value) { initializeError = value }, set moduleError(value) { moduleError = value } }
 }
@@ -299,7 +305,7 @@ test('actual worker forwards the frozen optimizer setting without mutating its m
   let disposals = 0
   let closed = false
   const self = { postMessage(event) { events.push(event) }, close() { closed = true } }
-  const context = createContext({ self, performance, structuredClone, URL, Response,
+  const context = createContext({ self, performance, structuredClone, URL, Response, crypto: webcrypto, TextEncoder, Uint8Array,
     location: { origin: 'http://127.0.0.1:5201', href: 'http://127.0.0.1:5201/model-worker.mjs' },
     caches: { async open() { return { async match() { throw new Error('This test must not load model bytes') } } } },
     async fetch() { throw new Error('This test must not perform network requests') } })
@@ -328,6 +334,8 @@ test('actual worker forwards the frozen optimizer setting without mutating its m
       this.setExport(name, class { constructor() { throw new Error('Initialization must not decode audio') } })
     }
   }, { context })
+  const composite = new SourceTextModule(await readFile(new URL('./composite-model.mjs', import.meta.url), 'utf8'), { context })
+  await composite.link(() => { throw new Error('Unexpected composition import') })
   const worker = new SourceTextModule(await readFile(new URL('./model-worker.mjs', import.meta.url), 'utf8'), {
     context,
     async importModuleDynamically(specifier) {
@@ -336,18 +344,19 @@ test('actual worker forwards the frozen optimizer setting without mutating its m
     },
   })
   await worker.link((specifier) => {
+    if (specifier === './composite-model.mjs') return composite
     if (specifier === './lab-contract.mjs') return contract
     if (specifier === './encoder-fetch-policy.mjs') return policyModule
     assert.equal(specifier, '/assets/mediabunny.mjs')
     return media
   })
   await worker.evaluate()
-  await self.onmessage({ data: { type: 'initialize', manifest, modelCache: 'source-test' } })
+  await self.onmessage({ data: { type: 'initialize', manifest, modelCache: 'source-test', modelIdentity: createHash('sha256').update(modelCachePayload(manifest)).digest('hex') } })
   assert.equal(calls.length, 1)
   assert.equal(calls[0].task, 'automatic-speech-recognition')
   assert.equal(calls[0].id, manifest.model.id)
   assert.deepEqual(calls[0].options.session_options, expected)
-  assert.equal(calls[0].options.revision, manifest.model.revision)
+  assert.equal(calls[0].options.revision, manifest.model.configurationRevision)
   assert.equal(calls[0].options.device, 'wasm')
   assert.equal(calls[0].options.dtype, 'q8')
   assert.deepEqual(manifest.runtime.sessionOptions, expected)
@@ -403,10 +412,10 @@ test('encoder fetch adapter preserves receiver, input/result ownership and every
 test('encoder fetch adapter rejects changed IO/policies and propagates runtime failures without fallback', async () => {
   const { runtime: { encoderFetchPolicy: policy } } = JSON.parse(await readFile(new URL('../../docs/evidence/issue201/replacement-manifest.json', import.meta.url)))
   const make = () => ({ inputNames: [...policy.inputNames], outputNames: [...policy.expectedOutputNames], async run() { return { last_hidden_state: {} } }, release() {} })
-  for (const session of [null, { ...make(), outputNames: ['last_hidden_state'] }, { ...make(), inputNames: ['wrong'] }]) {
+  for (const session of [null, { ...make(), outputNames: ['last_hidden_state', 'encoder_attentions.0', 'encoder_attentions.1', 'encoder_attentions.2', 'encoder_attentions.3'] }, { ...make(), inputNames: ['wrong'] }]) {
     assert.throws(() => installEncoderFetchPolicy(session, policy), /interface changed/u)
   }
-  assert.throws(() => installEncoderFetchPolicy(make(), { ...policy, fetchNames: policy.expectedOutputNames }), /Unrecognized/u)
+  assert.throws(() => installEncoderFetchPolicy(make(), { ...policy, fetchNames: ['last_hidden_state', 'encoder_attentions.0'] }), /Unrecognized/u)
   const error = new Error('Native run failed')
   let calls = 0
   const session = { ...make(), async run() { calls++; throw error } }
@@ -417,4 +426,32 @@ test('encoder fetch adapter rejects changed IO/policies and propagates runtime f
   const unexpected = { ...make(), async run() { return { last_hidden_state: {}, 'encoder_attentions.0': {} } } }
   installEncoderFetchPolicy(unexpected, policy)
   await assert.rejects(unexpected.run(feeds), /unexpected outputs/u)
+})
+
+
+test('actual controller rejects changed cache source headers before creating an inference owner', async (t) => {
+  for (const header of ['x-model-bundle', 'x-source-revision', 'x-source-repository', 'x-upstream-path']) {
+    const h = await controller(t)
+    const installed = (await h.lab.cacheFacts()).model
+    const cache = await h.caches.open(installed.name)
+    const file = h.lab.manifest.model.files[0]
+    const original = await cache.match(file.url)
+    const headers = new Headers(original.headers)
+    headers.set(header, 'different-source')
+    await cache.put(file.url, new Response(await original.arrayBuffer(), { headers }))
+    await assert.rejects(h.lab.transcribeFixture('english'), /cache is incomplete/u)
+    assert.equal(h.workers.length, 0)
+  }
+})
+
+test('actual controller registry requires the explicit bundle and configuration revision', async (t) => {
+  const h = await controller(t)
+  const registry = await h.caches.open('myrelith-issue201-lab-registry')
+  const key = 'http://127.0.0.1:5201/model-registry'
+  const original = await (await registry.match(key)).json()
+  for (const patch of [{ bundleId: 'wrong-bundle' }, { configurationRevision: 'wrong-revision' }, { identity: 'wrong-runtime' }]) {
+    await registry.put(key, new Response(JSON.stringify({ ...original, ...patch })))
+    await assert.rejects(h.lab.transcribeFixture('english'), /registry provenance mismatch/u)
+    assert.equal(h.workers.length, 0)
+  }
 })

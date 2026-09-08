@@ -1,0 +1,405 @@
+{
+  "kind": "issue201-source-only-route-comparison-v1",
+  "recordedAt": "2026-09-08T13:43:03.521Z",
+  "nativeExecution": false,
+  "whisperCppSource": {
+    "tag": "b4938",
+    "commit": "371b5a7561823ab2bb32142d2751e35e7534727b",
+    "publishedAt": "2026-08-20T11:33:19Z"
+  },
+  "modelSource": {
+    "repository": "ggerganov/whisper.cpp",
+    "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "declaredLicense": "mit",
+    "variants": [
+      {
+        "file": "ggml-tiny-q8_0.bin",
+        "bytesFromPublisherMetadata": 43537433,
+        "sha256FromPublisherLfs": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+        "weightsDownloaded": false,
+        "twoCopies": 87074866,
+        "oldCompositePlusStaged": 87147898,
+        "fitsTwoCopiesIn96MiB": true
+      },
+      {
+        "file": "ggml-tiny-q5_1.bin",
+        "bytesFromPublisherMetadata": 32152673,
+        "sha256FromPublisherLfs": "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7",
+        "weightsDownloaded": false,
+        "twoCopies": 64305346,
+        "oldCompositePlusStaged": 75763138,
+        "fitsTwoCopiesIn96MiB": true
+      },
+      {
+        "file": "ggml-tiny.bin",
+        "bytesFromPublisherMetadata": 77691713,
+        "sha256FromPublisherLfs": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+        "weightsDownloaded": false,
+        "twoCopies": 155383426,
+        "oldCompositePlusStaged": 121302178,
+        "fitsTwoCopiesIn96MiB": false
+      }
+    ]
+  },
+  "oldRuntime": {
+    "wasm": {
+      "path": ".tmp/issue201-speech-lab/assets/ort-wasm-simd-threaded.wasm",
+      "bytes": 12942611,
+      "sha256": "f4f290847a4df02d0b93cdbf39b4b0e71acefbe80573e7e6b9342a7abd7b290a",
+      "memories": [
+        {
+          "module": "a",
+          "field": "a",
+          "kind": "imported",
+          "flags": 3,
+          "minimumPages": 256,
+          "maximumPages": 65536,
+          "minimumBytes": 16777216,
+          "maximumBytes": 4294967296,
+          "shared": true
+        }
+      ]
+    },
+    "js": {
+      "path": ".tmp/issue201-speech-lab/assets/ort-wasm-simd-threaded.mjs",
+      "bytes": 24180,
+      "sha256": "5f2cd914554830762579c372d0211614c1e3f40ab3f6c0cfcf0900343229071d",
+      "growthExcerpt": "){a>>>=0;var b=(v(),A).length;if(a<=b||4294901760<a)return!1;for(var d=1;4>=d;d*=2){var c=b*(1+.2/d);c=Math.min(c,a+100663296);a:{c=(Math.min(4294901760,65536*Math.ceil(Math.max(a,c)/65536))-x.buffer.byteLength+65535)/65536|0;try{x.grow(c);qa();var e=1;break a}catch(f){}e=void 0}if(e)return!0}return!1}\nfunction Nb(a,b,d){a>>>=0;b>>>=0;if(Z.Vb==a)va"
+    },
+    "qualification": "Limits and growth logic from static bytes only; no live heap measurements or allocation-site attribution."
+  },
+  "records": [
+    {
+      "file": "release.json",
+      "url": "https://api.github.com/repos/ggml-org/whisper.cpp/releases/tags/b4938",
+      "status": 200,
+      "bytes": 17199,
+      "sha256": "ea895551fc88e89e1d6720f617203bf6e6a902cb8639598d9a141e9f52814b8b",
+      "saved": true
+    },
+    {
+      "file": "commit.json",
+      "url": "https://api.github.com/repos/ggml-org/whisper.cpp/commits/371b5a7561823ab2bb32142d2751e35e7534727b",
+      "status": 200,
+      "bytes": 7159,
+      "sha256": "50f2b1383393750bd82d7eaf902719c2ea172a8d4cfe5aa83bac206be821c94b",
+      "saved": true
+    },
+    {
+      "file": "tree.json",
+      "url": "https://api.github.com/repos/ggml-org/whisper.cpp/git/trees/371b5a7561823ab2bb32142d2751e35e7534727b?recursive=1",
+      "status": 200,
+      "bytes": 546840,
+      "sha256": "2f8defc8167bdf148624d1e57cfa54ee3a76652a42db41e8d98d48a7f1a0771a",
+      "saved": true
+    },
+    {
+      "file": "model-metadata.json",
+      "url": "https://huggingface.co/api/models/ggerganov/whisper.cpp?blobs=true",
+      "status": 200,
+      "bytes": 12592,
+      "sha256": "c6b367aa87a4a61f025204abcb896999f8ddc85c03669620b0b53755bfe78fa9",
+      "saved": true
+    },
+    {
+      "file": "README.md",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/README.md",
+      "status": 200,
+      "bytes": 36779,
+      "sha256": "a90259e43d1d5fd1054c2e41dfd4adf3eca9e29d331e0ff6304f6b8b53583064",
+      "saved": true
+    },
+    {
+      "file": "LICENSE",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/LICENSE",
+      "status": 200,
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+      "saved": true
+    },
+    {
+      "file": "CMakeLists.txt",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/CMakeLists.txt",
+      "status": 200,
+      "bytes": 12693,
+      "sha256": "ad8d5b3f05151f3e7a7a782242ebcefd65ebf01a652501d9ee7e53176880830f",
+      "saved": true
+    },
+    {
+      "file": "include/whisper.h",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/include/whisper.h",
+      "status": 200,
+      "bytes": 37439,
+      "sha256": "a7d19f7feb5be52426628ff07e0602de28a30dc4312d0d0603e1e536753f76dd",
+      "saved": true
+    },
+    {
+      "file": "src/whisper.cpp",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/src/whisper.cpp",
+      "status": 200,
+      "bytes": 337557,
+      "sha256": "dc70e14a08119b58ed2a7c7c2919f87b120897f75648002202cce58d8e09191f",
+      "saved": true
+    },
+    {
+      "file": "examples/whisper.wasm/CMakeLists.txt",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/examples/whisper.wasm/CMakeLists.txt",
+      "status": 200,
+      "bytes": 1204,
+      "sha256": "c01c5dc02adfecfa612eeaecbbac31ee356cbad7c706b4d33aeb96aba48a61c6",
+      "saved": true
+    },
+    {
+      "file": "examples/whisper.wasm/emscripten.cpp",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/examples/whisper.wasm/emscripten.cpp",
+      "status": 200,
+      "bytes": 3840,
+      "sha256": "8803c2ecfbfae1ddb8c5c6791b0485d95907b10c23cc023a2adaa090df83d6cb",
+      "saved": true
+    },
+    {
+      "file": "examples/whisper.wasm/README.md",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/examples/whisper.wasm/README.md",
+      "status": 200,
+      "bytes": 2873,
+      "sha256": "42aa7df55d8e5bb98bfecaebb00f4f49b1af5e7f3865906f87db155972abb97a",
+      "saved": true
+    },
+    {
+      "file": "examples/CMakeLists.txt",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/examples/CMakeLists.txt",
+      "status": 200,
+      "bytes": 3688,
+      "sha256": "982075571238fee6d010c72acf3df2d6552bfa099058996c88248b89141613af",
+      "saved": true
+    },
+    {
+      "file": "ggml/CMakeLists.txt",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/CMakeLists.txt",
+      "status": 200,
+      "bytes": 21581,
+      "sha256": "5c97a1112c1e038259447f73924f1132bf0d412a8964b068971dd641acfb03f0",
+      "saved": true
+    },
+    {
+      "file": "ggml/src/CMakeLists.txt",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/CMakeLists.txt",
+      "status": 200,
+      "bytes": 20034,
+      "sha256": "b4210d3aded4f4d217209624f981ecb5c65b1592eca7e049ff14b13c60743cb5",
+      "saved": true
+    },
+    {
+      "file": "ggml/src/ggml-cpu/CMakeLists.txt",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/ggml-cpu/CMakeLists.txt",
+      "status": 200,
+      "bytes": 36419,
+      "sha256": "8f540fdf899f1de3e9b08b2768c8546a9416794a9b290615d50bbec80f5fc84c",
+      "saved": true
+    },
+    {
+      "file": "ggml/src/ggml-cpu/ggml-cpu.c",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/ggml-cpu/ggml-cpu.c",
+      "status": 200,
+      "bytes": 130383,
+      "sha256": "3bd5df6e8ed4b642b5c2f8c997d0a231ea59c0e957a0bd321fbd1123317eebd7",
+      "saved": true
+    },
+    {
+      "file": "ggml/src/ggml-cpu/ggml-cpu.cpp",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/ggml-cpu/ggml-cpu.cpp",
+      "status": 200,
+      "bytes": 24546,
+      "sha256": "b620923a8966395ba9c5f2ee4acb35b8d42ea77a58943d7eb733a917c4c1cafb",
+      "saved": true
+    },
+    {
+      "file": "ggml/src/ggml-alloc.c",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/ggml-alloc.c",
+      "status": 200,
+      "bytes": 47819,
+      "sha256": "881083e2f5d0126738ffe5b246d60cacf7db7b524f1ea471f116697c3211026a",
+      "saved": true
+    },
+    {
+      "file": "ggml/src/ggml-backend.cpp",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/ggml-backend.cpp",
+      "status": 200,
+      "bytes": 96019,
+      "sha256": "507577061d22e673a4f002bb215c65aa9c63b88a4e6d1586f52c74ca0b98fa07",
+      "saved": true
+    },
+    {
+      "file": "models/download-ggml-model.sh",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/models/download-ggml-model.sh",
+      "status": 200,
+      "bytes": 3964,
+      "sha256": "fa7e697dc9eb77c1fdba7936687f73adfae6897075e5e2661758cfb3f3aa6aa4",
+      "saved": true
+    },
+    {
+      "file": "models/README.md",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/models/README.md",
+      "status": 200,
+      "bytes": 5745,
+      "sha256": "bad04fef13f1556cc9cc93c46022e47dbcea94814032faaa4aac2e168314b2b7",
+      "saved": true
+    },
+    {
+      "file": "model-pinned-metadata.json",
+      "url": "https://huggingface.co/api/models/ggerganov/whisper.cpp/revision/5359861c739e955e79d9a303bcbc70fb988958b1?blobs=true",
+      "status": 200,
+      "bytes": 12592,
+      "sha256": "c6b367aa87a4a61f025204abcb896999f8ddc85c03669620b0b53755bfe78fa9",
+      "saved": true
+    },
+    {
+      "file": "model-README.md",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/raw/5359861c739e955e79d9a303bcbc70fb988958b1/README.md",
+      "status": 200,
+      "bytes": 3196,
+      "sha256": "21fd967098804f33fc84e803fb0e5ab7666d71801f4027cf28a65e7af09c1758",
+      "saved": true
+    },
+    {
+      "file": ".github/workflows/build-wasm.yml",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/.github/workflows/build-wasm.yml",
+      "status": 200,
+      "bytes": 1881,
+      "sha256": "97921df4c37ad12a53710c2419069f818642c0b3a5f085753492672283108685",
+      "saved": true
+    },
+    {
+      "file": ".github/workflows/deploy-examples-wasm.yml",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/.github/workflows/deploy-examples-wasm.yml",
+      "status": 200,
+      "bytes": 2975,
+      "sha256": "d79a566ffcbcc8c1492394fccf659894fe49df6fa84bba69681fb9e6c7288cc7",
+      "saved": true
+    },
+    {
+      "file": "bindings/javascript/CMakeLists.txt",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/bindings/javascript/CMakeLists.txt",
+      "status": 200,
+      "bytes": 991,
+      "sha256": "92c421bf2def3e6b05d7c10fd9e54daff8ec668f8764103daffee774b51aaf67",
+      "saved": true
+    },
+    {
+      "file": "bindings/javascript/emscripten.cpp",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/bindings/javascript/emscripten.cpp",
+      "status": 200,
+      "bytes": 3048,
+      "sha256": "7bbf8bd62d87dd66d25e457a93f4360baaf08f16dbd4991fc2c0a92e89130e9c",
+      "saved": true
+    },
+    {
+      "file": "ggml/src/ggml-cpu/ops.cpp",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/ggml-cpu/ops.cpp",
+      "status": 200,
+      "bytes": 411743,
+      "sha256": "740701e585872545650edfd08c9114619a9ad1e67dbab19f6b2060b6290fdf88",
+      "saved": true
+    },
+    {
+      "file": "ggml/src/ggml-cpu/arch/wasm/quants.c",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/ggml-cpu/arch/wasm/quants.c",
+      "status": 200,
+      "bytes": 46731,
+      "sha256": "defc3f28aa882d52a390d4573f5308ddc3aa95c5f487bbdaf311e7b0874493b3",
+      "saved": true
+    },
+    {
+      "file": "ggml/src/ggml.c",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/ggml.c",
+      "status": 200,
+      "bytes": 257026,
+      "sha256": "fb177479234cc6e5d15105f5cac630d9321827de6a71ead648ac96862ec6367f",
+      "saved": true
+    },
+    {
+      "file": "ggml/include/ggml.h",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/include/ggml.h",
+      "status": 200,
+      "bytes": 112215,
+      "sha256": "725ca1d9670770f7ee7e1f736983ce332c4f9f27999a5472b61002ff1fa78ea5",
+      "saved": true
+    },
+    {
+      "file": "ggml/src/ggml-cpu/traits.cpp",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/ggml-cpu/traits.cpp",
+      "status": 200,
+      "bytes": 1231,
+      "sha256": "a85bd3ff50c91cb67d14221988544664dfe5975db0811b330dc4a2f385239de4",
+      "saved": true
+    },
+    {
+      "file": "cmake/DefaultTargetOptions.cmake",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/cmake/DefaultTargetOptions.cmake",
+      "status": 200,
+      "bytes": 385,
+      "sha256": "46a0fea1d8cac20e3017d31551f316a2846343d929b7833ce2e7ed6f39c800b9",
+      "saved": true
+    },
+    {
+      "file": "scripts/deploy-wasm.sh",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/371b5a7561823ab2bb32142d2751e35e7534727b/scripts/deploy-wasm.sh",
+      "status": 200,
+      "bytes": 1154,
+      "sha256": "81513154f5aade98ce7cb29be7137c9b78276d3b904c29a0273450ec6b15d9d3",
+      "saved": true
+    },
+    {
+      "file": "ort/cmake/onnxruntime_webassembly.cmake",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/cmake/onnxruntime_webassembly.cmake",
+      "status": 200,
+      "bytes": 14933,
+      "sha256": "c4d604e87fc4d514dd9bdf8ac61270e539c334d1821579475ec1844a0ba278c5",
+      "saved": true
+    },
+    {
+      "file": "ort/cmake/external/emsdk.cmake",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/cmake/external/emsdk.cmake",
+      "status": 404,
+      "saved": false
+    },
+    {
+      "file": "ort/onnxruntime/core/providers/cpu/math/softmax.cc",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/providers/cpu/math/softmax.cc",
+      "status": 200,
+      "bytes": 7621,
+      "sha256": "6ef8a2fa8b19007758fa4b4173c070ab1378488f76856de0556fd4242b533aff",
+      "saved": true
+    },
+    {
+      "file": "ort/onnxruntime/core/providers/cpu/math/matmul.cc",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/providers/cpu/math/matmul.cc",
+      "status": 200,
+      "bytes": 11343,
+      "sha256": "8dc472a9ae665384f2f9094dd7665c8a5ec44c7df9557d714335146b6ed67e38",
+      "saved": true
+    },
+    {
+      "file": "ort/onnxruntime/core/framework/allocator.cc",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/framework/allocator.cc",
+      "status": 200,
+      "bytes": 13956,
+      "sha256": "00e9fed73b59fd61a95af9fe235799abb459079276afa274c26e6dd5669a8438",
+      "saved": true
+    },
+    {
+      "file": "ort/onnxruntime/core/framework/cpu_allocator.cc",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/onnxruntime/core/framework/cpu_allocator.cc",
+      "status": 404,
+      "saved": false
+    },
+    {
+      "file": "ort/js/web/lib/wasm/session-options.ts",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/b7804b056c30aa35c1748f8e4e239d0e2ff25d6d/js/web/lib/wasm/session-options.ts",
+      "status": 200,
+      "bytes": 10896,
+      "sha256": "ffdb6352b62bd4a2a68b17334403be97cb01ba06d14b4093943d47de4f882598",
+      "saved": true
+    }
+  ]
+}

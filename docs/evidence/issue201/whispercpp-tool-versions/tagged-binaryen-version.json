@@ -1,0 +1,16 @@
+{
+  "label": "tagged-binaryen-version",
+  "command": [
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/bin/wasm-opt",
+    "--version"
+  ],
+  "timeoutSeconds": 30,
+  "startedAt": "2026-09-08T17:36:01Z",
+  "pid": 92019,
+  "processGroup": 92019,
+  "exitCode": 0,
+  "remainingGroupTerminated": false,
+  "elapsedSeconds": 0.436,
+  "logBytes": 49,
+  "logSha256": "312db670f796f2590ca0784b6ea86771ce3f4e808fc7e46b8e045f2fb4490127"
+}

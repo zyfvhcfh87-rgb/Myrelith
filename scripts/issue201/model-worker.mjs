@@ -1,6 +1,7 @@
 // Disposable laboratory owner. No production source imports this module.
 import { ALL_FORMATS, AudioSampleSink, BlobSource, Input } from '/assets/mediabunny.mjs'
 import { pinnedModelFileLookup, speechSegments, withinSourceCoverage } from './lab-contract.mjs'
+import { assertReviewedComposite, verifyModelBundle, modelCachePayload } from './composite-model.mjs'
 import { installEncoderFetchPolicy } from './encoder-fetch-policy.mjs'
 
 let manifest
@@ -24,6 +25,11 @@ const updatePcm = (bytes) => {
 async function initialize(message) {
   if (manifest || disposed) throw new Error('Worker initialization is single use')
   manifest = message.manifest
+  assertReviewedComposite(manifest)
+  const digest = async (bytes) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (b) => b.toString(16).padStart(2, '0')).join('')
+  await verifyModelBundle(manifest.model, digest)
+  const modelIdentity = await digest(new TextEncoder().encode(modelCachePayload(manifest)))
+  if (message.modelIdentity !== modelIdentity) throw new Error('Worker model/cache identity differs')
   const cache = await caches.open(message.modelCache)
   const files = pinnedModelFileLookup(manifest.model, location.origin)
   const runtimeUrls = new Set(manifest.runtime.artifacts.map((asset) => `${location.origin}/assets/${asset.name}`))
@@ -56,6 +62,9 @@ async function initialize(message) {
       if (!file) return undefined
       const response = await cache.match(file.url)
       if (!response) throw new Error(`Verified model cache missing ${file.path}`)
+      if (Number(response.headers.get('content-length')) !== file.bytes || response.headers.get('x-sha256') !== file.sha256
+        || response.headers.get('x-model-bundle') !== manifest.model.bundleId || response.headers.get('x-source-revision') !== file.sourceRevision
+        || response.headers.get('x-source-repository') !== file.sourceRepository || response.headers.get('x-upstream-path') !== file.upstreamPath) throw new Error('Worker model component provenance differs')
       return response
     },
     async put() { throw new Error('The inference worker cannot write model caches') },
@@ -69,7 +78,7 @@ async function initialize(message) {
   post('phase', { phase: 'model-load' })
   const started = performance.now()
   transcriber = await pipeline('automatic-speech-recognition', manifest.model.id, {
-    revision: manifest.model.revision, device: 'wasm', dtype: 'q8', local_files_only: true,
+    revision: manifest.model.configurationRevision, device: 'wasm', dtype: 'q8', local_files_only: true,
     session_options: structuredClone(manifest.runtime.sessionOptions),
     progress_callback: (progress) => post('progress', { status: progress.status, file: progress.file ?? null }),
   })
@@ -77,7 +86,8 @@ async function initialize(message) {
   installEncoderFetchPolicy(transcriber.model?.sessions?.model, manifest.runtime.encoderFetchPolicy,
     (event) => { const { type, ...detail } = event; post(type, detail) })
   post('ready', { loadMs: performance.now() - started, ledger: { ...ledger }, version: env.version,
-    sessionOptions: manifest.runtime.sessionOptions, encoderFetchPolicy: manifest.runtime.encoderFetchPolicy })
+    sessionOptions: manifest.runtime.sessionOptions, encoderFetchPolicy: manifest.runtime.encoderFetchPolicy,
+    modelIdentity, bundleId: manifest.model.bundleId, configurationRevision: manifest.model.configurationRevision, files: manifest.model.files })
 }
 
 /** Fixed-radius windowed sinc; a bounded window, no full-source PCM retention. */

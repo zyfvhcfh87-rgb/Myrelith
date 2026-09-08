@@ -1,0 +1,11 @@
+test_changed_checkpoint_rejected_by_real_verifier (__main__.RetryTests) ... ok
+test_failed_configure_consumes_attempt_without_compile_or_retry (__main__.RetryTests) ... ok
+test_failed_verification_does_not_stage_or_consume_attempt (__main__.RetryTests) ... ok
+test_separate_paths_marker_before_tools_and_same_bounded_profile (__main__.RetryTests) ... ok
+test_source_drift_during_staging_stops_before_tools (__main__.RetryTests) ... ok
+test_success_cannot_be_repeated (__main__.RetryTests) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.027s
+
+OK

@@ -1,0 +1,1 @@
+/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/node/node-v24.19.0-darwin-arm64/bin/node: bad option: --no-expose-wasm

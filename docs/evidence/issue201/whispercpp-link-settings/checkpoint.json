@@ -1,0 +1,180 @@
+{
+  "parentHead": "10ed9b5805fde0c95269ad8b7c9d87ed5347aab7",
+  "status": "source-correction-ready-no-retry",
+  "recipeChange": "Remove only invalid internal -sPTHREADS=0; retain all other options",
+  "sourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp/CMakeLists.txt",
+      "bytes": 3550,
+      "sha256": "bc68e94197b6e819f8d5257a536b02bd0a5931c525005b994c2046fad80ba0a6"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/preparation.test.mjs",
+      "bytes": 17829,
+      "sha256": "db0932c26a3922544ca3eb4ac06b5f05c9ac745810eda453e8bb141f1f72d044"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/settings-source-audit.py",
+      "bytes": 4729,
+      "sha256": "6e0ba87acbe56b6ee8c9c28d7c29088d42092c1803ddc359187330c1ecbbbe12"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/settings-source-audit.test.mjs",
+      "bytes": 3994,
+      "sha256": "e3fef57e65806229049bc2ba2497aecabe32bd9142e90ca85685c9d6bf3625eb"
+    },
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_LINK_SETTINGS.md",
+      "bytes": 4904,
+      "sha256": "77f5670a69ee58b47d929be39170ea48f22e37840323c66a4750864a124e3180"
+    }
+  ],
+  "records": [
+    {
+      "path": "CMakeCache.txt.gz",
+      "bytes": 6820,
+      "sha256": "82a322e80f7c407509033b00da2cc52e2a49f94ddde6e52d81b91a2a3faae684",
+      "decodedBytes": 32103,
+      "decodedSha256": "373e847e57543d6e0fc10141598fea4c9d9d6322b7c1af01da1d72d4c6aefde7"
+    },
+    {
+      "path": "build-attempt.json",
+      "bytes": 163,
+      "sha256": "eb9cdf97cf72332da69bf652054a7c3f47aa35edbb375ca677f1e6ce3d923914"
+    },
+    {
+      "path": "build-cleanup.json",
+      "bytes": 2810,
+      "sha256": "e04337e5c53788925393757e3c835c3dbc81dd33131135c71abbce849a756787"
+    },
+    {
+      "path": "build-result.json",
+      "bytes": 143,
+      "sha256": "a5f89db21eb1d0710085c412676bfeeda954fc0d9f9b35b61f088584e9196344"
+    },
+    {
+      "path": "build.ninja.gz",
+      "bytes": 5991,
+      "sha256": "ed9e29aea7c583f62f4add453bc8d4773eb7309573420991a3078b26eb330878",
+      "decodedBytes": 119006,
+      "decodedSha256": "1f28cc0af75d0027bf31d70c067f1c2898b8351cebde463b36f9c34fe044b9c4"
+    },
+    {
+      "path": "compile-link.json",
+      "bytes": 701,
+      "sha256": "4eaf2791bd8d0f4619ff8fe53e43f5c031d92528ec312fccaea066f917843a42"
+    },
+    {
+      "path": "compile-link.txt.gz",
+      "bytes": 5553,
+      "sha256": "06d1bb1daf6fcbbe5a36e8a5fea839c7daabb3818ac6c668a487f21a4c516f6e",
+      "decodedBytes": 189748,
+      "decodedSha256": "66927f1d82a49cbe3785bb0227dfe618c6aae6f6a79761326c178d86df745a9d"
+    },
+    {
+      "path": "compile_commands.json.gz",
+      "bytes": 1539,
+      "sha256": "544cc821047377b3f3902aa2f1fa60ebf1d771979296674df49c0792eee38c4e",
+      "decodedBytes": 48224,
+      "decodedSha256": "b855baad2d18565201e5b9ac22faf9e7e1661037fff5f05c8f7dc6a2db34595f"
+    },
+    {
+      "path": "configure.json",
+      "bytes": 1618,
+      "sha256": "a659f9bdd37d996ef33b700421b707160db760ac264ba9a3b32a6d160b926d4d"
+    },
+    {
+      "path": "configure.txt.gz",
+      "bytes": 1518,
+      "sha256": "b48b7284848a626957653776f6d4b2da047f510d4c1ce1f888222ade5abd97a1",
+      "decodedBytes": 7586,
+      "decodedSha256": "19b33712103c192c65ad8c7a9bfbd43674d09cc692c08d874e49170a55a65e42"
+    },
+    {
+      "path": "failed-CMakeLists.txt",
+      "bytes": 3405,
+      "sha256": "c137a6d26e981a6604d05a65e6cda3ecf612c5f5b849b161fbd6e70284d67939"
+    },
+    {
+      "path": "failed-link-arguments.json",
+      "bytes": 1610,
+      "sha256": "e25a337abc3b18e293988c3c8ae57bc69bd2c6d7b513dee12989a0fa2269ea08"
+    },
+    {
+      "path": "first-harness-failure.txt",
+      "bytes": 1979,
+      "sha256": "25ee491b7f1c1c62ec4f9b6da9f863d3009ed13c833db2695b5530d68aadc52a"
+    },
+    {
+      "path": "lint.txt",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "parser-audit.json",
+      "bytes": 31564,
+      "sha256": "8e30149fe66555185ffb1a7fc94f174077159f138a230f439a57cdda69ad99f0"
+    },
+    {
+      "path": "pre-build-verification.json",
+      "bytes": 3444,
+      "sha256": "bc2c7291a5d7622a45bb8821d7ef781f8ab3a91335197f1732653a347e5df64a"
+    },
+    {
+      "path": "second-harness-failure.txt",
+      "bytes": 1685,
+      "sha256": "b632cec9bcd42d2a8f74219583e747cef067f5afa221eca516daf964e91df6cb"
+    },
+    {
+      "path": "source-pins.json",
+      "bytes": 1942,
+      "sha256": "23d971f7e9f6bb12ec40287d8046bd77a8059c8659fccba369a0a70ff7d99559"
+    },
+    {
+      "path": "source-tests.txt",
+      "bytes": 6320,
+      "sha256": "29ef037661f8ed16b1ffc292d66b3ab96c587467ae90e8733d3ca1503aa1a674"
+    },
+    {
+      "path": "src-settings.js.gz",
+      "bytes": 36405,
+      "sha256": "527b3af386632be318c141cc800c6d7a7ae6b829c0ce75caef0d1227392e3163",
+      "decodedBytes": 104750,
+      "decodedSha256": "51883b14014de59beae82df827a08f48d32baabd4b629fbf2e2b77ddd7a8f854"
+    },
+    {
+      "path": "src-settings_internal.js.gz",
+      "bytes": 4414,
+      "sha256": "d8934f2abcb4e946111ca62a97b663bda9dfc12c15abf91ecd286549ac3b589e",
+      "decodedBytes": 10719,
+      "decodedSha256": "ec90a484ea7436130b29045251c7bf827c52c74a1266ddd15142967079f9fef0"
+    },
+    {
+      "path": "tools-cmdline.py.gz",
+      "bytes": 9744,
+      "sha256": "c17a8702d5d02d1eddb7b1163e47a6ec58b08ef5a2005084687fd5b2318bac97",
+      "decodedBytes": 30569,
+      "decodedSha256": "d0ceb94f413f873db7cc5eedf71651c59c279b3bae7ee875580c36b420ba0a25"
+    },
+    {
+      "path": "tools-link.py.gz",
+      "bytes": 39120,
+      "sha256": "3708b2e0e6992133ab5576271c5a9917fc326dbe39aaeb38db9b0a60f9a1a2e9",
+      "decodedBytes": 133054,
+      "decodedSha256": "c5332e4fbdfbc9c7223c57ae8b34bcc28921fef2daefd8470d0583e7bfdf0efc"
+    },
+    {
+      "path": "tools-settings.py.gz",
+      "bytes": 7246,
+      "sha256": "79b73f73edd782e8bd6a5e4cfbed157da6b1ffb971b93cb03b74d3dd108e471c",
+      "decodedBytes": 21656,
+      "decodedSha256": "9f2c5feab6a19831cda4d5be84baa1d6632651f8c7a2ba4d516941a8539aaa43"
+    }
+  ],
+  "testsPassed": 60,
+  "lintPassed": true,
+  "privateRecipeRestaged": false,
+  "newBuildAttempt": false,
+  "wasmExecuted": false,
+  "generatedArtifactQualified": false
+}

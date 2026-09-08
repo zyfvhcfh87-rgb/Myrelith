@@ -52,7 +52,7 @@ import type {
   Transform,
 } from '../domain/schema'
 import type { PresentationProfile } from '../domain/presentationProfile'
-import { wrapTextLines } from '../domain/textLayout'
+import { textLayoutMetrics, wrapTextLines } from '../domain/textLayout'
 import type { TitlePaintElement } from '../domain/titleComposition'
 import { textPropsValidationError } from '../domain/textOverlay'
 import {
@@ -520,7 +520,6 @@ export async function compositeFrame(
 
 const MAX_CACHED_TEXT_LAYOUTS_PER_CONTEXT = 64
 const MAX_CACHED_TEXT_BYTES_PER_CONTEXT = 8 * 1024 * 1024
-const MAX_RENDERED_TEXT_LINES = 512
 interface TextLayoutCache {
   readonly owner: WeakRef<TimelineDoc>
   readonly entries: Map<string, { readonly lines: readonly string[]; readonly bytes: number }>
@@ -538,13 +537,7 @@ function textLines(
   text: TextProps,
   doc: TimelineDoc,
 ): readonly string[] {
-  const lineHeight = Math.ceil(text.fontSizePx * 1.2)
-  const innerWidth = text.boxWidthPx - text.paddingPx * 2
-  const innerHeight = text.boxHeightPx - text.paddingPx * 2
-  const maxLines = Math.max(
-    1,
-    Math.min(MAX_RENDERED_TEXT_LINES, Math.floor(innerHeight / lineHeight)),
-  )
+  const { innerWidth, maxLines } = textLayoutMetrics(text)
   const key = [
     text.content,
     text.fontFamily,
@@ -630,7 +623,7 @@ function drawTextPayload(
   const anchorY = transform.anchorY * text.boxHeightPx
   const canvasX = (doc.width - text.boxWidthPx) / 2 + anchorX + transform.x
   const canvasY = (doc.height - text.boxHeightPx) / 2 + anchorY + transform.y
-  const lineHeight = Math.ceil(text.fontSizePx * 1.2)
+  const { lineHeight } = textLayoutMetrics(text)
   const x = text.align === 'left'
     ? text.paddingPx
     : text.align === 'right'

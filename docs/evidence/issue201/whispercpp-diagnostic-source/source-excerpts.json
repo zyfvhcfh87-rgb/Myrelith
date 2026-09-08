@@ -1,0 +1,29 @@
+{
+  "scope": "Exact staged accepted C source text; no native execution. ggml.c matches extraction inventory; whisper.cpp matches accepted patched after hash.",
+  "excerpts": [
+    {
+      "path": "ggml/src/ggml.c",
+      "completeFileBytes": 257026,
+      "completeFileSha256": "fb177479234cc6e5d15105f5cac630d9321827de6a71ead648ac96862ec6367f",
+      "startLine": 243,
+      "endLine": 272,
+      "text": "static ggml_abort_callback_t g_abort_callback = NULL;\n\n// Set the abort callback (passing null will restore original abort functionality: printing a message to stdout)\nGGML_API ggml_abort_callback_t ggml_set_abort_callback(ggml_abort_callback_t callback) {\n    ggml_abort_callback_t ret_val = g_abort_callback;\n    g_abort_callback = callback;\n    return ret_val;\n}\n\nvoid ggml_abort(const char * file, int line, const char * fmt, ...) {\n    fflush(stdout);\n\n    char message[2048];\n    int offset = snprintf(message, sizeof(message), \"%s:%d: \", file, line);\n\n    va_list args;\n    va_start(args, fmt);\n    vsnprintf(message + offset, sizeof(message) - offset, fmt, args);\n    va_end(args);\n\n    if (g_abort_callback) {\n        g_abort_callback(message);\n    } else {\n        // default: print error and backtrace to stderr\n        fprintf(stderr, \"%s\\n\", message);\n        ggml_print_backtrace();\n    }\n\n    abort();\n}\n"
+    },
+    {
+      "path": "src/whisper.cpp",
+      "completeFileBytes": 339145,
+      "completeFileSha256": "85617366fdfce12ea3d56ebb36d1267d2e70618b0151b17e6d84f4736ba9c2ad",
+      "startLine": 134,
+      "endLine": 141,
+      "text": "\n#define WHISPER_ASSERT(x) \\\n    do { \\\n        if (!(x)) { \\\n            WHISPER_LOG_ERROR(\"WHISPER_ASSERT: %s:%d: %s\\n\", __FILE__, __LINE__, #x); \\\n            abort(); \\\n        } \\\n    } while (0)\n"
+    },
+    {
+      "path": "src/whisper.cpp",
+      "completeFileBytes": 339145,
+      "completeFileSha256": "85617366fdfce12ea3d56ebb36d1267d2e70618b0151b17e6d84f4736ba9c2ad",
+      "startLine": 9197,
+      "endLine": 9201,
+      "text": "void whisper_log_set(ggml_log_callback log_callback, void * user_data) {\n    g_state.log_callback = log_callback ? log_callback : whisper_log_callback_default;\n    g_state.log_callback_user_data = user_data;\n    ggml_log_set(g_state.log_callback, g_state.log_callback_user_data);\n}\n"
+    }
+  ]
+}

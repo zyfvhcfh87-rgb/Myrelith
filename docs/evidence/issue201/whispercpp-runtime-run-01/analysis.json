@@ -1,0 +1,61 @@
+{
+  "status": "raw-evidence-recomputed",
+  "runtimeSourceCommit": "73395b5e39df01b6e19b0fb847cc2079d3f437d6",
+  "checkpointSha256": "074d223786a46d3d58d094b23e1b26da1a218f927524cb78bf42919089b810e0",
+  "acceptance": {
+    "automatedStatus": "failed-incomplete",
+    "expectedCases": 23,
+    "completedCases": 9,
+    "missing": [
+      "transcribe-english-9",
+      "transcribe-french-10",
+      "transcribe-silence-11",
+      "one-second-speech-window",
+      "corrupt-audio-rejection",
+      "cancel-model-load",
+      "cancel-prepare",
+      "cancel-infer",
+      "project-replacement",
+      "300-second-bounded-workload",
+      "offline-loaded-app-and-fresh-worker",
+      "offline-page-reload",
+      "offline-persistent-browser-reopen",
+      "remove-model-and-offline-no-model"
+    ],
+    "failed": [
+      "transcribe-english-8"
+    ],
+    "unexpected": [],
+    "duplicateNames": false,
+    "qualification": "Automatic laboratory checks only; no production/model enablement verdict."
+  },
+  "passed": 8,
+  "failedCaseElapsedMs": 113,
+  "firstFailure": {
+    "type": "case-failure",
+    "case": "transcribe-english-8",
+    "message": "page.evaluate: Error: Core Aborted(). Build with -sASSERTIONS for more info.; cooperativeZero=false\n    at worker.onmessage (http://127.0.0.1:5201/lab-client.mjs:236:23)",
+    "at": 1788898957703
+  },
+  "rawSampleCount": 15,
+  "partialJournalRecords": 46,
+  "baselineBytes": 272777216,
+  "sampledPeakBytes": 778502144,
+  "sampledPeakDeltaBytes": 505724928,
+  "maximumActiveEpochGapMs": 109,
+  "observedEpochQualified": true,
+  "fullRuntimeQualification": false,
+  "readyEvent": false,
+  "audioPreparationReached": false,
+  "inferenceReached": false,
+  "transcriptProduced": false,
+  "workerCleanup": {
+    "mode": "terminated-error",
+    "reason": "initialization-failed",
+    "elapsedMs": 0,
+    "cooperativeZero": false
+  },
+  "browserCloseMs": 70,
+  "independentReleaseAt": "2026-09-08T20:23:26.616921+00:00",
+  "sourceAndServedBytesUnchanged": true
+}

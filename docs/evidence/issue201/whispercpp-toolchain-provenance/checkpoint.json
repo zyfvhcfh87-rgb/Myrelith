@@ -1,0 +1,161 @@
+{
+  "status": "tagged-source-attribution-corrected-no-build",
+  "baseHead": "59c9401c71ec4eda72b1926297f430d88d7a394e",
+  "profile": "profile.json",
+  "files": [
+    {
+      "path": "scripts/issue201/whispercpp/private-build.py",
+      "bytes": 12267,
+      "sha256": "84f37735563801687c4e57d6fc8987bc90d2eb2eb9d57eb4f63b1c211564b1ae"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-preparation/assets.json",
+      "bytes": 12880,
+      "sha256": "0e4f027f88aa30e9215a85621f080cbfe9b9a721192a43aa5b13a22bd87ef2ec"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-preparation/emscripten-releases-tagged-DEPS.txt",
+      "bytes": 5547,
+      "sha256": "c432603d34cfb31d8e84be556ae5474ccaa0edbccff0059dbf25b19ba11d0744"
+    }
+  ],
+  "evidence": [
+    {
+      "name": "asset-checks.txt",
+      "bytes": 223,
+      "sha256": "8cd8b00b40644bd49ee4466f26626ba1e739f61f83e1b9f0a1875522a1390e69"
+    },
+    {
+      "name": "build.py.txt",
+      "bytes": 66915,
+      "sha256": "498c402f2cd04b620670c36000ac39303561a6fdc7e248dd844cc8214c32bdaa"
+    },
+    {
+      "name": "correction-clang-version.json",
+      "bytes": 509,
+      "sha256": "f6d06147fbe1b143bf7dfe2620312fc09d1a3401ad7ad67d2806cf708ee05650"
+    },
+    {
+      "name": "correction-clang-version.txt",
+      "bytes": 284,
+      "sha256": "2a4993ddb0bf7a9d09afe7788015b3db1d4d6363050f6fd06ea28eac6fb8fbfe"
+    },
+    {
+      "name": "correction-cmake-version.json",
+      "bytes": 543,
+      "sha256": "ca7cbdb52bdc02366f730257108963a93875f01f12a1fe5ff799af25a2045772"
+    },
+    {
+      "name": "correction-cmake-version.txt",
+      "bytes": 90,
+      "sha256": "f46066af33a13476fb604a1a1a24bb8d4dbddb6eb5855e0c24f9f7132784c9f0"
+    },
+    {
+      "name": "correction-ninja-version.json",
+      "bytes": 491,
+      "sha256": "319c08b56446d84f1e498258666e126620f8973852e0f8ac878e38eecbec95e7"
+    },
+    {
+      "name": "correction-ninja-version.txt",
+      "bytes": 7,
+      "sha256": "810ab97f4b3fccb9adf1db7959945b479635931ccc4a0243c34a41b739eae25a"
+    },
+    {
+      "name": "correction-node-version.json",
+      "bytes": 673,
+      "sha256": "71d23e47a3bd5966dab75eca0c64af5ae99058686cc347ab26c48a1470279009"
+    },
+    {
+      "name": "correction-node-version.txt",
+      "bytes": 9,
+      "sha256": "b7677d3ec37ee1897ba07dc2cfe8292fe421c9ac93396cca5bbece486d1a2a41"
+    },
+    {
+      "name": "correction-private-environment.json",
+      "bytes": 2921,
+      "sha256": "2ac97cf0048c5a3afecb0e9b7b6f5e3080044a8f653da642f3c512b413eab0a3"
+    },
+    {
+      "name": "correction-python-version.json",
+      "bytes": 519,
+      "sha256": "2d72a0e1aab48dbf50a6c020e42df8b817fdffaac545de5875504533f5f7d034"
+    },
+    {
+      "name": "correction-python-version.txt",
+      "bytes": 14,
+      "sha256": "466d56409acd0196aa49258a5892f36ee5da8580e74ee5e3a7f7d81d9d9f5b78"
+    },
+    {
+      "name": "loader-proof-unchanged.json",
+      "bytes": 889,
+      "sha256": "8ece2b82f0a3abf9494b73fe2e8d9d53c3ad34242ee54f7af4dbfb492497c1e7"
+    },
+    {
+      "name": "official-records.zip",
+      "bytes": 164085,
+      "sha256": "1e6f6607c7012eead5d5999a7fecedfcd0003df8765448242b201ebecac8252e"
+    },
+    {
+      "name": "original-private-config.txt",
+      "bytes": 753,
+      "sha256": "b318ddf9a5bb0bb4ef27fd81ca89c37c92f444e9aed19ba2fad79a9e5e38ad53"
+    },
+    {
+      "name": "previous-assets.json.gz",
+      "bytes": 4008,
+      "sha256": "846916d43c1f0dac8e70b40a72bf0467da4dcd83b44f7aaac18d58152866961b"
+    },
+    {
+      "name": "profile.json",
+      "bytes": 2498,
+      "sha256": "84733fef46d0f3336624cab49643aed2df0f4cfd3f52e8888b0ea4c049dc48f1"
+    },
+    {
+      "name": "release-commit.json.txt",
+      "bytes": 1154,
+      "sha256": "bde6d2eed2aafc569628213c4905f58739a711f5572590f4b99203d5284acac0"
+    },
+    {
+      "name": "release-info.py.txt",
+      "bytes": 12268,
+      "sha256": "2c9238a6ad286215553710689cf841bf9b4d0f9a1d2474b27a6cb538766f7d60"
+    },
+    {
+      "name": "source-checks.txt",
+      "bytes": 5834,
+      "sha256": "d5c84fe17d7618a65f10d680733e65698f06821ed6cdb714645b633e93fb53bf"
+    },
+    {
+      "name": "version-correction-attempt.json",
+      "bytes": 167,
+      "sha256": "fff2484b3abed786b1f7a6850ab9997c6d9d437fe9bfe3fbfcf982c0e001ff65"
+    },
+    {
+      "name": "version-correction-cleanup.json",
+      "bytes": 578,
+      "sha256": "7537b45c9c1c0a632829351d0db6e38cb67e1c9df10b2886ef8801444392a8f0"
+    },
+    {
+      "name": "version-retry-failure.txt",
+      "bytes": 3255,
+      "sha256": "d9d231869f3a243166ae70648546f671c7784311672a5917cda649de35c27dc5"
+    },
+    {
+      "name": "lint.txt",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    }
+  ],
+  "sourceVmTestsPassed": 55,
+  "sourceAssetsVerified": 8,
+  "savedAssetEvidenceFilesVerified": 24,
+  "binaryenVersionStillPending": true,
+  "emscriptenVersionStillPending": true,
+  "compileAttempted": false,
+  "wasmExecuted": false,
+  "inferenceExecuted": false,
+  "archiveIdentitiesChanged": false,
+  "loaderSourceAssumptionsChanged": false,
+  "cAdapterRecipeOrTokenGuardChanged": false,
+  "lint": "passed"
+}

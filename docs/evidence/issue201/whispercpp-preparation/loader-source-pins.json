@@ -1,0 +1,32 @@
+{
+  "toolchainRevision": "aeb67926e7de656da38bc807d83050af93578758",
+  "sources": [
+    {
+      "name": "loader-shell.js.gz",
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "archiveMember": "install/emscripten/src/shell.js",
+      "bytes": 4889,
+      "sha256": "be75aa6f13b9f140aebb13ca75847c4577949e6c1d7b854ba4f0468d460b87e1",
+      "decodedBytes": 14812,
+      "decodedSha256": "c24264b2c433aa57318e07705faa78414811bf5ee201dba91f2c053d0d61850a"
+    },
+    {
+      "name": "loader-preamble.js.gz",
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "archiveMember": "install/emscripten/src/preamble.js",
+      "bytes": 10355,
+      "sha256": "92e9ec095b5205aad4ad1a639569557c5b7230625a527ff4a4c65cb2012c2023",
+      "decodedBytes": 31150,
+      "decodedSha256": "80b4c6f4eb894ee6eacb2474c3eb1aff878ae989045c122a93397bd4f4a1c0ba"
+    },
+    {
+      "name": "loader-settings.js.gz",
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "archiveMember": "install/emscripten/src/settings.js",
+      "bytes": 36405,
+      "sha256": "527b3af386632be318c141cc800c6d7a7ae6b829c0ce75caef0d1227392e3163",
+      "decodedBytes": 104750,
+      "decodedSha256": "51883b14014de59beae82df827a08f48d32baabd4b629fbf2e2b77ddd7a8f854"
+    }
+  ]
+}

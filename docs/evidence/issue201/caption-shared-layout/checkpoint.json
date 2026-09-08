@@ -1,0 +1,146 @@
+{
+  "status": "shared-source-ready-for-review-browser-gate-open",
+  "speechSourceUnchanged": true,
+  "files": [
+    {
+      "path": "src/domain/textLayout.ts",
+      "bytes": 2750,
+      "sha256": "c3fd09e1dd58415cc856fd4d713d872260278ffa19705b5a112aa9a75be35589"
+    },
+    {
+      "path": "src/domain/titleExport.ts",
+      "bytes": 3830,
+      "sha256": "7919328eb424e5931faa9d8c4410a0e3479c87a27b54f42bed0f214cbedfc242"
+    },
+    {
+      "path": "src/domain/sequenceFrameCoverage.ts",
+      "bytes": 1202,
+      "sha256": "371c1533eeba01a4618e52f735a7d9d90ca3548752e3aa84bb47cc7ba82d59bd"
+    },
+    {
+      "path": "src/domain/captionDiagnostics.ts",
+      "bytes": 3738,
+      "sha256": "70a4bc2373b3a7e1aecf65ba11a59472e7f09f6f69174fb15f49140abdbb6b29"
+    },
+    {
+      "path": "src/domain/captionDiagnostics.test.ts",
+      "bytes": 4369,
+      "sha256": "8c73ba6700da8e14a08698b9affc33b696b3521591f74d34722915c3241f44ad"
+    },
+    {
+      "path": "src/domain/captionExport.ts",
+      "bytes": 4741,
+      "sha256": "26629a622a5073db2c2d58e9ddad2d60cf14c7f1c927ee0795ea0205da9cd550"
+    },
+    {
+      "path": "src/domain/captionExport.test.ts",
+      "bytes": 7960,
+      "sha256": "4171e17e0fae91d72a12430885399161f5146f6028e180142613baad8f9a2bef"
+    },
+    {
+      "path": "src/pipeline/render.ts",
+      "bytes": 55337,
+      "sha256": "c5480fd0a728663f98e8e42636917ef89f3b2e09bbdeca537612fb2bca264db7"
+    }
+  ],
+  "logs": [
+    {
+      "name": "focused-tests.txt.gz",
+      "bytes": 2144,
+      "sha256": "f6442dd80bd2d04dc7c9e948d25808343b9b7b51b9d6b9d07ba2e46c83aa92de",
+      "decodedBytes": 4413,
+      "decodedSha256": "7f41c55475230a30cd2d0133f933a937367d8b7fb80f2eb69ec570e8ce392f0b"
+    },
+    {
+      "name": "build.txt.gz",
+      "bytes": 1426,
+      "sha256": "bd238b4b32f807b0a5f471c963a897fab76b1e5b25edd62698b7a91e2e7a4b04",
+      "decodedBytes": 3853,
+      "decodedSha256": "823825b59364594b9949e123353ff92a270083745ff02b9568925e40ff923c7a"
+    },
+    {
+      "name": "lint.txt.gz",
+      "bytes": 57,
+      "sha256": "9e7fca24312ff0f46242e2c2c3ecb9705640f049087ab8809b6271d5c6d93576",
+      "decodedBytes": 41,
+      "decodedSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "name": "unchanged-baseline-test.txt.gz",
+      "bytes": 2145,
+      "sha256": "dbcf151b4915587e46fafb74df6eed5cd2f1f24c9dfb3b84975bce56d260cca5",
+      "decodedBytes": 4420,
+      "decodedSha256": "079949b0feee786584befb783fbb89b42f31d8643a0d79e4c61fe342e19d3730"
+    },
+    {
+      "name": "schema-probe.txt.gz",
+      "bytes": 232,
+      "sha256": "ce21ac772799ba528ac40b0bc5a3e827525ee5c930c72d9a94763079714cef17",
+      "decodedBytes": 300,
+      "decodedSha256": "69d75866d0c95108d81b885ed55c63a2722b995d582bb217eddbe54662a3846e"
+    }
+  ],
+  "focusedPassed": 103,
+  "focusedFailed": 1,
+  "newPureTests": 31,
+  "baselineReproducedFailure": {
+    "test": "src/test/titleCanvasDiagnostic.test.ts",
+    "snapshot": "34fe9493cada403159bdce75b50f6c08a20f755b",
+    "cause": "Existing fixture hash pins use schema23, current factory emits24; clone-only24->23 probe reproduces all18 hashes.",
+    "scope": "Pre-existing relative to this helper diff; integrated schema24 fixture qualification remains open.",
+    "files": [
+      {
+        "path": "src/domain/textLayout.ts",
+        "bytes": 2073,
+        "sha256": "a70d5591dfef845417517854e012cd38f88db040cb0634df407b5d776a7592af",
+        "matchesHead": "34fe9493cada403159bdce75b50f6c08a20f755b"
+      },
+      {
+        "path": "src/domain/titleExport.ts",
+        "bytes": 4730,
+        "sha256": "c1e0780d527f3f93345ad1d4780de0df03b3f2eb50faed9ddb86076b74b5e728",
+        "matchesHead": "34fe9493cada403159bdce75b50f6c08a20f755b"
+      },
+      {
+        "path": "src/pipeline/render.ts",
+        "bytes": 55589,
+        "sha256": "39779b86d786f1511966f3ea0f8ec9b6edfb48f851c6fe51e1a615f6a232e2e5",
+        "matchesHead": "34fe9493cada403159bdce75b50f6c08a20f755b"
+      },
+      {
+        "path": "src/test/titleCanvasDiagnostic.test.ts",
+        "bytes": 1283,
+        "sha256": "84839a3c374f9601d09da08b0b8069d5a47249403a6fb965ca0ee3615f54c3f5",
+        "matchesHead": "34fe9493cada403159bdce75b50f6c08a20f755b"
+      },
+      {
+        "path": "src/test/titleRenderProof.ts",
+        "bytes": 15398,
+        "sha256": "9e2be35157a9d9029059a6961dba2355f15a1a7125045411e8b021dc7e4a46aa",
+        "matchesHead": "34fe9493cada403159bdce75b50f6c08a20f755b"
+      },
+      {
+        "path": "tests/diagnostics/issue200/fixtures.ts",
+        "bytes": 981,
+        "sha256": "8d8727058b48ffdf6b22d5e8739ef13a6d3da1e78d7771947c146c16f056dfbf",
+        "matchesHead": "34fe9493cada403159bdce75b50f6c08a20f755b"
+      },
+      {
+        "path": "docs/evidence/issue200/canvas-diagnostic-fixture-pins.json",
+        "bytes": 2119,
+        "sha256": "4ec7ca03e8fafe28aee8a834c7f26de29a52c45d3e8166f0739b5bb63b616a3e",
+        "matchesHead": "34fe9493cada403159bdce75b50f6c08a20f755b"
+      },
+      {
+        "path": "src/domain/projectFile/migrations.ts",
+        "bytes": 30547,
+        "sha256": "a1db6a3c92c845375d904b1bea51f76663bf2b478a30be1c2b24acd271be4f05",
+        "matchesHead": "34fe9493cada403159bdce75b50f6c08a20f755b"
+      }
+    ]
+  },
+  "build": "passed-with-existing-Vite-chunk-advisory",
+  "lint": "passed",
+  "browserExecuted": false,
+  "runtimeExecuted": false
+}

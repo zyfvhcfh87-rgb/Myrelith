@@ -1,0 +1,17 @@
+{
+  "label": "node-version",
+  "command": [
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/node/node-v24.19.0-darwin-arm64/bin/node",
+    "--no-expose-wasm",
+    "--version"
+  ],
+  "timeoutSeconds": 30,
+  "startedAt": "2026-09-08T16:47:19Z",
+  "pid": 85238,
+  "processGroup": 85238,
+  "exitCode": 9,
+  "remainingGroupTerminated": false,
+  "elapsedSeconds": 0.899,
+  "logBytes": 180,
+  "logSha256": "c5bcfce424e00662098afacba3820ac3d152e22db715ea30c3e2267ba91b028b"
+}

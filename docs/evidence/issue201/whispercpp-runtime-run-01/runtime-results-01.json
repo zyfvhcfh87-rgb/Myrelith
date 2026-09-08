@@ -1,0 +1,2154 @@
+{
+  "kind": "issue201-whispercpp-lab-result-v1",
+  "recordedAt": "2026-09-08T20:22:37.926Z",
+  "source": {
+    "commit": "73395b5e39df01b6e19b0fb847cc2079d3f437d6",
+    "checkpointSha256": "074d223786a46d3d58d094b23e1b26da1a218f927524cb78bf42919089b810e0",
+    "manifestSha256": "048a935b4bd798295a4493cf7b1a8e6afb8966883923f73b3040e0dbc84ebcd4",
+    "model": {
+      "kind": "local-composite-v1",
+      "id": "ggerganov/whisper.cpp",
+      "configurationRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "totalBytes": 43537433,
+      "files": [
+        {
+          "path": "ggml-tiny-q8_0.bin",
+          "sourceRepository": "ggerganov/whisper.cpp",
+          "sourceRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+          "upstreamPath": "ggml-tiny-q8_0.bin",
+          "localPath": ".tmp/issue201-whispercpp-preparation/ggml-tiny-q8_0.bin",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny-q8_0.bin",
+          "bytes": 43537433,
+          "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca"
+        }
+      ],
+      "licenseProvenance": {
+        "noticeEvidence": "docs/evidence/issue201/whispercpp-generated/runtime-notices.zip",
+        "scope": "Pinned multilingual tiny q8_0 GGML weights; exact quantizer provenance remains unknown as recorded in accepted preparation. No numerical parity claim."
+      },
+      "bundleId": "sha256:6f4ab890b02876493211844b95d622da99199d8abb56ec54f6e37ca425091370"
+    },
+    "assets": [
+      {
+        "url": "/assets/myrelith-whisper.mjs",
+        "bytes": 22350,
+        "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7"
+      },
+      {
+        "url": "/assets/myrelith-whisper.wasm",
+        "bytes": 1198861,
+        "sha256": "9df26c6b690de120e6f1fb5ce17a25ebb2b016a73f0477b24376f558ee00ce72"
+      },
+      {
+        "url": "/assets/mediabunny.mjs",
+        "bytes": 624835,
+        "sha256": "a7e7e14265b787de0daf23d379a8b4afa4b36b74711d71a2f5e075bff6a671a6"
+      },
+      {
+        "url": "/model/ggml-tiny-q8_0.bin",
+        "bytes": 43537433,
+        "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca"
+      },
+      {
+        "url": "/fixtures/english.wav",
+        "bytes": 187404,
+        "sha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46"
+      },
+      {
+        "url": "/fixtures/french.wav",
+        "bytes": 30096,
+        "sha256": "84defdc828ef59cec10364354fbc284bc2cc683fdd4a5edd5863b7bb2c6123a8"
+      },
+      {
+        "url": "/fixtures/english-300.wav",
+        "bytes": 9600044,
+        "sha256": "a9860cf9ff8c6a5bbe1959abb5d94fcebd4de35fac70937b7ec2977d02c6d6d9"
+      },
+      {
+        "url": "/fixtures/silence.wav",
+        "bytes": 32044,
+        "sha256": "643f8a8dc8bd9c19225afffad2becfec5426180b3749cb208abdf1a6c8354efc"
+      },
+      {
+        "url": "/fixtures/corrupt.wav",
+        "bytes": 43,
+        "sha256": "87bf5c6e2799bb64bab80cbdb8b0f4d0707f05d7156cf7f7fa471b393dcabc1e"
+      },
+      {
+        "url": "/lab-client.mjs",
+        "bytes": 13987,
+        "sha256": "6557e298323ae411894bbb122c44297962b1b3684aa6e3b2ff51c74fe61d30d8"
+      },
+      {
+        "url": "/model-worker.mjs",
+        "bytes": 12676,
+        "sha256": "2cb7538d514927fcf58c8c92a9b43d34d770944794e59628fcaf02e87ee3fcfd"
+      },
+      {
+        "url": "/candidate.mjs",
+        "bytes": 3478,
+        "sha256": "bfa04969b2fe76230a843dd7450748326da482357d0dd9baa595db4ff9ab227f"
+      },
+      {
+        "url": "/lab-contract.mjs",
+        "bytes": 4604,
+        "sha256": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba"
+      },
+      {
+        "url": "/worker-protocol.mjs",
+        "bytes": 8077,
+        "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b"
+      },
+      {
+        "url": "/model-format.mjs",
+        "bytes": 4193,
+        "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426"
+      },
+      {
+        "url": "/manifest.json",
+        "bytes": 6324,
+        "sha256": "048a935b4bd798295a4493cf7b1a8e6afb8966883923f73b3040e0dbc84ebcd4"
+      }
+    ],
+    "files": [
+      {
+        "path": "scripts/issue201/whispercpp-lab/candidate.mjs",
+        "bytes": 3478,
+        "sha256": "bfa04969b2fe76230a843dd7450748326da482357d0dd9baa595db4ff9ab227f"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-lab/client.test.mjs",
+        "bytes": 5714,
+        "sha256": "c30f3e65df01fed11e083473d3672333482317008327d888022750c8ca7d6e15"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-lab/host-limits.mjs",
+        "bytes": 875,
+        "sha256": "2e7f4dc9457ca9126d7fc1f1aa27bfd4b5bc1d7a1ce7c9468b941b1a0c17c91b"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-lab/lab-client.mjs",
+        "bytes": 13987,
+        "sha256": "6557e298323ae411894bbb122c44297962b1b3684aa6e3b2ff51c74fe61d30d8"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-lab/model-worker.mjs",
+        "bytes": 12676,
+        "sha256": "2cb7538d514927fcf58c8c92a9b43d34d770944794e59628fcaf02e87ee3fcfd"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-lab/preflight.mjs",
+        "bytes": 3995,
+        "sha256": "490442fc63c4be166645b02c863d8cee23dc8809bdc41658ba3ee8c928fc6426"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-lab/resident-monitor.mjs",
+        "bytes": 3519,
+        "sha256": "93a7d21b4a1624abbe69b0df7c78f2f2386e6554f4c2bd11025b1eb1fa6d7ebb"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-lab/run-lab.mjs",
+        "bytes": 41165,
+        "sha256": "8f071673b2f9de2a258e3b580b87130400d99ccaf632e0fb5f23781151da7e17"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-lab/runner.test.mjs",
+        "bytes": 14429,
+        "sha256": "2cac5076d9a78ca436bc7d86e0d22a7fd32dbf2aa8bc399d5a14adb8da04f9d0"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-lab/source.test.mjs",
+        "bytes": 13578,
+        "sha256": "4e0a0e469447f2671fce40af21c5f0030273086f11a015f0e8e4ca97d4b42fe6"
+      },
+      {
+        "path": "docs/evidence/issue201/WHISPER_CPP_RUNTIME_PROTOCOL.md",
+        "bytes": 10355,
+        "sha256": "5dd85ddff1457e3437bbfa1b368cf3dd242aec64a67c9662503c51079f2a89b7"
+      }
+    ],
+    "references": [
+      {
+        "path": "docs/evidence/issue201/WHISPER_CPP_GENERATED_REVIEW.md",
+        "bytes": 9706,
+        "sha256": "7269493d10f298477ecf7724758840946ca30047617af001d912ace1e66aa432"
+      },
+      {
+        "path": "docs/evidence/issue201/replacement-manifest.json",
+        "bytes": 18578,
+        "sha256": "c68800d6b46bcecd9bbdfe7ed8abc853bcb8cf194bbe98dc3fd39518f37c8804"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-build-preparation/extraction-inventory.json.gz",
+        "bytes": 1864139,
+        "sha256": "ba24ca7b38f5f82b909da0214bcf7983e2f693e9f1db9e63ba2967270a6f2d10"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/CMakeCache.txt.gz",
+        "bytes": 6832,
+        "sha256": "d5280cbba6b1c38566ba50dcefb26fb4a86b9b0de71feb743ee8b09fe7c07863"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/actual-link-command.txt",
+        "bytes": 1928,
+        "sha256": "83b8475393be723b445e045d502440ba5775dcf9c857f3cbcb770c96bde763cb"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/artifacts.json",
+        "bytes": 814,
+        "sha256": "521d5185f474f39a02e8ff6d8337814fa7eb8d96045cb9b4475c3e490f6e7981"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/binary-inspection.json",
+        "bytes": 22239,
+        "sha256": "4bedffebcd4ed241220c3d97e9a2dd614b651714185a2120993671b78b12cb7e"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/build.ninja.gz",
+        "bytes": 6022,
+        "sha256": "89f65688fa60c60edd00d3c16f760f96546200d6a3e3dbea40d4a3641f60d551"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/checkpoint.json",
+        "bytes": 8101,
+        "sha256": "0ad4cf6dbf53d3493e8a00df97bd0fe02880176cb599aee3c29ad02aa2230ece"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/compile_commands.json.gz",
+        "bytes": 1555,
+        "sha256": "0e09808116e7d94ef03647f7c5a28f64c8cb22ebb8d04ca20edf446e76ea7aad"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/glue-inspection.json",
+        "bytes": 34257,
+        "sha256": "476e4ec5c453a5198ccc05174e26c358905f3486f05a779e4c846cfce8ba1245"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/link-settings-attempt.json",
+        "bytes": 718,
+        "sha256": "7566d2187aa72af602ef60e0509b268208c38ef0b007d9033472308dc1a11e1f"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/link-settings-cleanup.json",
+        "bytes": 2790,
+        "sha256": "cc3869ab48a94d41d6fb75900030053c7f80e6ecfdf222db75aa0ba68d8f3518"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/link-settings-compile-link.json",
+        "bytes": 728,
+        "sha256": "2931eca7b418c20b1f497ef030c96057a73715418a481209d7b226acbaffff1c"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/link-settings-compile-link.txt.gz",
+        "bytes": 8339,
+        "sha256": "6dd2ad9470e9d096811e40cf326ab7a44efa79ec9d218ac0ac26df626f2204bb"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/link-settings-configure.json",
+        "bytes": 1658,
+        "sha256": "961646d95b4a6c12aecbf869ee816ed67d1511f4ed71decb8a74fd35878bba5f"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/link-settings-configure.txt.gz",
+        "bytes": 1529,
+        "sha256": "5b773bf71fdbff666220655909cfcba0cc7aed4d271da18bf89208b929b2a505"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/link-settings-result.json",
+        "bytes": 102,
+        "sha256": "cbb23fe38eb16dbd501fd428e3ecbe4ca7e1889dcd28194ffc3cec36d56e035c"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/lint.txt",
+        "bytes": 41,
+        "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.mjs.gz",
+        "bytes": 5556,
+        "sha256": "68f30b568d3724ccfe1184920c6f1e7157c8b503290a30d15b1994698ad0447d"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.wasm.gz",
+        "bytes": 386503,
+        "sha256": "5d54071f2d88478c3ba721f92b8220d00974ef4652f288d091fa1c297b750b78"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/notice-verification.json",
+        "bytes": 138,
+        "sha256": "768ab4e3792a4c6bf1b0e4343677de54c437234bcc31f859b0fefc523df1e2b1"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/outer-launch.txt",
+        "bytes": 2254,
+        "sha256": "3b158e5c6230e6678799d7eff16b13e29f470c177d7aaa719aedb8dbc9a4d012"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/preflight.json",
+        "bytes": 1170,
+        "sha256": "28a66df936d91459689255d1be5fd7830cce1fa975b15d9fba7acdb795fbbb33"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/runtime-notices.json",
+        "bytes": 2606,
+        "sha256": "148e16482ce2b1740051ab3c12a0d26a8af17acb969992af92844b1a1e3fb11c"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/runtime-notices.zip",
+        "bytes": 108332,
+        "sha256": "ad255711c323ac01457bbd1fe8cd72c5a6d1eda1be67446ae916bb604d37af17"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/source-tests-final-seven.txt",
+        "bytes": 977,
+        "sha256": "c24d14e20921374154f4917f942a195b8ba4c0e17c8d14b952893b897436661d"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/source-tests-initial-five.txt",
+        "bytes": 761,
+        "sha256": "fbac4ecb6c1373cbfcaa0db3fb3c4191d902f49883f54af775e153e674e86e1c"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/source-tests-intermediate-six.txt",
+        "bytes": 868,
+        "sha256": "04d7d39b94a4c77177025c14b49894cb970ff1539fe9f4e6676ab38e7dc05bd5"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/system-libraries-source.json",
+        "bytes": 429,
+        "sha256": "73318f37abd61a961b7ee2f7328510918edf6d8e1de7d5092dac775c29dd5a51"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-generated/system_libs.py.gz",
+        "bytes": 24430,
+        "sha256": "239c71a2394397a5fd1665f85b5059bdb03aae5512b28b9f10146829d08f8c3a"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-link-retry/checkpoint.json",
+        "bytes": 1280,
+        "sha256": "16aa86eb86493aea2ab99840f577444d9ebfb6617c770b0043ecd2af6584dd23"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-link-settings/checkpoint.json",
+        "bytes": 6235,
+        "sha256": "a0e423b220967a42586a9f4601671d5cccecb8cc8feeb9a6550d5df0ccee5386"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-preparation/assets.json",
+        "bytes": 12965,
+        "sha256": "704c2c1fb852be2966ff505b26a58330d15a613c1162b60032baefd91254f279"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-preparation/model-format.json",
+        "bytes": 29516,
+        "sha256": "66a751f0f21b3ebbf5132e99f83d1224b431c248f72084931ae198e75a9d1400"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-preparation/openai-whisper-LICENSE",
+        "bytes": 1063,
+        "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d"
+      },
+      {
+        "path": "docs/evidence/issue201/whispercpp-preparation/whisper-LICENSE",
+        "bytes": 1078,
+        "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+      },
+      {
+        "path": "package-lock.json",
+        "bytes": 120905,
+        "sha256": "affe6090fa9a422aeadf6dd2e06ff65dd55f31457d7645ac9bf3f33e13bc44df"
+      },
+      {
+        "path": "package.json",
+        "bytes": 2694,
+        "sha256": "8b42c90b07c4cab70c4a5203a2bbe596c02c9a4e27c8d130fd38c40086df54c6"
+      },
+      {
+        "path": "scripts/issue201/lab-client.mjs",
+        "bytes": 13386,
+        "sha256": "9677d056f1ac30308d0459c8d68d28c25b212ccc57f5f878af9fa9bbdb8f4e2d"
+      },
+      {
+        "path": "scripts/issue201/lab-contract.mjs",
+        "bytes": 4604,
+        "sha256": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba"
+      },
+      {
+        "path": "scripts/issue201/model-worker.mjs",
+        "bytes": 11369,
+        "sha256": "46bc2c2fae2a6cc22bf1ba51735cd48dba6f33dae9f45b1e06e2055920ee8466"
+      },
+      {
+        "path": "scripts/issue201/run-speech-lab.mjs",
+        "bytes": 26258,
+        "sha256": "3e630ef0c0e2a6e77420fa1d622a25fa81940a945a021e4ed8037c8601ea781e"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-review/generated.test.mjs",
+        "bytes": 7502,
+        "sha256": "b0a43f7f9c95b321c53c42933632bc464472a7eb0afed724458a0923654b6458"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-review/inspect-binary.mjs",
+        "bytes": 6115,
+        "sha256": "5bba9c9457e9fdbb58558e11b77fff2d11fb33d5e089350529d67194405c2405"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-review/inspect-glue.mjs",
+        "bytes": 8318,
+        "sha256": "e900944457e000a97a1d303dc5d1107cac981c428b257fc5e61f00b71f37f372"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-review/verify-generated.mjs",
+        "bytes": 2916,
+        "sha256": "4dd03817b93b4d9b8813383a363447e1cacc0cc3a0e3beb6be62465d695c2321"
+      },
+      {
+        "path": "scripts/issue201/whispercpp-review/verify-notices.py",
+        "bytes": 1765,
+        "sha256": "4408c8d371278132f276b16475ef40f8522ef03f4af85a6ae1eaab394e7a2f7f"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/02-whole-call-token-budget.patch",
+        "bytes": 3471,
+        "sha256": "4d3e0d398bfbe5cb61a814b1ac94555efd11abeeed37ec4a50b3b4e2677937f3"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/CMakeLists.txt",
+        "bytes": 3550,
+        "sha256": "bc68e94197b6e819f8d5257a536b02bd0a5931c525005b994c2046fad80ba0a6"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/adapter.cpp",
+        "bytes": 6827,
+        "sha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/deny-wasm.cjs",
+        "bytes": 467,
+        "sha256": "4c9ba6b9267a14db07ec6ed901ddde8eaef0f314b3b53aa7dd10128c4bd9f764"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/loader-startup.test.mjs",
+        "bytes": 7036,
+        "sha256": "309830f5580afa8a60796149868a60a994b696f04feb2aff635bd52ede2f651c"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/model-format.mjs",
+        "bytes": 4193,
+        "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/myrelith-token-budget.h",
+        "bytes": 403,
+        "sha256": "e0dc2d7ec04a52e47214de3536ca479f710b6957d422260eb5bc87b7bfe9ff9b"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/patch-identities.json",
+        "bytes": 1172,
+        "sha256": "74a2fb69113d229b172d073cebe6b37087bcf49999945bd3be28783922952a7b"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/preparation.test.mjs",
+        "bytes": 17829,
+        "sha256": "db0932c26a3922544ca3eb4ac06b5f05c9ac745810eda453e8bb141f1f72d044"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/private-build-retry.test.py",
+        "bytes": 5648,
+        "sha256": "d41a4134f06c2620cacb505ca23f6375d890c939920e148349f3fa7bd1db9d8d"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/private-build.py",
+        "bytes": 18043,
+        "sha256": "4a58a09a560daf3ec47e58639ee1b58f50caa84695289cafcbe3fb20e89ae110"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/private-build.test.mjs",
+        "bytes": 1910,
+        "sha256": "cec57efe408581ace8ce2bc2f14dbceb98cd21ce759a8967aa010b168d810551"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/resident-coverage.mjs",
+        "bytes": 2809,
+        "sha256": "96114f08b414309ae94b76777327257b75d96bfa6555da96ec189d3c4a1cd7bf"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/settings-source-audit.py",
+        "bytes": 4729,
+        "sha256": "6e0ba87acbe56b6ee8c9c28d7c29088d42092c1803ddc359187330c1ecbbbe12"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/settings-source-audit.test.mjs",
+        "bytes": 3994,
+        "sha256": "e3fef57e65806229049bc2ba2497aecabe32bd9142e90ca85685c9d6bf3625eb"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/worker-owner.mjs",
+        "bytes": 3602,
+        "sha256": "f9ae85d3fb3593ccbf219a058218ad672133b5bd3af56f75683c2a976dfe32f5"
+      },
+      {
+        "path": "scripts/issue201/whispercpp/worker-protocol.mjs",
+        "bytes": 8077,
+        "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b"
+      }
+    ]
+  },
+  "qualification": "Isolated exact-candidate laboratory only. No production or broader language/audio/browser qualification.",
+  "runtime": {
+    "browserVersion": {
+      "protocolVersion": "1.3",
+      "product": "HeadlessChrome/151.0.7922.34",
+      "revision": "@782af9cb30a53f54487e5d2e44738645a8ec457c",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+      "jsVersion": "15.1.206.8"
+    },
+    "platform": "darwin",
+    "architecture": "arm64",
+    "nodeVersion": "v26.8.1",
+    "engine": {
+      "engine": "whisper.cpp",
+      "version": "1.9.3-dev",
+      "sourceRevision": "371b5a7561823ab2bb32142d2751e35e7534727b",
+      "generatedCheckpoint": "26370ca81410aaf797cf9c71f84b0928c38fa68a",
+      "device": "wasm",
+      "dtype": "q8_0",
+      "threads": 1,
+      "initialHeapBytes": 67108864,
+      "maximumHeapBytes": 536870912,
+      "stackBytes": 5242880,
+      "wholeCallTokenBudget": 448,
+      "windowDeadlineMs": 120000,
+      "artifacts": [
+        {
+          "name": "myrelith-whisper.mjs",
+          "bytes": 22350,
+          "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7",
+          "packedPath": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.mjs.gz"
+        },
+        {
+          "name": "myrelith-whisper.wasm",
+          "bytes": 1198861,
+          "sha256": "9df26c6b690de120e6f1fb5ce17a25ebb2b016a73f0477b24376f558ee00ce72",
+          "packedPath": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.wasm.gz"
+        },
+        {
+          "name": "mediabunny.mjs",
+          "bytes": 624835,
+          "sha256": "a7e7e14265b787de0daf23d379a8b4afa4b36b74711d71a2f5e075bff6a671a6",
+          "localPath": ".tmp/issue201-speech-lab/assets/mediabunny.mjs"
+        }
+      ]
+    },
+    "bundleId": "sha256:6f4ab890b02876493211844b95d622da99199d8abb56ec54f6e37ca425091370",
+    "configurationRevision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+  },
+  "acceptance": {
+    "automatedStatus": "failed-incomplete",
+    "expectedCases": 23,
+    "completedCases": 9,
+    "missing": [
+      "transcribe-english-9",
+      "transcribe-french-10",
+      "transcribe-silence-11",
+      "one-second-speech-window",
+      "corrupt-audio-rejection",
+      "cancel-model-load",
+      "cancel-prepare",
+      "cancel-infer",
+      "project-replacement",
+      "300-second-bounded-workload",
+      "offline-loaded-app-and-fresh-worker",
+      "offline-page-reload",
+      "offline-persistent-browser-reopen",
+      "remove-model-and-offline-no-model"
+    ],
+    "failed": [
+      "transcribe-english-8"
+    ],
+    "unexpected": [],
+    "duplicateNames": false,
+    "qualification": "Automatic laboratory checks only; no production/model enablement verdict."
+  },
+  "results": [
+    {
+      "name": "no-model-and-lazy-runtime",
+      "passed": true,
+      "elapsedMs": 36,
+      "data": {
+        "generation": 1,
+        "phase": "idle",
+        "workerOwners": 0,
+        "acquisitionOwners": 0,
+        "lastCleanup": null,
+        "events": []
+      },
+      "serverRequests": []
+    },
+    {
+      "name": "cancel-acquisition",
+      "passed": true,
+      "elapsedMs": 109,
+      "data": {
+        "state": {
+          "generation": 1,
+          "phase": "idle",
+          "workerOwners": 0,
+          "acquisitionOwners": 0,
+          "lastCleanup": null,
+          "events": [
+            {
+              "at": 74.79999999701977,
+              "type": "acquisition-file",
+              "file": "ggml-tiny-q8_0.bin"
+            }
+          ]
+        },
+        "completion": {
+          "error": "acquisition-test"
+        },
+        "cache": {
+          "model": {
+            "error": "No local speech model is installed"
+          },
+          "estimate": {
+            "quota": 10737418240,
+            "usage": 0,
+            "usageDetails": {}
+          },
+          "cacheNames": [
+            "myrelith-issue201-whispercpp-lab-registry"
+          ]
+        }
+      },
+      "serverRequests": []
+    },
+    {
+      "name": "verified-model-install",
+      "passed": true,
+      "elapsedMs": 67,
+      "data": {
+        "bytes": 43537433,
+        "name": "myrelith-issue201-whispercpp-lab-model-97c1ee97-8207-4181-b42b-1d370b01c64c"
+      },
+      "serverRequests": [
+        {
+          "url": "/model/ggml-tiny-q8_0.bin",
+          "encodedBytes": 43537433,
+          "decodedBytes": 43537433,
+          "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+          "gzip": false
+        }
+      ]
+    },
+    {
+      "name": "cancel-cache-write-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 392,
+      "data": {
+        "before": {
+          "model": {
+            "name": "myrelith-issue201-whispercpp-lab-model-97c1ee97-8207-4181-b42b-1d370b01c64c",
+            "identity": "7dcb53e22d3d0275e268a9aeb7606b7b970c924b9023694365a118859f381d81",
+            "bundleId": "sha256:6f4ab890b02876493211844b95d622da99199d8abb56ec54f6e37ca425091370",
+            "configurationRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+            "bytes": 43537433
+          },
+          "estimate": {
+            "quota": 10780957440,
+            "usage": 43539200,
+            "usageDetails": {
+              "caches": 43539200
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-whispercpp-lab-registry",
+            "myrelith-issue201-whispercpp-lab-model-97c1ee97-8207-4181-b42b-1d370b01c64c"
+          ]
+        },
+        "state": {
+          "generation": 1,
+          "phase": "idle",
+          "workerOwners": 0,
+          "acquisitionOwners": 0,
+          "lastCleanup": null,
+          "events": [
+            {
+              "at": 291.70000000298023,
+              "type": "acquisition-file",
+              "file": "ggml-tiny-q8_0.bin"
+            },
+            {
+              "at": 328.09999999403954,
+              "type": "cache-write",
+              "file": "ggml-tiny-q8_0.bin"
+            }
+          ]
+        },
+        "completion": {
+          "error": "cache-race"
+        },
+        "after": {
+          "model": {
+            "name": "myrelith-issue201-whispercpp-lab-model-97c1ee97-8207-4181-b42b-1d370b01c64c",
+            "identity": "7dcb53e22d3d0275e268a9aeb7606b7b970c924b9023694365a118859f381d81",
+            "bundleId": "sha256:6f4ab890b02876493211844b95d622da99199d8abb56ec54f6e37ca425091370",
+            "configurationRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+            "bytes": 43537433
+          },
+          "estimate": {
+            "quota": 10824495872,
+            "usage": 87077632,
+            "usageDetails": {
+              "caches": 87077632
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-whispercpp-lab-registry",
+            "myrelith-issue201-whispercpp-lab-model-97c1ee97-8207-4181-b42b-1d370b01c64c"
+          ]
+        }
+      },
+      "serverRequests": [
+        {
+          "url": "/model/ggml-tiny-q8_0.bin",
+          "encodedBytes": 43537433,
+          "decodedBytes": 43537433,
+          "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+          "gzip": false
+        }
+      ]
+    },
+    {
+      "name": "cancel-cache-commit-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 384,
+      "data": {
+        "before": {
+          "model": {
+            "name": "myrelith-issue201-whispercpp-lab-model-97c1ee97-8207-4181-b42b-1d370b01c64c",
+            "identity": "7dcb53e22d3d0275e268a9aeb7606b7b970c924b9023694365a118859f381d81",
+            "bundleId": "sha256:6f4ab890b02876493211844b95d622da99199d8abb56ec54f6e37ca425091370",
+            "configurationRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+            "bytes": 43537433
+          },
+          "estimate": {
+            "quota": 10824495872,
+            "usage": 87077632,
+            "usageDetails": {
+              "caches": 87077632
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-whispercpp-lab-registry",
+            "myrelith-issue201-whispercpp-lab-model-97c1ee97-8207-4181-b42b-1d370b01c64c"
+          ]
+        },
+        "state": {
+          "generation": 1,
+          "phase": "idle",
+          "workerOwners": 0,
+          "acquisitionOwners": 0,
+          "lastCleanup": null,
+          "events": [
+            {
+              "at": 688.7999999970198,
+              "type": "acquisition-file",
+              "file": "ggml-tiny-q8_0.bin"
+            },
+            {
+              "at": 724.7999999970198,
+              "type": "cache-write",
+              "file": "ggml-tiny-q8_0.bin"
+            },
+            {
+              "at": 736.5999999940395,
+              "type": "cache-commit"
+            }
+          ]
+        },
+        "completion": {
+          "error": "Cancelled model publication rolled back"
+        },
+        "after": {
+          "model": {
+            "name": "myrelith-issue201-whispercpp-lab-model-97c1ee97-8207-4181-b42b-1d370b01c64c",
+            "identity": "7dcb53e22d3d0275e268a9aeb7606b7b970c924b9023694365a118859f381d81",
+            "bundleId": "sha256:6f4ab890b02876493211844b95d622da99199d8abb56ec54f6e37ca425091370",
+            "configurationRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+            "bytes": 43537433
+          },
+          "estimate": {
+            "quota": 10824495872,
+            "usage": 87077632,
+            "usageDetails": {
+              "caches": 87077632
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-whispercpp-lab-registry",
+            "myrelith-issue201-whispercpp-lab-model-97c1ee97-8207-4181-b42b-1d370b01c64c"
+          ]
+        }
+      },
+      "serverRequests": [
+        {
+          "url": "/model/ggml-tiny-q8_0.bin",
+          "encodedBytes": 43537433,
+          "decodedBytes": 43537433,
+          "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+          "gzip": false
+        }
+      ]
+    },
+    {
+      "name": "corrupt-cache-rejected-before-inference",
+      "passed": true,
+      "elapsedMs": 115,
+      "data": {
+        "error": "Model cache digest mismatch",
+        "state": {
+          "generation": 1,
+          "phase": "idle",
+          "workerOwners": 0,
+          "acquisitionOwners": 0,
+          "lastCleanup": null,
+          "events": []
+        }
+      },
+      "serverRequests": []
+    },
+    {
+      "name": "selected-local-files-install",
+      "passed": true,
+      "elapsedMs": 80,
+      "data": {
+        "bytes": 43537433,
+        "name": "myrelith-issue201-whispercpp-lab-model-b9f30957-e779-4e3b-8d64-7ce30e2eb8c4"
+      },
+      "serverRequests": []
+    },
+    {
+      "name": "capacity-rejection-preserves-model",
+      "passed": true,
+      "elapsedMs": 66,
+      "data": {
+        "error": "Model cache capacity is insufficient",
+        "before": {
+          "model": {
+            "name": "myrelith-issue201-whispercpp-lab-model-b9f30957-e779-4e3b-8d64-7ce30e2eb8c4",
+            "identity": "7dcb53e22d3d0275e268a9aeb7606b7b970c924b9023694365a118859f381d81",
+            "bundleId": "sha256:6f4ab890b02876493211844b95d622da99199d8abb56ec54f6e37ca425091370",
+            "configurationRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+            "bytes": 43537433
+          },
+          "estimate": {
+            "quota": 10824495872,
+            "usage": 87077632,
+            "usageDetails": {
+              "caches": 87077632
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-whispercpp-lab-registry",
+            "myrelith-issue201-whispercpp-lab-model-b9f30957-e779-4e3b-8d64-7ce30e2eb8c4"
+          ]
+        },
+        "after": {
+          "model": {
+            "name": "myrelith-issue201-whispercpp-lab-model-b9f30957-e779-4e3b-8d64-7ce30e2eb8c4",
+            "identity": "7dcb53e22d3d0275e268a9aeb7606b7b970c924b9023694365a118859f381d81",
+            "bundleId": "sha256:6f4ab890b02876493211844b95d622da99199d8abb56ec54f6e37ca425091370",
+            "configurationRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+            "bytes": 43537433
+          },
+          "estimate": {
+            "quota": 10824495872,
+            "usage": 87077632,
+            "usageDetails": {
+              "caches": 87077632
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-whispercpp-lab-registry",
+            "myrelith-issue201-whispercpp-lab-model-b9f30957-e779-4e3b-8d64-7ce30e2eb8c4"
+          ]
+        }
+      },
+      "serverRequests": []
+    },
+    {
+      "name": "transcribe-english-8",
+      "passed": false,
+      "elapsedMs": 113,
+      "error": "page.evaluate: Error: Core Aborted(). Build with -sASSERTIONS for more info.; cooperativeZero=false\n    at worker.onmessage (http://127.0.0.1:5201/lab-client.mjs:236:23)",
+      "failedState": {
+        "generation": 1,
+        "phase": "idle",
+        "workerOwners": 0,
+        "acquisitionOwners": 0,
+        "lastCleanup": {
+          "mode": "terminated-error",
+          "reason": "initialization-failed",
+          "elapsedMs": 0,
+          "cooperativeZero": false
+        },
+        "events": [
+          {
+            "at": 1378.7000000029802,
+            "type": "phase",
+            "phase": "model-cache-read"
+          },
+          {
+            "at": 1390.7000000029802,
+            "type": "model-read",
+            "file": "ggml-tiny-q8_0.bin",
+            "bytes": 43537433
+          },
+          {
+            "at": 1390.7000000029802,
+            "type": "phase",
+            "phase": "runtime-import"
+          },
+          {
+            "at": 1395.2999999970198,
+            "type": "phase",
+            "phase": "model-load"
+          },
+          {
+            "at": 1443.2000000029802,
+            "type": "error",
+            "code": "initialization-failed",
+            "phase": "model-load",
+            "message": "Core Aborted(). Build with -sASSERTIONS for more info.; cooperativeZero=false",
+            "ledger": {
+              "modelOwners": 0,
+              "inputOwners": 0,
+              "sampleOwners": 0,
+              "acquiredSamples": 0,
+              "closedSamples": 0,
+              "pcmBytes": 0,
+              "maxPcmBytes": 0,
+              "windows": 0
+            }
+          },
+          {
+            "at": 1443.2999999970198,
+            "type": "cleanup",
+            "mode": "terminated-error",
+            "reason": "initialization-failed",
+            "elapsedMs": 0,
+            "cooperativeZero": false
+          }
+        ]
+      },
+      "serverRequests": [
+        {
+          "url": "/fixtures/english.wav",
+          "encodedBytes": 156546,
+          "decodedBytes": 187404,
+          "sha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46",
+          "gzip": true
+        },
+        {
+          "url": "/model-worker.mjs",
+          "encodedBytes": 4351,
+          "decodedBytes": 12676,
+          "sha256": "2cb7538d514927fcf58c8c92a9b43d34d770944794e59628fcaf02e87ee3fcfd",
+          "gzip": true
+        },
+        {
+          "url": "/assets/mediabunny.mjs",
+          "encodedBytes": 159759,
+          "decodedBytes": 624835,
+          "sha256": "a7e7e14265b787de0daf23d379a8b4afa4b36b74711d71a2f5e075bff6a671a6",
+          "gzip": true
+        },
+        {
+          "url": "/lab-contract.mjs",
+          "encodedBytes": 1836,
+          "decodedBytes": 4604,
+          "sha256": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba",
+          "gzip": true
+        },
+        {
+          "url": "/worker-protocol.mjs",
+          "encodedBytes": 2841,
+          "decodedBytes": 8077,
+          "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b",
+          "gzip": true
+        },
+        {
+          "url": "/model-format.mjs",
+          "encodedBytes": 1652,
+          "decodedBytes": 4193,
+          "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426",
+          "gzip": true
+        },
+        {
+          "url": "/assets/myrelith-whisper.mjs",
+          "encodedBytes": 5593,
+          "decodedBytes": 22350,
+          "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7",
+          "gzip": true
+        },
+        {
+          "url": "/assets/myrelith-whisper.wasm",
+          "encodedBytes": 390084,
+          "decodedBytes": 1198861,
+          "sha256": "9df26c6b690de120e6f1fb5ce17a25ebb2b016a73f0477b24376f558ee00ce72",
+          "gzip": true
+        }
+      ]
+    }
+  ],
+  "problems": [
+    {
+      "type": "case-failure",
+      "case": "transcribe-english-8",
+      "message": "page.evaluate: Error: Core Aborted(). Build with -sASSERTIONS for more info.; cooperativeZero=false\n    at worker.onmessage (http://127.0.0.1:5201/lab-client.mjs:236:23)"
+    },
+    {
+      "type": "runner-stopped",
+      "message": "Laboratory stopped after transcribe-english-8"
+    },
+    {
+      "type": "final-cleanup-unverified",
+      "status": "unavailable",
+      "reason": "Browser closed after failure; no cooperative model/cache cleanup claim"
+    }
+  ],
+  "stopReason": {
+    "type": "case-failure",
+    "case": "transcribe-english-8",
+    "message": "page.evaluate: Error: Core Aborted(). Build with -sASSERTIONS for more info.; cooperativeZero=false\n    at worker.onmessage (http://127.0.0.1:5201/lab-client.mjs:236:23)",
+    "at": 1788898957703
+  },
+  "finalCleanup": {
+    "status": "unavailable",
+    "reason": "Browser closed after failure; no cooperative model/cache cleanup claim"
+  },
+  "finalInputVerification": {
+    "status": "verified",
+    "checkpointSha256": "074d223786a46d3d58d094b23e1b26da1a218f927524cb78bf42919089b810e0",
+    "assets": [
+      {
+        "url": "/assets/myrelith-whisper.mjs",
+        "bytes": 22350,
+        "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7"
+      },
+      {
+        "url": "/assets/myrelith-whisper.wasm",
+        "bytes": 1198861,
+        "sha256": "9df26c6b690de120e6f1fb5ce17a25ebb2b016a73f0477b24376f558ee00ce72"
+      },
+      {
+        "url": "/assets/mediabunny.mjs",
+        "bytes": 624835,
+        "sha256": "a7e7e14265b787de0daf23d379a8b4afa4b36b74711d71a2f5e075bff6a671a6"
+      },
+      {
+        "url": "/model/ggml-tiny-q8_0.bin",
+        "bytes": 43537433,
+        "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca"
+      },
+      {
+        "url": "/fixtures/english.wav",
+        "bytes": 187404,
+        "sha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46"
+      },
+      {
+        "url": "/fixtures/french.wav",
+        "bytes": 30096,
+        "sha256": "84defdc828ef59cec10364354fbc284bc2cc683fdd4a5edd5863b7bb2c6123a8"
+      },
+      {
+        "url": "/fixtures/english-300.wav",
+        "bytes": 9600044,
+        "sha256": "a9860cf9ff8c6a5bbe1959abb5d94fcebd4de35fac70937b7ec2977d02c6d6d9"
+      },
+      {
+        "url": "/fixtures/silence.wav",
+        "bytes": 32044,
+        "sha256": "643f8a8dc8bd9c19225afffad2becfec5426180b3749cb208abdf1a6c8354efc"
+      },
+      {
+        "url": "/fixtures/corrupt.wav",
+        "bytes": 43,
+        "sha256": "87bf5c6e2799bb64bab80cbdb8b0f4d0707f05d7156cf7f7fa471b393dcabc1e"
+      },
+      {
+        "url": "/lab-client.mjs",
+        "bytes": 13987,
+        "sha256": "6557e298323ae411894bbb122c44297962b1b3684aa6e3b2ff51c74fe61d30d8"
+      },
+      {
+        "url": "/model-worker.mjs",
+        "bytes": 12676,
+        "sha256": "2cb7538d514927fcf58c8c92a9b43d34d770944794e59628fcaf02e87ee3fcfd"
+      },
+      {
+        "url": "/candidate.mjs",
+        "bytes": 3478,
+        "sha256": "bfa04969b2fe76230a843dd7450748326da482357d0dd9baa595db4ff9ab227f"
+      },
+      {
+        "url": "/lab-contract.mjs",
+        "bytes": 4604,
+        "sha256": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba"
+      },
+      {
+        "url": "/worker-protocol.mjs",
+        "bytes": 8077,
+        "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b"
+      },
+      {
+        "url": "/model-format.mjs",
+        "bytes": 4193,
+        "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426"
+      },
+      {
+        "url": "/manifest.json",
+        "bytes": 6324,
+        "sha256": "048a935b4bd798295a4493cf7b1a8e6afb8966883923f73b3040e0dbc84ebcd4"
+      }
+    ]
+  },
+  "memoryAssessment": {
+    "firstBaseline": 272777216,
+    "peak": 778502144,
+    "samples": 15,
+    "failures": [],
+    "epochs": [
+      {
+        "id": 1,
+        "label": "initial-browser",
+        "openedAt": 1788898956274,
+        "closed": {
+          "reason": "first-failure",
+          "startedAt": 1788898957704,
+          "at": 1788898957774,
+          "elapsedMs": 70,
+          "remaining": [],
+          "verifiedAbsent": true,
+          "errors": [],
+          "signals": [],
+          "observedIdentities": [
+            {
+              "pid": 27426,
+              "started": "Tue Sep 8 22:22:36 2026",
+              "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --disable-background-networking --disable-component-update --user-data-dir=/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-lab/profile-01 --remote-debugging-pipe about:blank"
+            },
+            {
+              "pid": 27427,
+              "started": "Tue Sep 8 22:22:36 2026",
+              "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=gpu-process --no-sandbox --disable-breakpad --headless --use-angle=swiftshader-webgl --enable-unsafe-swiftshader --gpu-preferences=WAAAAAAAAAAgAAAEAAAAAAAAAAAAAGAAQAAAAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAKAAAAAAAAAAoAAAAAAAAAAgAAAAAAAAADAAAAAEAAAAAAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,15797690219440065693,5428861123517579800,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6582145178942953669,5524823797079892214,4 --trace-process-track-uuid=3190708988185955192"
+            },
+            {
+              "pid": 27428,
+              "started": "Tue Sep 8 22:22:36 2026",
+              "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-US --service-sandbox-type=none --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --headless=old --shared-files --field-trial-handle=1718379636,r,15797690219440065693,5428861123517579800,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6582145178942953669,5524823797079892214,4 --trace-process-track-uuid=3190708989122997041"
+            },
+            {
+              "pid": 27429,
+              "started": "Tue Sep 8 22:22:36 2026",
+              "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=renderer --headless=old --no-sandbox --disable-back-forward-cache --disable-background-timer-throttling --disable-breakpad --force-color-profile=srgb --remote-debugging-pipe --allow-pre-commit-input --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --disable-gpu-compositing --lang=en-US --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1788794155008013 --launch-time-ticks=104801221454 --shared-files --field-trial-handle=1718379636,r,15797690219440065693,5428861123517579800,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6582145178942953669,5524823797079892214,4 --trace-process-track-uuid=3190708990060038890"
+            }
+          ],
+          "coverage": {
+            "samples": 15,
+            "baseline": 272777216,
+            "peak": 778502144,
+            "maxGap": 109,
+            "failures": [],
+            "qualified": true
+          }
+        },
+        "coverage": {
+          "samples": 15,
+          "baseline": 272777216,
+          "peak": 778502144,
+          "maxGap": 109,
+          "failures": [],
+          "qualified": true
+        }
+      }
+    ],
+    "maximumActiveEpochGapMs": 109,
+    "qualified": true,
+    "scope": "Candidate work inside browser epochs. Browser launch and verified-absent reopen intervals are disclosed separately; no RSS or cadence claim for those intervals."
+  },
+  "memory": [
+    {
+      "startedAt": 1788898956278,
+      "at": 1788898956282,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          87883776
+        ],
+        [
+          27427,
+          48726016
+        ],
+        [
+          27428,
+          46022656
+        ],
+        [
+          27429,
+          90144768
+        ]
+      ],
+      "label": "idle-baseline",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 272777216,
+      "coverage": {
+        "samples": 1,
+        "baseline": 272777216,
+        "peak": 272777216,
+        "maxGap": 0,
+        "failures": [],
+        "qualified": false
+      }
+    },
+    {
+      "startedAt": 1788898956387,
+      "at": 1788898956391,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          90570752
+        ],
+        [
+          27427,
+          57475072
+        ],
+        [
+          27428,
+          46022656
+        ],
+        [
+          27429,
+          94830592
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 288899072,
+      "coverage": {
+        "samples": 2,
+        "baseline": 272777216,
+        "peak": 288899072,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898956488,
+      "at": 1788898956492,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          139984896
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46039040
+        ],
+        [
+          27429,
+          216858624
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 460423168,
+      "coverage": {
+        "samples": 3,
+        "baseline": 272777216,
+        "peak": 460423168,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898956589,
+      "at": 1788898956592,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          184139776
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46039040
+        ],
+        [
+          27429,
+          407715840
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 695435264,
+      "coverage": {
+        "samples": 4,
+        "baseline": 272777216,
+        "peak": 695435264,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898956690,
+      "at": 1788898956694,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          179945472
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46039040
+        ],
+        [
+          27429,
+          407732224
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 691257344,
+      "coverage": {
+        "samples": 5,
+        "baseline": 272777216,
+        "peak": 695435264,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898956791,
+      "at": 1788898956798,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          179961856
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46039040
+        ],
+        [
+          27429,
+          407732224
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 691273728,
+      "coverage": {
+        "samples": 6,
+        "baseline": 272777216,
+        "peak": 695435264,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898956892,
+      "at": 1788898956896,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          179994624
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46039040
+        ],
+        [
+          27429,
+          494927872
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 778502144,
+      "coverage": {
+        "samples": 7,
+        "baseline": 272777216,
+        "peak": 778502144,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898956993,
+      "at": 1788898956996,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          136429568
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46039040
+        ],
+        [
+          27429,
+          317997056
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 558006272,
+      "coverage": {
+        "samples": 8,
+        "baseline": 272777216,
+        "peak": 778502144,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898957094,
+      "at": 1788898957098,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          136429568
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46039040
+        ],
+        [
+          27429,
+          318013440
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 558022656,
+      "coverage": {
+        "samples": 9,
+        "baseline": 272777216,
+        "peak": 778502144,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898957196,
+      "at": 1788898957204,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          136429568
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46039040
+        ],
+        [
+          27429,
+          318013440
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 558022656,
+      "coverage": {
+        "samples": 10,
+        "baseline": 272777216,
+        "peak": 778502144,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898957295,
+      "at": 1788898957299,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          136560640
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46235648
+        ],
+        [
+          27429,
+          361644032
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 601980928,
+      "coverage": {
+        "samples": 11,
+        "baseline": 272777216,
+        "peak": 778502144,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898957397,
+      "at": 1788898957400,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          140787712
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46235648
+        ],
+        [
+          27429,
+          492503040
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 737067008,
+      "coverage": {
+        "samples": 12,
+        "baseline": 272777216,
+        "peak": 778502144,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898957497,
+      "at": 1788898957500,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          136642560
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46235648
+        ],
+        [
+          27429,
+          349093888
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 589512704,
+      "coverage": {
+        "samples": 13,
+        "baseline": 272777216,
+        "peak": 778502144,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898957597,
+      "at": 1788898957601,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          138739712
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46235648
+        ],
+        [
+          27429,
+          440500224
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 683016192,
+      "coverage": {
+        "samples": 14,
+        "baseline": 272777216,
+        "peak": 778502144,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    },
+    {
+      "startedAt": 1788898957698,
+      "at": 1788898957703,
+      "beforePids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "afterPids": [
+        27426,
+        27429,
+        27427,
+        27428
+      ],
+      "rss": [
+        [
+          27426,
+          137871360
+        ],
+        [
+          27427,
+          57540608
+        ],
+        [
+          27428,
+          46972928
+        ],
+        [
+          27429,
+          505151488
+        ]
+      ],
+      "label": "periodic",
+      "epoch": 1,
+      "rssUnit": "bytes",
+      "complete": true,
+      "bytes": 747536384,
+      "coverage": {
+        "samples": 15,
+        "baseline": 272777216,
+        "peak": 778502144,
+        "maxGap": 109,
+        "failures": [],
+        "qualified": true
+      }
+    }
+  ],
+  "browserLaunches": [
+    {
+      "label": "initial-browser",
+      "startedAt": 1788898956173,
+      "readyAt": 1788898956274,
+      "elapsedMs": 101,
+      "scope": "Browser/bootstrap interval before candidate work; excluded from active-epoch cadence."
+    }
+  ],
+  "browserClosures": [
+    {
+      "reason": "first-failure",
+      "startedAt": 1788898957704,
+      "at": 1788898957774,
+      "elapsedMs": 70,
+      "remaining": [],
+      "verifiedAbsent": true,
+      "errors": [],
+      "signals": [],
+      "observedIdentities": [
+        {
+          "pid": 27426,
+          "started": "Tue Sep 8 22:22:36 2026",
+          "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --disable-background-networking --disable-component-update --user-data-dir=/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-lab/profile-01 --remote-debugging-pipe about:blank"
+        },
+        {
+          "pid": 27427,
+          "started": "Tue Sep 8 22:22:36 2026",
+          "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=gpu-process --no-sandbox --disable-breakpad --headless --use-angle=swiftshader-webgl --enable-unsafe-swiftshader --gpu-preferences=WAAAAAAAAAAgAAAEAAAAAAAAAAAAAGAAQAAAAAAAAAAAAAAAAAAAADgAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAKAAAAAAAAAAoAAAAAAAAAAgAAAAAAAAADAAAAAEAAAAAAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --shared-files --field-trial-handle=1718379636,r,15797690219440065693,5428861123517579800,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6582145178942953669,5524823797079892214,4 --trace-process-track-uuid=3190708988185955192"
+        },
+        {
+          "pid": 27428,
+          "started": "Tue Sep 8 22:22:36 2026",
+          "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=utility --utility-sub-type=network.mojom.NetworkService --lang=en-US --service-sandbox-type=none --no-sandbox --use-angle=swiftshader-webgl --use-gl=angle --mute-audio --headless=old --shared-files --field-trial-handle=1718379636,r,15797690219440065693,5428861123517579800,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6582145178942953669,5524823797079892214,4 --trace-process-track-uuid=3190708989122997041"
+        },
+        {
+          "pid": 27429,
+          "started": "Tue Sep 8 22:22:36 2026",
+          "command": "/Users/razvan-constantinbotezatu/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell --type=renderer --headless=old --no-sandbox --disable-back-forward-cache --disable-background-timer-throttling --disable-breakpad --force-color-profile=srgb --remote-debugging-pipe --allow-pre-commit-input --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --disable-gpu-compositing --lang=en-US --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=4 --time-ticks-at-unix-epoch=-1788794155008013 --launch-time-ticks=104801221454 --shared-files --field-trial-handle=1718379636,r,15797690219440065693,5428861123517579800,262144 --enable-features=CDPScreenshotNewSurface --disable-features=AutoDeElevate,AvoidUnnecessaryBeforeUnloadCheckSync,BlockOriginHeaderModificationOnRedirect,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,OptimizationHints,PaintHolding,ThirdPartyStoragePartitioning,Translate,msEdgeUpdateLaunchServicesPreferredVersion,msForceBrowserSignIn --variations-seed-version --pseudonymization-salt-handle=1935764596,r,6582145178942953669,5524823797079892214,4 --trace-process-track-uuid=3190708990060038890"
+        }
+      ]
+    }
+  ],
+  "physicalRelease": {
+    "status": "verified-absent",
+    "reason": "final-physical-verification",
+    "startedAt": 1788898957783,
+    "at": 1788898957834,
+    "elapsedMs": 51,
+    "remaining": [],
+    "verifiedAbsent": true,
+    "signals": [],
+    "errors": []
+  },
+  "serverRelease": {
+    "status": "not-listening",
+    "listening": false,
+    "elapsedMs": 0,
+    "errors": []
+  },
+  "profileRemoval": {
+    "status": "removed-owned-profile",
+    "path": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-lab/profile-01",
+    "files": 83,
+    "bytes": 46130163,
+    "scope": "Separate filesystem teardown, not an application Remove-model pass."
+  },
+  "network": [
+    {
+      "url": "http://127.0.0.1:5201/",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/lab-client.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/candidate.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/manifest.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/ggml-tiny-q8_0.bin",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/ggml-tiny-q8_0.bin",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/ggml-tiny-q8_0.bin",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/fixtures/english.wav",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model-worker.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/assets/mediabunny.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/lab-contract.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/candidate.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/worker-protocol.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model-format.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/assets/myrelith-whisper.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/assets/myrelith-whisper.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/assets/myrelith-whisper.wasm",
+      "method": "GET"
+    }
+  ],
+  "serverRequests": [
+    {
+      "url": "/",
+      "encodedBytes": 221,
+      "decodedBytes": 221,
+      "sha256": "f76ef7cb3188d559ab7bfb4eac74928d283ddc871fdf269c74e8c8c17ec17a0b",
+      "gzip": false
+    },
+    {
+      "url": "/lab-client.mjs",
+      "encodedBytes": 4187,
+      "decodedBytes": 13987,
+      "sha256": "6557e298323ae411894bbb122c44297962b1b3684aa6e3b2ff51c74fe61d30d8",
+      "gzip": true
+    },
+    {
+      "url": "/candidate.mjs",
+      "encodedBytes": 1491,
+      "decodedBytes": 3478,
+      "sha256": "bfa04969b2fe76230a843dd7450748326da482357d0dd9baa595db4ff9ab227f",
+      "gzip": true
+    },
+    {
+      "url": "/manifest.json",
+      "encodedBytes": 2641,
+      "decodedBytes": 6324,
+      "sha256": "048a935b4bd798295a4493cf7b1a8e6afb8966883923f73b3040e0dbc84ebcd4",
+      "gzip": true
+    },
+    {
+      "url": "/model/ggml-tiny-q8_0.bin",
+      "encodedBytes": 43537433,
+      "decodedBytes": 43537433,
+      "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+      "gzip": false
+    },
+    {
+      "url": "/model/ggml-tiny-q8_0.bin",
+      "encodedBytes": 43537433,
+      "decodedBytes": 43537433,
+      "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+      "gzip": false
+    },
+    {
+      "url": "/model/ggml-tiny-q8_0.bin",
+      "encodedBytes": 43537433,
+      "decodedBytes": 43537433,
+      "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+      "gzip": false
+    },
+    {
+      "url": "/fixtures/english.wav",
+      "encodedBytes": 156546,
+      "decodedBytes": 187404,
+      "sha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46",
+      "gzip": true
+    },
+    {
+      "url": "/model-worker.mjs",
+      "encodedBytes": 4351,
+      "decodedBytes": 12676,
+      "sha256": "2cb7538d514927fcf58c8c92a9b43d34d770944794e59628fcaf02e87ee3fcfd",
+      "gzip": true
+    },
+    {
+      "url": "/assets/mediabunny.mjs",
+      "encodedBytes": 159759,
+      "decodedBytes": 624835,
+      "sha256": "a7e7e14265b787de0daf23d379a8b4afa4b36b74711d71a2f5e075bff6a671a6",
+      "gzip": true
+    },
+    {
+      "url": "/lab-contract.mjs",
+      "encodedBytes": 1836,
+      "decodedBytes": 4604,
+      "sha256": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba",
+      "gzip": true
+    },
+    {
+      "url": "/worker-protocol.mjs",
+      "encodedBytes": 2841,
+      "decodedBytes": 8077,
+      "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b",
+      "gzip": true
+    },
+    {
+      "url": "/model-format.mjs",
+      "encodedBytes": 1652,
+      "decodedBytes": 4193,
+      "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426",
+      "gzip": true
+    },
+    {
+      "url": "/assets/myrelith-whisper.mjs",
+      "encodedBytes": 5593,
+      "decodedBytes": 22350,
+      "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7",
+      "gzip": true
+    },
+    {
+      "url": "/assets/myrelith-whisper.wasm",
+      "encodedBytes": 390084,
+      "decodedBytes": 1198861,
+      "sha256": "9df26c6b690de120e6f1fb5ce17a25ebb2b016a73f0477b24376f558ee00ce72",
+      "gzip": true
+    }
+  ],
+  "hostLimits": {
+    "inputVerificationMs": 30000,
+    "browserLaunchMs": 12000,
+    "browserInternalLaunchMs": 10000,
+    "setupOperationMs": 10000,
+    "overallMs": 3600000,
+    "ordinaryCaseMs": 30000,
+    "speechCaseMs": 300000,
+    "cancelCaseMs": 180000,
+    "longCaseMs": 1800000,
+    "journalMs": 1000,
+    "sampleDrainMs": 500,
+    "serverCloseMs": 500,
+    "forcedServerCloseMs": 250,
+    "profileCleanupMs": 3000
+  },
+  "journal": {
+    "path": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-lab/runtime-partial-01.jsonl",
+    "records": 45,
+    "broken": false
+  }
+}

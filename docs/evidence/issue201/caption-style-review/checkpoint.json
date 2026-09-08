@@ -1,0 +1,83 @@
+{
+  "status": "source-correction-ready-for-review",
+  "baseHead": "a9221df5282261681e8bf9e105f8e5982af714bc",
+  "focusedTests": 91,
+  "architectureTests": 8,
+  "build": "passed-with-existing-Vite-chunk-advisory",
+  "lint": "passed",
+  "browserExecuted": false,
+  "speechExecuted": false,
+  "files": [
+    {
+      "path": "src/app/captionEditingController.ts",
+      "bytes": 10556,
+      "sha256": "4e15e824dd13d1deb90cce4bcacbcc06ce8c0644b6c1d9f76154adab838e58e5"
+    },
+    {
+      "path": "src/app/captionStyleReview.test.ts",
+      "bytes": 5685,
+      "sha256": "87fa7d38181ea3f2d68ea2a36727fa80107f89f66244367eceb4f6dbfb90dcb8"
+    },
+    {
+      "path": "src/app/captionAdmission.test.ts",
+      "bytes": 11845,
+      "sha256": "bcc30f1b9a8d5ce7e46c053bb51fdda4408c7881a03ce89012effbbcfb7a61b0"
+    },
+    {
+      "path": "src/app/captionReentrancy.test.ts",
+      "bytes": 7627,
+      "sha256": "9c73d8db03731e449c3022761ea36f37c60f1a40a5d2d8dc344afe5fcc91f24c"
+    }
+  ],
+  "logs": [
+    {
+      "name": "reproducer-before.txt.gz",
+      "bytes": 1318,
+      "sha256": "b312675155f1ce8df54575bb6e5ec70a9dd548d23733fdaf95097268863e289d",
+      "decodedBytes": 5361,
+      "decodedSha256": "cfe69789b6db1ba5342b682897aebd7e8c8b22990ed430e4d8843c4370853eb7"
+    },
+    {
+      "name": "first-tests.txt.gz",
+      "bytes": 220,
+      "sha256": "7f7ddc1391b07d6ad0f0cd13bcbf63ac2c2ca0953138f7dade2060318d6d5386",
+      "decodedBytes": 266,
+      "decodedSha256": "a7876eac68a9d34e7c2476dff02c2b295dbff1a0a1f047a15c4c432471967e56"
+    },
+    {
+      "name": "first-build-failure.txt.gz",
+      "bytes": 321,
+      "sha256": "025064ea5900dab5b4b520c1257948594b7902f652bd526a9921dd43ebc14d2f",
+      "decodedBytes": 668,
+      "decodedSha256": "7f39fbad8e00f452b8fe4966116528b0cc77dcc830266899a677056ee944199c"
+    },
+    {
+      "name": "final-tests.txt.gz",
+      "bytes": 219,
+      "sha256": "cb008bd9c595d6837cb0594568235f5ca298b4354da9ebc7ea9bd56334d79040",
+      "decodedBytes": 267,
+      "decodedSha256": "510d004aec81516d384d6eae09828e026b8ca4ef6f2c75718624363d68074e3d"
+    },
+    {
+      "name": "architecture.txt.gz",
+      "bytes": 216,
+      "sha256": "64bfc1a69da581b588d44ffe9685b2126d0ae43ce3f1e17d8cae13e3ce5b87e4",
+      "decodedBytes": 263,
+      "decodedSha256": "303c7eeb65693ff2682d7582b9e37c91e9c98c3d5d90104fd55997c3bfdaf60c"
+    },
+    {
+      "name": "build.txt.gz",
+      "bytes": 1426,
+      "sha256": "2d8d5bb12145b6f2f71c0a69dd774f497305408bd7e50d7799a68b9e19feb1a4",
+      "decodedBytes": 3853,
+      "decodedSha256": "1dbf2e7dfd5a09429d4be9810ca208e4d2b5c45188144cb0a8e825603afb739e"
+    },
+    {
+      "name": "lint.txt.gz",
+      "bytes": 57,
+      "sha256": "9e7fca24312ff0f46242e2c2c3ecb9705640f049087ab8809b6271d5c6d93576",
+      "decodedBytes": 41,
+      "decodedSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    }
+  ]
+}

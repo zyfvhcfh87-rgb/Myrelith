@@ -1,0 +1,92 @@
+{
+  "parentHead": "73395b5e39df01b6e19b0fb847cc2079d3f437d6",
+  "status": "failed-incomplete-initialization-abort",
+  "sourceFiles": [
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_RUNTIME_RUN_01.md",
+      "bytes": 5100,
+      "sha256": "cbcdb75f82649e3306352b454377214f24e975786504a2d71e9093f844fba87f"
+    },
+    {
+      "path": "docs/evidence/issue201/MODEL_DECISION.md",
+      "bytes": 22049,
+      "sha256": "b00d76c9ea5d6b9a1030dfa82ed8a5da2c1084ea21ee64c29cb81a15579c3fa4"
+    }
+  ],
+  "referenceFiles": [
+    {
+      "path": "docs/evidence/issue201/whispercpp-runtime-source/checkpoint.json",
+      "bytes": 16834,
+      "sha256": "074d223786a46d3d58d094b23e1b26da1a218f927524cb78bf42919089b810e0"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-runtime-source/manifest.json",
+      "bytes": 6324,
+      "sha256": "048a935b4bd798295a4493cf7b1a8e6afb8966883923f73b3040e0dbc84ebcd4"
+    },
+    {
+      "path": "scripts/issue201/lab-contract.mjs",
+      "bytes": 4604,
+      "sha256": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/resident-monitor.mjs",
+      "bytes": 3519,
+      "sha256": "93a7d21b4a1624abbe69b0df7c78f2f2386e6554f4c2bd11025b1eb1fa6d7ebb"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/resident-coverage.mjs",
+      "bytes": 2809,
+      "sha256": "96114f08b414309ae94b76777327257b75d96bfa6555da96ec189d3c4a1cd7bf"
+    }
+  ],
+  "records": [
+    {
+      "path": "analysis.json",
+      "bytes": 1998,
+      "sha256": "621e2459e08af8ad0aa872c4f49eda857a82afaee944e19aa8764542c64db6b8"
+    },
+    {
+      "path": "grant-preflight.json",
+      "bytes": 578,
+      "sha256": "78ddd56441246008d86d3348a34bf78d1d5e9a6b078fb9e4bb8ef54afc400408"
+    },
+    {
+      "path": "input-preflight.json",
+      "bytes": 2761,
+      "sha256": "a6f996121d81a8c119033059cc8f82fee46abdfd419a4d9d682b970747b1c4b6"
+    },
+    {
+      "path": "outer-log.txt",
+      "bytes": 2063,
+      "sha256": "5fe353906dbaacc41bdf919f2e10e023ae26f51220b0cdac7ce308fb90b59de5"
+    },
+    {
+      "path": "runtime-attempt-01.json",
+      "bytes": 208,
+      "sha256": "a87c1ba7f077403a65b4d1fd91c6cfdeefcdcb45e84600daeca19db4a3a0639b"
+    },
+    {
+      "path": "runtime-independent-release-01.json",
+      "bytes": 6849,
+      "sha256": "a2065131d971a816036e01d84d33add6314398c4ddf9b7b5042a9ddfe53d96c2"
+    },
+    {
+      "path": "runtime-partial-01.jsonl",
+      "bytes": 59032,
+      "sha256": "b95f224e0c25648396f128ab9dbcf39eb0326fb21305e6892226d25c15d6db79"
+    },
+    {
+      "path": "runtime-results-01.json",
+      "bytes": 72111,
+      "sha256": "c89c7a700c805acc02085f504fc4ad0bc3839ac3b325b4c4688e3c3925c0c21d"
+    }
+  ],
+  "runtimeAttempts": 1,
+  "retryPerformed": false,
+  "sourceAndInputHashesVerified": true,
+  "rawAcceptanceAndResidentAssessmentRecomputed": true,
+  "sharedHeavySlotHeld": false,
+  "runtimeQualified": false,
+  "speechProductionGo": false
+}

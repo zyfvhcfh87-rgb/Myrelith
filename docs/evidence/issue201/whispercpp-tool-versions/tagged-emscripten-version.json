@@ -1,0 +1,17 @@
+{
+  "label": "tagged-emscripten-version",
+  "command": [
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/python/python-3.13.3-0/bin/python3.13",
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/toolchain/install/emscripten/emcc.py",
+    "--version"
+  ],
+  "timeoutSeconds": 30,
+  "startedAt": "2026-09-08T17:36:02Z",
+  "pid": 92021,
+  "processGroup": 92021,
+  "exitCode": 0,
+  "remainingGroupTerminated": false,
+  "elapsedSeconds": 5.389,
+  "logBytes": 4610,
+  "logSha256": "73dbad27149f35da432ae8a25f89191f4ddf160f0b5212074c3b85b3c13b73ff"
+}
