@@ -9,11 +9,12 @@ const luminance = (rgba: number[]) => rgba[0]! + rgba[1]! + rgba[2]!
 
 test.afterEach(async ({ page }, testInfo) => {
   if (page.isClosed()) return
-  const records = await page.evaluate(() => {
+  const diagnostics = await page.evaluate(() => {
     const probe = window.__issue198Presentation
-    try { return probe?.records ?? [] } finally { probe?.dispose(); delete window.__issue198Presentation }
+    try { return { records: probe?.records ?? [], check: probe?.lastCheck ?? null } } finally { probe?.dispose(); delete window.__issue198Presentation }
   })
-  await testInfo.attach('program-presentations', { body: JSON.stringify(records, null, 2), contentType: 'application/json' })
+  await testInfo.attach('program-presentations', { body: JSON.stringify(diagnostics.records, null, 2), contentType: 'application/json' })
+  await testInfo.attach('program-presentation-check', { body: JSON.stringify(diagnostics.check, null, 2), contentType: 'application/json' })
 })
 
 function snapshot(page: Page) {
