@@ -3,17 +3,20 @@ import { planCaptionBatch, type CaptionBatchOperation, type CaptionBatchScope, t
 import { CAPTION_LIMITS, captionDocumentValidationError, findCaptionTrack } from '../domain/captions'
 import { captionIntentOwners, captionRetentionError, type CaptionIntentOwner } from '../domain/captionIntentBudget'
 import { captionIntentEqual, copyCaptionIntent } from '../domain/captionIntent'
-import { inspectCaptionStyle, type CaptionStyleDescriptor } from '../domain/captionStyle'
+import { inspectCaptionStyle, isCaptionStyleField, type CaptionStyleDescriptor, type CaptionStyleValue } from '../domain/captionStyle'
 import { replaceProjectSequence, sequenceProjectReservedIds, type SequenceProject } from '../domain/projectSequences'
 import type { CaptionItem, TimelineDoc } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { commitPortableProjectEdit, portableProjectEditError } from './portableProjectEdit'
+import { captionStyleSummary, type CaptionStylePreviewRow } from './captionStylePresentation'
 
 export interface CaptionEditReview {
   readonly token: number
   readonly changedCueCount: number
   readonly replacementCount: number
   readonly preview: readonly CaptionBatchPreviewRow[]
+  readonly stylePreview: readonly CaptionStylePreviewRow[]
+  readonly unavailableStylesRemoved: number
   readonly omittedPreviewRows: number
   readonly requiresLossAcceptance: boolean
 }
@@ -89,6 +92,7 @@ export class CaptionEditSession {
   prepareDocument(next: TimelineDoc, detail: {
     changedCueCount?: number; replacementCount?: number; preview?: readonly CaptionBatchPreviewRow[];
     omittedPreviewRows?: number; requiresLossAcceptance?: boolean;
+    stylePreview?: readonly CaptionStylePreviewRow[]; unavailableStylesRemoved?: number;
   } = {}): CaptionEditReview {
     this.assertNotAdmitting()
     const expected = this.pin()
@@ -104,6 +108,11 @@ export class CaptionEditSession {
       ?? captionRetentionError(useDocumentStore.getState(), candidate)
     if (error) throw new RangeError(error)
     if ((detail.preview?.length ?? 0) > 100 || detail.preview?.some((row) => row.before.length > 10 || row.after.length > 10)) throw new RangeError('Caption review exceeds its bounded preview limit')
+    if ((detail.stylePreview?.length ?? 0) + (detail.preview?.length ?? 0) > 100 || detail.stylePreview?.some(row =>
+      [row.target, row.before, row.after, row.inheritance].some(value => typeof value !== 'string' || value.length > 2000))) {
+      throw new RangeError('Caption style review exceeds its bounded preview limit')
+    }
+    const stylePreview = Object.freeze((detail.stylePreview ?? []).map(row => Object.freeze({ ...row })))
     const preview = Object.freeze((detail.preview ?? []).map((row) => Object.freeze({ ...row,
       before: Object.freeze(row.before.map(copyCue)), after: Object.freeze(row.after.map(copyCue)),
     })))
@@ -114,6 +123,7 @@ export class CaptionEditSession {
     this.candidate = candidate
     this.review = Object.freeze({ token: ++this.revision, changedCueCount: detail.changedCueCount ?? 0,
       replacementCount: detail.replacementCount ?? 0, preview, omittedPreviewRows: detail.omittedPreviewRows ?? 0,
+      stylePreview, unavailableStylesRemoved: detail.unavailableStylesRemoved ?? 0,
       requiresLossAcceptance: detail.requiresLossAcceptance ?? false })
     return this.review
   }
@@ -126,6 +136,38 @@ export class CaptionEditSession {
     return this.prepareDocument(result.document, result)
   }
   prepareStyle(trackId: string, cueIds: readonly string[] | null, style: CaptionStyleDescriptor | null): CaptionEditReview | null {
+    return this.prepareStyleChange(trackId, cueIds, () => {
+      const inspected = style === null ? null : inspectCaptionStyle(style)
+      if (inspected?.kind === 'invalid') throw new RangeError(inspected.reason)
+      return () => inspected?.descriptor
+    })
+  }
+  /** Change one field across mixed styles without erasing their other intent.
+   * Null means inherit this field; whole unavailable overrides require an
+   * explicit replacement/removal through prepareStyle instead.
+   */
+  prepareStyleField(trackId: string, cueIds: readonly string[] | null, key: string,
+    value: CaptionStyleValue | null): CaptionEditReview | null {
+    return this.prepareStyleChange(trackId, cueIds, () => {
+      if (!isCaptionStyleField(key)) throw new RangeError('This caption style field is unavailable')
+      if (value !== null) {
+        const inspected = inspectCaptionStyle({ version: 1, params: { [key]: value } })
+        if (inspected.kind !== 'supported') throw new RangeError(inspected.reason)
+      }
+      return (current) => {
+        const inspected = current === undefined ? null : inspectCaptionStyle(current)
+        if (inspected && inspected.kind !== 'supported') {
+          throw new RangeError('Replace or remove the unavailable style override before editing its fields.')
+        }
+        const params: Record<string, CaptionStyleValue> = { ...inspected?.descriptor.params }
+        if (value === null) delete params[key]
+        else params[key] = value
+        return current === undefined && Object.keys(params).length === 0 ? undefined : { version: 1, params }
+      }
+    })
+  }
+  private prepareStyleChange(trackId: string, cueIds: readonly string[] | null,
+    prepareReplacement: () => (current: CaptionStyleDescriptor | undefined) => CaptionStyleDescriptor | undefined): CaptionEditReview | null {
     this.assertNotAdmitting()
     const doc = this.document(), track = findCaptionTrack(doc, trackId)
     if (!track) throw new RangeError('The caption track no longer exists')
@@ -137,24 +179,36 @@ export class CaptionEditSession {
     }
     // Validate once even for an empty selection. Opaque bounded intent remains
     // opaque; equality compares stored intent rather than current render output.
-    const inspected = style === null ? null : inspectCaptionStyle(style)
-    if (inspected?.kind === 'invalid') throw new RangeError(inspected.reason)
-    const replacement = inspected?.descriptor
+    const replacementFor = prepareReplacement()
     let changedCueCount = 0
-    const change = <T extends { style?: CaptionStyleDescriptor }>(owner: T): T => {
+    let changedOwners = 0, unavailableStylesRemoved = 0
+    const stylePreview: CaptionStylePreviewRow[] = []
+    const change = <T extends { style?: CaptionStyleDescriptor }>(owner: T, target: string): T => {
+      const replacement = replacementFor(owner.style)
       if (captionIntentEqual(owner.style, replacement)) return owner
+      changedOwners++
+      if (owner.style && inspectCaptionStyle(owner.style).kind === 'unavailable') unavailableStylesRemoved++
+      if (stylePreview.length < 100) {
+        const inheritedFrom = ids ? 'track defaults, then the track preset' : 'the track preset'
+        stylePreview.push({ target, before: captionStyleSummary(owner.style, inheritedFrom),
+          after: captionStyleSummary(replacement, inheritedFrom),
+          inheritance: ids ? `Track defaults: ${captionStyleSummary(track.style, 'the track preset')} Preset: ${track.stylePreset}.`
+            : `Preset: ${track.stylePreset}. Cue overrides take precedence over these defaults.` })
+      }
       const { style: _old, ...rest } = owner
       return { ...rest, ...(replacement === undefined ? {} : { style: replacement }) } as T
     }
     const items = ids ? track.items.map((item) => {
-      const next = ids.has(item.id) ? change(item) : item
+      const next = ids.has(item.id) ? change(item, `Cue at frames ${item.range.startFrame}–${item.range.startFrame + item.range.durationFrames}`) : item
       if (next !== item) changedCueCount++
       return next
     }) : track.items
-    const nextTrack = ids ? (changedCueCount ? { ...track, items } : track) : change(track)
+    const nextTrack = ids ? (changedCueCount ? { ...track, items } : track) : change(track, 'Track defaults')
     if (nextTrack === track) { this.clearReview(); return null }
     return this.prepareDocument({ ...doc, captionTracks: doc.captionTracks!.map((item) => item.id === trackId ? nextTrack : item) },
-      { changedCueCount: ids ? changedCueCount : track.items.length })
+      { changedCueCount: ids ? changedCueCount : track.items.length, stylePreview,
+        omittedPreviewRows: Math.max(0, changedOwners - stylePreview.length), unavailableStylesRemoved,
+        requiresLossAcceptance: unavailableStylesRemoved > 0 })
   }
   apply(review: CaptionEditReview, acceptLoss = false): string | null {
     try {

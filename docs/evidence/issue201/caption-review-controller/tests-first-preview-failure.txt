@@ -1,0 +1,37 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --run src/app/captionReviewController.test.ts src/app/captionStyleReview.test.ts src/app/captionAdmission.test.ts src/app/captionReentrancy.test.ts src/app/captionFileController.test.ts --maxWorkers=2
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201
+
+ ❯ src/app/captionStyleReview.test.ts (13 tests | 1 failed) 24ms
+     × rejects field changes to opaque styles without losing the previous review 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/captionStyleReview.test.ts > caption style review identity > rejects field changes to opaque styles without losing the previous review
+AssertionError: expected 'Accept the disclosed caption losses b…' to be null
+
+- Expected:
+null
+
++ Received:
+"Accept the disclosed caption losses before applying this review."
+
+ ❯ src/app/captionStyleReview.test.ts:70:35
+     68|     expect(() => session.prepareStyleField('dormant-captions', ['dorma…
+     69|     expect(useDocumentStore.getState()).toBe(before)
+     70|     expect(session.apply(review)).toBeNull()
+       |                                   ^
+     71|     expect(useDocumentStore.getState().doc.captionTracks![0]!.items[0]…
+     72|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  1 failed | 55 passed (56)
+   Start at  22:20:32
+   Duration  1.78s (transform 562ms, setup 133ms, import 801ms, tests 1.11s, environment 1.13s)
+

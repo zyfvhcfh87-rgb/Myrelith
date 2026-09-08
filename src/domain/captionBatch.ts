@@ -31,7 +31,7 @@ export type CaptionBatchProposal =
 
 function fail(message: string): never { throw new RangeError(message) }
 const safeFrame = (value: number): boolean => Number.isSafeInteger(value) && value >= 0 && value <= CAPTION_LIMITS.maxFrame
-function selectedIds(track: CaptionTrack, scope: CaptionBatchScope): Set<string> {
+export function captionBatchSelectedIds(track: CaptionTrack, scope: CaptionBatchScope): Set<string> {
   if (scope.kind === 'all') return new Set(track.items.map((item) => item.id))
   if (scope.kind === 'following') {
     const index = track.items.findIndex((item) => item.id === scope.fromId)
@@ -74,7 +74,7 @@ export function planCaptionBatch(document: TimelineDoc, trackId: string, scope: 
     if (currentError) fail(currentError)
     const track = findCaptionTrack(document, trackId)
     if (!track) fail('The caption track no longer exists')
-    const selected = selectedIds(track, scope)
+    const selected = captionBatchSelectedIds(track, scope)
     if (!selected.size) return { kind: 'unchanged', document }
     const selectedItems = track.items.filter((item) => selected.has(item.id))
     const changes: CaptionBatchPreviewRow[] = []
