@@ -25,6 +25,14 @@
     {
       "path": "goldens-v1.json",
       "sha256": "1dace6f40f31efb710e8bf30340e62c069fdb0d22a3b996429e9d50c1fe65e56"
+    },
+    {
+      "path": "presentation-oracle.py",
+      "sha256": "48e0c71c255395ab1e398f3b7668672e61a8fd36fe80d7bfd442babc9d35d106"
+    },
+    {
+      "path": "presentations-v1.json",
+      "sha256": "c45d7add1d910383fbbe9e96c2e70d37221f6e273aed15badd258a9b9e9b2e09"
     }
   ]
 }
