@@ -16,10 +16,14 @@ same caption collection validator enforces IDs, text, timing and eight-active-cu
 overlap. Its extraction from `captionDocumentValidationError` preserves existing
 document behavior and avoids fabricating a TimelineDoc merely to validate a file.
 
-Imported styles use a complete override over the existing `minimal` preset,
-which has no shadow. This preserves supported ASS Shadow=0 without adding a new
-shadow field or altering legacy classic/boxed/minimal pixels. Raw ASS, attached
-fonts, positions, animated effects or vector drawings never enter stored intent.
+Imported styles carry a complete descriptor and select `minimal` as their future
+track preset. Correction: the legacy minimal preset does enable a shadow
+(`captionPaintFor` sets `shadowEnabled: !boxed`). The descriptor has no shadow
+field, so the future custom-style resolver must explicitly honor the supported
+ASS no-shadow profile; the preset selection alone cannot do that. This appearance
+boundary is not implemented or qualified here. Legacy preset pixels remain
+unchanged. Raw ASS, attached fonts, positions, animated effects or vector drawings
+never enter stored intent.
 The parser does not claim pixel equivalence between Canvas and other renderers.
 
 Named fonts require a caller-supplied explicit generic-family substitution and

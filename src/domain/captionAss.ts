@@ -24,7 +24,7 @@ export interface CaptionAssReport {
 }
 export interface CaptionAssItem extends CaptionItem { style?: CaptionStyleDescriptor }
 export interface CaptionAssProposal {
-  /** ASS's supported no-shadow profile uses minimal; full imported values override it. */
+  /** Future track preset selection; the resolved ASS profile itself has no shadow. */
   readonly stylePreset: CaptionStylePreset
   readonly style: CaptionStyleDescriptor
   readonly items: CaptionAssItem[]
