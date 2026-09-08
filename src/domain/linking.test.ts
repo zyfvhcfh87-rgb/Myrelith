@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 /**
  * domain/linking.test.ts — Linked A/V clip pairs acceptance tests.
  *
@@ -111,7 +112,7 @@ const PAIR4 = 'link_pair4'
  */
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-1',
     name: 'Test doc',
     frameRate: { num: 30000, den: 1001 },
@@ -160,7 +161,7 @@ function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-transition-linked',
     name: 'Linked transition test doc',
     frameRate: { num: 30, den: 1 },
@@ -177,7 +178,7 @@ function makeLinkedTransitionDoc(audioLocked = false): TimelineDoc {
 describe('linkedRetimeClips', () => {
   test('retimes every selected timed clip in one edit', () => {
     const doc = deepFreeze({
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc-multi-retime',
       name: 'multi retime',
       frameRate: { num: 30, den: 1 },
@@ -224,7 +225,7 @@ describe('linkedRetimeClips', () => {
       }
     }
     const doc = deepFreeze({
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc-restore-100',
       name: 'restore 100',
       frameRate: { num: 30, den: 1 },
@@ -276,7 +277,7 @@ describe('linkedRetimeClips', () => {
       }
     }
     const doc = deepFreeze({
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc-retime-push',
       name: 'retime push',
       frameRate: { num: 30, den: 1 },
@@ -327,7 +328,7 @@ describe('linkedRetimeClips', () => {
     }])
     track.adjustments = [createAdjustmentItem(10, 10, 'Grade')]
     const doc = deepFreeze({
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc-retime-push-adjustment',
       name: 'retime push adjustment',
       frameRate: { num: 30, den: 1 },
@@ -369,7 +370,7 @@ describe('linkedRetimeClips', () => {
       }
     }
     const doc = deepFreeze({
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc-retime-clear',
       name: 'retime clear',
       frameRate: { num: 30, den: 1 },
@@ -408,7 +409,7 @@ describe('linkedRetimeClips', () => {
       }
     }
     const doc = deepFreeze({
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc-retime-push-link',
       name: 'retime push link',
       frameRate: { num: 30, den: 1 },
@@ -457,7 +458,7 @@ describe('linkedRetimeClips', () => {
 
   test('rolls back when a later linked partner sits on a locked track', () => {
     const doc = deepFreeze({
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'doc-multi-retime-locked',
       name: 'multi retime locked',
       frameRate: { num: 30, den: 1 },
@@ -686,7 +687,7 @@ function makeManualLinkDoc(options: ManualLinkDocOptions = {}): TimelineDoc {
   }
 
   return deepFreeze({
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-manual-link',
     name: 'Manual link test doc',
     frameRate: { num: 30, den: 1 },
@@ -1216,7 +1217,7 @@ describe('unlinkClip', () => {
 
 function makePairedLaneDoc(audioLocked = false): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-paired-lanes',
     name: 'Paired lanes',
     frameRate: { num: 30, den: 1 },

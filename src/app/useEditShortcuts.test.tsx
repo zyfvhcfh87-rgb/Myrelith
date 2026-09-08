@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * app/useEditShortcuts.test.tsx — Phase 4.2 keyboard layer.
  * Same harness style as useUndoRedoShortcuts.test.tsx: mount a component
@@ -49,7 +50,7 @@ function makeTrack(id: string, clips: Clip[], locked = false): Track {
 /** V1: clipA [100,50), clipB [200,40). VL (locked): clipE [0,30). */
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-keys',
     name: 'keys fixture',
     frameRate: { num: 30, den: 1 },

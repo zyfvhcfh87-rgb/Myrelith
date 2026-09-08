@@ -5,6 +5,14 @@ import { createColorAdjustEffect } from '../domain/effectStack'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
 import { sequenceProjectFromTimeline } from '../domain/projectSequences'
 import { defaultSourceTimeMap } from '../domain/sourceTimeMap'
+import type { PortableAssetDescriptor } from '../domain/projectFile'
+
+export const ATTRIBUTE_ASSET_DESCRIPTOR: PortableAssetDescriptor = {
+  id: 'asset', fileName: 'fixture.mp4', mimeType: 'video/mp4', size: 1, lastModified: 0,
+  kind: 'video', durationMicroseconds: 30_000_000, nativeFrameRate: { num: 30, den: 1 },
+  sourceBounds: { video: { status: 'unknown' }, audio: null },
+  width: 1920, height: 1080, hasAudio: false, audioSampleRate: null, audioChannels: null,
+}
 
 export function attributeClip(id: string, startFrame = 0): Clip {
   return {

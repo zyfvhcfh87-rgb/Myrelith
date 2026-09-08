@@ -1,3 +1,6 @@
+import { projectCropAnimationError } from './projectCropAnimation'
+import { clipAnimation, clipAnimationKeyframeCount } from './clipAnimation'
+import { MASK_PATH_ANIMATION_LIMITS } from './maskPathAnimation'
 import { colorLutCatalogError, type PortableColorLut } from './colorLutCatalog'
 /**
  * Pure project-level sequence collection and edit authority.
@@ -108,6 +111,8 @@ interface SequenceProjectCounts {
   audioEffects: number
   audioEffectParams: number
   audioEffectStringCharacters: number
+  pathKeys: number
+  pathValueCharacters: number
   keyframes: number
   speedPoints: number
   textCharacters: number
@@ -211,6 +216,8 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
     audioEffectParams: 0,
     audioEffectStringCharacters: 0,
     keyframes: 0,
+    pathKeys: 0,
+    pathValueCharacters: 0,
     speedPoints: 0,
     textCharacters: 0,
   }
@@ -245,14 +252,11 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
       for (const clip of track.clips) {
         counts.speedPoints += clip.sourceTimeMap?.speedCurve?.points.length ?? 0
         counts.textCharacters += clip.text?.content.length ?? 0
-        counts.keyframes += (clip.animation?.tracks ?? []).reduce(
-          (sum, animationTrack) => sum + animationTrack.keyframes.length,
-          0,
-        )
-        counts.keyframes += (clip.animation?.effectTracks ?? []).reduce(
-          (sum, animationTrack) => sum + animationTrack.keyframes.length,
-          0,
-        )
+        counts.keyframes += clipAnimationKeyframeCount(clipAnimation(clip))
+        for (const lane of clip.animation?.effectPathTracks ?? []) {
+          counts.pathKeys += lane.keyframes.length
+          for (const key of lane.keyframes) counts.pathValueCharacters += key.value.length
+        }
         counts.effects += clip.effects.length
         for (const effect of clip.effects) {
           const budget = effectDescriptorBudget(effect)
@@ -267,14 +271,11 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
         }
       }
       for (const adjustment of track.adjustments ?? []) {
-        counts.keyframes += adjustment.animation.tracks.reduce(
-          (sum, animationTrack) => sum + animationTrack.keyframes.length,
-          0,
-        )
-        counts.keyframes += adjustment.animation.effectTracks.reduce(
-          (sum, animationTrack) => sum + animationTrack.keyframes.length,
-          0,
-        )
+        counts.keyframes += clipAnimationKeyframeCount(adjustment.animation)
+        for (const lane of adjustment.animation.effectPathTracks ?? []) {
+          counts.pathKeys += lane.keyframes.length
+          for (const key of lane.keyframes) counts.pathValueCharacters += key.value.length
+        }
         counts.effects += adjustment.effects.length
         for (const effect of adjustment.effects) {
           const budget = effectDescriptorBudget(effect)
@@ -442,7 +443,10 @@ export function sequenceProjectWithinEditBudget(
     && counts.audioEffectParams <= SEQUENCE_PROJECT_LIMITS.maxTotalAudioEffectParams
     && counts.audioEffectStringCharacters
       <= SEQUENCE_PROJECT_LIMITS.maxTotalAudioEffectStringCharacters
+    && counts.pathKeys <= MASK_PATH_ANIMATION_LIMITS.projectKeys
+    && counts.pathValueCharacters <= MASK_PATH_ANIMATION_LIMITS.projectValueCharacters
     && counts.keyframes <= SEQUENCE_PROJECT_LIMITS.maxTotalKeyframes
+    && projectCropAnimationError(project) === null
     && counts.speedPoints <= SEQUENCE_PROJECT_LIMITS.maxTotalSpeedPoints
     && counts.textCharacters <= SEQUENCE_PROJECT_LIMITS.maxTotalTextCharacters
 }
@@ -604,12 +608,12 @@ export function createProjectEffectIdAllocator(
   for (const sequence of project.sequences) {
     for (const track of sequence.tracks) {
       for (const clip of track.clips) {
-        for (const animation of clip.animation?.effectTracks ?? []) {
+        for (const animation of [...(clip.animation?.effectTracks ?? []), ...(clip.animation?.effectPathTracks ?? [])]) {
           used.effect.add(animation.effectId)
         }
       }
       for (const adjustment of track.adjustments ?? []) {
-        for (const animation of adjustment.animation.effectTracks) {
+        for (const animation of [...adjustment.animation.effectTracks, ...(adjustment.animation.effectPathTracks ?? [])]) {
           used.effect.add(animation.effectId)
         }
       }
@@ -681,7 +685,7 @@ function remapDuplicateIds(
         if (!effectId) return null
         effect.id = effectId
       }
-      for (const track of clip.animation?.effectTracks ?? []) {
+      for (const track of [...(clip.animation?.effectTracks ?? []), ...(clip.animation?.effectPathTracks ?? [])]) {
         const effectId = effectIds.get(track.effectId)
         if (effectId) track.effectId = effectId
       }
@@ -749,7 +753,7 @@ function remapDuplicateIds(
         effectIds.set(effect.id, effectId)
         effect.id = effectId
       }
-      for (const animationTrack of adjustment.animation.effectTracks) {
+      for (const animationTrack of [...adjustment.animation.effectTracks, ...(adjustment.animation.effectPathTracks ?? [])]) {
         const effectId = effectIds.get(animationTrack.effectId)
         if (effectId) animationTrack.effectId = effectId
       }

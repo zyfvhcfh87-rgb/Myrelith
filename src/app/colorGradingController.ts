@@ -40,7 +40,7 @@ export function beginColorGradingEdit(target: ColorGradingTarget, effectId: stri
       const next = editColorGradingParams(state.project, target, effectId, frame, patch)
       if (commit) {
         cancel()
-        return useDocumentStore.getState().commitColorLutEdit(state.project, state.projectGeneration, next)
+        return useDocumentStore.getState().commitProjectEdit(state.project, state.projectGeneration, next)
       }
       useTransportStore.getState().setColorGradingPreview({ sequenceId: target.sequenceId, effectId,
         params: patch, document: next.sequences.find((sequence) => sequence.id === target.sequenceId)! })
@@ -61,6 +61,6 @@ export function commitColorGradingParams(target: ColorGradingTarget, effectId: s
 
 export function addGradingEffect(target: ColorGradingTarget, type: string): string | null {
   const state = useDocumentStore.getState()
-  try { return state.commitColorLutEdit(state.project, state.projectGeneration, addColorGradingEffect(state.project, target, type, () => crypto.randomUUID())) }
+  try { return state.commitProjectEdit(state.project, state.projectGeneration, addColorGradingEffect(state.project, target, type, () => crypto.randomUUID())) }
   catch (cause) { return cause instanceof Error ? cause.message : 'Could not add grading.' }
 }

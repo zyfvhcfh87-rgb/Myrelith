@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type { TimelineDoc, Track, TrackKind } from './schema'
 import { createMulticamPlanner } from './multicam'
@@ -30,7 +31,7 @@ function track(id: string, kind: TrackKind): Track {
 
 function sequence(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'root',
     name: 'Root',
     frameRate: { num: 30, den: 1 },

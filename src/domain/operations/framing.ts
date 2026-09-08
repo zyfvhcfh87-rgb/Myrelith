@@ -78,8 +78,8 @@ export function applyDynamicZoomWithResult(
   }
   const tracks = [...retainedTracks, ...plannedTracks]
   tracks.sort(
-    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property)
-      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property),
+    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property as ClipAnimationProperty)
+      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property as ClipAnimationProperty),
   )
   const animation = { ...current, tracks }
   const animationError = clipAnimationValidationError(animation)
@@ -113,7 +113,7 @@ export function applyVideoStabilizationWithResult(
   const op = 'applyVideoStabilization'
   const location = animationEditLocationResult(doc, clipId)
   if (!location.ok) return rejectClipFramingOperation(doc, op, location.reason)
-  const owned = new Set<ClipAnimationProperty>(VIDEO_STABILIZATION_PROPERTIES)
+  const owned = new Set<string>(VIDEO_STABILIZATION_PROPERTIES)
   const current = clipAnimation(location.loc.clip)
   const existingOwned = current.tracks.some((track) => owned.has(track.property))
   if (existingOwned && !replaceExisting) {
@@ -145,8 +145,8 @@ export function applyVideoStabilizationWithResult(
     })),
   ]
   tracks.sort(
-    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property)
-      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property),
+    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property as ClipAnimationProperty)
+      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property as ClipAnimationProperty),
   )
   const animation = { ...current, tracks }
   const animationError = clipAnimationValidationError(animation)
@@ -180,7 +180,7 @@ export function applyMotionTrackingWithResult(
   const expected = plan.kind === 'box' && plan.includeScale
     ? BOX_TRACKING_PROPERTIES
     : POINT_TRACKING_PROPERTIES
-  const owned = new Set<ClipAnimationProperty>(expected)
+  const owned = new Set<string>(expected)
   if (
     plan.tracks.length !== expected.length
     || expected.some((property) => plan.tracks.filter((track) => track.property === property).length !== 1)
@@ -207,8 +207,8 @@ export function applyMotionTrackingWithResult(
     })),
   ]
   tracks.sort((left, right) => (
-    ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property)
-      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property)
+    ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property as ClipAnimationProperty)
+      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property as ClipAnimationProperty)
   ))
   const animation = { ...current, tracks }
   const error = clipAnimationValidationError(animation)
@@ -238,7 +238,7 @@ export function resetVideoStabilizationWithResult(
   const op = 'resetVideoStabilization'
   const location = animationEditLocationResult(doc, clipId)
   if (!location.ok) return rejectClipFramingOperation(doc, op, location.reason)
-  const owned = new Set<ClipAnimationProperty>(VIDEO_STABILIZATION_PROPERTIES)
+  const owned = new Set<string>(VIDEO_STABILIZATION_PROPERTIES)
   const current = clipAnimation(location.loc.clip)
   const tracks = current.tracks.filter((track) => !owned.has(track.property))
   if (tracks.length === current.tracks.length) return { ok: true, changed: false, doc }

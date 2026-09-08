@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { attributeProject } from '../test/clipAttributeFixtures'
+import { ATTRIBUTE_ASSET_DESCRIPTOR, attributeProject } from '../test/clipAttributeFixtures'
+import { useMediaStore } from '../state/mediaStore'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import { useClipAttributeStore } from '../state/clipAttributeStore'
@@ -12,6 +13,7 @@ import type { AttributePasteOptions } from '../domain/clipAttributes'
 const options: AttributePasteOptions = { groups: ['effects'], effectsMode: 'append', includeAnimation: true }
 let release: () => void
 beforeEach(() => {
+  useMediaStore.setState({ descriptors: new Map([['asset', ATTRIBUTE_ASSET_DESCRIPTOR]]), collections: [] })
   useDocumentStore.getState().setProject(attributeProject())
   useTransportStore.getState().resetTransport()
   release = initClipAttributeClipboard()
