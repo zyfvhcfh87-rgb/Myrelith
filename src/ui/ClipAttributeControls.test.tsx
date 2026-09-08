@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test } from 'vitest'
-import { attributeProject } from '../test/clipAttributeFixtures'
+import { ATTRIBUTE_ASSET_DESCRIPTOR, attributeProject } from '../test/clipAttributeFixtures'
+import { useMediaStore } from '../state/mediaStore'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import { initClipAttributeClipboard } from '../app/clipAttributeController'
@@ -8,6 +9,7 @@ import ClipAttributeControls from './ClipAttributeControls'
 
 let release: () => void
 beforeEach(() => {
+  useMediaStore.setState({ descriptors: new Map([['asset', ATTRIBUTE_ASSET_DESCRIPTOR]]), collections: [] })
   useDocumentStore.getState().setProject(attributeProject())
   useTransportStore.setState({ selectedClipIds: ['source'], selectedClipId: 'source' })
   release = initClipAttributeClipboard()

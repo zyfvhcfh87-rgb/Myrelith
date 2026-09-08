@@ -107,7 +107,7 @@ export function applyAttributeEdit(
     const result = pasteClipAttributes(state.project, session.sequenceId, session.targetIds, session.template, options, () => crypto.randomUUID())
     if (!result.ok) return result.reason
     const error = commitPortableProjectEdit(state.project, session.generation, result.project)
-    if (!error) report('Pasted attributes.')
+    if (!error) report(`Pasted attributes on ${session.targetIds.length} clip${session.targetIds.length === 1 ? '' : 's'}.`)
     return error
   }
   const error = state.applyClipAttributes(session.project, session.sequenceId,

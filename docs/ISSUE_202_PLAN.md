@@ -1,6 +1,8 @@
 # Issue #202 — managed 10-bit and HDR research
 
-Status: **R4 research decision ready for orchestrator review: no-go for product promotion; all experiment slots released**.
+Status: **research complete and accepted by the orchestrator: no-go for product
+promotion; all experiment slots released.** Publication remains part of the
+combined milestone delivery.
 Baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue202`, inspected 2026-09-08. Scope comes from
 [#202](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/202) and the Milestone 9

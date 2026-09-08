@@ -1,9 +1,19 @@
 # Issue #201 — semantic ASS, batch captions, and optional local speech
 
-Stage: initial internal review, 2026-09-08. Product implementation has not
-started. Starting tree: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
-`codex/issue201`. This document requests the orchestrator's review; it does not
-authorize the speech product path before its separate measured gate.
+Status: **caption editing/interchange implemented and accepted locally; optional
+local transcription remains incomplete, so #201 must remain open.** Schema 24
+styles, strict ASS import/export with explicit loss review, atomic batch edits,
+appearance advice and SRT/VTT/ASS downloads are integrated. The root's
+[two browser workflows](evidence/milestone9/caption-workflows.md) cover actual
+editing, Undo/Redo, portable Save/Open, downloads and narrow dialog focus.
+Transcription remains an isolated laboratory: English/French and cancellation
+cases passed, but rapid worker replacement exceeded the fixed resident-memory
+limit before long-audio inference. Long-job/offline lifecycle and production
+app wiring are not qualified. No production speech control is exposed.
+
+The starting tree was `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
+`codex/issue201`. The proposals below retain their historical context and do
+not authorize speech promotion before its separate measured gate.
 
 ## Acceptance and existing authorities
 

@@ -1,13 +1,15 @@
 # Issue #198: direct masks and bounded manual path animation
 
-Status: **static/open/held authoring and the 7/7 focused tracking browser gate accepted. Resource, performance and whole-issue acceptance remain open.**
-
-The authorized shared resource implementation is ready for source review:
-[pixel-work admission and immediate plugin cleanup](evidence/issue198/resource-source-gate.md).
-Its focused gate passes 406 tests across 18 files plus 17 runner checks. The
-[next measurement protocol](evidence/issue198/resource-performance-protocol.md)
-is a proposal; executable harness review and an exclusive grant precede any
-resource, performance or export-stress run.
+Status: **issue-specific implementation and local acceptance complete; combined
+engineering and publication remain orchestrator-owned.** Static/open/held
+authoring, seven tracking browser flows, raster checks and shared resource
+admission are accepted. The [final export lifecycle result](evidence/issue198/export-lifecycle-attempt2.md)
+passes all nine completion/cancellation/retry attempts, 27 exact pre-encode
+comparisons and 24 encoded mean checks. The historical maximum-12 encoded
+pixel rule still fails and remains an explicit lossy-codec qualification.
+The [resource source gate](evidence/issue198/resource-source-gate.md) retains
+406 focused tests across 18 files plus 17 runner checks. No additional broad
+resource/performance matrix is required by the final wrap-up scope.
 
 Prepared on `codex/issue198` from `ce91074c276ca6892a74addb7dd673b9a19c7eeb`.
 The Milestone 9 orchestrator owns approval, migration ordering, integration and

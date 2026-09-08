@@ -1,14 +1,12 @@
 # Issue #200 — reusable titles and animated text
 
-Status: **G2 and the six G3 functional flows are accepted with their recorded
-qualifications. The separate fallback first-paint result is accepted and archived
-at f8e7370: an early blank canvas followed by exact automatic glyph rendering in
-the same unchanged run. Remaining title keyboard/focus/narrow-controls acceptance,
-the shared #199 key/encoded gate and root final engineering checks remain open.**
+Status: **issue-specific implementation and local acceptance complete with
+recorded qualifications; combined engineering and publication remain
+orchestrator-owned.** G2, six G3 functional flows, automatic fallback first paint,
+the [staged keyboard/dialog checks](evidence/issue200/keyboard-results.md) and
+the shared #199 mixed encoded export are accepted. Native Mac font-popup
+selection remains unverified in the measured headless browser.
 See the [current evidence matrix](evidence/issue200/remaining-acceptance-matrix.md).
-The remaining protocol was accepted; its executable harness is preparing for
-source review against explicitly assigned integration 580de54 (merged at5bca9bf).
-No product correction or native/build run is authorized here.
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
 issue last updated 2026-08-25T21:36:47Z. [Issue #200](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/200).
