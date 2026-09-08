@@ -1,0 +1,14 @@
+{
+  "preservedCandidate04Sha256": "4aebb4adbd8c0a00615065f4dd3c0d1da5259e2daf5a37f71489e0c5732470e7",
+  "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+  "modelBytes": 43610465,
+  "candidate04PlusStagedBytes": 87232592,
+  "compositePlusStagedBytes": 87220930,
+  "cacheByteLimit": 100663296,
+  "unchangedRuntimeAndNotices": 11,
+  "unchangedFixtures": 5,
+  "retainedCurrentComponents": 6,
+  "originalEncoderPreserved": true,
+  "nativeExecution": false,
+  "manifestSha256": "c68800d6b46bcecd9bbdfe7ed8abc853bcb8cf194bbe98dc3fd39518f37c8804"
+}

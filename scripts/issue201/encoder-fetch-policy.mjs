@@ -5,8 +5,7 @@ export function installEncoderFetchPolicy(session, policy, observe = () => {}) {
     && new Set(actual).size === actual.length && expected.every((name) => actual.includes(name))
   if (!policy || policy.sessionKey !== 'model'
     || !sameNames(policy.inputNames, ['input_features'])
-    || !sameNames(policy.expectedOutputNames, ['last_hidden_state', 'encoder_attentions.0',
-      'encoder_attentions.1', 'encoder_attentions.2', 'encoder_attentions.3'])
+    || !sameNames(policy.expectedOutputNames, ['last_hidden_state'])
     || !sameNames(policy.fetchNames, ['last_hidden_state'])) throw new Error('Unrecognized pinned encoder fetch policy')
   if (!session || typeof session.run !== 'function' || typeof session.release !== 'function'
     || !sameNames(session.inputNames, policy.inputNames)

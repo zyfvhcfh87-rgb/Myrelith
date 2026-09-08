@@ -6,21 +6,35 @@ This status preserves the separate decision required by issue #201. The
 orchestrator may approve the independent caption implementation after reviewing
 the plan without approving speech enablement.
 
-## Current replacement and outstanding decision
+## Current prepared candidate and outstanding decision
 
-The current isolated-lab candidate keeps the exact model revision and seven
+Candidate05 is now prepared for source review only, after the historical encoder
+contract was accepted. [ENCODER_COMPOSITE_CANDIDATE_05.md](ENCODER_COMPOSITE_CANDIDATE_05.md)
+and [composite-preparation.json](composite-preparation.json) record its explicit
+seven-file local composite: one exact July2023 published encoder plus six
+unchanged current files. The current configuration revision is not represented
+as the source of the older encoder. Model bytes are 43,610,465; runtime bytes
+remain 14,073,343. No candidate05 inference has run and no native grant is active.
+The 25 deterministic source/VM checks pass; resident/quality/offline qualification
+remains unresolved. The frozen candidate04 manifest and all failed raw evidence
+are preserved. Product speech stays NO-GO.
+
+## Measured replacement history through run04
+
+The prior measured isolated-lab candidate kept the exact model revision and seven
 model files below, with **Transformers.js 4.2.0** and **ORT Web
 1.26.0-dev.20260416-b7804b056c**, using its WASM-only entry point and matching
 non-JSEP loader/binary. The concrete browser payload is **14,073,343 raw bytes /
 3,627,462 locally gzipped bytes**, including the existing Mediabunny audio adapter.
-The selected model remains **43,622,127 bytes**; combined raw payload is
+That measured model was **43,622,127 bytes**; combined raw payload is
 **57,695,470 bytes**. These are asset measurements, not runtime or Vite claims.
 
 [REPLACEMENT_PREFLIGHT.md](REPLACEMENT_PREFLIGHT.md) explains the removed
 JavaScript protobuf route, actual import substitution/common-version identity,
 license and notice inventory, fixture provenance, frozen thresholds, executable
-harness and remaining qualifications. [replacement-manifest.json](replacement-manifest.json)
-binds every selected asset and measurement. The inspected executable JavaScript
+harness and remaining qualifications. The preserved
+[encoder-fetch-candidate04-manifest.json](encoder-fetch-candidate04-manifest.json)
+binds the selected run04 assets and measurements. The inspected executable JavaScript
 package advisory query returned no entries; this does not establish complete
 native-WASM advisory coverage or approve production use. The first frozen run
 failed before model initialization because the cache adapter omitted the SDK's
