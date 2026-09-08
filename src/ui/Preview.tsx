@@ -42,7 +42,7 @@ export default function Preview() {
   const scopesEnabled = useVideoScopesStore((state) => state.enabled)
   const scopesSupported = useVideoScopesStore((state) => state.rendererSupported)
   const hasTextOverlay = useDocumentStore((state) =>
-    state.doc.tracks.some((track) => track.clips.some((clip) => clip.text !== undefined)),
+    state.doc.tracks.some((track) => track.clips.some((clip) => (clip.text !== undefined || clip.title !== undefined))),
   )
   const hasVisibleCaption = useDocumentStore((state) =>
     (state.doc.captionTracks ?? []).some(
@@ -70,6 +70,7 @@ export default function Preview() {
     }
     return false
   })
+  const titleNotices = usePreviewStatusStore((state) => state.titleNotices)
   const offlineVisualAssetIds = usePreviewStatusStore(
     (state) => state.offlineVisualAssetIds,
   )
@@ -172,6 +173,11 @@ export default function Preview() {
       </>}
       <MaskOverlayControls canvasRef={canvasRef} panelRef={panelRef} toolbarHost={maskControlsHost} />
       {scopesEnabled ? <VideoScopesPanel /> : null}
+      {titleNotices.length > 0 && <div className="preview-title-status" role="status">
+        <strong>{titleNotices.some((notice) => notice.kind === 'unavailable') ? 'Title unavailable' : 'Title font notice'}</strong>
+        <span>{titleNotices.slice(0, 2).map((notice) => `${notice.clipName} / ${notice.name}: ${notice.detail}`).join(' ')}</span>
+        {titleNotices.length > 2 && <span> {titleNotices.length - 2} more title notices.</span>}
+      </div>}
       {offlineVisualAssetIds.length > 0 ? (
         <div className="preview-hint preview-hint-offline" role="status">
           <strong>Source offline</strong>

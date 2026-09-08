@@ -1,4 +1,5 @@
 import { isProceduralTitleClip } from './textOverlay'
+import { titleEffectAnimationParameterSpec } from './titleEffectAnimation'
 /** Pure, bounded scalar clip-keyframe model and evaluator. */
 
 import {
@@ -399,7 +400,8 @@ function applyAnimatedEffectValues(
     for (const track of targeted) {
       // Bound identities belong to plugin declarations, never to this built-in resolver.
       if (track.parameterIdentity !== undefined) continue
-      const spec = effectAnimationParameterSpec(effect, track.parameter)
+      const spec = clip.title === undefined ? effectAnimationParameterSpec(effect, track.parameter)
+        : titleEffectAnimationParameterSpec(clip, effect, track.parameter)
       const fallback = params[track.parameter]
       if (!spec || typeof fallback !== 'number') continue
       if (track.keyframes.some((keyframe) => (

@@ -706,6 +706,32 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   shader fallback. Canvas filters use the existing saved context and reusable
   text/transition surfaces; effects never allocate per-frame scratch resources.
   Preview and export share this exact plan/compositor path.
+- Expanded `Clip.title` contributes a resource-free `title` composition item.
+  The domain planner resolves ordered elements, scalar values and explicit
+  generic-font intent; enabled unavailable elements or animation produce named
+  preview status and block strict export. Nested occurrences count toward the
+  4,096 visible-element bound before layout or source/surface acquisition.
+  Supported text elements reuse the compact text/caption painter. Elements with
+  opacity 1 paint directly into the existing leg; translucent elements borrow
+  the existing group, copy once at element opacity, and release it before any
+  clip effect or track bus begins. The complete leg then receives clip effects,
+  clip opacity/blend and the existing enclosing bus exactly once. There are no
+  per-element canvases or synthetic media owners.
+- `titleEffectAnimationParameterSpec` is the canonical title effect boundary:
+  only supported expanded owners and exact registered numeric post-composite
+  parameters are available. Compact text authoring stays static; its existing
+  evaluation remains unchanged. Stored unavailable title lanes stay portable.
+  Upgrade refuses potentially active bound plugin animation and actually
+  resolved source-only scalar changes so it cannot silently change compact
+  text's animation. Registry/property/evaluator authority stays below owner
+  composition; no effectStack-to-titleOwnership-to-clipAnimation cycle is added.
+- Title-definition caches admit only deeply frozen JSON graphs. Mutable and
+  shallow-frozen inputs are revalidated; cached parsed copies are also frozen.
+  Text layout retains at most 64 entries / 8 MiB of conservatively priced data
+  per context, with 512 lines per element. Document/font intent replacement,
+  presentation resize and completed worker disposal invalidate derived layouts.
+  Generic font aliases remain platform dependent; no font bytes or remote font
+  service enters this owner.
 - Manual lens correction is the first authored source-geometry operation. A
   decoded, orientation-normalized visual source is remapped before crop,
   transform, masks/chroma, ordered effects, opacity/blend, and transitions.

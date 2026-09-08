@@ -549,6 +549,25 @@
   font-size: 11px;
 }
 
+.preview-title-status {
+  position: absolute;
+  right: 16px;
+  bottom: 8px;
+  left: 16px;
+  z-index: 5;
+  max-height: 28%;
+  overflow: auto;
+  padding: 6px 9px;
+  border: 1px solid #53677d;
+  border-radius: 5px;
+  background: rgb(15 26 40 / 94%);
+  color: #d5e0ed;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.preview-title-status strong { margin-right: 8px; color: #f3d39e; }
+
 /* Soft Studio program monitor. */
 .preview-panel {
   box-sizing: border-box;

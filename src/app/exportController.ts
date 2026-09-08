@@ -1,3 +1,4 @@
+import { projectTitleExportError } from '../domain/titleExport'
 import { documentGradingEffects } from '../domain/colorGradingBudget'
 import { isColorGradingType } from '../domain/colorGradingEffects'
 import { ColorGradingCancelledError } from '../pipeline/colorGradingRuntime'
@@ -609,6 +610,8 @@ async function preflightAndRunExport(
   >,
 ): Promise<ExportResult | undefined> {
   if (lifecycle.cancelRequested) return undefined
+  const titleError = projectTitleExportError(projectTarget.project, projectTarget.sequenceId)
+  if (titleError) throw new Error(`Title cannot be exported: ${titleError}`)
   await deps.preparePlaybackForExport()
   if (lifecycle.cancelRequested) return undefined
   // Reject impossible work before Blob retention, profile probing, or the

@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import type { EffectResolutionStatus } from '../domain/effectStack'
 import type { LensRemapAvailability } from '../domain/lensCorrection'
+import type { TitleCompositionNotice } from '../domain/titleComposition'
 import type { AssetId, EffectId } from '../domain/schema'
 
 export interface PreviewEffectStatus {
@@ -17,7 +18,14 @@ export interface PreviewRendererCapabilities {
   readonly lensRemap?: LensRemapAvailability
 }
 
+export interface PreviewTitleNotice extends TitleCompositionNotice {
+  readonly clipId: string
+  readonly clipName: string
+}
+
 export interface PreviewStatusState {
+  readonly titleNotices: readonly PreviewTitleNotice[]
+  setTitleNotices(notices: readonly PreviewTitleNotice[]): void
   /** Durable offline visual sources needed by the displayed timeline frame. */
   offlineVisualAssetIds: readonly AssetId[]
   /** Null until the worker reports its actual preview compositor context. */
@@ -41,6 +49,7 @@ function idsMatch(left: readonly AssetId[], right: readonly AssetId[]): boolean 
 }
 
 export const usePreviewStatusStore = create<PreviewStatusState>()((set) => ({
+  titleNotices: [],
   offlineVisualAssetIds: EMPTY_OFFLINE_IDS,
   rendererCapabilities: null,
   effectStatuses: EMPTY_EFFECT_STATUSES,
@@ -49,10 +58,20 @@ export const usePreviewStatusStore = create<PreviewStatusState>()((set) => ({
       if (idsMatch(state.offlineVisualAssetIds, ids)) return state
       return { offlineVisualAssetIds: [...ids] }
     }),
+  setTitleNotices: (titleNotices) => set((state) => {
+    const previous = state.titleNotices
+    if (previous.length === titleNotices.length && previous.every((item, index) => {
+      const next = titleNotices[index]
+      return item.clipId === next.clipId && item.clipName === next.clipName && item.elementId === next.elementId
+        && item.kind === next.kind && item.name === next.name && item.detail === next.detail
+    })) return state
+    return { titleNotices: [...titleNotices] }
+  }),
   setEffectProjection: (rendererCapabilities, effectStatuses) =>
     set({ rendererCapabilities, effectStatuses: new Map(effectStatuses) }),
   resetPreviewStatus: () =>
     set({
+      titleNotices: [],
       offlineVisualAssetIds: EMPTY_OFFLINE_IDS,
       rendererCapabilities: null,
       effectStatuses: EMPTY_EFFECT_STATUSES,
