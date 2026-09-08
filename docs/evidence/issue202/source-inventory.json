@@ -1,0 +1,206 @@
+{
+  "kind": "issue202-r0-read-only-source-inventory",
+  "collectedAt": "2026-09-08T08:39:36.614Z",
+  "baseCommit": "ce91074c276ca6892a74addb7dd673b9a19c7eeb",
+  "branch": "codex/issue202",
+  "node": "v26.8.1",
+  "architecture": "arm64",
+  "platform": "darwin",
+  "macOS": "ProductName:\t\tmacOS\nProductVersion:\t\t26.6.2\nBuildVersion:\t\t25G83",
+  "nodeModulesIsSymlink": false,
+  "packages": {
+    "mediabunny": "1.50.9",
+    "@playwright/test": "1.62.1",
+    "typescript": "6.0.3",
+    "vite": "8.1.2"
+  },
+  "files": [
+    {
+      "path": "ARCHITECTURE.md",
+      "sha256": "42ebd26721628326cb7492e8986ce1a861572fa14027899112c9f67377fc26d7"
+    },
+    {
+      "path": "package.json",
+      "sha256": "8b42c90b07c4cab70c4a5203a2bbe596c02c9a4e27c8d130fd38c40086df54c6"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "affe6090fa9a422aeadf6dd2e06ff65dd55f31457d7645ac9bf3f33e13bc44df"
+    },
+    {
+      "path": "src/workers/renderWorker/contracts.ts",
+      "sha256": "062eb6b6c415b61c8cad809c69b00c681d9b87bbba869ce0ae9b67d27b962f13"
+    },
+    {
+      "path": "src/pipeline/export-mediabunny-sink.ts",
+      "sha256": "7f88fa46815d3d6bd15641e95ca513bbdb46e93420e8b94d867220889e34749f"
+    },
+    {
+      "path": "src/pipeline/lensRemapWebgl.ts",
+      "sha256": "982fbb25d884acdb25e30ff7223b5198ba0bb05d8594ebcdb41a6e9ea5b9f17a"
+    },
+    {
+      "path": "src/domain/effectPixels.ts",
+      "sha256": "d40e30b8a01eddf6cab882ae66677c7c9716587cd0ef73a4d33ba9415c3199a0"
+    },
+    {
+      "path": "src/domain/pluginManifest.ts",
+      "sha256": "9312956e6a0f027c498fd615f8cc5cf7bbf1116149f833f8460c53295705aa48"
+    },
+    {
+      "path": "src/domain/renderSurfaceBudget.ts",
+      "sha256": "fba123821b6f226bf8b96fe232bc1f04cddec38ec118a4cf92e1c6fe2c94df3b"
+    },
+    {
+      "path": "src/domain/videoScopes.ts",
+      "sha256": "0aa7fed45b36dc2211461d8773c9edd49d1ea28f472fc95d2d19b01d216d201c"
+    },
+    {
+      "path": "src/domain/blendModes.ts",
+      "sha256": "fc28bb20eee9c3bddc69c5be576ca6a5e0fac1fda1129decb867630a77e5c380"
+    },
+    {
+      "path": "src/pipeline/proxyGeneration.ts",
+      "sha256": "00695e81a81b7d054fadff43336e78098217c0c215821bff2626aea75dc35e19"
+    },
+    {
+      "path": "src/pipeline/colorGradingRuntime.ts",
+      "sha256": "dfe50b9111a6c3fdce0eba5161b4e2762d07235c7837f93d9b903909b4aa3e81"
+    },
+    {
+      "path": "node_modules/mediabunny/src/input-track.ts",
+      "sha256": "32d1e1a85b52b11a89d476ac08b844b58ece059aaf47bc914668f96d67ee12c1"
+    },
+    {
+      "path": "node_modules/mediabunny/src/codec.ts",
+      "sha256": "59dc44ed575064df591ee2971af2c35b184b3e03fe9748892470be2db6959780"
+    },
+    {
+      "path": "node_modules/mediabunny/src/encode.ts",
+      "sha256": "b79555b1e7f53f7b4c5b9c8e4dc9ccf8b4103c9dbf1b8fa60235533b795d609f"
+    },
+    {
+      "path": "node_modules/mediabunny/src/sample.ts",
+      "sha256": "ea2e0444ca0aee35317848ecca5b284439ee1bc89d45cef6b69bbafa22d7fe3f"
+    },
+    {
+      "path": "node_modules/mediabunny/src/isobmff/isobmff-boxes.ts",
+      "sha256": "2be09a111868f8eb47467e94d5f6b65d7814ad929974d66a3547692b75155df4"
+    },
+    {
+      "path": "node_modules/mediabunny/src/matroska/matroska-muxer.ts",
+      "sha256": "caa3ad2c9bdbc50d6f7718edc21ba0f711a12b739c7e5e144d6c61e1cbc3f485"
+    },
+    {
+      "path": "src/domain/colorLut.ts",
+      "sha256": "66bdcc6a5b483675383ab3ae9b3e0289af8b707f5aa184b0c4a068b5e713503c"
+    },
+    {
+      "path": "src/domain/colorCurves.ts",
+      "sha256": "aec4ad4fd370602a85119d8428c6cb328ae0260a9d9eeaf1dea65d2f503044af"
+    },
+    {
+      "path": "src/domain/colorWheels.ts",
+      "sha256": "836b5c64a1a030bafa2c94e9b9918ff93f73ace908ab673ecaf3d07dc07187b8"
+    }
+  ],
+  "staticSurfaceBytes": [
+    {
+      "width": 1920,
+      "height": 1080,
+      "bytesPerPixel": 4,
+      "surfaceCount": 4,
+      "bytes": 33177600,
+      "within256MiB": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "bytesPerPixel": 4,
+      "surfaceCount": 7,
+      "bytes": 58060800,
+      "within256MiB": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "bytesPerPixel": 8,
+      "surfaceCount": 4,
+      "bytes": 66355200,
+      "within256MiB": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "bytesPerPixel": 8,
+      "surfaceCount": 7,
+      "bytes": 116121600,
+      "within256MiB": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "bytesPerPixel": 16,
+      "surfaceCount": 4,
+      "bytes": 132710400,
+      "within256MiB": true
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "bytesPerPixel": 16,
+      "surfaceCount": 7,
+      "bytes": 232243200,
+      "within256MiB": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "bytesPerPixel": 4,
+      "surfaceCount": 4,
+      "bytes": 132710400,
+      "within256MiB": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "bytesPerPixel": 4,
+      "surfaceCount": 7,
+      "bytes": 232243200,
+      "within256MiB": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "bytesPerPixel": 8,
+      "surfaceCount": 4,
+      "bytes": 265420800,
+      "within256MiB": true
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "bytesPerPixel": 8,
+      "surfaceCount": 7,
+      "bytes": 464486400,
+      "within256MiB": false
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "bytesPerPixel": 16,
+      "surfaceCount": 4,
+      "bytes": 530841600,
+      "within256MiB": false
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "bytesPerPixel": 16,
+      "surfaceCount": 7,
+      "bytes": 928972800,
+      "within256MiB": false
+    }
+  ],
+  "qualification": "Static arithmetic only. No timings, actual allocation, browser codec, physical monitor or native memory measurement."
+}
