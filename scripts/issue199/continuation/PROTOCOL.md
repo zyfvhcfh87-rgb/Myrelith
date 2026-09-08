@@ -73,7 +73,7 @@ identity. It does not use a saved user browser profile or create a visible windo
 | --- | --- |
 | Playwright mouse down/move/up and keyboard press/down/up | Native browser input for gestures and shortcuts. A read-only document observer requires a trusted pointer-down and actual `hasPointerCapture`; no fabricated pointer event or direct animation edit command substitutes for the gesture. |
 | Locator click/fill/selectOption/setChecked/focus/scrollIntoView and setInputFiles | Actual application DOM controls and portable-open flow. These are browser automation operations; they do not qualify an OS file picker, screen-reader speech, or a physical keyboard/IME. Accepted early evidence separately used Chromium `Input.imeSetComposition` and `Input.dispatchKeyEvent` for IME containment. |
-| Actual captured element `releasePointerCapture` | Browser capture-loss behavior with the native lost-capture event. This cancellation trigger is a browser API call, not a physical pointer action. |
+| Actual captured element `releasePointerCapture`, then one native pointer move while held | The release request clears pending capture. The following real move processes pending capture; require trusted capture/loss on the same pointer and element, no mouseup, then a cleared preview and unchanged document/history/clipboard before release. This trigger combines a browser API call with native input. |
 | Production `setPlayheadFrame` | Explicit transient scenario positioning and ten playhead updates. Native transport-button playback/pause is separate. This does not claim native Timeline seeking or continuous playback index measurement. |
 | Production `setColorGradingPreview` / `setMaskPreview` | Explicit sibling-preview setup/restoration around a native Animation drag. It checks the three owners present at b33b753. It does not qualify native grading/mask authoring, the later fourth tracking owner, or later title-effect helper parity. |
 | Already-requested production module exports | Read-only store/history/clipboard observations plus the explicitly named transient setup above. No dev module, product test route, bundled-code replacement, or document edit API is injected into the page. Diagnostic project/history references retain at most four checkpoints and are cleared on portable project replacement. |
@@ -119,3 +119,30 @@ this source checkpoint alone. Later Gate 4 still covers integrated retime/split,
 title/path rendering, muted playback, exact pixel/PCM/export oracles and saved
 project behavior after the required integrations. Gate 5 remains the full
 canonical suite, build/lint, production audit, and final source checks.
+
+## Capture-event correction after the first gestures attempt
+
+The original gestures run at `379634405c15b1e553c1e36996aac6ac83e61d39`
+passed six checkpoints and stopped on the first capture-loss assertion. Its
+unchanged evidence remains at
+`/private/tmp/issue199-continuation/2026-09-08T16-36-07.724Z-gestures/`.
+It asserted cancellation after `releasePointerCapture` and two animation frames
+without proving that `lostpointercapture` had been delivered. No confirmed product
+defect or passing capture-loss result follows from that attempt.
+
+[Pointer Events 3 section 9.3](https://www.w3.org/TR/pointerevents3/#releasing-pointer-capture)
+clears the pending capture target; [section 4.1.3.2](https://www.w3.org/TR/pointerevents3/#process-pending-pointer-capture)
+dispatches capture events when processing subsequent pointer input or implicit
+release. The corrected capture case issues one real pointer move with the button
+still held. It requires the same pointer/gesture and element identity, trusted
+capture followed by trusted loss and a native move, and zero pointer-up events.
+The original exact preview/document/history/clipboard assertions run before and
+after eventual mouseup. It does not replace cancellation with mouseup, synthetic
+DOM dispatch, or a longer wait.
+
+The passive event ring remains bounded at 256 records. Monotonic event sequence
+and gesture IDs distinguish previous events and reused mouse pointer IDs; records
+include target identity comparison, trust, buttons and coordinates. Failure state
+now preserves this ring and the current pointer/capture state, as success already
+does. Product source, other gesture actions, bounds and slot rules remain unchanged.
+This correction requires separate source review and a new native execution grant.

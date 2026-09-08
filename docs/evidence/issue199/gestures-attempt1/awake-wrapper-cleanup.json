@@ -1,0 +1,8 @@
+{
+  "checkedAt": "2026-09-08T16:45:09.840Z",
+  "runnerPid": 81510,
+  "scopedCaffeinatePid": 81521,
+  "bothAbsent": true,
+  "identitySource": "Original observed preview parent PID and run-interval pmset caffeinate assertion PID",
+  "nativeRerun": false
+}

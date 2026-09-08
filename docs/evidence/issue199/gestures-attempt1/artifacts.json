@@ -1,0 +1,94 @@
+{
+  "sourceHead": "379634405c15b1e553c1e36996aac6ac83e61d39",
+  "productSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+  "attemptDirectory": "/private/tmp/issue199-continuation/2026-09-08T16-36-07.724Z-gestures",
+  "status": "failed",
+  "files": {
+    "build.log": {
+      "bytes": 3939,
+      "sha256": "3fc8ea092e551bbb0c10e60019ce40b9c7b43243c2dfcf05bfe37f0ca4d56914"
+    },
+    "console.log": {
+      "bytes": 893,
+      "sha256": "20402ac2d8049bcd3c9a0fcc9401b7b8830a7d136fdf26e3dba45614d3de88d3"
+    },
+    "failure-dom.txt": {
+      "bytes": 4842,
+      "sha256": "bf2f073398c6e6e8437e0414982584af19df7f043457a4d00d04f26569bbd717"
+    },
+    "failure.png": {
+      "bytes": 149198,
+      "sha256": "dba2d6072da3ddd25ce8831860177f494540e51b4970164f9610b8c7634d8e53"
+    },
+    "independent-cleanup-source.json": {
+      "bytes": 10845,
+      "sha256": "0a4d806c221f4774cfc1aac37f0c74308c599d654433dd0c3a9894e87a555fa4"
+    },
+    "result.json": {
+      "bytes": 203601,
+      "sha256": "375261407275608af320de8676ef4b3d7902300bd4af9b4d9d5f301491a07aa7"
+    },
+    "server.log": {
+      "bytes": 39,
+      "sha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d"
+    },
+    "sleep-assessment.json": {
+      "bytes": 446,
+      "sha256": "6f6defc6170fe4e1626da1ca7683b0611f4e1f85579e5740444555c9b7ed23a9"
+    },
+    "step-01-dom.txt": {
+      "bytes": 1050,
+      "sha256": "391e96e976bb2729c502f64bb5e09dc362aab8be1361f10d9a8d6d3ec49301a2"
+    },
+    "step-01.png": {
+      "bytes": 485772,
+      "sha256": "473f5dd351a65a4e15b8081e21068a22410ca613f3477442d0583d9a41aea7c6"
+    },
+    "step-02-dom.txt": {
+      "bytes": 4917,
+      "sha256": "ee9208c86b51fa695fe3875cab342075e81d87d47334964df7f005bc1e907b3d"
+    },
+    "step-02.png": {
+      "bytes": 133866,
+      "sha256": "e3987837e1bb8d2547509ec07ee93e0c9e78ed20f4a265d15cc50d8949213250"
+    },
+    "step-03-dom.txt": {
+      "bytes": 4816,
+      "sha256": "5827490e6b13d3cf24332235fccaca80fd3f2e7de87fe29299f1e45c67ffbf6f"
+    },
+    "step-03.png": {
+      "bytes": 147342,
+      "sha256": "835b35d6b8aeb4bca2d8fa818a752508b7ed7fa7b154cbaa319901086c02d75b"
+    },
+    "step-04-dom.txt": {
+      "bytes": 4869,
+      "sha256": "d41a441062b059519e49e097c7bcf71604f9e8d4ce1ad1ec7fb4e97f5163460a"
+    },
+    "step-04.png": {
+      "bytes": 153289,
+      "sha256": "8eddc8de9659f46b1059f915d183a1055618980fb6f649519a64b25e11a4d3dd"
+    },
+    "step-05-dom.txt": {
+      "bytes": 4869,
+      "sha256": "d41a441062b059519e49e097c7bcf71604f9e8d4ce1ad1ec7fb4e97f5163460a"
+    },
+    "step-05.png": {
+      "bytes": 153292,
+      "sha256": "2b61b1a8c02e198b761492bf000e5241137aaf69e93e2d3c29ad504e823d156c"
+    },
+    "step-06-dom.txt": {
+      "bytes": 4820,
+      "sha256": "4eb9151b329fc0e639cf741caa4fcf2319484eaf4d9e73079ba9c7b03cf24ed7"
+    },
+    "step-06.png": {
+      "bytes": 147134,
+      "sha256": "1b393d451437456513176eb901505663bba006d35c69d24a5228743cade1ea21"
+    },
+    "trace.zip": {
+      "bytes": 7370312,
+      "sha256": "c5b7b3c3a879195fab44462373493fc47178b6a2343a5a188c6d0afa4a6de085"
+    }
+  },
+  "profilePreserved": "/private/tmp/issue199-continuation/2026-09-08T16-36-07.724Z-gestures/chromium-profile",
+  "profileHashClaim": false
+}

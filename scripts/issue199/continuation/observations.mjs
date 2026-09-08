@@ -125,11 +125,42 @@ function helpers(h) {
     await page.mouse.down(); await page.mouse.move(point.x + dx, point.y + dy, { steps: 4 }); await settled()
     const captured = await page.evaluate(() => {
       const p = window.__animationQA.nativePointer
-      return { trusted: p?.trusted, captured: p?.target.hasPointerCapture(p.id), id: p?.id }
+      return { trusted: p?.trusted, captured: p?.target.hasPointerCapture(p.id), id: p?.id, gesture: p?.gesture }
     })
     assert.equal(captured.trusted, true, 'Gesture did not begin from a trusted native event')
     assert.equal(captured.captured, true, 'Native pointer capture was not acquired')
-    return { point, box, captured, bypass }
+    return { point, endPoint: { x: point.x + dx, y: point.y + dy }, box, captured, bypass }
+  }
+  async function loseCapture(pointer) {
+    const released = await page.evaluate(() => {
+      const q = window.__animationQA, p = q.nativePointer
+      const before = { id: p.id, gesture: p.gesture, connected: p.target.isConnected, captured: p.target.hasPointerCapture(p.id), eventSequence: q.pointerEventSequence, captureEvents: q.pointerEvents.filter((event) => event.gesture === p.gesture && event.id === p.id && event.type === 'gotpointercapture') }
+      p.target.releasePointerCapture(p.id)
+      return { ...before, pendingCaptureAfterRelease: p.target.hasPointerCapture(p.id) }
+    })
+    report.observations.push({ name: 'Explicit capture release request', released })
+    assert.equal(released.id, pointer.captured.id); assert.equal(released.gesture, pointer.captured.gesture)
+    assert.equal(released.connected, true); assert.equal(released.captured, true)
+    assert.equal(released.captureEvents.filter((event) => event.sameTarget && event.trusted && event.buttons === 1).length, 1, 'Expected actual trusted capture on this gesture before release')
+    assert.equal(released.pendingCaptureAfterRelease, false)
+    // Releasing capture clears a pending target. Process it with a real next
+    // pointer event while the button stays held, before any possible up/commit.
+    await page.mouse.move(pointer.endPoint.x + 1, pointer.endPoint.y, { steps: 1 })
+    await settled()
+    const loss = await page.evaluate((released) => {
+      const q = window.__animationQA, p = q.nativePointer
+      return { id: p.id, gesture: p.gesture, connected: p.target.isConnected, captured: p.target.hasPointerCapture(p.id), events: q.pointerEvents.filter((event) => event.sequence > released.eventSequence) }
+    }, released)
+    report.observations.push({ name: 'Native event processing after explicit capture release', loss })
+    assert.equal(loss.id, released.id); assert.equal(loss.gesture, released.gesture)
+    assert.equal(loss.connected, true); assert.equal(loss.captured, false)
+    const current = loss.events.filter((event) => event.id === released.id && event.gesture === released.gesture)
+    const lost = current.filter((event) => event.type === 'lostpointercapture' && event.sameTarget && event.trusted && event.buttons === 1)
+    const moved = current.filter((event) => event.type === 'pointermove' && event.trusted && event.buttons === 1)
+    assert.equal(lost.length, 1, 'Expected actual trusted lost capture on the captured element while held')
+    assert.ok(moved.some((event) => event.sequence > lost[0].sequence), 'Expected a following trusted native pointer move while held')
+    assert.ok(!current.some((event) => event.type === 'pointerup'), 'Capture cancellation must be checked before mouseup')
+    return { released, loss }
   }
   async function releasePointer(pointer) {
     await page.mouse.up(); if (pointer.bypass) await page.keyboard.up('Alt'); await settled()
@@ -139,13 +170,21 @@ function helpers(h) {
       if (window.__animationQA.pointerObserversInstalled) return
       window.__animationQA.pointerObserversInstalled = true
       window.__animationQA.pointerEvents = []
+      window.__animationQA.pointerEventSequence = 0
+      window.__animationQA.pointerGestureSequence = 0
       document.addEventListener('pointerdown', (event) => {
         const target = event.composedPath().find((node) => node instanceof Element && node.matches('[data-animation-glyph],.animation-bezier-handle'))
-        if (target) window.__animationQA.nativePointer = { target, id: event.pointerId, trusted: event.isTrusted }
+        if (target) {
+          const q = window.__animationQA
+          q.nativePointer = { target, id: event.pointerId, trusted: event.isTrusted, gesture: ++q.pointerGestureSequence }
+        }
       }, true)
-      for (const type of ['gotpointercapture', 'lostpointercapture', 'pointercancel']) document.addEventListener(type, (event) => {
-        const events = window.__animationQA.pointerEvents
-        events.push({ type, id: event.pointerId, trusted: event.isTrusted }); if (events.length > 256) events.shift()
+      for (const type of ['gotpointercapture', 'lostpointercapture', 'pointercancel', 'pointermove', 'pointerup']) document.addEventListener(type, (event) => {
+        const q = window.__animationQA, p = q.nativePointer
+        if (!p || p.id !== event.pointerId) return
+        const events = q.pointerEvents
+        events.push({ sequence: ++q.pointerEventSequence, type, id: event.pointerId, gesture: p.gesture, trusted: event.isTrusted, sameTarget: event.target === p.target, buttons: event.buttons, x: event.clientX, y: event.clientY, target: { tag: event.target?.tagName, label: event.target?.getAttribute?.('aria-label') ?? null } })
+        if (events.length > 256) events.shift()
       }, true)
     })
   }
@@ -158,7 +197,7 @@ function helpers(h) {
     await settled(); await h.bridge(); await preparePointers()
     if (expectPristine) assert.equal((await peek()).past, 0)
   }
-  return { ...h, workspace, button, grid, keyField, glyph, handle, peek, remember, unchanged, sameProjectPayload, bounds, measured, openDock, filter, focusLane, nativeField, assertFocused, undoTo, playhead, startPointer, releasePointer, preparePointers, openFixture }
+  return { ...h, workspace, button, grid, keyField, glyph, handle, peek, remember, unchanged, sameProjectPayload, bounds, measured, openDock, filter, focusLane, nativeField, assertFocused, undoTo, playhead, startPointer, loseCapture, releasePointer, preparePointers, openFixture }
 }
 
 export async function prepareAnimationContinuation(h) {
@@ -212,10 +251,7 @@ export async function runAnimationGestures(h) {
         // Cancellation shortcuts should not inherit the drag's optional snap modifier.
         if (pointer.bypass) { await page.keyboard.up('Alt'); pointer.bypass = false }
         if (reason === 'escape') await q.grid().press('Escape')
-        if (reason === 'capture') await page.evaluate(() => {
-          // Invoke the browser's actual capture-release API; do not fabricate a React/DOM event.
-          const p = window.__animationQA.nativePointer; p.target.releasePointerCapture(p.id)
-        })
+        if (reason === 'capture') await q.loseCapture(pointer)
         if (reason === 'close') { await q.button('Back to Timeline').focus(); await q.button('Back to Timeline').press('Enter') }
         if (reason === 'mode') { const toggle = q.button(target === 'key' ? 'Curve' : 'Dope sheet'); await toggle.focus(); await toggle.press('Enter') }
         if (reason === 'selection') await q.grid().press(target === 'key' ? 'Home' : 'End')
@@ -227,6 +263,7 @@ export async function runAnimationGestures(h) {
         if (reason === 'document') await q.grid().press('ControlOrMeta+Z')
         if (reason === 'sequence') await page.getByRole('combobox', { name: 'Active sequence' }).selectOption('dormant')
         await settled(); assert.equal((await q.peek()).preview, false, 'Cancellation left an animation preview')
+        if (reason === 'capture') await q.unchanged(name)
         await q.releasePointer(pointer)
         if (reason === 'document') {
           assert.equal((await q.peek()).past, before.past - 1); assert.equal((await q.peek()).future, before.future + 1)

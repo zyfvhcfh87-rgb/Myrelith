@@ -61,7 +61,8 @@ async function state() {
     const q = window.__animationQA
     if (!q?.document || !q?.transport) return { phase: 'before production bridge' }
     const d = q.document.getState(), t = q.transport.getState()
-    return { project: d.project, past: d.past.length, future: d.future.length, selectedClipIds: t.selectedClipIds, selectedKeys: t.animationSelection, focus: t.animationFocus, focusedLane: t.animationFocusedLane, zoom: t.zoom, origin: t.timelineOriginFrame, status: t.animationStatus, preview: !!t.animationPreview, effectOwner: t.effectDocumentPreview?.owner ?? null, active: { tag: document.activeElement?.tagName, name: document.activeElement?.getAttribute('aria-label') } }
+    const p = q.nativePointer
+    return { project: d.project, past: d.past.length, future: d.future.length, selectedClipIds: t.selectedClipIds, selectedKeys: t.animationSelection, focus: t.animationFocus, focusedLane: t.animationFocusedLane, zoom: t.zoom, origin: t.timelineOriginFrame, status: t.animationStatus, preview: !!t.animationPreview, effectOwner: t.effectDocumentPreview?.owner ?? null, active: { tag: document.activeElement?.tagName, name: document.activeElement?.getAttribute('aria-label') }, nativePointer: p ? { id: p.id, gesture: p.gesture, trusted: p.trusted, connected: p.target.isConnected, captured: p.target.hasPointerCapture(p.id), target: { tag: p.target.tagName, label: p.target.getAttribute('aria-label') } } : null, nativePointerEvents: q.pointerEvents ?? [] }
   })
 }
 async function bridge() {
@@ -132,7 +133,7 @@ try {
   report.status = 'segment-passed'
 } catch (error) {
   report.status = 'failed'; report.failure = { step: currentStep, error: error.stack }; process.exitCode = 1
-  if (page) try { await shot('failure'); writeFileSync(join(out, 'failure-dom.txt'), await page.locator('body').innerText()); report.failure.state = await state() } catch (captureError) { report.failure.captureError = String(captureError) }
+  if (page) try { await shot('failure'); writeFileSync(join(out, 'failure-dom.txt'), await page.locator('body').innerText()); report.failure.state = await state(); report.nativePointerEvents = report.failure.state.nativePointerEvents ?? [] } catch (captureError) { report.failure.captureError = String(captureError) }
   console.error(`STOP ${currentStep}: ${error.message}`)
 } finally { await finishRun() }
 
