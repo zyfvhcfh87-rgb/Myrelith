@@ -7,8 +7,6 @@ import TitleInspector from './TitleInspector'
 import { lazy, useEffect, useState, type KeyboardEvent } from 'react'
 import { FileAudio, FileVideo } from '@phosphor-icons/react'
 import {
-  ANIMATABLE_AUDIO_PROPERTIES,
-  ANIMATABLE_VISUAL_PROPERTIES,
   resolveClipAnimationAtFrame,
   findAdjustment,
   findClip,
@@ -29,7 +27,8 @@ import VideoInspectorSections from './inspector/VideoInspectorSections'
 import AdjustmentInspector from './AdjustmentInspector'
 import ClipAttributeControls from './ClipAttributeControls'
 
-const AnimationCurveEditor = lazy(() => import('./AnimationCurveEditor'))
+import AnimationEntry from './animation/AnimationEntry'
+import { isProceduralTitleClip } from '../domain/textOverlay'
 const DynamicZoomEditor = lazy(() => import('./DynamicZoomEditor'))
 const StabilizationEditor = lazy(() => import('./StabilizationEditor'))
 const MotionTrackingEditor = lazy(() => import('./MotionTrackingEditor'))
@@ -195,9 +194,9 @@ function ClipInspector() {
           aria-labelledby="inspector-animation-tab"
           hidden={activeVideoTab !== 'animation'}
         >
-          {videoClip.title ? <span className="inspector-note">Use Title elements to edit base values or generate roll / crawl motion.</span> : videoClip.text
-            ? <span className="inspector-note">Animation controls are not available for text overlays yet.</span>
-            : animationSurfaceOpened && (
+          <AnimationEntry lane={{ kind: 'scalar', owner: { kind: 'clip', id: videoClip.id }, property: 'opacity', propertyVersion: 1 }} />
+          {videoClip.title && <span className="inspector-note">Use Title elements to edit base values or generate roll / crawl motion.</span>}
+          {!isProceduralTitleClip(videoClip) && animationSurfaceOpened && (
                 <LazySurfaceBoundary
                   loadingLabel="Loading animation curves…"
                   failureTitle="Animation curves could not load"
@@ -216,14 +215,7 @@ function ClipInspector() {
                     locked={videoLocked}
                     playheadFrame={playheadFrame}
                   />
-                  <AnimationCurveEditor
-                    clip={videoClip}
-                    locked={videoLocked}
-                    playheadFrame={playheadFrame}
-                    properties={audioClip
-                      ? ANIMATABLE_VISUAL_PROPERTIES
-                      : [...ANIMATABLE_VISUAL_PROPERTIES, ...ANIMATABLE_AUDIO_PROPERTIES]}
-                  />
+
                 </LazySurfaceBoundary>
               )}
         </div>
@@ -231,19 +223,7 @@ function ClipInspector() {
       {audioClip && (
         <AudioInspectorSection clip={audioClip} locked={audioLocked} />
       )}
-      {audioClip && (
-        <LazySurfaceBoundary
-          loadingLabel="Loading animation curves…"
-          failureTitle="Animation curves could not load"
-        >
-          <AnimationCurveEditor
-            clip={audioClip}
-            locked={audioLocked}
-            playheadFrame={playheadFrame}
-            properties={ANIMATABLE_AUDIO_PROPERTIES}
-          />
-        </LazySurfaceBoundary>
-      )}
+      {audioClip && <AnimationEntry label="Open audio animation" lane={{ kind: 'scalar', owner: { kind: 'clip', id: audioClip.id }, property: 'volume', propertyVersion: 1 }} />}
       {audioEffectClip && (
         <AudioEffectStackInspector
           doc={timelineDoc}

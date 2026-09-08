@@ -1,0 +1,139 @@
+{
+  "sourceHead": "34b55e0ce06af0b5b7ba8c5db23b7ce63fcf13cc",
+  "productSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "attemptDirectory": "/private/tmp/issue199-continuation/2026-09-08T17-37-13.437Z-gestures",
+  "status": "failed",
+  "traceArchiveValid": true,
+  "files": {
+    "build.log": {
+      "bytes": 3939,
+      "sha256": "7268faecd777fb4b16be033f1e8da4b56f2f578b42a8c6cae30e691ad3564889"
+    },
+    "console.log": {
+      "bytes": 1529,
+      "sha256": "610ef236589572ada74fa2edf3da83fb8554ad6a9c87baddf2f6d25681b776ea"
+    },
+    "failure-dom.txt": {
+      "bytes": 4842,
+      "sha256": "bf2f073398c6e6e8437e0414982584af19df7f043457a4d00d04f26569bbd717"
+    },
+    "failure.png": {
+      "bytes": 149592,
+      "sha256": "1a2a819fa6d0d1feb4ca4c04aa2cfad6a206ce2637ab3b7196389e8f186096b2"
+    },
+    "independent-cleanup-source.json": {
+      "bytes": 16405,
+      "sha256": "5ba6819c19a6f054b5f2b3ef4c01f4e75f3db0a7873a8fdf935466a755dd522d"
+    },
+    "result.json": {
+      "bytes": 399809,
+      "sha256": "4243249979949da9ebc5ed40b348236cfc67a4994e607c639185d6ff028396dc"
+    },
+    "server.log": {
+      "bytes": 39,
+      "sha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d"
+    },
+    "step-01-dom.txt": {
+      "bytes": 1050,
+      "sha256": "391e96e976bb2729c502f64bb5e09dc362aab8be1361f10d9a8d6d3ec49301a2"
+    },
+    "step-01.png": {
+      "bytes": 489379,
+      "sha256": "d172e046c287450fe29a0310ef764814ab5a0135d626e2dc043a98b26e968b2f"
+    },
+    "step-02-dom.txt": {
+      "bytes": 4917,
+      "sha256": "ee9208c86b51fa695fe3875cab342075e81d87d47334964df7f005bc1e907b3d"
+    },
+    "step-02.png": {
+      "bytes": 133866,
+      "sha256": "e3987837e1bb8d2547509ec07ee93e0c9e78ed20f4a265d15cc50d8949213250"
+    },
+    "step-03-dom.txt": {
+      "bytes": 4816,
+      "sha256": "5827490e6b13d3cf24332235fccaca80fd3f2e7de87fe29299f1e45c67ffbf6f"
+    },
+    "step-03.png": {
+      "bytes": 147342,
+      "sha256": "835b35d6b8aeb4bca2d8fa818a752508b7ed7fa7b154cbaa319901086c02d75b"
+    },
+    "step-04-dom.txt": {
+      "bytes": 4869,
+      "sha256": "d41a441062b059519e49e097c7bcf71604f9e8d4ce1ad1ec7fb4e97f5163460a"
+    },
+    "step-04.png": {
+      "bytes": 153289,
+      "sha256": "8eddc8de9659f46b1059f915d183a1055618980fb6f649519a64b25e11a4d3dd"
+    },
+    "step-05-dom.txt": {
+      "bytes": 4869,
+      "sha256": "d41a441062b059519e49e097c7bcf71604f9e8d4ce1ad1ec7fb4e97f5163460a"
+    },
+    "step-05.png": {
+      "bytes": 153292,
+      "sha256": "2b61b1a8c02e198b761492bf000e5241137aaf69e93e2d3c29ad504e823d156c"
+    },
+    "step-06-dom.txt": {
+      "bytes": 4820,
+      "sha256": "4eb9151b329fc0e639cf741caa4fcf2319484eaf4d9e73079ba9c7b03cf24ed7"
+    },
+    "step-06.png": {
+      "bytes": 147134,
+      "sha256": "1b393d451437456513176eb901505663bba006d35c69d24a5228743cade1ea21"
+    },
+    "step-07-dom.txt": {
+      "bytes": 4842,
+      "sha256": "bf2f073398c6e6e8437e0414982584af19df7f043457a4d00d04f26569bbd717"
+    },
+    "step-07.png": {
+      "bytes": 148806,
+      "sha256": "e8e2e5cfbdde492b8b15b96f3f0e2c4f7a4e56a0ab01c88c55db260fb824291e"
+    },
+    "step-08-dom.txt": {
+      "bytes": 4980,
+      "sha256": "c9101f4863124137a237f9ffab2bfc93713718e2dd8c95379ffee7ba67da4a90"
+    },
+    "step-08.png": {
+      "bytes": 129983,
+      "sha256": "74ec2ba25dd40ec82d1a562c1da7c394d40f5f92ccd25e9c82203b354c5e9a04"
+    },
+    "step-09-dom.txt": {
+      "bytes": 4848,
+      "sha256": "fcd1e34460c9d426a282c2d25b2d2d0c3af03549c203eb938012906cc6acca7d"
+    },
+    "step-09.png": {
+      "bytes": 153303,
+      "sha256": "67c9a33b1926a2513f8a2a1f051eab4d2e1ca5acb148212fbc84fcc4e4c84ea8"
+    },
+    "step-10-dom.txt": {
+      "bytes": 4885,
+      "sha256": "d850735e21c2f4f38e7e2741b3513632bec071c8ea622706286861656d4fbdc5"
+    },
+    "step-10.png": {
+      "bytes": 150352,
+      "sha256": "e6d6ce63b2c40a80161b2267efd80c43665fdafc891edb8abd15b520ffd9386d"
+    },
+    "step-11-dom.txt": {
+      "bytes": 4842,
+      "sha256": "4e55e71aa3d8bc014e62e2a8b0500c5d7537ad03318993772e7459e4e556c13f"
+    },
+    "step-11.png": {
+      "bytes": 148625,
+      "sha256": "aa810e50288a422568380be8ee2821c9829f9b1c47747549cd52fae07acd8091"
+    },
+    "step-12-dom.txt": {
+      "bytes": 4842,
+      "sha256": "bf2f073398c6e6e8437e0414982584af19df7f043457a4d00d04f26569bbd717"
+    },
+    "step-12.png": {
+      "bytes": 149592,
+      "sha256": "1a2a819fa6d0d1feb4ca4c04aa2cfad6a206ce2637ab3b7196389e8f186096b2"
+    },
+    "trace.zip": {
+      "bytes": 11979306,
+      "sha256": "a2d297b33c501647080e21bf50cafb37a6614608b1aed2bac377c509910dd6d9"
+    }
+  },
+  "profilePreserved": "/private/tmp/issue199-continuation/2026-09-08T17-37-13.437Z-gestures/chromium-profile",
+  "profileHashClaim": false
+}

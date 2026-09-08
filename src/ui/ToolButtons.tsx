@@ -23,6 +23,7 @@ import { useTransportStore } from '../state/transportStore'
 import { usePreferencesStore } from '../state/preferencesStore'
 import { shortcutForCommand, type EditorCommandId } from '../app/editorCommands'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
+import AnimationEntry from './animation/AnimationEntry'
 
 const TitleTemplateDialog = lazy(() => import('./TitleTemplateDialog'))
 const TextOverlayDialog = lazy(() => import('./TextOverlayDialog'))
@@ -118,6 +119,7 @@ export default function ToolButtons() {
         >
           <Magnet aria-hidden="true" size={17} weight="bold" />
         </button>
+        <AnimationEntry variant="tool" label="Animation" />
       </div>
       {templatesOpen && <LazySurfaceBoundary variant="dialog" loadingLabel="Loading title templates…" failureTitle="Title templates could not load" onClose={closeTemplates}><TitleTemplateDialog onClose={closeTemplates} /></LazySurfaceBoundary>}
       {textOpen && (

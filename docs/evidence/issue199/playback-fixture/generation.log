@@ -1,0 +1,64 @@
+{
+  "productSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "generatorSha256": "071da8db34fd473c359855da525a15e2bec2346f81fd328907b72cc4f1cbbfde",
+  "preserved": {
+    "mixed.myrelith": "e510cb67197ed771049dea65cfccf02820d4550841f6b32dde9ac6c0f4618ac0",
+    "dense.myrelith": "26814d074c6e94230b1e3004c863d32490bd84cd266123c27720f228b851c574",
+    "many-lanes.myrelith": "2461ff539f8db3515c5845dbdbe1d3427fbe792d8a852906c6504f74221fda4c",
+    "continuation/dense-scalar.myrelith": "2518406e6d2759bb7a8cdceb0d2d555ec460c0e34130325fa61f4b9b775dadbf"
+  },
+  "scope": "Supplemental gestures-only input. Original portable bytes retained; only audio-asset.size corrected for the actual Relink file-input path. Browser output remains muted.",
+  "pcm": {
+    "container": "RIFF/WAVE",
+    "formatTag": 1,
+    "bitsPerSample": 16,
+    "sampleRate": 48000,
+    "channels": 2,
+    "sampleFrames": 1440000,
+    "durationMicroseconds": 30000000,
+    "headerBytes": 44,
+    "dataBytes": 5760000,
+    "dataSha256": "9495a53928ee15a36c0556a18eee35727e08f0634387bfef71bfa7a50cfbc8bf",
+    "signal": "For phase=frame%192: left=phase<96 ? -1536+32*phase : 4608-32*phase; right=-left. Signed little-endian 16-bit interleaved stereo. No random values or timestamps."
+  },
+  "metadataProbe": {
+    "library": "mediabunny 1.50.9",
+    "codec": "pcm-s16",
+    "sampleRate": 48000,
+    "channels": 2,
+    "firstTimestamp": 0,
+    "durationSeconds": 30,
+    "qualification": "Host demux/metadata only; no browser compatibility probe, decoding, playback, PCM output, or export acceptance."
+  },
+  "canonicalValidation": {
+    "audioDescriptorSize": {
+      "before": 1,
+      "after": 5760044
+    },
+    "allOtherPortableFieldsEqual": true,
+    "canonicalRoundTripExact": true,
+    "originalRelinkSizeRejected": true,
+    "supplementalMetadataMatchAccepted": true,
+    "audioDependencies": {
+      "root": [
+        {
+          "clipId": "ordinary-audio",
+          "assetId": "audio-asset",
+          "startFrame": 0,
+          "endFrame": 60
+        }
+      ],
+      "dormant": []
+    }
+  },
+  "files": {
+    "silent-offline.wav": {
+      "bytes": 5760044,
+      "sha256": "f674326cc658930dc9eb01b1388aca7e7f9a0e7bedc3fb58b49803f01a133859"
+    },
+    "mixed-playback.myrelith": {
+      "bytes": 13385,
+      "sha256": "8a067088cd5c007ea701d3af702626dc15aa880086e359a56c1629868dc8ae6b"
+    }
+  }
+}

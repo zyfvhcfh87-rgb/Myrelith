@@ -1,0 +1,483 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/app/animationEditingController.test.ts src/app/animationTitleIntegration.test.ts src/app/animationPreviewIntegration.test.ts src/app/colorGradingController.test.ts src/app/maskEditingController.test.ts src/app/maskMotionTrackingController.test.ts src/app/titleEditingController.test.ts src/app/titlePreviewRetention.test.ts src/ui/animation/AnimationWorkspace.test.tsx src/test/issue199G4Fixture.test.ts src/test/architecture.test.ts
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx (30 tests | 1 failed) 2557ms
+     × explicit unavailable entries and future stored versions never fall back to a different editable property 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > explicit unavailable entries and future stored versions never fall back to a different editable property
+TestingLibraryElementError: Unable to find an element with the text: This title effect does not support animation.. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <section
+      aria-label="Animation workspace"
+      class="animation-workspace"
+    >
+      <div
+        class="animation-toolbar"
+      >
+        <strong>
+          Animation
+        </strong>
+        <button
+          aria-pressed="true"
+          type="button"
+        >
+          Dope sheet
+        </button>
+        <button
+          aria-pressed="false"
+          type="button"
+        >
+          Curve
+        </button>
+        <input
+          aria-label="Filter animation lanes"
+          placeholder="Find track, item or property"
+          value=""
+        />
+        <label>
+          <input
+            type="checkbox"
+          />
+          Selected items
+        </label>
+        <label>
+          <input
+            type="checkbox"
+          />
+          Animated only
+        </label>
+        <select
+          aria-label="Animation lane kind"
+        >
+          <option
+            value="all"
+          >
+            All properties
+          </option>
+          <option
+            value="scalar"
+          >
+            Clip / audio
+          </option>
+          <option
+            value="effect"
+          >
+            Effects
+          </option>
+          <option
+            value="title"
+          >
+            Title elements
+          </option>
+          <option
+            value="path"
+          >
+            Held paths
+          </option>
+        </select>
+        <button
+          type="button"
+        >
+          Back to Timeline
+        </button>
+      </div>
+      <div
+        aria-label="Animation commands"
+        class="animation-toolbar animation-tools"
+      >
+        <button
+          type="button"
+        >
+          First
+        </button>
+        <button
+          type="button"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+        >
+          Next
+        </button>
+        <button
+          type="button"
+        >
+          Last
+        </button>
+        <button
+          disabled=""
+          type="button"
+        >
+          -10
+          f
+        </button>
+        <button
+          disabled=""
+          type="button"
+        >
+          -1
+          f
+        </button>
+        <button
+          disabled=""
+          type="button"
+        >
+          +
+          1
+          f
+        </button>
+        <button
+          disabled=""
+          type="button"
+        >
+          +
+          10
+          f
+        </button>
+        <button
+          disabled=""
+          type="button"
+        >
+          Copy
+        </button>
+        <button
+          disabled=""
+          type="button"
+        >
+          Cut
+        </button>
+        <button
+          disabled=""
+          type="button"
+        >
+          Paste
+        </button>
+        <button
+          disabled=""
+          type="button"
+        >
+          Paste original time
+        </button>
+        <button
+          disabled=""
+          type="button"
+        >
+          Map paste…
+        </button>
+        <button
+          disabled=""
+          type="button"
+        >
+          Delete
+        </button>
+        <button
+          aria-label="Horizontal zoom out"
+          type="button"
+        >
+          X−
+        </button>
+        <button
+          aria-label="Horizontal zoom in"
+          type="button"
+        >
+          X+
+        </button>
+        <button
+          aria-label="Pan animation left"
+          type="button"
+        >
+          ←
+        </button>
+        <button
+          aria-label="Pan animation right"
+          type="button"
+        >
+          →
+        </button>
+        <button
+          type="button"
+        >
+          Fit keys
+        </button>
+        <button
+          type="button"
+        >
+          Reset view
+        </button>
+      </div>
+      <div
+        class="animation-main"
+      >
+        <div
+          class="animation-grid-wrap"
+        >
+          <div
+            class="animation-ruler"
+          >
+            <span
+              style="width: 248px;"
+            >
+              Track / item / property
+            </span>
+            <svg
+              aria-hidden="true"
+              height="22"
+              width="352"
+            >
+              <text
+                x="2"
+                y="15"
+              >
+                0
+              </text>
+              <text
+                x="60.666666666666664"
+                y="15"
+              >
+                59
+              </text>
+              <text
+                x="119.33333333333333"
+                y="15"
+              >
+                117
+              </text>
+              <text
+                x="178"
+                y="15"
+              >
+                176
+              </text>
+              <text
+                x="236.66666666666666"
+                y="15"
+              >
+                235
+              </text>
+              <text
+                x="295.3333333333333"
+                y="15"
+              >
+                293
+              </text>
+              <text
+                x="354"
+                y="15"
+              >
+                352
+              </text>
+            </svg>
+          </div>
+          <div
+            aria-activedescendant="animation-focused-description"
+            aria-label="Animation keys"
+            aria-rowcount="1"
+            class="animation-grid"
+            data-timeline-scroll="true"
+            role="grid"
+            tabindex="0"
+          >
+            <div
+              data-timeline-headers="true"
+              style="width: 248px; height: 0px;"
+            />
+            <div
+              class="animation-grid-surface"
+              style="width: 1296248px; height: 200px;"
+            >
+              <div
+                aria-rowindex="1"
+                class="animation-lane"
+                data-animation-lane="true"
+                role="row"
+                style="top: 0px; height: 32px;"
+              >
+                <button
+                  aria-label="V1 / Title 世界
+Second line, Opacity, 2 keys"
+                  class="animation-lane-label"
+                  role="rowheader"
+                  style="left: 0px; width: 248px;"
+                  tabindex="-1"
+                  type="button"
+                >
+                  <span>
+                    V1 / Title 世界
+Second line
+                  </span>
+                  <strong>
+                    Opacity
+
+                    <small />
+                  </strong>
+                </button>
+                <svg
+                  aria-label="Opacity key positions"
+                  class="animation-key-lane"
+                  height="32"
+                  style="left: 248px;"
+                  width="352"
+                >
+                  <g
+                    aria-label="Opacity, local frame 0"
+                    aria-selected="false"
+                    class="animation-key"
+                    data-animation-glyph="true"
+                    role="gridcell"
+                    transform="translate(0 16)"
+                  >
+                    <path
+                      d="M 0 -6 L 6 0 L 0 6 L -6 0 Z"
+                    />
+                  </g>
+                  <g
+                    aria-label="Opacity, local frame 10"
+                    aria-selected="false"
+                    class="animation-key"
+                    data-animation-glyph="true"
+                    role="gridcell"
+                    transform="translate(10 16)"
+                  >
+                    <path
+                      d="M 0 -6 L 6 0 L 0 6 L -6 0 Z"
+                    />
+                  </g>
+                </svg>
+              </div>
+              <div
+                class="animation-playhead"
+                style="left: 248px; height: 200px; top: 0px;"
+              />
+            </div>
+            <span
+              class="visually-hidden"
+              id="animation-focused-description"
+              role="gridcell"
+            >
+              V1 / Title 世界
+Second line / unknown
+              ,
+              strength
+              ,
+              no selected key
+              ,
+              The effect owner or stage is unavailable.
+            </span>
+          </div>
+        </div>
+        <aside
+          aria-label="Animation key controls"
+          class="animation-key-controls"
+        >
+          <strong>
+            strength
+          </strong>
+          <small>
+            V1 / Title 世界
+Second line / unknown
+          </small>
+          <p
+            class="animation-unavailable"
+          >
+            The effect owner or stage is unavailable.
+          </p>
+          <button
+            disabled=""
+            type="button"
+          >
+            Set key at playhead
+          </button>
+          <label
+            class="inspector-field"
+          >
+            <span
+              class="inspector-field-label"
+            >
+              Offset frames
+            </span>
+            <input
+              data-testid="animation-offset"
+              max="1000000000"
+              min="-1000000000"
+              step="1"
+              type="number"
+              value="1"
+            />
+          </label>
+          <div
+            class="animation-inline-actions"
+          >
+            <button
+              disabled=""
+              type="button"
+            >
+              Move
+            </button>
+            <button
+              disabled=""
+              type="button"
+            >
+              Duplicate
+            </button>
+          </div>
+        </aside>
+      </div>
+      <footer
+        class="animation-footer"
+      >
+        <span>
+          1
+           lanes ·
+          2
+           keys ·
+          0
+           selected
+           · Focused property is outside the filters
+        </span>
+        <details>
+          <summary>
+            Keyboard help
+          </summary>
+          <p>
+            ↑↓ properties; ←→ previous/next key; Home/End first/last; Shift extends selection; Ctrl/Cmd-click toggles keys. Ctrl/Cmd+←→ moves 1 frame, add Shift for 10. K sets at playhead; Delete removes; Ctrl/Cmd+C/X/V copies/cuts/pastes; Shift+paste keeps original time; Ctrl/Cmd+D duplicates 1 frame later; Ctrl/Cmd+A selects filtered keys; Ctrl/Cmd+Z undoes; +/− zooms. Escape or lost pointer capture cancels a drag. Alt bypasses snapping. Inputs keep their normal keyboard behavior.
+          </p>
+        </details>
+        <span
+          aria-live="polite"
+          role="status"
+        >
+          Ready
+        </span>
+      </footer>
+    </section>
+  </div>
+</body>
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx:338:19
+    336|     render(<AnimationWorkspace />)
+    337|     expect(screen.getByRole('button', { name: 'Set key at playhead' })…
+    338|     expect(screen.getByText('This title effect does not support animat…
+       |                   ^
+    339|     const before = store(); keyDown('k'); expect(store()).toBe(before)
+    340|     const project = legacyTitleProject()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 10 passed (11)
+      Tests  1 failed | 184 passed (185)
+   Start at  22:02:39
+   Duration  4.09s (transform 2.95s, setup 567ms, import 5.67s, tests 5.98s, environment 3.82s)

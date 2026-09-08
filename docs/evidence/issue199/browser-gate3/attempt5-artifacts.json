@@ -1,0 +1,65 @@
+{
+  "directory": "/private/tmp/issue199-gate3-browser/2026-09-08T13-55-23.484Z",
+  "files": {
+    "build.log": {
+      "bytes": 3579,
+      "sha256": "6faba959ebc96f5a04b011beb6e09fb528c45666ea5be1bf04866cd409f0b698"
+    },
+    "compact-sheet.png": {
+      "bytes": 126586,
+      "sha256": "95a0efa1460cec2e93648c3229ee00080a5997120c9b093e21ae7837b2726e32"
+    },
+    "curve-before-click.png": {
+      "bytes": 152973,
+      "sha256": "d14a7bf2d41a9bab916708b5fb2bb309e99580aaaec53334a3c07f87f55e90a3"
+    },
+    "curve-handle-1-offset--2.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "curve-handle-1-offset-0.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "curve-handle-1-offset-2.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "curve-handle-2-offset--2.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "curve-handle-2-offset-0.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "curve-handle-2-offset-2.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "desktop-sheet.png": {
+      "bytes": 161943,
+      "sha256": "f9e3e92da480bcede0d55c5ba2ea157d0f2d5d23e7fbdc9cc3705f478533beea"
+    },
+    "process-cleanup.json": {
+      "bytes": 466,
+      "sha256": "63c80a2e35074f9e34faba4106741114d0cbe2caab19ff9dd7f3659cf2c895b8"
+    },
+    "result.json": {
+      "bytes": 581692,
+      "sha256": "036e735fc039737c299ce2b0247017adce37e9137f718e6031dbec90f79af0d1"
+    },
+    "server.log": {
+      "bytes": 39,
+      "sha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d"
+    },
+    "timeline-return.png": {
+      "bytes": 127995,
+      "sha256": "6dcfa5e6da5d7fb44c653bfd447c75e69bb33da29e5166ab5e204a4a4c9d80fd"
+    },
+    "trace.zip": {
+      "bytes": 4285604,
+      "sha256": "4bcb2b8ed699c62acea714ea726394cd832e0a86f9f067b0f090806e1834a348"
+    }
+  }
+}

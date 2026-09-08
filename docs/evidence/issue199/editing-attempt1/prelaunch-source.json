@@ -1,0 +1,16 @@
+{
+  "at": "2026-09-08T18:43:30.922Z",
+  "head": "a70d0c24a57ca04fa488f3ae0a8819b4fc995f19",
+  "clean": true,
+  "sourceFiles": 242,
+  "checkpointFiles": 55,
+  "unchangedHarness": "d16cca49617a8a32cc820d63345404133b70eb12",
+  "product": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "segment": "editing",
+  "fixtureHashes": {
+    "mixed.myrelith": "e510cb67197ed771049dea65cfccf02820d4550841f6b32dde9ac6c0f4618ac0",
+    "dense.myrelith": "26814d074c6e94230b1e3004c863d32490bd84cd266123c27720f228b851c574",
+    "many-lanes.myrelith": "2461ff539f8db3515c5845dbdbe1d3427fbe792d8a852906c6504f74221fda4c",
+    "continuation/dense-scalar.myrelith": "2518406e6d2759bb7a8cdceb0d2d555ec460c0e34130325fa61f4b9b775dadbf"
+  }
+}

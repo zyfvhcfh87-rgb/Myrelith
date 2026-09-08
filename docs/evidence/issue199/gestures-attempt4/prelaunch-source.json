@@ -1,0 +1,10 @@
+{
+  "at": "2026-09-08T18:30:19.985Z",
+  "head": "d16cca49617a8a32cc820d63345404133b70eb12",
+  "clean": true,
+  "sourceFiles": 242,
+  "checkpointFiles": 55,
+  "parentReviewedHashesMatch": true,
+  "productConfigDiffEmpty": true,
+  "commit": "commit d16cca49617a8a32cc820d63345404133b70eb12\nAuthor:     Aryel <286477813+zyfvhcfh87-rgb@users.noreply.github.com>\nAuthorDate: Tue Sep 8 20:29:39 2026 +0200\nCommit:     Aryel <286477813+zyfvhcfh87-rgb@users.noreply.github.com>\nCommitDate: Tue Sep 8 20:29:39 2026 +0200\n\n    Prepare canonical audio relink fixture for Animation gestures\n    \n    Add deterministic stereo PCM and a supplemental portable fixture correcting only the offline audio descriptor byte size. Prepare the actual Relink file-input path before gesture checkpoints while preserving native transport actions and strict console acceptance.\n    \n    Record source-only canonical, metadata, PCM structure, and deterministic-generation evidence. Preserve all original portable fixtures and failed native attempts; require root review before another native run.\n    \n    Co-authored-by: Codex <codex@openai.com>"
+}

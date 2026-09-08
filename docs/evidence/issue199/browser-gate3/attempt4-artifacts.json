@@ -1,0 +1,69 @@
+{
+  "directory": "/private/tmp/issue199-gate3-browser/2026-09-08T13-36-45.626Z",
+  "files": {
+    "build.log": {
+      "bytes": 3579,
+      "sha256": "91fa822313ab4ffdc1b461004a4d2293bac5c4f7df95e0b170c143db2c864257"
+    },
+    "compact-sheet.png": {
+      "bytes": 126586,
+      "sha256": "95a0efa1460cec2e93648c3229ee00080a5997120c9b093e21ae7837b2726e32"
+    },
+    "curve-before-click.png": {
+      "bytes": 152973,
+      "sha256": "d14a7bf2d41a9bab916708b5fb2bb309e99580aaaec53334a3c07f87f55e90a3"
+    },
+    "curve-handle-1-offset--2.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "curve-handle-1-offset-0.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "curve-handle-1-offset-2.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "curve-handle-2-offset--2.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "curve-handle-2-offset-0.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "curve-handle-2-offset-2.png": {
+      "bytes": 152415,
+      "sha256": "01bc166a2d627101cb6a65fa3944df0c51d9e69a7ef402554ac134b50b782e69"
+    },
+    "desktop-sheet.png": {
+      "bytes": 161943,
+      "sha256": "f9e3e92da480bcede0d55c5ba2ea157d0f2d5d23e7fbdc9cc3705f478533beea"
+    },
+    "failure-dom.txt": {
+      "bytes": 4977,
+      "sha256": "a21fc357a2ac5482d871e7e2b46c8043466bce7f07a8b4967002d9cbd613bd1a"
+    },
+    "failure.png": {
+      "bytes": 127995,
+      "sha256": "6dcfa5e6da5d7fb44c653bfd447c75e69bb33da29e5166ab5e204a4a4c9d80fd"
+    },
+    "process-cleanup.json": {
+      "bytes": 460,
+      "sha256": "c4f9506e30c50b28e81f83d8856f8eb7a83cc40249cf7a386f7362825fadf731"
+    },
+    "result.json": {
+      "bytes": 621473,
+      "sha256": "15df89870d98eca1397bc58b5d677a832693a5c18f2fff2422739a16767c087c"
+    },
+    "server.log": {
+      "bytes": 39,
+      "sha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d"
+    },
+    "trace.zip": {
+      "bytes": 4290437,
+      "sha256": "c65c173bd34771ce337eed73a3351af1d3acac1a2cbfddc440727c9ad9a96ee1"
+    }
+  }
+}

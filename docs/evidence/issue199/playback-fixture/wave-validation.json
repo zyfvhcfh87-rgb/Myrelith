@@ -1,0 +1,20 @@
+{
+  "tool": "Python standard-library wave and array, no audio device or decoder",
+  "metadata": {
+    "channels": 2,
+    "sampleWidthBytes": 2,
+    "sampleRate": 48000,
+    "sampleFrames": 1440000,
+    "compression": "NONE"
+  },
+  "durationSeconds": 30.0,
+  "sampleValues": 2880000,
+  "min": -1536,
+  "max": 1536,
+  "oppositeStereoThroughout": true,
+  "nonSilent": true,
+  "dataBytes": 5760000,
+  "dataSha256": "9495a53928ee15a36c0556a18eee35727e08f0634387bfef71bfa7a50cfbc8bf",
+  "fileBytes": 5760044,
+  "fileSha256": "f674326cc658930dc9eb01b1388aca7e7f9a0e7bedc3fb58b49803f01a133859"
+}

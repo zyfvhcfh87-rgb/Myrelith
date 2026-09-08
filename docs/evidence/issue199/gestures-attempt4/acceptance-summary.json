@@ -1,0 +1,253 @@
+{
+  "harnessHead": "d16cca49617a8a32cc820d63345404133b70eb12",
+  "productSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "startedAt": "2026-09-08T18:30:49.647Z",
+  "finishedAt": "2026-09-08T18:31:11.808Z",
+  "durationMs": 22161,
+  "stepsPassed": 34,
+  "strictConsoleProblems": [],
+  "actualRelink": {
+    "asset": {
+      "id": "audio-asset",
+      "kind": "audio",
+      "size": 5760044,
+      "durationMicroseconds": 30000000,
+      "hasAudio": true,
+      "audioSampleRate": 48000,
+      "audioChannels": 2,
+      "sourceBounds": {
+        "video": null,
+        "audio": {
+          "status": "exact",
+          "firstTimestampUs": 0,
+          "endTimestampUs": 30000000
+        }
+      },
+      "localBlob": true
+    },
+    "connectedAssetIds": [
+      "audio-asset"
+    ],
+    "audioClip": {
+      "id": "ordinary-audio",
+      "assetId": "audio-asset",
+      "enabled": true,
+      "volume": 1
+    }
+  },
+  "playbackCases": [
+    {
+      "name": "native key cancellation: playback",
+      "status": "passed",
+      "after": {
+        "past": 0,
+        "future": 1,
+        "activeSequenceId": "root",
+        "focus": {
+          "frame": 40,
+          "lane": {
+            "owner": {
+              "kind": "clip",
+              "id": "root-text"
+            },
+            "kind": "scalar",
+            "property": "opacity",
+            "propertyVersion": 1
+          }
+        },
+        "selection": [
+          {
+            "frame": 40,
+            "lane": {
+              "owner": {
+                "kind": "clip",
+                "id": "root-text"
+              },
+              "kind": "scalar",
+              "property": "opacity",
+              "propertyVersion": 1
+            }
+          }
+        ],
+        "lane": {
+          "owner": {
+            "kind": "clip",
+            "id": "root-text"
+          },
+          "kind": "scalar",
+          "property": "opacity",
+          "propertyVersion": 1
+        },
+        "playhead": 1,
+        "playing": false,
+        "preview": false,
+        "effectOwner": null,
+        "origin": 0,
+        "zoom": 11.62962962962963,
+        "range": {
+          "startFrame": 0,
+          "endFrame": 84
+        },
+        "status": "Bézier handles updated.",
+        "clipboard": null
+      }
+    },
+    {
+      "name": "native handle-1 cancellation: playback",
+      "status": "passed",
+      "after": {
+        "past": 0,
+        "future": 1,
+        "activeSequenceId": "root",
+        "focus": {
+          "frame": 0,
+          "lane": {
+            "owner": {
+              "kind": "clip",
+              "id": "root-text"
+            },
+            "kind": "scalar",
+            "property": "opacity",
+            "propertyVersion": 1
+          }
+        },
+        "selection": [
+          {
+            "frame": 0,
+            "lane": {
+              "owner": {
+                "kind": "clip",
+                "id": "root-text"
+              },
+              "kind": "scalar",
+              "property": "opacity",
+              "propertyVersion": 1
+            }
+          }
+        ],
+        "lane": {
+          "owner": {
+            "kind": "clip",
+            "id": "root-text"
+          },
+          "kind": "scalar",
+          "property": "opacity",
+          "propertyVersion": 1
+        },
+        "playhead": 1,
+        "playing": false,
+        "preview": false,
+        "effectOwner": null,
+        "origin": 0,
+        "zoom": 11.62962962962963,
+        "range": {
+          "startFrame": 0,
+          "endFrame": 84
+        },
+        "status": "",
+        "clipboard": null
+      }
+    },
+    {
+      "name": "native handle-2 cancellation: playback",
+      "status": "passed",
+      "after": {
+        "past": 0,
+        "future": 1,
+        "activeSequenceId": "root",
+        "focus": {
+          "frame": 0,
+          "lane": {
+            "owner": {
+              "kind": "clip",
+              "id": "root-text"
+            },
+            "kind": "scalar",
+            "property": "opacity",
+            "propertyVersion": 1
+          }
+        },
+        "selection": [
+          {
+            "frame": 0,
+            "lane": {
+              "owner": {
+                "kind": "clip",
+                "id": "root-text"
+              },
+              "kind": "scalar",
+              "property": "opacity",
+              "propertyVersion": 1
+            }
+          }
+        ],
+        "lane": {
+          "owner": {
+            "kind": "clip",
+            "id": "root-text"
+          },
+          "kind": "scalar",
+          "property": "opacity",
+          "propertyVersion": 1
+        },
+        "playhead": 1,
+        "playing": false,
+        "preview": false,
+        "effectOwner": null,
+        "origin": 0,
+        "zoom": 11.62962962962963,
+        "range": {
+          "startFrame": 0,
+          "endFrame": 84
+        },
+        "status": "",
+        "clipboard": null
+      }
+    }
+  ],
+  "captureProofs": [
+    {
+      "gesture": 5,
+      "pointerId": 1,
+      "got": 61,
+      "lost": 66,
+      "followingHeldMove": 67,
+      "trustedSameElementLoss": true,
+      "noPointerUpBeforeProof": true,
+      "captureFalse": true
+    },
+    {
+      "gesture": 14,
+      "pointerId": 1,
+      "got": 202,
+      "lost": 207,
+      "followingHeldMove": 208,
+      "trustedSameElementLoss": true,
+      "noPointerUpBeforeProof": true,
+      "captureFalse": true
+    },
+    {
+      "gesture": 23,
+      "pointerId": 1,
+      "got": 357,
+      "lost": 362,
+      "followingHeldMove": 363,
+      "trustedSameElementLoss": true,
+      "noPointerUpBeforeProof": true,
+      "captureFalse": true
+    }
+  ],
+  "observedBounds": {
+    "observations": 33,
+    "maxRows": 1,
+    "maxGlyphsIncludingGhosts": 4,
+    "maxCurveSamples": 254,
+    "horizontalOverflow": false
+  },
+  "imagesInspected": [
+    "step-02.png",
+    "step-30.png",
+    "step-34.png"
+  ],
+  "qualification": "Only this selected segment. No automatic whole Gate3, OS save-picker, instrumented index count, hardware GPU, media pixel/PCM or export acceptance."
+}

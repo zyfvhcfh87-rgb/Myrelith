@@ -1,0 +1,27 @@
+START production launcher identity
+PASS production launcher identity
+START canonical mixed fixture and native selection
+PASS canonical mixed fixture and native selection
+START 720x900 native Timeline and Inspector entry keep the full Animation controls reachable
+PASS 720x900 native Timeline and Inspector entry keep the full Animation controls reachable
+START native input select/copy/paste/undo does not trigger Animation or global document commands
+PASS native input select/copy/paste/undo does not trigger Animation or global document commands
+START full-sequence filters, exact out-of-clip keys, Shift range and native toggle
+PASS full-sequence filters, exact out-of-clip keys, Shift range and native toggle
+START create/value/easing/invalid drafts with native numeric input and button activation
+PASS create/value/easing/invalid drafts with native numeric input and button activation
+START native keyboard moves/duplicate/delete and audio scalar values stay inside Animation
+PASS native keyboard moves/duplicate/delete and audio scalar values stay inside Animation
+START held paths and unavailable/future/title-effect intent retain their own editing limits
+PASS held paths and unavailable/future/title-effect intent retain their own editing limits
+START complete cross-owner mapping, incompatible mapping refusal, collision refusal and undo
+PASS complete cross-owner mapping, incompatible mapping refusal, collision refusal and undo
+START title key cut/paste original time and relative paste preserve authored spacing
+PASS title key cut/paste original time and relative paste preserve authored spacing
+START explicit clip-effect to adjustment-effect mapping preserves parameter identity and spacing
+PASS explicit clip-effect to adjustment-effect mapping preserves parameter identity and spacing
+START locked track refuses native keyboard edits without replacing document/history/clipboard
+PASS locked track refuses native keyboard edits without replacing document/history/clipboard
+START canonical portable save/reopen after mixed native edits preserves complete project payload
+PASS canonical portable save/reopen after mixed native edits preserves complete project payload
+Evidence: /private/tmp/issue199-continuation/2026-09-08T18-43-43.397Z-editing

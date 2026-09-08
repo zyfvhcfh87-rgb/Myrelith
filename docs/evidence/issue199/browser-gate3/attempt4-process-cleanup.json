@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-09-08T13:38:15.486Z",
+  "pids": [
+    62750,
+    62995,
+    62996,
+    62997,
+    62998
+  ],
+  "capturedOwnedProcessesAbsent": true,
+  "port5199Listening": false,
+  "ps": {
+    "exitCode": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "lsof": {
+    "exitCode": 1,
+    "stdout": "",
+    "stderr": ""
+  },
+  "qualification": "Captured server/browser/GPU/network PIDs absent; browser.close completed. No unrelated process was terminated."
+}

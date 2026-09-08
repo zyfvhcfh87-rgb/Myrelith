@@ -11,6 +11,8 @@ export interface NumberFieldProps {
   max?: number
   disabled?: boolean
   clamp?: boolean
+  /** An external validation refusal can reset the draft without remounting/focus loss. */
+  resetRevision?: number
 }
 
 export function NumberField({
@@ -23,13 +25,14 @@ export function NumberField({
   max,
   disabled = false,
   clamp = false,
+  resetRevision,
 }: NumberFieldProps) {
   const [draft, setDraft] = useState(String(value))
   // Re-sync whenever the committed value changes under us (undo/redo, a
   // gesture on the canvas, switching clips) — but never while typing.
   useEffect(() => {
     setDraft(String(value))
-  }, [value])
+  }, [value, resetRevision])
 
   const commit = (): void => {
     const trimmed = draft.trim()

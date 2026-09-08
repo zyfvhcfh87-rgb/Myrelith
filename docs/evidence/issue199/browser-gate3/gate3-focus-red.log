@@ -1,0 +1,278 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --run src/app/EditorShell.test.tsx -t returns focus to the Timeline Animation entry
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/app/EditorShell.test.tsx (16 tests | 2 failed | 14 skipped) 636ms
+     × returns focus to the Timeline Animation entry after closing from Timeline 502ms
+     × returns focus to the Timeline Animation entry after closing from Inspector 133ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/EditorShell.test.tsx > EditorShell > returns focus to the Timeline Animation entry after closing from Timeline
+ FAIL  src/app/EditorShell.test.tsx > EditorShell > returns focus to the Timeline Animation entry after closing from Inspector
+Error: expect(element).toHaveFocus()
+
+Expected element with focus:
+  <button
+  aria-controls="workspace-timeline-panel"
+  aria-expanded="false"
+  aria-label="Animation"
+  class="tool-button"
+  title="Animation"
+  type="button"
+>
+  <svg
+    aria-hidden="true"
+    fill="currentColor"
+    height="16"
+    viewBox="0 0 256 256"
+    width="16"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M224.28,141a100.61,100.61,0,0,0-31.4-49H240a12,12,0,0,0,0-24H161.94a36,36,0,0,0-67.88,0H16a12,12,0,0,0,0,24H63.12a100.61,100.61,0,0,0-31.4,49A36,36,0,1,0,56,143.74,76.66,76.66,0,0,1,97.15,98.53a36,36,0,0,0,61.7,0A76.66,76.66,0,0,1,200,143.74,36,36,0,1,0,224.28,141ZM40,188a12,12,0,1,1,12-12A12,12,0,0,1,40,188Zm88-96a12,12,0,1,1,12-12A12,12,0,0,1,128,92Zm88,96a12,12,0,1,1,12-12A12,12,0,0,1,216,188Z"
+    />
+  </svg>
+</button>
+Received element with focus:
+  <body>
+  <div>
+    <div
+      aria-busy="false"
+      class="app-shell"
+      style="--workspace-media-width: 340px; --workspace-inspector-width: 300px; --workspace-timeline-height: 360px;"
+    >
+      <header
+        class="area-toolbar"
+      >
+        <div
+          class="toolbar"
+        >
+          <strong … />
+          <div … />
+          <span … />
+          <div … />
+        </div>
+      </header>
+      <section
+        class="area-workspace"
+      >
+        <div
+          aria-label="Workspace layout"
+          class="workspace-controls"
+          role="group"
+        >
+          <label … />
+          <span … />
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+        </div>
+        <div
+          aria-label="Project sequences"
+          class="sequence-controls"
+        >
+          <label … />
+          <span … />
+          <div … />
+          <span … />
+        </div>
+        <span
+          aria-atomic="true"
+          aria-live="polite"
+          class="workspace-status visually-hidden"
+          role="status"
+        />
+      </section>
+      <aside
+        class="area-media-pool"
+        data-media-pool-scroll="true"
+        id="workspace-media-panel"
+      >
+        <div
+          class="media-pool"
+        >
+          <div … />
+          <section … />
+          <ul … />
+          <p … />
+          <span … />
+          <span … />
+        </div>
+      </aside>
+      <div
+        aria-controls="workspace-media-panel"
+        aria-label="Resize Media panel"
+        aria-orientation="vertical"
+        aria-valuemax="364"
+        aria-valuemin="180"
+        aria-valuenow="340"
+        aria-valuetext="340 pixels"
+        class="workspace-resize-handle workspace-resize-vertical area-media-resize"
+        role="separator"
+        tabindex="0"
+      />
+      <main
+        class="area-preview"
+      >
+        <div
+          class="preview-workspace"
+        >
+          <div … />
+          <div … />
+        </div>
+      </main>
+      <div
+        aria-controls="workspace-inspector-panel"
+        aria-label="Resize Inspector panel"
+        aria-orientation="vertical"
+        aria-valuemax="324"
+        aria-valuemin="180"
+        aria-valuenow="300"
+        aria-valuetext="300 pixels"
+        class="workspace-resize-handle workspace-resize-vertical area-inspector-resize"
+        role="separator"
+        tabindex="0"
+      />
+      <aside
+        class="area-inspector"
+        id="workspace-inspector-panel"
+      >
+        <section
+          aria-label="Manual-sync multicam"
+          class="multicam-controls"
+        >
+          <div … />
+          <span … />
+        </section>
+        <details
+          class="inspector-section inspector-effects video-bus-inspector"
+        >
+          <summary … />
+          <label … />
+          <p … />
+          <div … />
+          <div … />
+          <ol … />
+        </details>
+        <div
+          class="inspector-panel"
+          data-testid="inspector-panel"
+        >
+          <div … />
+          <div … />
+          <div … />
+          <div … />
+          <section … />
+          <section … />
+          <div … />
+          <div … />
+          <section … />
+          <section … />
+          <section … />
+          <section … />
+        </div>
+      </aside>
+      <section
+        class="area-transport"
+      >
+        <div
+          aria-label="timeline tools"
+          class="transport-tools"
+          role="group"
+        >
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+        </div>
+        <div
+          class="transport-bar"
+          data-testid="transport-bar"
+        >
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <section … />
+        </div>
+        <div
+          aria-label="Timeline zoom controls"
+          class="timeline-zoom-controls"
+          role="group"
+        >
+          <button … />
+          <button … />
+          <button … />
+          <button … />
+          <input … />
+          <button … />
+        </div>
+      </section>
+      <div
+        aria-controls="workspace-timeline-panel"
+        aria-label="Resize Timeline panel"
+        aria-orientation="horizontal"
+        aria-valuemax="378"
+        aria-valuemin="180"
+        aria-valuenow="360"
+        aria-valuetext="360 pixels"
+        class="workspace-resize-handle workspace-resize-horizontal area-timeline-resize"
+        role="separator"
+        tabindex="0"
+      />
+      <section
+        class="area-timeline"
+        id="workspace-timeline-panel"
+      >
+        <section
+          aria-label="Audio mixer"
+          class="audio-mixer"
+        >
+          <article … />
+        </section>
+        <div
+          class="timeline-scroll-host"
+          data-timeline-scroll="true"
+        >
+          <div … />
+        </div>
+      </section>
+      <span
+        aria-atomic="true"
+        aria-live="polite"
+        class="visually-hidden"
+        data-testid="media-drop-status"
+        role="status"
+      />
+    </div>
+  </div>
+</body>
+ ❯ src/app/EditorShell.test.tsx:334:19
+    332|
+    333|     expect(screen.queryByRole('region', { name: 'Animation workspace' …
+    334|     expect(entry).toHaveFocus()
+       |                   ^
+    335|     expect(entry).toHaveAttribute('aria-expanded', 'false')
+    336|     expect(useDocumentStore.getState().project).toBe(project)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 14 skipped (16)
+   Start at  15:39:32
+   Duration  2.29s (transform 817ms, setup 23ms, import 1.41s, tests 636ms, environment 166ms)

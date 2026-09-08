@@ -1,0 +1,68 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --run src/ui/animation/AnimationWorkspace.test.tsx -t mode transitions cancel
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx (27 tests | 6 failed | 21 skipped) 294ms
+     × mode transitions cancel 'sheet' gestures with 'queued' previews before removing their input target 105ms
+     × mode transitions cancel 'sheet' gestures with 'admitted' previews before removing their input target 42ms
+     × mode transitions cancel 'handle 1' gestures with 'queued' previews before removing their input target 37ms
+     × mode transitions cancel 'handle 1' gestures with 'admitted' previews before removing their input target 39ms
+     × mode transitions cancel 'handle 2' gestures with 'queued' previews before removing their input target 34ms
+     × mode transitions cancel 'handle 2' gestures with 'admitted' previews before removing their input target 37ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > mode transitions cancel 'sheet' gestures with 'queued' previews before removing their input target
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > mode transitions cancel 'sheet' gestures with 'admitted' previews before removing their input target
+AssertionError: expected [] to deeply equal [ true ]
+
+- Expected
++ Received
+
+- [
+-   true,
+- ]
++ []
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx:171:76
+    169|     fireEvent.click(screen.getByRole('button', { name: destination }))
+    170|     expect(screen.getByRole('button', { name: destination })).toHaveAt…
+    171|     expect(target.isConnected).toBe(false); expect(releasedWhileConnec…
+       |                                                                            ^
+    172|     expect(transport().animationPreview).toBeNull(); expect(transport(…
+    173|     flushFrames(); expect(transport().animationPreview).toBeNull(); un…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > mode transitions cancel 'handle 1' gestures with 'queued' previews before removing their input target
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > mode transitions cancel 'handle 1' gestures with 'admitted' previews before removing their input target
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > mode transitions cancel 'handle 2' gestures with 'queued' previews before removing their input target
+ FAIL  src/ui/animation/AnimationWorkspace.test.tsx > unified animation workspace > mode transitions cancel 'handle 2' gestures with 'admitted' previews before removing their input target
+AssertionError: expected [ false ] to deeply equal [ true ]
+
+- Expected
++ Received
+
+  [
+-   true,
++   false,
+  ]
+
+ ❯ src/ui/animation/AnimationWorkspace.test.tsx:171:76
+    169|     fireEvent.click(screen.getByRole('button', { name: destination }))
+    170|     expect(screen.getByRole('button', { name: destination })).toHaveAt…
+    171|     expect(target.isConnected).toBe(false); expect(releasedWhileConnec…
+       |                                                                            ^
+    172|     expect(transport().animationPreview).toBeNull(); expect(transport(…
+    173|     flushFrames(); expect(transport().animationPreview).toBeNull(); un…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 21 skipped (27)
+   Start at  19:25:30
+   Duration  1.45s (transform 313ms, setup 25ms, import 855ms, tests 294ms, environment 222ms)

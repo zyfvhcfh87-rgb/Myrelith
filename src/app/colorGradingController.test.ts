@@ -91,3 +91,36 @@ test.each(['clip', 'adjustment'] as const)('a full %s keyframe lane rejects the 
   expect(beginColorGradingEdit(editTarget, 'grade').commit({ gainR: 2, gainG: 2 })).toBeNull()
   expect(useDocumentStore.getState().past).toEqual([project])
 })
+
+
+test.each(['playback', 'scrubbing'] as const)('%s invalidates a grading draft and rejects a new gesture', (action) => {
+  const before = useDocumentStore.getState(), edit = beginColorGradingEdit(target, 'grade')
+  expect(edit.preview({ gammaR: 2 })).toBeNull()
+  useTransportStore.setState(action === 'playback' ? { isPlaying: true } : { isScrubbing: true })
+  expect(useTransportStore.getState().colorGradingPreview).toBeNull()
+  expect(edit.commit({ gammaR: 2 })).toMatch(/changed/)
+  expect(() => beginColorGradingEdit(target, 'grade')).toThrow(/Pause/)
+  expect(useDocumentStore.getState()).toBe(before)
+})
+
+test.each(['playhead', 'selection', 'replacement'] as const)('grading cleanup reentrancy cannot commit over changed %s', (action) => {
+  const before = useDocumentStore.getState(), edit = beginColorGradingEdit(target, 'grade')
+  expect(edit.preview({ gammaR: 2 })).toBeNull()
+  let replacement: ReturnType<typeof beginColorGradingEdit> | undefined
+  let handled = false
+  const stop = useTransportStore.subscribe((state) => {
+    if (handled || state.colorGradingPreview !== null) return
+    handled = true
+    if (action === 'playhead') state.setPlayheadFrame(1)
+    if (action === 'selection') state.setSelectedClip(null)
+    if (action === 'replacement') {
+      replacement = beginColorGradingEdit(target, 'grade')
+      expect(replacement.preview({ gammaR: 1.5 })).toBeNull()
+    }
+  })
+  try {
+    expect(edit.commit({ gammaR: 2 })).toMatch(/changed/)
+    expect(useDocumentStore.getState()).toBe(before)
+    if (replacement) expect(useTransportStore.getState().colorGradingPreview?.params.gammaR).toBe(1.5)
+  } finally { stop(); replacement?.cancel() }
+})

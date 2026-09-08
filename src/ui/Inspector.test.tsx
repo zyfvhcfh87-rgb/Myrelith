@@ -1,3 +1,4 @@
+import { animationEditorController } from '../app/animationEditorController'
 import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * ui/Inspector.test.tsx — Phase 4.3.
@@ -838,7 +839,14 @@ describe('Inspector', () => {
     fireEvent.change(left, { target: { value: '25' } })
     fireEvent.keyDown(left, { key: 'Enter' })
     expect(clipA().effects[0].params.x).toBe(0.25)
-    await user.click(screen.getByRole('button', { name: 'Animate Left (%)' }))
+    const beforeAnimation = doc().project
+    await user.click(screen.getByRole('button', { name: 'Open Left (%) animation' }))
+    expect(doc().project).toBe(beforeAnimation)
+    expect(useTransportStore.getState().animationFocusedLane).toMatchObject({ kind: 'effect', effectId: mask.id, parameter: 'x' })
+    const releaseAnimation = animationEditorController.init()
+    try {
+      expect(animationEditorController.setKey(useTransportStore.getState().animationFocusedLane!, 10, 0.25)).toBeNull()
+    } finally { releaseAnimation() }
     expect(clipA().animation?.effectTracks?.[0]).toMatchObject({
       effectId: mask.id,
       parameter: 'x',
@@ -853,7 +861,7 @@ describe('Inspector', () => {
     })
     expect(clipA().effects[0].params.x).toBe(0.25)
     expect(clipA().animation?.effectTracks?.[0].keyframes[0].value).toBe(0.5)
-    expect(screen.getByRole('list', { name: 'Left (%) keyframes' })).toBeInTheDocument()
+    expect(screen.getByText('1 keys · Edit timing, values and easing in Animation.')).toBeInTheDocument()
 
     const tolerance = screen.getByTestId(`inspector-effect-key-tolerance-${key.id}`)
     fireEvent.change(tolerance, { target: { value: '20' } })

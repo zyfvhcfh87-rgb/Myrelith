@@ -1,0 +1,366 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/app/animationEditingController.test.ts src/app/colorGradingController.test.ts -t replacement Animation|invalidates a grading|grading cleanup reentrancy
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+ ❯ src/app/colorGradingController.test.ts (16 tests | 5 failed | 11 skipped) 9ms
+   × playback invalidates a grading draft and rejects a new gesture 5ms
+   × scrubbing invalidates a grading draft and rejects a new gesture 1ms
+   × grading cleanup reentrancy cannot commit over changed playhead 1ms
+   × grading cleanup reentrancy cannot commit over changed selection 1ms
+   × grading cleanup reentrancy cannot commit over changed replacement 1ms
+ ❯ src/app/animationEditingController.test.ts (31 tests | 4 failed | 27 skipped) 9ms
+     × a replacement Animation frame stays below newer mask-gesture ownership 6ms
+     × a replacement Animation frame stays below newer mask-tracking ownership 1ms
+     × a replacement Animation frame stays below newer title-authoring ownership 1ms
+     × a replacement Animation frame stays below newer color-grading ownership 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/animationEditingController.test.ts > animation gesture ownership > a replacement Animation frame stays below newer mask-gesture ownership
+AssertionError: expected 'animation-gesture' to be 'mask-gesture' // Object.is equality
+
+Expected: "mask-gesture"
+Received: "animation-gesture"
+
+ ❯ src/app/animationEditingController.test.ts:107:71
+    105|     expect(useTransportStore.getState().effectDocumentPreview?.owner).…
+    106|     gesture.preview({ kind: 'move', deltaFrames: 4 }); flush()
+    107|     expect(useTransportStore.getState().effectDocumentPreview?.owner).…
+       |                                                                       ^
+    108|     expect(useTransportStore.getState().animationPreview!.document.tra…
+    109|     gesture.cancel()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  src/app/animationEditingController.test.ts > animation gesture ownership > a replacement Animation frame stays below newer mask-tracking ownership
+AssertionError: expected 'animation-gesture' to be 'mask-tracking' // Object.is equality
+
+Expected: "mask-tracking"
+Received: "animation-gesture"
+
+ ❯ src/app/animationEditingController.test.ts:107:71
+    105|     expect(useTransportStore.getState().effectDocumentPreview?.owner).…
+    106|     gesture.preview({ kind: 'move', deltaFrames: 4 }); flush()
+    107|     expect(useTransportStore.getState().effectDocumentPreview?.owner).…
+       |                                                                       ^
+    108|     expect(useTransportStore.getState().animationPreview!.document.tra…
+    109|     gesture.cancel()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  src/app/animationEditingController.test.ts > animation gesture ownership > a replacement Animation frame stays below newer title-authoring ownership
+AssertionError: expected 'animation-gesture' to be 'title-authoring' // Object.is equality
+
+Expected: "title-authoring"
+Received: "animation-gesture"
+
+ ❯ src/app/animationEditingController.test.ts:107:71
+    105|     expect(useTransportStore.getState().effectDocumentPreview?.owner).…
+    106|     gesture.preview({ kind: 'move', deltaFrames: 4 }); flush()
+    107|     expect(useTransportStore.getState().effectDocumentPreview?.owner).…
+       |                                                                       ^
+    108|     expect(useTransportStore.getState().animationPreview!.document.tra…
+    109|     gesture.cancel()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  src/app/animationEditingController.test.ts > animation gesture ownership > a replacement Animation frame stays below newer color-grading ownership
+AssertionError: expected 'animation-gesture' to be 'color-grading' // Object.is equality
+
+Expected: "color-grading"
+Received: "animation-gesture"
+
+ ❯ src/app/animationEditingController.test.ts:107:71
+    105|     expect(useTransportStore.getState().effectDocumentPreview?.owner).…
+    106|     gesture.preview({ kind: 'move', deltaFrames: 4 }); flush()
+    107|     expect(useTransportStore.getState().effectDocumentPreview?.owner).…
+       |                                                                       ^
+    108|     expect(useTransportStore.getState().animationPreview!.document.tra…
+    109|     gesture.cancel()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  src/app/colorGradingController.test.ts > playback invalidates a grading draft and rejects a new gesture
+ FAIL  src/app/colorGradingController.test.ts > scrubbing invalidates a grading draft and rejects a new gesture
+AssertionError: expected { sequenceId: 'grading', …(3) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "document": {
+    "audioSampleRate": 48000,
+    "captionTracks": [],
+    "frameRate": {
+      "den": 1,
+      "num": 30,
+    },
+    "height": 1080,
+    "id": "grading",
+    "markers": [],
+    "masterAudio": {
+      "audioEffects": [],
+      "balance": 0,
+      "muted": false,
+      "volume": 1,
+    },
+    "masterVideoEffects": [],
+    "name": "Grading",
+    "schemaVersion": 24,
+    "tracks": [
+      {
+        "adjustments": [],
+        "audioEffects": [],
+        "balance": 0,
+        "clips": [
+          {
+            "animation": {
+              "effectTracks": [],
+              "tracks": [],
+            },
+            "assetId": "asset",
+            "audio": {
+              "balance": 0,
+              "enabled": true,
+              "fadeInFrames": 0,
+              "fadeOutFrames": 0,
+            },
+            "blendMode": "normal",
+            "effects": [
+              {
+                "enabled": true,
+                "id": "grade",
+                "params": [Object],
+                "type": "builtin.lift-gamma-gain",
+                "version": 1,
+              },
+            ],
+            "id": "clip",
+            "name": "clip",
+            "opacity": 1,
+            "sourceMode": "timed",
+            "sourceRange": {
+              "durationFrames": 60,
+              "startFrame": 0,
+            },
+            "sourceTimeMap": {
+              "rate": {
+                "denominator": 1,
+                "numerator": 1,
+              },
+              "sourceDurationTicks": 60000000,
+              "sourceStartTicks": 0,
+              "speedCurve": {
+                "originFrame": 0,
+                "points": [Array],
+              },
+            },
+            "timelineRange": {
+              "durationFrames": 60,
+              "startFrame": 0,
+            },
+            "transform": {
+              "anchorX": 0.5,
+              "anchorY": 0.5,
+              "rotation": 0,
+              "scaleX": 1,
+              "scaleY": 1,
+              "x": 0,
+              "y": 0,
+            },
+            "visual": {
+              "crop": {
+                "bottom": 0,
+                "left": 0,
+                "right": 0,
+                "top": 0,
+              },
+              "flipHorizontal": false,
+              "flipVertical": false,
+              "scaleLocked": true,
+            },
+            "volume": 1,
+          },
+        ],
+        "hidden": false,
+        "id": "V1",
+        "kind": "video",
+        "locked": false,
+        "multicamInstances": [],
+        "muted": false,
+        "name": "V1",
+        "sequenceInstances": [],
+        "solo": false,
+        "transitions": [],
+        "videoEffects": [],
+        "volume": 1,
+      },
+      {
+        "adjustments": [],
+        "audioEffects": [],
+        "balance": 0,
+        "clips": [],
+        "hidden": false,
+        "id": "V2",
+        "kind": "video",
+        "locked": false,
+        "multicamInstances": [],
+        "muted": false,
+        "name": "V2",
+        "sequenceInstances": [],
+        "solo": false,
+        "transitions": [],
+        "videoEffects": [],
+        "volume": 1,
+      },
+      {
+        "adjustments": [],
+        "audioEffects": [],
+        "balance": 0,
+        "clips": [],
+        "hidden": false,
+        "id": "V3",
+        "kind": "video",
+        "locked": false,
+        "multicamInstances": [],
+        "muted": false,
+        "name": "V3",
+        "sequenceInstances": [],
+        "solo": false,
+        "transitions": [],
+        "videoEffects": [],
+        "volume": 1,
+      },
+      {
+        "adjustments": [],
+        "audioEffects": [],
+        "balance": 0,
+        "clips": [],
+        "hidden": false,
+        "id": "V4",
+        "kind": "video",
+        "locked": false,
+        "multicamInstances": [],
+        "muted": false,
+        "name": "V4",
+        "sequenceInstances": [],
+        "solo": false,
+        "transitions": [],
+        "videoEffects": [],
+        "volume": 1,
+      },
+      {
+        "adjustments": [],
+        "audioEffects": [],
+        "balance": 0,
+        "clips": [],
+        "hidden": false,
+        "id": "A1",
+        "kind": "audio",
+        "locked": false,
+        "multicamInstances": [],
+        "muted": false,
+        "name": "A1",
+        "sequenceInstances": [],
+        "solo": false,
+        "transitions": [],
+        "videoEffects": [],
+        "volume": 1,
+      },
+      {
+        "adjustments": [],
+        "audioEffects": [],
+        "balance": 0,
+        "clips": [],
+        "hidden": false,
+        "id": "A2",
+        "kind": "audio",
+        "locked": false,
+        "multicamInstances": [],
+        "muted": false,
+        "name": "A2",
+        "sequenceInstances": [],
+        "solo": false,
+        "transitions": [],
+        "videoEffects": [],
+        "volume": 1,
+      },
+      {
+        "adjustments": [],
+        "audioEffects": [],
+        "balance": 0,
+        "clips": [],
+        "hidden": false,
+        "id": "A3",
+        "kind": "audio",
+        "locked": false,
+        "multicamInstances": [],
+        "muted": false,
+        "name": "A3",
+        "sequenceInstances": [],
+        "solo": false,
+        "transitions": [],
+        "videoEffects": [],
+        "volume": 1,
+      },
+      {
+        "adjustments": [],
+        "audioEffects": [],
+        "balance": 0,
+        "clips": [],
+        "hidden": false,
+        "id": "A4",
+        "kind": "audio",
+        "locked": false,
+        "multicamInstances": [],
+        "muted": false,
+        "name": "A4",
+        "sequenceInstances": [],
+        "solo": false,
+        "transitions": [],
+        "videoEffects": [],
+        "volume": 1,
+      },
+    ],
+    "width": 1920,
+  },
+  "effectId": "grade",
+  "params": {
+    "gammaR": 2,
+  },
+  "sequenceId": "grading",
+}
+
+ ❯ src/app/colorGradingController.test.ts:100:60
+     98|   expect(edit.preview({ gammaR: 2 })).toBeNull()
+     99|   useTransportStore.setState(action === 'playback' ? { isPlaying: true…
+    100|   expect(useTransportStore.getState().colorGradingPreview).toBeNull()
+       |                                                            ^
+    101|   expect(edit.commit({ gammaR: 2 })).toMatch(/changed/)
+    102|   expect(() => beginColorGradingEdit(target, 'grade')).toThrow(/Pause/)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  src/app/colorGradingController.test.ts > grading cleanup reentrancy cannot commit over changed playhead
+ FAIL  src/app/colorGradingController.test.ts > grading cleanup reentrancy cannot commit over changed selection
+ FAIL  src/app/colorGradingController.test.ts > grading cleanup reentrancy cannot commit over changed replacement
+TypeError: .toMatch() expects to receive a string, but got object
+ ❯ src/app/colorGradingController.test.ts:122:40
+    120|   })
+    121|   try {
+    122|     expect(edit.commit({ gammaR: 2 })).toMatch(/changed/)
+       |                                        ^
+    123|     expect(useDocumentStore.getState()).toBe(before)
+    124|     if (replacement) expect(useTransportStore.getState().colorGradingP…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  9 failed | 38 skipped (47)
+   Start at  21:44:21
+   Duration  589ms (transform 483ms, setup 50ms, import 591ms, tests 18ms, environment 375ms)

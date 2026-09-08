@@ -10,7 +10,7 @@
  *   setter rounds and clamps to >= 0 so a stray float can never leak in.
  */
 
-import { animationKeyKey, animationSelectionError, type AnimationKeyAddress } from '../domain/animationAddresses'
+import { animationKeyKey, animationLaneKey, animationLaneAddressError, animationSelectionError, type AnimationLaneAddress, type AnimationKeyAddress } from '../domain/animationAddresses'
 import { create } from 'zustand'
 import type {
   AdjustmentItemId,
@@ -23,6 +23,7 @@ import type {
   TimeRange,
   TrackId,
   Transform,
+  ClipAnimationEasing,
 } from '../domain/schema'
 import type { TimelineSnapGuide } from '../domain/timelineSnapping'
 
@@ -154,17 +155,29 @@ export interface EffectDocumentPreview {
   readonly document: TimelineDoc
 }
 
+export interface AnimationDocumentPreview extends Pick<EffectDocumentPreview, 'sequenceId' | 'document'> {
+  readonly selection?: readonly AnimationKeyAddress[]
+  readonly easing?: ClipAnimationEasing
+}
+
 export interface TransportState {
+  animationWorkspaceOpen: boolean
+  animationFocusedLane: AnimationLaneAddress | null
+  animationStatus: { readonly message: string; readonly revision: number }
+  setAnimationWorkspaceOpen(open: boolean): void
+  setAnimationFocusedLane(lane: AnimationLaneAddress | null): void
+  announceAnimation(message: string): void
   animationSelection: readonly AnimationKeyAddress[]
   animationFocus: AnimationKeyAddress | null
   animationFilter: string
   animationVisibleRange: { readonly startFrame: number; readonly endFrame: number } | null
   setTitleDocumentPreview(preview: Pick<EffectDocumentPreview, 'sequenceId' | 'document'> | null, retainOrder?: boolean): void
-  animationPreview: Pick<EffectDocumentPreview, 'sequenceId' | 'document'> | null
+  animationPreview: AnimationDocumentPreview | null
   setAnimationSelection(keys: readonly AnimationKeyAddress[], focus?: AnimationKeyAddress | null): void
   setAnimationFilter(filter: string): void
   setAnimationVisibleRange(range: { readonly startFrame: number; readonly endFrame: number } | null): void
-  setAnimationPreview(preview: Pick<EffectDocumentPreview, 'sequenceId' | 'document'> | null): void
+  /** Replacement releases retained payload while preserving this gesture's activation order. */
+  setAnimationPreview(preview: AnimationDocumentPreview | null, retainOrder?: boolean): void
   maskEditorTarget: import('../domain/maskEditing').MaskEditTarget | null
   setMaskEditorTarget(target: import('../domain/maskEditing').MaskEditTarget | null): void
   maskPreview: ColorGradingPreview | null
@@ -388,6 +401,9 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   textOverlayPreview: null,
   clipVisualPreview: null,
   colorGradingPreview: null,
+  animationWorkspaceOpen: false,
+  animationFocusedLane: null,
+  animationStatus: { message: '', revision: 0 },
   animationSelection: [],
   animationFocus: null,
   animationFilter: '',
@@ -838,6 +854,14 @@ export const useTransportStore = create<TransportState>()((set) => ({
           }
         : null,
     }),
+  setAnimationWorkspaceOpen: (animationWorkspaceOpen) => set({ animationWorkspaceOpen }),
+  setAnimationFocusedLane: (lane) => set((state) => {
+    if (lane && animationLaneAddressError(lane)) return state
+    if ((lane ? animationLaneKey(lane) : null) === (state.animationFocusedLane ? animationLaneKey(state.animationFocusedLane) : null)) return state
+    return { animationFocusedLane: lane ? Object.freeze({ ...lane, owner: Object.freeze({ ...lane.owner }),
+      ...(lane.kind === 'effect' && lane.parameterIdentity ? { parameterIdentity: Object.freeze({ ...lane.parameterIdentity }) } : {}) }) : null }
+  }),
+  announceAnimation: (message) => set((state) => ({ animationStatus: { message: message.slice(0, 2048), revision: state.animationStatus.revision + 1 } })),
   setAnimationSelection: (keys, focus = keys[0] ?? null) => set((state) => {
     if (animationSelectionError(keys) || (focus && animationSelectionError([focus]))) return state
     if (keys.length === state.animationSelection.length && keys.every((key, index) => animationKeyKey(key) === animationKeyKey(state.animationSelection[index]))
@@ -847,7 +871,8 @@ export const useTransportStore = create<TransportState>()((set) => ({
       if (lane.kind === 'effect' && lane.parameterIdentity) lane.parameterIdentity = Object.freeze({ ...lane.parameterIdentity })
       return Object.freeze({ frame: key.frame, lane: Object.freeze(lane) })
     }
-    return { animationSelection: Object.freeze(keys.map(cloneKey)), animationFocus: focus ? cloneKey(focus) : null }
+    return { animationSelection: Object.freeze(keys.map(cloneKey)), animationFocus: focus ? cloneKey(focus) : null,
+      ...(focus ? { animationFocusedLane: cloneKey(focus).lane } : {}) }
   }),
   setAnimationFilter: (animationFilter) => { if (animationFilter.length <= 256) set({ animationFilter }) },
   setAnimationVisibleRange: (animationVisibleRange) => {
@@ -856,7 +881,7 @@ export const useTransportStore = create<TransportState>()((set) => ({
     set({ animationVisibleRange: animationVisibleRange ? { ...animationVisibleRange } : null })
   },
   setTitleDocumentPreview: (preview, retainOrder = false) => set({ effectDocumentPreview: updateEffectPreview('title-authoring', preview, true, retainOrder) }),
-  setAnimationPreview: (animationPreview) => set({ animationPreview, effectDocumentPreview: updateEffectPreview('animation-gesture', animationPreview) }),
+  setAnimationPreview: (animationPreview, retainOrder = false) => set({ animationPreview, effectDocumentPreview: updateEffectPreview('animation-gesture', animationPreview, true, retainOrder) }),
   setMaskEditorTarget: (maskEditorTarget) => set({ maskEditorTarget }),
   setMaskPreview: (maskPreview) => set({ maskPreview, effectDocumentPreview: updateEffectPreview('mask-gesture', maskPreview) }),
   setMaskTrackingPreview: (preview, visible = true) => set({ effectDocumentPreview: updateEffectPreview('mask-tracking', preview, visible) }),
