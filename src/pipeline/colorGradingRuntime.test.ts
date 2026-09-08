@@ -85,6 +85,49 @@ describe('shared grading runtime', () => {
       expect(runtime.ledger().bytes).toBe(256 * 768)
     } finally { runtime.dispose() }
   })
+  test.each(['cancelled', 'malformed'] as const)('%s catalog replacement preserves the published tables and can retry', async (failure) => {
+    const runtime = new ColorGradingRuntime(async () => {}), original = [table()]
+    runtime.setCatalog(original)
+    const context = runtime.context
+    const replacement = [table('candidate'), failure === 'malformed' ? { ...table('broken'), data: '!'.repeat(table().data.length) } : table('second')]
+    let checks = 0
+    try {
+      expect(() => runtime.setCatalog(replacement, () => {
+        if (++checks === 2 && failure === 'cancelled') throw new ColorGradingCancelledError()
+      })).toThrow(failure === 'cancelled' ? /cancelled/ : /base64/)
+      expect(runtime.context).toBe(context)
+      expect(runtime.ledger()).toMatchObject({ bytes: 0, entries: 0, active: false })
+      const actual = pixels(), expected = pixels()
+      applyColorLut(expected, decodeColorLut(original[0]), 0.7)
+      await runtime.apply(actual, stages([lutEffect], runtime), geometry)
+      expect(actual).toEqual(expected)
+      runtime.setCatalog(original)
+      expect(runtime.context).toBe(context)
+      const retry = portableColorLut('lut', 'Inverse', parseCube('LUT_1D_SIZE 2\n1 1 1\n0 0 0'))
+      runtime.setCatalog([retry])
+      actual.set(pixels()); expected.set(pixels())
+      applyColorLut(expected, decodeColorLut(retry), 0.7)
+      await runtime.apply(actual, stages([lutEffect], runtime), geometry)
+      expect(actual).toEqual(expected)
+      expect(runtime.ledger().peakBytes).toBeLessThanOrEqual(COLOR_LUT_LIMITS.runtimeBytes)
+    } finally { runtime.dispose() }
+    expect(runtime.ledger()).toMatchObject({ bytes: 0, entries: 0, ports: 0, pendingTasks: 0 })
+  })
+  test('checks currentness after the last table and never restores a disposed catalog', () => {
+    const runtime = new ColorGradingRuntime(), original = [table()]
+    runtime.setCatalog(original)
+    const context = runtime.context
+    let checks = 0
+    expect(() => runtime.setCatalog([table('candidate')], () => {
+      if (++checks === 2) throw new ColorGradingCancelledError()
+    })).toThrow(/cancelled/)
+    expect(runtime.context).toBe(context)
+    expect(runtime.ledger()).toMatchObject({ bytes: 0, entries: 0 })
+    expect(() => runtime.setCatalog([table('candidate')], () => runtime.dispose())).toThrow(/cancelled/)
+    expect(runtime.context.colorLuts).toEqual([])
+    expect(runtime.ledger()).toMatchObject({ bytes: 0, entries: 0, ports: 0, pendingTasks: 0 })
+    expect(() => runtime.setCatalog(original)).toThrow(/cancelled/)
+  })
   test('delivered cancellation stops at the next chunk and disposal retains borrowed buffers until settlement', async () => {
     let release!: () => void
     const runtime = new ColorGradingRuntime(() => new Promise<void>((resolve) => { release = resolve }))

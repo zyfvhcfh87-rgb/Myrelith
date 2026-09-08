@@ -1,5 +1,9 @@
 # Issue #196 final local acceptance — 2026-09-08
 
+This records initial acceptance at `fa8b84e`. The subsequent
+[PR #225 catalog refresh fix and fresh verification](issue196-review.md)
+supersede its final-source and test-total claims; the original evidence is retained.
+
 The approved local SDR grading implementation is complete on `codex/issue196`,
 based on `368bd438411b4b261c032945523b81cf6a8c30f0`. Local LUTs, RGB curves,
 lift/gamma/gain wheels and portable correction presets pass their acceptance

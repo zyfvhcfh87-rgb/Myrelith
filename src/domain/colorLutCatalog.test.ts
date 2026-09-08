@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { COLOR_LUT_LIMITS, COLOR_LUT_TYPE, parseCube, portableColorLut } from './colorLut'
-import { colorLutCatalogError, immutableColorLuts, mergeColorLuts, newColorLutReferenceError, retainedColorLutBytes } from './colorLutCatalog'
+import { colorLutCatalogError, immutableColorLuts, mergeColorLuts, newColorLutReferenceError, projectVideoEffects, retainedColorLutBytes } from './colorLutCatalog'
 import { applyColorLutToProject, removeUnusedColorLuts, type ColorGradingTarget } from './colorGradingEdits'
 import { createProjectFileSnapshot, parseProjectFile, serializeProjectFile } from './projectFile'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from './projectSettings'
@@ -66,6 +66,26 @@ describe('portable LUT ownership', () => {
     expect(useDocumentStore.getState().future).toEqual([future])
     expect(useDocumentStore.getState().project).toBe(base)
     useDocumentStore.getState().setProject(fixture())
+  })
+  test.each(['master', 'track', 'clip', 'adjustment'] as const)('reapplying the same LUT to %s is a no-op that preserves redo', (kind) => {
+    const project = fixture(), track = project.sequences[0].tracks[0]
+    track.clips = [attributeClip('clip')]
+    track.adjustments = [{ kind: 'adjustment', enabled: true, opacity: 1, id: 'adjustment', name: 'Correction', animation: { tracks: [], effectTracks: [] }, timelineRange: { startFrame: 0, durationFrames: 60 }, effects: [] }]
+    const target = { sequenceId: 'root', kind, trackId: track.id, clipId: 'clip', adjustmentId: 'adjustment' } as ColorGradingTarget
+    const graded = applyColorLutToProject(project, target, table(), fresh)
+    const effect = projectVideoEffects(graded).find((entry) => entry.type === COLOR_LUT_TYPE)!
+    useDocumentStore.getState().setProject(graded)
+    useDocumentStore.setState({ past: [project], future: [graded] })
+    const before = useDocumentStore.getState(), previousId = id
+    for (const reused of [table(), table('same-content-other-id')]) {
+      const candidate = applyColorLutToProject(graded, target, reused, fresh, effect.id)
+      expect(candidate).toBe(graded)
+      expect(before.commitColorLutEdit(graded, before.projectGeneration, candidate)).toBeNull()
+      expect(useDocumentStore.getState().project).toBe(graded)
+      expect(useDocumentStore.getState().past).toBe(before.past)
+      expect(useDocumentStore.getState().future).toBe(before.future)
+      expect(id).toBe(previousId)
+    }
   })
   test.each(['master', 'track', 'clip', 'adjustment'] as const)('applies table plus descriptor atomically to %s with one undo', (kind) => {
     const project = fixture(), track = project.sequences[0].tracks[0]

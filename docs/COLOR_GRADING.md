@@ -1,6 +1,7 @@
 # Issue #196: local SDR color grading
 
 Status: implemented and accepted locally on 2026-09-08. Optional RGB parade deferred.
+Latest verification includes the [PR #225 catalog refresh follow-up](evidence/issue196-review.md).
 Inspected on 2026-09-07 at merged master `368bd43`, on `codex/issue196`.
 Issue: [#196](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/196).
 
@@ -688,3 +689,27 @@ Commands, baseline evidence, current source fingerprints and the remaining
 browser/hardware limits are in [final acceptance](evidence/issue196-acceptance.md).
 RGB parade remains absent from production as documented in Gate 5. This completes
 the approved local implementation; publication is separate.
+
+## PR #225 review follow-up, 2026-09-08
+
+A failed or cancelled runtime catalog replacement now retains the published
+catalog and status facts. Candidate lookup buffers are discarded on failure;
+the next frame lazily rebuilds the old lookup within the same 2 MiB allowance.
+Only a completely checked replacement becomes visible. A final currentness
+check precedes publication, and disposal cannot resurrect a previous catalog.
+The original failure and terminal-check gap reproduce in three new tests before
+the fix; the corrected owner also proves rendering and retry without resending
+the original catalog.
+
+The reported same-LUT budget error is not reproducible: replacement constructs
+a fresh sequence before the existing structural no-op check. Four additional
+regressions verify all target types, exact-table deduplication, no new identities
+and preserved project/undo/redo on the unchanged implementation.
+
+Final review verification passes 4,207 Vitest cases in 304 files, all 17 runner
+checks, build/typecheck, lint, the production audit and all nine functional issue
+Chromium cases. All 45 CPU timing cells pass again against the original ceilings,
+with current runtime hashes. Worst single/eight-stage p95 is 18.1/154.8 ms at
+720p, 40.4/347.1 ms at 1080p and 162.2/1287.4 ms at 4K. Delivered cancellation
+settles in 0.2 ms; final ownership is zero. See the
+[review report](evidence/issue196-review.md) for the fresh evidence and scope.

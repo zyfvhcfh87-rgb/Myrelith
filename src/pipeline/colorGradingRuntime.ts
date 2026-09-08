@@ -59,7 +59,10 @@ export class ColorGradingRuntime {
     if (this.active) throw new ColorGradingExecutionError('Color catalog replacement must wait for the active frame.')
     const error = colorLutCatalogError(catalog)
     if (error) throw new ColorGradingExecutionError(error)
-    this.cache.clear(); this.bytes = 0; this.catalog = catalog
+    // Discard only derived buffers while checking the replacement. Keeping the
+    // published catalog/facts lets a failed refresh lazily rebuild the old look
+    // without retaining two decoded caches beyond the shared byte allowance.
+    this.cache.clear(); this.bytes = 0
     const facts: ColorLutFact[] = []
     try {
       for (const record of catalog) {
@@ -67,8 +70,10 @@ export class ColorGradingRuntime {
         if (!isColorLutV1(record)) facts.push({ id: record.id, identity: false, error: `Embedded LUT version ${record.version} is unsupported.` })
         else facts.push({ id: record.id, identity: this.lut(record).identity, error: null })
       }
-      this.context = Object.freeze({ colorLuts: Object.freeze(facts) })
-    } catch (cause) { this.cache.clear(); this.bytes = 0; this.catalog = []; this.context = EMPTY_COLOR_GRADING_CONTEXT; throw cause }
+      const context = Object.freeze({ colorLuts: Object.freeze(facts) })
+      check(); this.checkOpen()
+      this.catalog = catalog; this.context = context
+    } catch (cause) { this.cache.clear(); this.bytes = 0; throw cause }
   }
   private async yieldTask(): Promise<void> {
     if (this.injectedYield) { await this.injectedYield(); return }

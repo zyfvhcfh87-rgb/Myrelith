@@ -5676,7 +5676,7 @@ The optional RGB parade failed its final repeated presentation timing gate
 scopes remain unchanged. Both measurements and the reproducible removed prototype
 are retained. The earlier passing run does not override the later failure.
 
-Final validation passes 4,200 Vitest tests in 304 files, all 17 runner checks,
+Initial Gate 6 validation passes 4,200 Vitest tests in 304 files, all 17 runner checks,
 build/typecheck, lint and the zero-vulnerability production audit. All nine issue
 functional Chromium cases pass; four preset flows pass again after final migration
 hardening. Gate 3's 45 CPU cells retain exact evaluator source hashes. Real tests
@@ -5691,3 +5691,12 @@ loss do not qualify other browsers/hardware, real-time 4K or native GPU resets.
 Use `DEVELOPER_DIR=/Library/Developer/CommandLineTools` for Git/test runners and
 `NODE_OPTIONS=--no-experimental-webstorage` for Node 26 Vitest; no Xcode agreement
 was accepted. See final acceptance for commands and the in-app upload limitation.
+
+PR #225's [review follow-up](evidence/issue196-review.md) fixes transactional
+runtime catalog replacement: failed/cancelled candidates discard derived buffers
+while preserving the published tables/facts for lazy rebuild. Disposal stays
+terminal. The second same-LUT report is disproved by four target-scope regressions;
+no-op reuse already preserves history and redo. The final review tree passes
+4,207 Vitest cases + 17 runner checks, build/lint/audit, all nine grading Chromium
+flows and a fresh 45-cell CPU timing run within the original ceilings. The initial
+acceptance manifest remains historical; the review evidence pins current sources.

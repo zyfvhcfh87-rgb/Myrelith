@@ -5139,3 +5139,7 @@ Contract and gate evidence: [COLOR_GRADING.md](COLOR_GRADING.md).
   grading proof retains matching source hashes. Broader Chromium: 41 pass /
   eight failures reproduced on unchanged `368bd43` / three opt-in skips. See
   [final acceptance](evidence/issue196-acceptance.md) for scope and limitations.
+- [x] PR #225 review: preserve the published catalog on failed/cancelled refresh;
+  prove existing same-LUT no-op behavior across all targets. Final review checks
+  pass 4,207 tests + 17 runner checks, build/lint/audit, nine Chromium flows and
+  all 45 freshly measured grading cells. See [review evidence](evidence/issue196-review.md).

@@ -1,0 +1,66 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/pipeline/colorGradingRuntime.test.ts src/domain/colorLutCatalog.test.ts
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith
+
+ ❯ src/pipeline/colorGradingRuntime.test.ts (10 tests | 3 failed) 200ms
+     × cancelled catalog replacement preserves the published tables and can retry 3ms
+     × malformed catalog replacement preserves the published tables and can retry 1ms
+     × checks currentness after the last table and never restores a disposed catalog 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/pipeline/colorGradingRuntime.test.ts > shared grading runtime > cancelled catalog replacement preserves the published tables and can retry
+ FAIL  src/pipeline/colorGradingRuntime.test.ts > shared grading runtime > malformed catalog replacement preserves the published tables and can retry
+AssertionError: expected { colorLuts: [] } to be { colorLuts: [ { id: 'lut', …(2) } ] } // Object.is equality
+
+- Expected
++ Received
+
+  {
+-   "colorLuts": [
+-     {
+-       "error": null,
+-       "id": "lut",
+-       "identity": false,
+-     },
+-   ],
++   "colorLuts": [],
+  }
+
+ ❯ src/pipeline/colorGradingRuntime.test.ts:98:31
+     96|         if (++checks === 2 && failure === 'cancelled') throw new Color…
+     97|       })).toThrow(failure === 'cancelled' ? /cancelled/ : /base64/)
+     98|       expect(runtime.context).toBe(context)
+       |                               ^
+     99|       expect(runtime.ledger()).toMatchObject({ bytes: 0, entries: 0, a…
+    100|       runtime.setCatalog(original)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/pipeline/colorGradingRuntime.test.ts > shared grading runtime > checks currentness after the last table and never restores a disposed catalog
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ src/pipeline/colorGradingRuntime.test.ts:122:9
+    120|     expect(() => runtime.setCatalog([table('candidate')], () => {
+    121|       if (++checks === 2) throw new ColorGradingCancelledError()
+    122|     })).toThrow(/cancelled/)
+       |         ^
+    123|     expect(runtime.context).toBe(context)
+    124|     expect(runtime.ledger()).toMatchObject({ bytes: 0, entries: 0 })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  3 failed | 21 passed (24)
+   Start at  10:02:59
+   Duration  634ms (transform 319ms, setup 56ms, import 372ms, tests 242ms, environment 407ms)
