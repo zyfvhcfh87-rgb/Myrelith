@@ -236,6 +236,7 @@ export interface DocumentState {
   retainedTitleClipboardOwners: readonly TitleBudgetOwner[]
   retainedTitleClipboardElements: readonly TitleElementIntent[]
   retainedTitleClipboardKeys: readonly object[]
+  commitAnimationEdit: (expectedProject: SequenceProject, generation: number, sequenceId: string, next: SequenceProject) => string | null
   commitProjectEdit: (expectedProject: SequenceProject, generation: number, next: SequenceProject) => string | null
 
   /** Complete portable edit snapshot. Browser resources remain elsewhere. */
@@ -792,6 +793,17 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   retainedTitleClipboardOwners: [],
   retainedTitleClipboardElements: [],
   retainedTitleClipboardKeys: [],
+  commitAnimationEdit: (expectedProject, generation, sequenceId, next) => {
+    let error: string | null = null
+    set((state) => {
+      if (state.project !== expectedProject || state.projectGeneration !== generation || state.activeSequenceId !== sequenceId) { error = 'The animation project or active sequence changed.'; return state }
+      if (next === expectedProject) return state
+      if (!sequenceProjectWithinEditBudget(next)) { error = 'The animation edit exceeds project limits.'; return state }
+      error = projectCommitError(state, next)
+      return error ? state : commitProject(state, next)
+    })
+    return error
+  },
   commitProjectEdit: (expectedProject, generation, next) => {
     let error: string | null = null
     set((state) => {

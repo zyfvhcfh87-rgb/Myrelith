@@ -1,9 +1,10 @@
 # Issue #199 — unified animation editor plan
 
-Status: The supervisor accepted scalar/timing, title/path, crop certificate,
-and title-budget foundations. Schema 22 Gate 1 implementation is complete and
-is being committed for exact-SHA review; see [Gate 1 evidence](evidence/issue199/schema22-foundation.md).
-Batch operations and UI remain later gates. This document does not approve itself.
+Status: Schema 22 Gate 1 was accepted at `f555a04` and integrated at
+`f9945c44f75a4818bc939d8b6e63c09db353e669`. Gate 2 atomic editing is complete
+for committed review; see [Gate 2 evidence](evidence/issue199/gate2-atomic-editing.md).
+The unified UI and browser/export acceptance remain later gates. This document
+does not approve itself.
 
 Issue: <https://github.com/zyfvhcfh87-rgb/Myrelith/issues/199>
 
@@ -142,9 +143,11 @@ at the crop boundary.
 
 The implementation, numerical argument, bounded-memory argument and qualified
 evidence are in [the crop certificate gate](evidence/issue199/crop-certificate.md).
-It has no runtime or serialization caller yet. A range certificate applies only
-to that exact immutable crop/tracks/range; crossfade handles and invalidation
-must be included when the reviewed proof is integrated.
+The accepted proof is integrated into all-sequence project admission and portable
+serialization. It covers complete integer crossfade leg ranges and held tails.
+The cache binds the deeply frozen ownership, crop, tracks, keys, easing and
+range graph; mutable or changed inputs require fresh proof. Runtime resolution
+uses admitted values without running a new certificate for each frame.
 
 ## Dependencies and shared ownership
 
@@ -181,7 +184,7 @@ The same bounded easing keeps that per-element constraint valid between keys.
 Shapes do not expose font/shadow tracks. Anchor, element crop/flip, padding,
 content, fonts, colors, booleans and ordering remain static.
 
-Use #200's proposed 16 elements/title, 256 title tracks/clip, 128-character
+Use #200's proposed 16 elements/title, 256 title tracks/clip, 256-character
 property names, 1 MiB title-plus-tracks size bound and 64 MiB retained title
 data allowance, together with the existing per-track and aggregate key limits.
 The shared key clipboard participates in both title and path retained-budget
@@ -304,14 +307,30 @@ package provenance cannot be reconstructed from the baseline files. No new
 plugin ABI/manifest field or automatic descriptor migration is approved here.
 Animated descriptor migration remains unavailable under its existing contract.
 
+### Gate 2 title-owner integration contract
+
+`AnimationTitleOwnerAdapter` in `domain/animationOwners.ts` accepts an immutable
+`isTitleClip(clip)` predicate and `readElement(clip, elementId)` reader. #200 G1b
+has offered canonical `textOverlay.isProceduralTitleClip` and
+`titleOwnership.readTitleClipElement`; after both commits are accepted, compose
+those functions in `app/animationEditorController.ts`. The predicate includes
+compact text and bounded unsupported expanded titles. The reader returns only
+the exact supported requested element, including disabled supported elements.
+Outer title geometry/crop/audio remain inactive; outer opacity stays available.
+All title-owned timing uses fixed local ticks, even for unavailable payloads.
+The current schema 22 default recognizes legacy text and resolves no expanded
+element. No schema 23 parsing is duplicated or consumed before acceptance.
+
 ## Atomic commands, clipboard and history
 
 Implement one pure batch planner taking a snapshot, structural key selection,
 typed operation, and explicit declarations. It builds a validated candidate
 once, checks final per-lane/document/project counts and payload budgets, then
 returns either the untouched source with a structured reason or candidate plus
-selection mapping. The store rechecks project generation, sequence, immutable
-source reference, locks and declaration generation before its single commit.
+selection mapping. The app pins project generation, sequence, immutable source, selection, playhead,
+media and declaration references; immutable source identity also pins locks.
+After full portable-file preflight, the store rechecks project generation,
+sequence, source identity and project/retention limits before its single commit.
 
 - Move uses one signed integer delta for the whole selection. Remove all
   selected source positions first; collisions with unselected or other
@@ -324,7 +343,9 @@ source reference, locks and declaration generation before its single commit.
   semantics. Unified multi-key Move never delegates to the legacy destructive
   single-key move loop. If the old Inspector move remains reachable, label its
   replacement semantics or route it through the reviewed collision policy.
-- Proposed internal clipboard bounds: 4,096 selected keys, 128 lanes, plus
+  Gate 2 keeps that existing single-key behavior and labels it at both Inspector
+  frame editors; the new batch API always rejects destination collisions.
+- Internal clipboard bounds: 4,096 selected keys, 128 lanes, plus
   #198's stricter path-byte allowance. It is defensive, project-generation
   scoped, data-only, and cleared on project replacement. No OS clipboard/API
   permission is needed for this slice.

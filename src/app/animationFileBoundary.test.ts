@@ -8,11 +8,12 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { attributeClip } from '../test/clipAttributeFixtures'
 import { ATTRIBUTE_ASSET_DESCRIPTOR, scalarKey, pathTrack, animationCatalog } from '../test/animationFoundationFixtures'
+import { createAnimationEditingController } from './animationEditingController'
+import { useTransportStore } from '../state/transportStore'
 import { commitPortableProjectEdit } from './portableProjectEdit'
 import type { SequenceProject } from '../domain/projectSequences'
 import type { Clip } from '../domain/schema'
 import { createMaskEffect } from '../domain/effectStack'
-import { useTransportStore } from '../state/transportStore'
 import { commitMaskParams } from './maskEditingController'
 
 function exactLegacyFile(characters: number, scalar: boolean): string {
@@ -111,5 +112,16 @@ describe('schema22 production file and history boundary', () => {
     useDocumentStore.getState().redo()
     expect(useDocumentStore.getState().project).toBe(edited)
     expect(currentFile(edited).length).toBe(characters)
+    // Gate 2 uses the real controller and pinned store entry point at the same cap.
+    const animation = createAnimationEditingController(), release = animation.init()
+    try {
+      useDocumentStore.getState().undo()
+      const beforeAnimation = useDocumentStore.getState()
+      expect(beforeAnimation.future.length).toBeGreaterThan(0)
+      expect(animation.setKey({ owner: { kind: 'clip', id: text.id }, kind: 'scalar', property: 'opacity', propertyVersion: 1 }, 5, 0.5)).toMatch(/exceeds 10000000 characters/)
+      expect(useDocumentStore.getState()).toBe(beforeAnimation)
+      expect(useDocumentStore.getState().project).toBe(project)
+      expect(useTransportStore.getState().animationPreview).toBeNull()
+    } finally { release() }
   }, 30_000)
 })
