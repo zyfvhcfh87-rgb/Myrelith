@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, MediaAsset, TimelineDoc, Track as TrackData } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
@@ -99,7 +100,7 @@ function makeTrack(
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-place-ctrl',
     name: 'placement controller fixture',
     frameRate: { num: 30, den: 1 },

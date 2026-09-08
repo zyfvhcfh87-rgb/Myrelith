@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { ColorGradingRuntime, ColorGradingExecutionError, type ColorGradingFrame } from './colorGradingRuntime'
 import { COLOR_LUT_TYPE, parseCube, portableColorLut } from '../domain/colorLut'
 import { COLOR_CURVES_TYPE, DEFAULT_COLOR_CURVES } from '../domain/colorCurves'
@@ -569,7 +570,7 @@ function makeAdjustment(
 
 function makeDoc(tracks: Track[], width = 5, height = 5): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'pixel-doc',
     name: 'pixel-doc',
     frameRate: { num: 30, den: 1 },

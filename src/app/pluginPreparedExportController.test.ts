@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { describe, expect, test, vi } from 'vitest'
 import { DEFAULT_EXPORT_PROFILE } from '../domain/exportProfile'
 import type { TimelineDoc } from '../domain/schema'
@@ -128,7 +129,7 @@ function baseDependencies(
 
 function document(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'prepared-export-doc',
     name: 'Prepared export',
     frameRate: { num: 30, den: 1 },

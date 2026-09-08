@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc } from '../domain/schema'
@@ -53,7 +54,7 @@ function makeClip(id: string, startFrame: number): Clip {
 
 function makeDocument(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-editor-shell-selection',
     name: 'Editor shell selection fixture',
     frameRate: { num: 30, den: 1 },

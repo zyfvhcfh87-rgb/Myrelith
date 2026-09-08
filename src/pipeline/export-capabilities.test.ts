@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { describe, expect, test, vi } from 'vitest'
 import {
   DEFAULT_EXPORT_PROFILE,
@@ -17,7 +18,7 @@ import {
 
 function makeDoc(includeAudio = true): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'capability-doc',
     name: 'Capability fixture',
     frameRate: { num: 30_000, den: 1_001 },

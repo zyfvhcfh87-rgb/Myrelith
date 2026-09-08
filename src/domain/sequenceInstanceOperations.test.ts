@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type { Clip, SequenceInstance, TimelineDoc, Track } from './schema'
 import { defaultSourceTimeMap } from './sourceTimeMap'
@@ -75,7 +76,7 @@ function clip(id: string, startFrame: number, linkGroupId?: string): Clip {
 
 function sequence(id: string, tracks: Track[] = []): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },

@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /** Pure product planning for bounded point and similarity-box tracking. */
 
 import { MAX_ANALYSIS_SAMPLES } from './analysisCache'
@@ -180,7 +181,7 @@ export function motionTrackingAvailabilityReason(
   source: MotionTrackingSource | null,
   selectionGlobalFrame: number,
 ): string | null {
-  if (clip.text !== undefined || clip.sourceMode !== 'timed') {
+  if (isProceduralTitleClip(clip) || clip.sourceMode !== 'timed') {
     return 'Tracking is available only for timed video clips.'
   }
   if ((clip.lensCorrection ?? null) !== null) {
@@ -305,7 +306,7 @@ export function createMotionTrackingSamplePlan(
 }
 
 function targetAvailabilityReason(doc: TimelineDoc, target: Clip): string | null {
-  if (target.text !== undefined) return 'Choose a video or image clip as the tracking target.'
+  if (isProceduralTitleClip(target)) return 'Choose a video or image clip as the tracking target.'
   const animationError = clipAnimationValidationError(clipAnimation(target))
   if (animationError) return `Target animation is invalid: ${animationError}.`
   const visualError = clipVisualSettingsValidationError(clipVisualSettings(target))

@@ -1,3 +1,8 @@
+import { projectTitleAnimationError } from './animationProjectBudget'
+import { projectTitleOwnershipError, titleDefinitionUsage, copyTitleForNewOwner } from './titleOwnership'
+import { projectCropAnimationError } from './projectCropAnimation'
+import { clipAnimation, clipAnimationKeyframeCount } from './clipAnimation'
+import { MASK_PATH_ANIMATION_LIMITS } from './maskPathAnimation'
 import { colorLutCatalogError, type PortableColorLut } from './colorLutCatalog'
 /**
  * Pure project-level sequence collection and edit authority.
@@ -25,7 +30,7 @@ import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
 } from './projectLimits'
-import { proceduralTextAssetId } from './textOverlay'
+import { proceduralTextAssetId, isProceduralTitleClip } from './textOverlay'
 import { SEQUENCE_PROJECT_LIMITS } from './sequenceProjectLimits'
 import { analyzeNestedSequenceGraph } from './nestedSequences'
 import {
@@ -56,6 +61,7 @@ export type SequenceEntityKind =
   | 'multicam-angle'
   | 'track'
   | 'clip'
+  | 'title-element'
   | 'sequence-instance'
   | 'multicam-instance'
   | 'adjustment'
@@ -108,6 +114,8 @@ interface SequenceProjectCounts {
   audioEffects: number
   audioEffectParams: number
   audioEffectStringCharacters: number
+  pathKeys: number
+  pathValueCharacters: number
   keyframes: number
   speedPoints: number
   textCharacters: number
@@ -211,6 +219,8 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
     audioEffectParams: 0,
     audioEffectStringCharacters: 0,
     keyframes: 0,
+    pathKeys: 0,
+    pathValueCharacters: 0,
     speedPoints: 0,
     textCharacters: 0,
   }
@@ -245,14 +255,11 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
       for (const clip of track.clips) {
         counts.speedPoints += clip.sourceTimeMap?.speedCurve?.points.length ?? 0
         counts.textCharacters += clip.text?.content.length ?? 0
-        counts.keyframes += (clip.animation?.tracks ?? []).reduce(
-          (sum, animationTrack) => sum + animationTrack.keyframes.length,
-          0,
-        )
-        counts.keyframes += (clip.animation?.effectTracks ?? []).reduce(
-          (sum, animationTrack) => sum + animationTrack.keyframes.length,
-          0,
-        )
+        counts.keyframes += clipAnimationKeyframeCount(clipAnimation(clip))
+        for (const lane of clip.animation?.effectPathTracks ?? []) {
+          counts.pathKeys += lane.keyframes.length
+          for (const key of lane.keyframes) counts.pathValueCharacters += key.value.length
+        }
         counts.effects += clip.effects.length
         for (const effect of clip.effects) {
           const budget = effectDescriptorBudget(effect)
@@ -267,14 +274,11 @@ function collectCounts(project: SequenceProject): SequenceProjectCounts {
         }
       }
       for (const adjustment of track.adjustments ?? []) {
-        counts.keyframes += adjustment.animation.tracks.reduce(
-          (sum, animationTrack) => sum + animationTrack.keyframes.length,
-          0,
-        )
-        counts.keyframes += adjustment.animation.effectTracks.reduce(
-          (sum, animationTrack) => sum + animationTrack.keyframes.length,
-          0,
-        )
+        counts.keyframes += clipAnimationKeyframeCount(adjustment.animation)
+        for (const lane of adjustment.animation.effectPathTracks ?? []) {
+          counts.pathKeys += lane.keyframes.length
+          for (const key of lane.keyframes) counts.pathValueCharacters += key.value.length
+        }
         counts.effects += adjustment.effects.length
         for (const effect of adjustment.effects) {
           const budget = effectDescriptorBudget(effect)
@@ -442,7 +446,12 @@ export function sequenceProjectWithinEditBudget(
     && counts.audioEffectParams <= SEQUENCE_PROJECT_LIMITS.maxTotalAudioEffectParams
     && counts.audioEffectStringCharacters
       <= SEQUENCE_PROJECT_LIMITS.maxTotalAudioEffectStringCharacters
+    && counts.pathKeys <= MASK_PATH_ANIMATION_LIMITS.projectKeys
+    && counts.pathValueCharacters <= MASK_PATH_ANIMATION_LIMITS.projectValueCharacters
     && counts.keyframes <= SEQUENCE_PROJECT_LIMITS.maxTotalKeyframes
+    && projectCropAnimationError(project) === null
+    && projectTitleAnimationError(project) === null
+    && projectTitleOwnershipError(project) === null
     && counts.speedPoints <= SEQUENCE_PROJECT_LIMITS.maxTotalSpeedPoints
     && counts.textCharacters <= SEQUENCE_PROJECT_LIMITS.maxTotalTextCharacters
 }
@@ -491,6 +500,7 @@ interface UsedIds {
   multicamAngle: Set<string>
   track: Set<string>
   timelineItem: Set<string>
+  titleElement: Set<string>
   effect: Set<string>
   audioEffect: Set<string>
   transition: Set<string>
@@ -507,6 +517,7 @@ function collectUsedIds(project: SequenceProject): UsedIds {
     multicamAngle: new Set(),
     track: new Set(),
     timelineItem: new Set(),
+    titleElement: new Set(),
     effect: new Set(),
     audioEffect: new Set(),
     transition: new Set(),
@@ -530,6 +541,8 @@ function collectUsedIds(project: SequenceProject): UsedIds {
       for (const effect of track.audioEffects ?? []) used.audioEffect.add(effect.id)
       for (const clip of track.clips) {
         used.timelineItem.add(clip.id)
+        if (clip.title !== undefined) for (const id of titleDefinitionUsage(clip.title).elementIds) used.titleElement.add(id)
+        for (const lane of clip.animation?.titleTracks ?? []) used.titleElement.add(lane.elementId)
         if (clip.linkGroupId) used.linkGroup.add(clip.linkGroupId)
         for (const effect of clip.effects) used.effect.add(effect.id)
         for (const effect of clip.audioEffects ?? []) used.audioEffect.add(effect.id)
@@ -564,6 +577,7 @@ function idSet(used: UsedIds, kind: SequenceEntityKind): Set<string> {
     case 'multicam-angle': return used.multicamAngle
     case 'track': return used.track
     case 'clip': return used.timelineItem
+    case 'title-element': return used.titleElement
     case 'sequence-instance': return used.timelineItem
     case 'multicam-instance': return used.timelineItem
     case 'adjustment': return used.timelineItem
@@ -604,12 +618,12 @@ export function createProjectEffectIdAllocator(
   for (const sequence of project.sequences) {
     for (const track of sequence.tracks) {
       for (const clip of track.clips) {
-        for (const animation of clip.animation?.effectTracks ?? []) {
+        for (const animation of [...(clip.animation?.effectTracks ?? []), ...(clip.animation?.effectPathTracks ?? [])]) {
           used.effect.add(animation.effectId)
         }
       }
       for (const adjustment of track.adjustments ?? []) {
-        for (const animation of adjustment.animation.effectTracks) {
+        for (const animation of [...adjustment.animation.effectTracks, ...(adjustment.animation.effectPathTracks ?? [])]) {
           used.effect.add(animation.effectId)
         }
       }
@@ -655,7 +669,19 @@ function remapDuplicateIds(
       if (!clipId) return null
       clipIds.set(clip.id, clipId)
       clip.id = clipId
-      if (clip.text !== undefined) clip.assetId = proceduralTextAssetId(clipId)
+      if (isProceduralTitleClip(clip)) clip.assetId = proceduralTextAssetId(clipId)
+      if (clip.title !== undefined || clip.animation?.titleTracks?.length) {
+        try {
+          const copy = copyTitleForNewOwner(clip, () => {
+            const id = allocateId(used, factory, 'title-element')
+            if (!id) throw new RangeError('Title element identity allocation failed.')
+            return id
+          })
+          if (!copy) return null
+          if (copy.title !== undefined) clip.title = copy.title
+          clip.animation = copy.animation
+        } catch { return null }
+      }
       if (clip.linkGroupId) {
         let linkGroupId = linkGroupIds.get(clip.linkGroupId)
         if (!linkGroupId) {
@@ -681,7 +707,7 @@ function remapDuplicateIds(
         if (!effectId) return null
         effect.id = effectId
       }
-      for (const track of clip.animation?.effectTracks ?? []) {
+      for (const track of [...(clip.animation?.effectTracks ?? []), ...(clip.animation?.effectPathTracks ?? [])]) {
         const effectId = effectIds.get(track.effectId)
         if (effectId) track.effectId = effectId
       }
@@ -749,7 +775,7 @@ function remapDuplicateIds(
         effectIds.set(effect.id, effectId)
         effect.id = effectId
       }
-      for (const animationTrack of adjustment.animation.effectTracks) {
+      for (const animationTrack of [...adjustment.animation.effectTracks, ...(adjustment.animation.effectPathTracks ?? [])]) {
         const effectId = effectIds.get(animationTrack.effectId)
         if (effectId) animationTrack.effectId = effectId
       }
@@ -936,7 +962,7 @@ export function projectMediaAssetIds(project: SequenceProject): ReadonlySet<stri
   for (const sequence of project.sequences) {
     for (const track of sequence.tracks) {
       for (const clip of track.clips) {
-        if (clip.text === undefined) assetIds.add(clip.assetId)
+        if (!isProceduralTitleClip(clip)) assetIds.add(clip.assetId)
       }
     }
   }

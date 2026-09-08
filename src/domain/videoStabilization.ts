@@ -22,6 +22,7 @@ import {
   type SimilarityPathSample,
   type SimilarityTransform,
 } from './motionAnalysis'
+import { isProceduralTitleClip } from './textOverlay'
 import { MAX_ANALYSIS_SAMPLES } from './analysisCache'
 import type {
   Clip,
@@ -127,7 +128,7 @@ export function videoStabilizationAvailabilityReason(
   clip: Clip,
   source: VideoStabilizationSource | null,
 ): string | null {
-  if (clip.text !== undefined || clip.sourceMode !== 'timed') {
+  if (isProceduralTitleClip(clip) || clip.sourceMode !== 'timed') {
     return 'Stabilization is available only for timed video clips.'
   }
   if (clip.timelineRange.durationFrames < 2) {
@@ -1001,7 +1002,7 @@ export function createVideoStabilizationPlan(
       return { ok: false, reason: 'Stabilization would exceed the clip scale limit.' }
     }
   }
-  const owned = new Set<ClipAnimationProperty>(VIDEO_STABILIZATION_PROPERTIES)
+  const owned = new Set<string>(VIDEO_STABILIZATION_PROPERTIES)
   const current = clipAnimation(clip)
   const replacementRequired = current.tracks.some((track) => owned.has(track.property))
   const retainedKeyCount = current.tracks

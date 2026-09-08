@@ -1,4 +1,9 @@
+import type { TitleBudgetOwner } from '../domain/titleBudgets'
+import type { TitleElementIntent } from '../domain/titleElements'
+import { animationRetentionError } from '../domain/animationProjectBudget'
+import type { EffectPathAnimationTrack } from '../domain/maskPathAnimation'
 import { COLOR_LUT_LIMITS } from '../domain/colorLut'
+import { createTitleElementIdAllocator } from '../domain/titleOwnership'
 import { newColorLutReferenceError, retainedColorLutBytes, type PortableColorLut } from '../domain/colorLutCatalog'
 import { sequenceProjectWithinEditBudget } from '../domain/projectSequences'
 import { editVideoBus, type VideoBusEdit, type VideoBusTarget } from '../domain/videoBusEffects'
@@ -226,7 +231,13 @@ const HISTORY_LIMIT = 100
 export interface DocumentState {
   /** Data-only clipboard retention ledger; shares immutable project records. */
   retainedClipboardColorLuts: readonly PortableColorLut[]
-  commitColorLutEdit: (expectedProject: SequenceProject, generation: number, next: SequenceProject) => string | null
+  retainedAttributePathTracks: readonly EffectPathAnimationTrack[]
+  retainedKeyPathTracks: readonly EffectPathAnimationTrack[]
+  retainedTitleClipboardOwners: readonly TitleBudgetOwner[]
+  retainedTitleClipboardElements: readonly TitleElementIntent[]
+  retainedTitleClipboardKeys: readonly object[]
+  commitAnimationEdit: (expectedProject: SequenceProject, generation: number, sequenceId: string, next: SequenceProject) => string | null
+  commitProjectEdit: (expectedProject: SequenceProject, generation: number, next: SequenceProject) => string | null
 
   /** Complete portable edit snapshot. Browser resources remain elsewhere. */
   project: SequenceProject
@@ -249,6 +260,8 @@ export interface DocumentState {
   setDoc: (doc: TimelineDoc) => void
   /** Commit a prevalidated whole-document gesture without clearing history. */
   setDocWithHistory: (doc: TimelineDoc) => void
+  /** Freshly validated mask gesture; rejection must retain both history branches. */
+  commitMaskEdit: (expectedProject: SequenceProject, generation: number, sequenceId: string, doc: TimelineDoc) => string | null
   /** Validate and commit an entire attribute batch once against its opening snapshot. */
   applyClipAttributes: (expectedProject: SequenceProject, sequenceId: string, command: ClipAttributeCommand) => string | null
   /** Navigate without persistence, dirty state, or history. */
@@ -712,7 +725,7 @@ function commit(
     state.activeSequenceId,
     next,
   )
-  if (project === state.project || colorLutCommitError(state, project)) return state
+  if (project === state.project || projectCommitError(state, project)) return state
   return {
     project,
     doc: next,
@@ -721,7 +734,9 @@ function commit(
   }
 }
 
-function colorLutCommitError(state: DocumentState, project: SequenceProject): string | null {
+function projectCommitError(state: DocumentState, project: SequenceProject): string | null {
+  const animationError = animationRetentionError(state, project)
+  if (animationError) return animationError
   if (!state.project.colorLuts?.length && !project.colorLuts?.length && !state.retainedClipboardColorLuts.length) {
     return newColorLutReferenceError(state.project, project)
   }
@@ -749,7 +764,7 @@ function commitProject(
   project: SequenceProject,
   preferredActiveId = state.activeSequenceId,
 ): Partial<DocumentState> | DocumentState {
-  if (project === state.project || colorLutCommitError(state, project)) return state
+  if (project === state.project || projectCommitError(state, project)) return state
   return {
     project,
     ...activeSequenceFor(project, preferredActiveId),
@@ -773,12 +788,28 @@ const INITIAL_PROJECT = sequenceProjectFromTimeline(INITIAL_DOCUMENT)
 
 export const useDocumentStore = create<DocumentState>()((set) => ({
   retainedClipboardColorLuts: [],
-  commitColorLutEdit: (expectedProject, generation, next) => {
+  retainedAttributePathTracks: [],
+  retainedKeyPathTracks: [],
+  retainedTitleClipboardOwners: [],
+  retainedTitleClipboardElements: [],
+  retainedTitleClipboardKeys: [],
+  commitAnimationEdit: (expectedProject, generation, sequenceId, next) => {
     let error: string | null = null
     set((state) => {
-      if (state.project !== expectedProject || state.projectGeneration !== generation) { error = 'The project changed. Reopen the grading controls.'; return state }
-      if (!sequenceProjectWithinEditBudget(next)) { error = 'The grading edit exceeds project limits.'; return state }
-      error = colorLutCommitError(state, next)
+      if (state.project !== expectedProject || state.projectGeneration !== generation || state.activeSequenceId !== sequenceId) { error = 'The animation project or active sequence changed.'; return state }
+      if (next === expectedProject) return state
+      if (!sequenceProjectWithinEditBudget(next)) { error = 'The animation edit exceeds project limits.'; return state }
+      error = projectCommitError(state, next)
+      return error ? state : commitProject(state, next)
+    })
+    return error
+  },
+  commitProjectEdit: (expectedProject, generation, next) => {
+    let error: string | null = null
+    set((state) => {
+      if (state.project !== expectedProject || state.projectGeneration !== generation) { error = 'The project changed. Reopen the editing controls.'; return state }
+      if (!sequenceProjectWithinEditBudget(next)) { error = 'The edit exceeds project limits.'; return state }
+      error = projectCommitError(state, next)
       return error ? state : commitProject(state, next)
     })
     return error
@@ -795,6 +826,11 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     project,
     projectGeneration: state.projectGeneration + 1,
     retainedClipboardColorLuts: [],
+    retainedAttributePathTracks: [],
+    retainedKeyPathTracks: [],
+    retainedTitleClipboardOwners: [],
+    retainedTitleClipboardElements: [],
+    retainedTitleClipboardKeys: [],
     ...activeSequenceFor(project, activeSequenceId),
     sequenceNavigation: [],
     past: [],
@@ -805,6 +841,11 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     project: sequenceProjectFromTimeline(doc),
     projectGeneration: state.projectGeneration + 1,
     retainedClipboardColorLuts: [],
+    retainedAttributePathTracks: [],
+    retainedKeyPathTracks: [],
+    retainedTitleClipboardOwners: [],
+    retainedTitleClipboardElements: [],
+    retainedTitleClipboardKeys: [],
     activeSequenceId: doc.id,
     sequenceNavigation: [],
     doc,
@@ -815,6 +856,20 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   setDocWithHistory: (doc) =>
     set((state) => commit(state, doc)),
 
+  commitMaskEdit: (expectedProject, generation, sequenceId, doc) => {
+    let error: string | null = null
+    set((state) => {
+      if (state.project !== expectedProject || state.projectGeneration !== generation || state.activeSequenceId !== sequenceId || doc.id !== sequenceId) {
+        error = 'The project changed. Start the mask edit again.'; return state
+      }
+      const candidate = replaceProjectSequence(state.project, sequenceId, doc)
+      if ((doc !== state.doc && candidate === state.project) || !sequenceProjectWithinEditBudget(candidate)) { error = 'The mask edit exceeds project limits.'; return state }
+      error = projectCommitError(state, candidate)
+      return error ? state : commit(state, doc)
+    })
+    return error
+  },
+
   editVideoBus: (expectedProject, target, command) => {
     let error: string | null = null
     set((state) => {
@@ -824,7 +879,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       }
       const result = editVideoBus(state.project, target, command, randomSequenceId)
       if (!result.ok) { error = result.reason; return state }
-      error = colorLutCommitError(state, result.project)
+      error = projectCommitError(state, result.project)
       return error ? state : commitProject(state, result.project)
     })
     return error
@@ -841,7 +896,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         ? pasteClipAttributes(state.project, sequenceId, command.targetIds, command.template, command.options, randomSequenceId)
         : resetClipAttributes(state.project, sequenceId, command.targetIds, command.groups, command.selectedEffectIds)
       if (!result.ok) { error = result.reason; return state }
-      error = colorLutCommitError(state, result.project)
+      error = projectCommitError(state, result.project)
       return error ? state : commitProject(state, result.project)
     })
     return error
@@ -1078,6 +1133,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   splitClipAtPlayhead: (playheadFrame) =>
     set((state) => {
       let next = state.doc
+      const allocateTitleId = createTitleElementIdAllocator(state.project, () => `title-element_${crypto.randomUUID()}`)
       // Collect targets from the CURRENT doc; left halves keep their ids, so
       // each original clip is split at most once even as `next` evolves.
       // A linked group is split via whichever member is visited first; mark
@@ -1095,7 +1151,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
               if (splitGroups.has(clip.linkGroupId)) continue
               splitGroups.add(clip.linkGroupId)
             }
-            next = linkedSplitClipAtFrame(next, clip.id, playheadFrame)
+            next = linkedSplitClipAtFrame(next, clip.id, playheadFrame, allocateTitleId)
           }
         }
       }
@@ -1273,7 +1329,8 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     )),
 
   splitClipAt: (clipId, frame) =>
-    set((state) => commit(state, linkedSplitClipAtFrame(state.doc, clipId, frame))),
+    set((state) => commit(state, linkedSplitClipAtFrame(state.doc, clipId, frame,
+      createTitleElementIdAllocator(state.project, () => `title-element_${crypto.randomUUID()}`)))),
 
   trimClip: (clipId, edge, deltaFrames) =>
     set((state) => commit(state, linkedTrimClip(state.doc, clipId, edge, deltaFrames))),
@@ -1320,7 +1377,8 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   applySequenceEdit: (plan, asset, catalog) =>
     set((state) => commit(
       state,
-      applySequenceEditToDocument(state.doc, plan, asset, catalog),
+      applySequenceEditToDocument(state.doc, plan, asset, catalog,
+        createTitleElementIdAllocator(state.project, () => `title-element_${crypto.randomUUID()}`)),
     )),
 
   addCrossfade: (fromClipId, toClipId, durationFrames) =>

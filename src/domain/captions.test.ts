@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, it } from 'vitest'
 import {
   CAPTION_LIMITS,
@@ -15,7 +16,7 @@ import type { CaptionItem, TimelineDoc } from './schema'
 
 function doc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc',
     name: 'Captions',
     frameRate: { num: 30_000, den: 1_001 },

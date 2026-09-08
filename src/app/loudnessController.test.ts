@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { beforeEach, describe, expect, test } from 'vitest'
 import type { TimelineDoc } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
@@ -7,7 +8,7 @@ import './loudnessController'
 
 function doc(id: string): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },

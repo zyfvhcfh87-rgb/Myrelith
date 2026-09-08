@@ -1,23 +1,14 @@
-import type { AudioEffectDescriptor, Clip, ClipAnimation, ClipAnimationEasing, ClipAnimationProperty, ClipAudioSettings, ClipVisualSettings, Effect, FrameRate, SourceTimeMap, SourceTimeSpeedCurve, TextProps, Track, Transform } from '../schema';
+import { validatePortableAnimation } from './animationValidation'
+import type { AudioEffectDescriptor, Clip, ClipAnimation, ClipAudioSettings, ClipVisualSettings, Effect, FrameRate, SourceTimeMap, SourceTimeSpeedCurve, TextProps, Track, Transform } from '../schema';
 import {
-  ANIMATABLE_CLIP_PROPERTIES,
   clipAnimationKindError,
-  clipAnimationValidationError,
   defaultClipAnimation,
-  MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP,
-  MAX_ANIMATED_FINITE_MAGNITUDE,
-  MAX_KEYFRAME_FRAME,
-  MAX_KEYFRAMES_PER_TRACK,
 } from '../clipAnimation';
 import {
   clipAudioSettingsValidationError,
   clipVisualSettingsValidationError,
-  MAX_AUDIO_BALANCE,
   MAX_CLIP_SCALE,
-  MAX_CLIP_VOLUME,
-  MIN_AUDIO_BALANCE,
   MIN_CLIP_SCALE,
-  MIN_CLIP_VOLUME,
 } from '../clipInspector';
 import { microsecondsDurationToFrames } from '../time';
 import { isProceduralTextAssetId, isSupportedTextColor, isSupportedTextFontFamily, TEXT_OVERLAY_LIMITS, textPropsValidationError, proceduralTextAssetId } from '../textOverlay';
@@ -26,6 +17,7 @@ import { effectDescriptorBoundsError, effectDescriptorBudget } from '../effectBo
 import { audioEffectDescriptorBudget } from '../audioEffectBounds';
 import { sourceRangeForMap, sourceTimeSpeedCurveValidationError, sourceTimeMapValidationError, MAX_SOURCE_TIME_SPEED_FRAME, SOURCE_TIME_SPEED_EASINGS, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
 import { PROJECT_FILE_LIMITS, type PortableAssetDescriptor } from './projectTypes';
+import { readTitleDefinition } from '../titleElements';
 import { booleanValue, boundedArray, exactKeys, fail, finiteNumber, record, safeInteger, stringValue, validateLensCorrectionIntent } from './validationPrimitives';
 
 export function validateRange(value: unknown, path: string, minimumDuration: number): void {
@@ -104,162 +96,10 @@ export function validateClipAudio(
   if (error) fail(path, error)
 }
 
-export function validateAnimationEasing(
-  value: unknown,
-  path: string,
-): asserts value is ClipAnimationEasing {
-  const easing = record(value, path)
-  if (easing.type === 'linear' || easing.type === 'hold') {
-    exactKeys(easing, ['type'], [], path)
-    return
-  }
-  if (easing.type !== 'cubic-bezier') {
-    fail(`${path}.type`, 'expected hold, linear, or cubic-bezier')
-  }
-  exactKeys(easing, ['type', 'x1', 'y1', 'x2', 'y2'], [], path)
-  for (const key of ['x1', 'y1', 'x2', 'y2'] as const) {
-    finiteNumber(easing[key], `${path}.${key}`, 0, 1)
-  }
-}
+export { validateAnimationEasing } from './animationValidation'
 
-export function validateClipAnimation(
-  value: unknown,
-  path: string,
-  context: ValidationContext,
-): asserts value is ClipAnimation {
-  const animation = record(value, path)
-  exactKeys(animation, ['tracks', 'effectTracks'], [], path)
-  boundedArray(
-    animation.tracks,
-    `${path}.tracks`,
-    ANIMATABLE_CLIP_PROPERTIES.length,
-  )
-  const properties = new Set<ClipAnimationProperty>()
-  for (let trackIndex = 0; trackIndex < animation.tracks.length; trackIndex++) {
-    const trackPath = `${path}.tracks[${trackIndex}]`
-    const track = record(animation.tracks[trackIndex], trackPath)
-    exactKeys(track, ['property', 'keyframes'], [], trackPath)
-    if (
-      typeof track.property !== 'string'
-      || !ANIMATABLE_CLIP_PROPERTIES.includes(
-        track.property as ClipAnimationProperty,
-      )
-    ) {
-      fail(`${trackPath}.property`, 'unsupported animated property')
-    }
-    const property = track.property as ClipAnimationProperty
-    if (properties.has(property)) fail(`${trackPath}.property`, 'duplicate animation track')
-    properties.add(property)
-    boundedArray(track.keyframes, `${trackPath}.keyframes`, MAX_KEYFRAMES_PER_TRACK)
-    if (track.keyframes.length === 0) fail(`${trackPath}.keyframes`, 'must not be empty')
-    context.keyframeCount += track.keyframes.length
-    if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
-      fail(
-        '$.sequences',
-        `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`,
-      )
-    }
-    let previousFrame: number | null = null
-    for (let keyframeIndex = 0; keyframeIndex < track.keyframes.length; keyframeIndex++) {
-      const keyframePath = `${trackPath}.keyframes[${keyframeIndex}]`
-      const keyframe = record(track.keyframes[keyframeIndex], keyframePath)
-      exactKeys(
-        keyframe,
-        ['frame', 'sourceTimeTicks', 'value', 'easing'],
-        [],
-        keyframePath,
-      )
-      safeInteger(
-        keyframe.frame,
-        `${keyframePath}.frame`,
-        -MAX_KEYFRAME_FRAME,
-        MAX_KEYFRAME_FRAME,
-      )
-      safeInteger(
-        keyframe.sourceTimeTicks,
-        `${keyframePath}.sourceTimeTicks`,
-        Number.MIN_SAFE_INTEGER,
-        Number.MAX_SAFE_INTEGER,
-      )
-      if (previousFrame !== null && keyframe.frame <= previousFrame) {
-        fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
-      }
-      const minimum = property === 'opacity' ? 0
-        : property === 'volume' ? MIN_CLIP_VOLUME
-          : property === 'balance' ? MIN_AUDIO_BALANCE
-            : property === 'scale-x' || property === 'scale-y' ? MIN_CLIP_SCALE
-              : -MAX_ANIMATED_FINITE_MAGNITUDE
-      const maximum = property === 'opacity' ? 1
-        : property === 'volume' ? MAX_CLIP_VOLUME
-          : property === 'balance' ? MAX_AUDIO_BALANCE
-            : property === 'scale-x' || property === 'scale-y' ? MAX_CLIP_SCALE
-              : MAX_ANIMATED_FINITE_MAGNITUDE
-      finiteNumber(keyframe.value, `${keyframePath}.value`, minimum, maximum)
-      validateAnimationEasing(keyframe.easing, `${keyframePath}.easing`)
-      previousFrame = keyframe.frame
-    }
-  }
-  boundedArray(
-    animation.effectTracks,
-    `${path}.effectTracks`,
-    MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP,
-  )
-  const effectTargets = new Set<string>()
-  for (let trackIndex = 0; trackIndex < animation.effectTracks.length; trackIndex++) {
-    const trackPath = `${path}.effectTracks[${trackIndex}]`
-    const track = record(animation.effectTracks[trackIndex], trackPath)
-    exactKeys(track, ['effectId', 'parameter', 'keyframes'], [], trackPath)
-    stringValue(track.effectId, `${trackPath}.effectId`, PROJECT_FILE_LIMITS.maxIdCharacters)
-    stringValue(track.parameter, `${trackPath}.parameter`, PROJECT_FILE_LIMITS.maxNameCharacters)
-    const target = `${String(track.effectId)}\u0000${String(track.parameter)}`
-    if (effectTargets.has(target)) fail(trackPath, 'duplicate effect animation track')
-    effectTargets.add(target)
-    boundedArray(track.keyframes, `${trackPath}.keyframes`, MAX_KEYFRAMES_PER_TRACK)
-    if (track.keyframes.length === 0) fail(`${trackPath}.keyframes`, 'must not be empty')
-    context.keyframeCount += track.keyframes.length
-    if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
-      fail(
-        '$.sequences',
-        `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`,
-      )
-    }
-    let previousFrame: number | null = null
-    for (let keyframeIndex = 0; keyframeIndex < track.keyframes.length; keyframeIndex++) {
-      const keyframePath = `${trackPath}.keyframes[${keyframeIndex}]`
-      const keyframe = record(track.keyframes[keyframeIndex], keyframePath)
-      exactKeys(
-        keyframe,
-        ['frame', 'sourceTimeTicks', 'value', 'easing'],
-        [],
-        keyframePath,
-      )
-      safeInteger(
-        keyframe.frame,
-        `${keyframePath}.frame`,
-        -MAX_KEYFRAME_FRAME,
-        MAX_KEYFRAME_FRAME,
-      )
-      safeInteger(
-        keyframe.sourceTimeTicks,
-        `${keyframePath}.sourceTimeTicks`,
-        Number.MIN_SAFE_INTEGER,
-        Number.MAX_SAFE_INTEGER,
-      )
-      if (previousFrame !== null && keyframe.frame <= previousFrame) {
-        fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
-      }
-      finiteNumber(
-        keyframe.value,
-        `${keyframePath}.value`,
-        -MAX_ANIMATED_FINITE_MAGNITUDE,
-        MAX_ANIMATED_FINITE_MAGNITUDE,
-      )
-      validateAnimationEasing(keyframe.easing, `${keyframePath}.easing`)
-      previousFrame = Number(keyframe.frame)
-    }
-  }
-  const error = clipAnimationValidationError(animation as unknown as ClipAnimation)
-  if (error) fail(path, error)
+export function validateClipAnimation(value: unknown, path: string, context: ValidationContext): asserts value is ClipAnimation {
+  validatePortableAnimation(value, path, context, 'required')
 }
 
 export function validateEffect(
@@ -468,6 +308,8 @@ export interface ValidationContext {
   audioEffectStringCharacterCount: number
   textCharacterCount: number
   transitionCount: number
+  pathKeyframeCount: number
+  pathValueCharacters: number
   keyframeCount: number
   speedPointCount: number
 }
@@ -530,10 +372,12 @@ export function validateSourceTimeMap(
 
 export function validateClip(value: unknown, path: string, trackKind: Track['kind'], context: ValidationContext): asserts value is Clip {
   const clip = record(value, path)
+  const procedural = clip.text !== undefined || clip.title !== undefined
+  if (clip.text !== undefined && clip.title !== undefined) fail(path, 'text and title are mutually exclusive')
   exactKeys(
     clip,
     ['id', 'assetId', 'name', 'sourceMode', 'sourceRange', 'sourceTimeMap', 'timelineRange', 'transform', 'opacity', 'blendMode', 'volume', 'lensCorrection', 'visual', 'audio', 'effects', 'audioEffects'],
-    ['animation', 'text', 'linkGroupId'],
+    ['animation', 'text', 'title', 'linkGroupId'],
     path,
   )
   stringValue(clip.id, `${path}.id`, PROJECT_FILE_LIMITS.maxIdCharacters)
@@ -543,13 +387,13 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   context.timelineItemIds.add(clip.id)
   stringValue(clip.assetId, `${path}.assetId`, PROJECT_FILE_LIMITS.maxIdCharacters)
   if (
-    clip.text !== undefined
+    procedural
     && clip.assetId !== proceduralTextAssetId(clip.id)
   ) {
     fail(`${path}.assetId`, 'text clips must use their reserved procedural asset id')
   }
   const asset = context.assetsById.get(clip.assetId)
-  const proceduralText = clip.text !== undefined
+  const proceduralText = procedural
     && isProceduralTextAssetId(clip.assetId)
   if (!asset && !proceduralText) {
     fail(`${path}.assetId`, 'references an unknown asset')
@@ -593,7 +437,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
       || map.speedCurve?.points.length !== 0
     ) fail(`${path}.sourceTimeMap`, 'still clips must use the canonical 1x map')
   }
-  if (clip.text !== undefined) {
+  if (procedural) {
     if (stillSource) fail(`${path}.sourceMode`, 'text clips must use timed source mode')
     if (sourceRange.startFrame !== 0) {
       fail(`${path}.sourceRange.startFrame`, 'text clips must use procedural source start 0')
@@ -609,10 +453,10 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
       || map.speedCurve?.points.length !== 0
     ) fail(`${path}.sourceTimeMap`, 'text clips must use the canonical 1x map')
   }
-  if (clip.text === undefined && asset?.kind === 'image' && !stillSource) {
+  if (!procedural && asset?.kind === 'image' && !stillSource) {
     fail(`${path}.sourceMode`, 'image clips must use still source mode')
   }
-  if (stillSource && (asset?.kind !== 'image' || clip.text !== undefined)) {
+  if (stillSource && (asset?.kind !== 'image' || procedural)) {
     fail(`${path}.sourceMode`, 'still source mode requires an image media clip')
   }
   if (context.documentFrameRate === null) {
@@ -626,7 +470,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
     : 0
   if (
     !stillSource
-    && clip.text === undefined
+    && !procedural
     && sourceRange.startFrame + sourceRange.durationFrames > assetDurationFrames
   ) {
     fail(`${path}.sourceRange`, 'extends beyond the referenced asset duration')
@@ -639,7 +483,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   validateLensCorrectionIntent(clip.lensCorrection, `${path}.lensCorrection`)
   if (
     clip.lensCorrection !== null
-    && (trackKind !== 'video' || clip.text !== undefined)
+    && (trackKind !== 'video' || procedural)
   ) {
     fail(`${path}.lensCorrection`, 'manual lens correction requires a visual media clip')
   }
@@ -653,7 +497,7 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
   validateClipAnimation(animation, `${path}.animation`, context)
   const animationKindError = clipAnimationKindError(
     trackKind,
-    clip.text !== undefined,
+    clip.title === undefined && procedural,
     animation,
   )
   if (animationKindError) fail(`${path}.animation`, animationKindError)
@@ -669,6 +513,10 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
     validateEffect(clip.effects[index], `${path}.effects[${index}]`, context)
   }
   validateAudioEffectStack(clip.audioEffects, `${path}.audioEffects`, context)
+  if (clip.title !== undefined) {
+    const title = readTitleDefinition(clip.title)
+    if (title.status === 'invalid') fail(`${path}.title`, title.reason)
+  }
   if (clip.text !== undefined) {
     validateText(clip.text, `${path}.text`)
     context.textCharacterCount += clip.text.content.length
@@ -687,9 +535,9 @@ export function validateClip(value: unknown, path: string, trackKind: Track['kin
     )
   }
   if (trackKind === 'audio') {
-    if (clip.text !== undefined) fail(path, 'text clips cannot be placed on audio tracks')
+    if (procedural) fail(path, 'text and title clips cannot be placed on audio tracks')
     if (!asset?.hasAudio) fail(`${path}.assetId`, 'audio-track clip references an asset without audio')
-  } else if (clip.text === undefined && asset?.kind === 'audio') {
+  } else if (!procedural && asset?.kind === 'audio') {
     fail(`${path}.assetId`, 'video-track clip references an audio-only asset')
   }
 }

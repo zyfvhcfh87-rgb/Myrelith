@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type {
   Clip,
@@ -111,7 +112,7 @@ function track(
 
 function sequence(id: string, tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id,
     name: id,
     frameRate: { num: 30, den: 1 },

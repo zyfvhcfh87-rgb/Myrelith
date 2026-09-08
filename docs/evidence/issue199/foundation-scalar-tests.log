@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/domain/scalarAnimation.test.ts src/domain/animationTiming.test.ts src/domain/clipAnimation.test.ts src/domain/clipAnimationOperations.test.ts src/state/clipAnimationStore.test.ts src/domain/sourceTimeMap.test.ts src/domain/audioMixPlan.test.ts src/domain/pluginVideoEffectStagePlan.test.ts src/ui/AnimationCurveEditor.test.tsx src/domain/effectStack.test.ts src/domain/clipAttributes.test.ts src/domain/adjustmentItems.test.ts src/domain/videoCompositionPlan.test.ts src/test/architecture.test.ts --maxWorkers=1
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+
+ Test Files  14 passed (14)
+      Tests  121 passed (121)
+   Start at  10:57:26
+   Duration  5.23s (transform 335ms, setup 227ms, import 1.19s, tests 326ms, environment 2.73s)
+
+✔ cold samples each use and close a fresh BrowserContext (0.663625ms)
+✔ source identity rejects end-of-run drift (0.1715ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (218.295959ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (137.881291ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.375084ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.804042ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.12375ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.276708ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.125ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.095583ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.290084ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.650625ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.915333ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.116ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.162333ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.213666ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.139625ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 542.910625

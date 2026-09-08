@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /**
  * Canonical, browser-free crossfade planning.
  *
@@ -288,7 +289,7 @@ function finishResolvedSeam(
   if (toIndex !== fromIndex + 1 || fromIndex === toIndex) {
     return 'endpoints-not-ordered-adjacent'
   }
-  if (from.text !== undefined || to.text !== undefined) return 'text-endpoint'
+  if (isProceduralTitleClip(from) || isProceduralTitleClip(to)) return 'text-endpoint'
   if (!validSourceRange(from) || !validSourceRange(to)) {
     return 'invalid-source-range'
   }
@@ -372,7 +373,7 @@ export function sourceHandleHeadroomFrames(input: {
   readonly catalog: SourceBoundsCatalog
 }): number | null {
   const { clip, edge, stream, rate, catalog } = input
-  if (clip.text !== undefined || clip.sourceMode === 'still') {
+  if (isProceduralTitleClip(clip) || clip.sourceMode === 'still') {
     return Number.POSITIVE_INFINITY
   }
   const role: CrossfadeLegRole = edge === 'end' ? 'from' : 'to'
@@ -488,9 +489,14 @@ function pairCapacities(
 function transitionWindow(
   seam: CrossfadeSeam,
 ): { startFrame: number; endFrame: number } | null {
-  const startFrame = seam.cutFrame
-    - Math.floor(seam.transition.durationFrames / 2)
-  const endFrame = startFrame + seam.transition.durationFrames
+  return crossfadeWindowAtCut(seam.cutFrame, seam.transition.durationFrames)
+}
+
+/** Shared integer window arithmetic for composition and admission of both handles. */
+export function crossfadeWindowAtCut(cutFrame: number, durationFrames: number): { startFrame: number; endFrame: number } | null {
+  if (!Number.isSafeInteger(cutFrame) || !Number.isSafeInteger(durationFrames) || durationFrames < 1) return null
+  const startFrame = cutFrame - Math.floor(durationFrames / 2)
+  const endFrame = startFrame + durationFrames
   return Number.isSafeInteger(startFrame) && Number.isSafeInteger(endFrame)
     ? { startFrame, endFrame }
     : null
@@ -680,8 +686,8 @@ function crossfadeAudioStructure(
   if (
     fromPartner.clip.sourceMode !== 'timed'
     || toPartner.clip.sourceMode !== 'timed'
-    || fromPartner.clip.text !== undefined
-    || toPartner.clip.text !== undefined
+    || isProceduralTitleClip(fromPartner.clip)
+    || isProceduralTitleClip(toPartner.clip)
     || !validSourceRange(fromPartner.clip)
     || !validSourceRange(toPartner.clip)
     || !validTimelineRange(fromPartner.clip)

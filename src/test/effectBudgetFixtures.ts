@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { defaultClipAnimation } from '../domain/clipAnimation'
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import type { Clip, EffectDescriptor, EffectParamValue, TimelineDoc } from '../domain/schema'
@@ -94,7 +95,7 @@ export function documentAtAggregateEffectBudget(
     ? effectCountClips()
     : [budget === 'params' ? parameterBudgetClip() : stringBudgetClip()]
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: `doc-${budget}-budget`,
     name: `${budget} budget`,
     frameRate: { num: 30, den: 1 },

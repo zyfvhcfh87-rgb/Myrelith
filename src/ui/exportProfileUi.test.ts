@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { describe, expect, test } from 'vitest'
 import {
   DEFAULT_EXPORT_PROFILE,
@@ -73,7 +74,7 @@ function doc(
     tracks.push(track('audio', durationFrames))
   }
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'export-profile-ui-doc',
     name: 'Export profile UI',
     frameRate,

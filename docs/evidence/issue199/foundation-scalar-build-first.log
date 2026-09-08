@@ -1,0 +1,5 @@
+
+> myrelith@0.2.0-alpha.1 build
+> tsc -b && vite build
+
+src/domain/animationTiming.test.ts(30,74): error TS2322: Type 'number' is not assignable to type '-2'.

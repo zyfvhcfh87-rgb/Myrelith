@@ -39,6 +39,7 @@ import { useEditShortcuts } from './useEditShortcuts'
 import { initMediaVisuals } from './mediaVisualsController'
 import { initMediaCapabilityLifecycle } from './mediaCapabilityController'
 import { initSelectionReconciliation } from './selectionReconciliationController'
+import { animationEditorController } from './animationEditorController'
 import { initClipAttributeClipboard } from './clipAttributeController'
 import { initProxyController } from './proxyController'
 import { initMotionAnalysisRuntime } from './motionAnalysisRuntime'
@@ -97,6 +98,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
   useEffect(() => initMediaCapabilityLifecycle(), [])
   useEffect(() => initSelectionReconciliation(), [])
   useEffect(() => initClipAttributeClipboard(), [])
+  useEffect(() => animationEditorController.init(), [])
   useEffect(() => colorLutController.init(), [])
   useEffect(() => initSourceMonitorLifecycle(), [])
   useEffect(() => initAudioEffectStatusProjection(), [])

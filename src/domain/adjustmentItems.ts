@@ -17,6 +17,8 @@ import type {
 import {
   animationEasingValidationError,
   clipAnimationKeyframeCount,
+  cloneClipAnimation,
+  shiftClipAnimation,
   clipAnimationValidationError,
   cloneAnimationEasing,
   documentAnimationKeyframeGrowthAllowed,
@@ -80,17 +82,7 @@ export function defaultAdjustmentAnimation(): AdjustmentAnimation {
 export function cloneAdjustmentAnimation(
   animation: AdjustmentAnimation,
 ): AdjustmentAnimation {
-  return {
-    tracks: animation.tracks.map((track) => ({
-      property: track.property,
-      keyframes: track.keyframes.map(cloneAdjustmentKeyframe),
-    })),
-    effectTracks: animation.effectTracks.map((track) => ({
-      effectId: track.effectId,
-      parameter: track.parameter,
-      keyframes: track.keyframes.map(cloneAdjustmentKeyframe),
-    })),
-  }
+  return cloneClipAnimation(animation) as AdjustmentAnimation
 }
 
 function cloneAdjustmentKeyframe(
@@ -106,6 +98,7 @@ function cloneAdjustmentKeyframe(
 export function adjustmentAnimationValidationError(
   animation: AdjustmentAnimation,
 ): string | null {
+  if ('titleTracks' in animation) return 'adjustments cannot own title element tracks'
   const sharedError = clipAnimationValidationError(animation as ClipAnimation)
   if (sharedError) return sharedError
   if (animation.tracks.some((track) => track.property !== 'opacity')) {
@@ -116,7 +109,7 @@ export function adjustmentAnimationValidationError(
       return 'adjustment keyframes must not carry source time'
     }
   }
-  for (const track of animation.effectTracks) {
+  for (const track of [...animation.effectTracks, ...(animation.effectPathTracks ?? [])]) {
     if (track.keyframes.some((keyframe) => 'sourceTimeTicks' in keyframe)) {
       return 'adjustment effect keyframes must not carry source time'
     }
@@ -339,27 +332,7 @@ function shiftAnimation(
   animation: AdjustmentAnimation,
   deltaFrames: number,
 ): AdjustmentAnimation | null {
-  const shift = (keyframe: AdjustmentAnimationKeyframe): AdjustmentAnimationKeyframe | null => {
-    const frame = keyframe.frame + deltaFrames
-    if (!Number.isSafeInteger(frame) || Math.abs(frame) > MAX_KEYFRAME_FRAME) return null
-    return { ...cloneAdjustmentKeyframe(keyframe), frame }
-  }
-  const tracks = animation.tracks.map((track) => ({
-    ...track,
-    keyframes: track.keyframes.map(shift),
-  }))
-  const effectTracks = animation.effectTracks.map((track) => ({
-    ...track,
-    keyframes: track.keyframes.map(shift),
-  }))
-  if (
-    tracks.some((track) => track.keyframes.some((keyframe) => keyframe === null))
-    || effectTracks.some((track) => track.keyframes.some((keyframe) => keyframe === null))
-  ) return null
-  return {
-    tracks: tracks as AdjustmentAnimation['tracks'],
-    effectTracks: effectTracks as AdjustmentAnimation['effectTracks'],
-  }
+  return shiftClipAnimation(animation, deltaFrames) as AdjustmentAnimation | null
 }
 
 export function trimAdjustment(
@@ -415,6 +388,9 @@ function remapAnimationEffectIds(
   clone.effectTracks = clone.effectTracks.map((track) => ({
     ...track,
     effectId: replacements.get(track.effectId) ?? track.effectId,
+  }))
+  if (clone.effectPathTracks) clone.effectPathTracks = clone.effectPathTracks.map((track) => ({
+    ...track, effectId: replacements.get(track.effectId) ?? track.effectId,
   }))
   return clone
 }
@@ -590,6 +566,7 @@ export function setAdjustmentOpacityAtFrame(
   const location = locateAdjustment(doc, adjustmentId)
   if (!location) return reject(doc, operation, `adjustment ${adjustmentId} not found`)
   const track = location.adjustment.animation.tracks[0]
+  if (track && (track.propertyVersion ?? 1) !== 1) return reject(doc, operation, 'opacity property version is unavailable')
   if (!track) {
     return updateAdjustment(doc, adjustmentId, operation, (item) => (
       item.opacity === opacity ? null : { ...item, opacity }
@@ -612,7 +589,7 @@ export function setAdjustmentOpacityAtFrame(
   if (!keyframes) return reject(doc, operation, 'opacity key exceeds its bounds')
   return replaceAdjustmentAnimation(doc, adjustmentId, {
     ...location.adjustment.animation,
-    tracks: [{ property: 'opacity', keyframes }],
+    tracks: [{ ...location.adjustment.animation.tracks[0], property: 'opacity', keyframes }],
   }, operation)
 }
 
@@ -625,7 +602,9 @@ export function setAdjustmentOpacityKeyframe(
   if (keyframe.value < 0 || keyframe.value > 1) return reject(doc, operation, 'opacity key is outside 0 through 1')
   const location = locateAdjustment(doc, adjustmentId)
   if (!location) return reject(doc, operation, `adjustment ${adjustmentId} not found`)
-  const current = location.adjustment.animation.tracks[0]?.keyframes ?? []
+  const lane = location.adjustment.animation.tracks[0]
+  if (lane && (lane.propertyVersion ?? 1) !== 1) return reject(doc, operation, 'opacity property version is unavailable')
+  const current = lane?.keyframes ?? []
   const exists = current.some((candidate) => candidate.frame === keyframe.frame)
   if (!exists && !documentAnimationKeyframeGrowthAllowed(doc, 1)) {
     return reject(doc, operation, 'opacity key would exceed the document keyframe budget')
@@ -634,7 +613,7 @@ export function setAdjustmentOpacityKeyframe(
   if (!keyframes) return reject(doc, operation, 'opacity key exceeds its bounds')
   return replaceAdjustmentAnimation(doc, adjustmentId, {
     ...location.adjustment.animation,
-    tracks: [{ property: 'opacity', keyframes }],
+    tracks: [{ ...location.adjustment.animation.tracks[0], property: 'opacity', keyframes }],
   }, operation)
 }
 
@@ -740,6 +719,7 @@ export function updateAdjustmentEffectParamsAtFrame(
       staticPatch[parameter] = value
       continue
     }
+    if (track.parameterIdentity !== undefined) return reject(doc, operation, 'effect animation identity is unavailable for this edit')
     const spec = effectAnimationParameterSpec(effect, parameter)
     if (!spec || typeof value !== 'number' || value < spec.min || value > spec.max) {
       return reject(doc, operation, `${effect.type}.${parameter} keyframe value is invalid`)
@@ -792,7 +772,7 @@ export function updateAdjustmentEffectParamsAtFrame(
         ?? { type: 'linear' },
     })
     if (!keyframes) return reject(doc, operation, 'effect key exceeds its bounds')
-    const nextTrack = { effectId, parameter, keyframes }
+    const nextTrack = { ...animation.effectTracks[index], effectId, parameter, keyframes }
     if (index < 0) animation.effectTracks.push(nextTrack)
     else animation.effectTracks[index] = nextTrack
   }
@@ -821,6 +801,7 @@ export function setAdjustmentEffectKeyframe(
   const index = animation.effectTracks.findIndex((track) => (
     track.effectId === effectId && track.parameter === parameter
   ))
+  if (index >= 0 && animation.effectTracks[index].parameterIdentity !== undefined) return reject(doc, 'setAdjustmentEffectKeyframe', 'effect animation identity is unavailable for this edit')
   const current = index < 0 ? [] : animation.effectTracks[index]!.keyframes
   const exists = current.some((candidate) => candidate.frame === keyframe.frame)
   if (!exists && !documentAnimationKeyframeGrowthAllowed(doc, 1)) {
@@ -828,7 +809,7 @@ export function setAdjustmentEffectKeyframe(
   }
   const keyframes = upsertKeyframe(current, keyframe)
   if (!keyframes) return reject(doc, 'setAdjustmentEffectKeyframe', 'effect key exceeds its bounds')
-  const track = { effectId, parameter, keyframes }
+  const track = { ...animation.effectTracks[index], effectId, parameter, keyframes }
   if (index < 0) animation.effectTracks.push(track)
   else animation.effectTracks[index] = track
   return replaceAdjustmentAnimation(doc, adjustmentId, animation, 'setAdjustmentEffectKeyframe')
@@ -925,7 +906,7 @@ export function resolveAdjustmentAtFrame(
   }
   const localFrame = timelineFrame - item.timelineRange.startFrame
   const opacityTrack = item.animation.tracks[0]
-  const opacity = opacityTrack
+  const opacity = opacityTrack && (opacityTrack.propertyVersion ?? 1) === 1
     ? evaluateAnimationTrack(opacityTrack, localFrame, item.opacity)
     : item.opacity
   let effects: EffectDescriptor[] | null = null
@@ -937,6 +918,7 @@ export function resolveAdjustmentAtFrame(
     const params = { ...effect.params }
     let changed = false
     for (const track of tracks) {
+      if (track.parameterIdentity !== undefined) continue
       const spec = effectAnimationParameterSpec(effect, track.parameter)
       const fallback = params[track.parameter]
       if (!spec || typeof fallback !== 'number') continue

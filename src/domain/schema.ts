@@ -15,6 +15,9 @@
  */
 
 import type { LensCorrectionIntent } from './lensCorrection'
+import type { EffectPathAnimationTrack } from './maskPathAnimation'
+import type { AnimationParameterIdentity } from './animationParameterIdentity'
+import type { TitleDefinition } from './titleElements'
 
 /* ------------------------------------------------------------------ */
 /* Time primitives                                                      */
@@ -293,6 +296,10 @@ export type ClipAnimationProperty =
   | 'opacity'
   | 'volume'
   | 'balance'
+  | 'crop-left'
+  | 'crop-right'
+  | 'crop-top'
+  | 'crop-bottom'
 
 /** Outgoing interpolation from one keyframe to the next. */
 export type ClipAnimationEasing =
@@ -314,7 +321,10 @@ export interface ClipAnimationKeyframe {
 }
 
 export interface ClipAnimationTrack {
-  property: ClipAnimationProperty
+  /** Bounded unknown names are retained, never treated as supported properties. */
+  property: string
+  /** Absence is the existing scalar v1 encoding and must not grow old files. */
+  propertyVersion?: number
   /** Strictly increasing, unique clip-local frames. */
   keyframes: ClipAnimationKeyframe[]
 }
@@ -323,7 +333,17 @@ export interface ClipAnimationTrack {
 export interface EffectAnimationTrack {
   effectId: EffectId
   parameter: string
+  /** Exact declaration intent, never a package trust grant. */
+  parameterIdentity?: AnimationParameterIdentity
   /** Strictly increasing, unique clip-local frames. */
+  keyframes: ClipAnimationKeyframe[]
+}
+
+/** Element ownership is resolved by the title adapter, independently of timing. */
+export interface TitleAnimationTrack {
+  elementId: string
+  propertyVersion: number
+  property: string
   keyframes: ClipAnimationKeyframe[]
 }
 
@@ -336,6 +356,9 @@ export interface ClipAnimation {
    * list; optional typing keeps historical pure fixtures source-compatible.
    */
   effectTracks?: EffectAnimationTrack[]
+  /** Absent collections stay absent in legacy serialization. */
+  titleTracks?: TitleAnimationTrack[]
+  effectPathTracks?: EffectPathAnimationTrack[]
 }
 
 /** Allowed value types for a single effect parameter. */
@@ -543,8 +566,10 @@ export interface Clip {
    * portable schema-18 files always write the array, empty when unused.
    */
   audioEffects?: AudioEffectDescriptor[]
-  /** Present only on text clips; such clips render text instead of media. */
+  /** Compact legacy text, mutually exclusive with expanded title ownership. */
   text?: TextProps
+  /** Versioned procedural composition; geometry belongs to its elements. */
+  title?: TitleDefinition
   /**
    * Clips sharing this id are LINKED: edits follow the link at the store
    * layer (moving/trimming/splitting/deleting one member applies the same
@@ -570,18 +595,22 @@ export interface AdjustmentAnimationKeyframe {
 
 export interface AdjustmentOpacityAnimationTrack {
   property: 'opacity'
+  propertyVersion?: number
   keyframes: AdjustmentAnimationKeyframe[]
 }
 
 export interface AdjustmentEffectAnimationTrack {
   effectId: EffectId
   parameter: string
+  parameterIdentity?: AnimationParameterIdentity
   keyframes: AdjustmentAnimationKeyframe[]
 }
 
 export interface AdjustmentAnimation {
   tracks: AdjustmentOpacityAnimationTrack[]
   effectTracks: AdjustmentEffectAnimationTrack[]
+  /** Item-local frames only; path keys must not carry source ticks. */
+  effectPathTracks?: EffectPathAnimationTrack[]
 }
 
 /**

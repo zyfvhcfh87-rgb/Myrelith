@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * workers/render.worker.test.ts — Phase 4.1b.
  *
@@ -720,7 +721,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 10, den: 1 },

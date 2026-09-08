@@ -10,6 +10,7 @@
  *   setter rounds and clamps to >= 0 so a stray float can never leak in.
  */
 
+import { animationKeyKey, animationSelectionError, type AnimationKeyAddress } from '../domain/animationAddresses'
 import { create } from 'zustand'
 import type {
   AdjustmentItemId,
@@ -147,7 +148,27 @@ export interface ColorGradingPreview {
   readonly document: TimelineDoc
 }
 
+export interface EffectDocumentPreview {
+  readonly owner: 'color-grading' | 'mask-gesture' | 'animation-gesture'
+  readonly sequenceId: string
+  readonly document: TimelineDoc
+}
+
 export interface TransportState {
+  animationSelection: readonly AnimationKeyAddress[]
+  animationFocus: AnimationKeyAddress | null
+  animationFilter: string
+  animationVisibleRange: { readonly startFrame: number; readonly endFrame: number } | null
+  animationPreview: Pick<EffectDocumentPreview, 'sequenceId' | 'document'> | null
+  setAnimationSelection(keys: readonly AnimationKeyAddress[], focus?: AnimationKeyAddress | null): void
+  setAnimationFilter(filter: string): void
+  setAnimationVisibleRange(range: { readonly startFrame: number; readonly endFrame: number } | null): void
+  setAnimationPreview(preview: Pick<EffectDocumentPreview, 'sequenceId' | 'document'> | null): void
+  maskEditorTarget: import('../domain/maskEditing').MaskEditTarget | null
+  setMaskEditorTarget(target: import('../domain/maskEditing').MaskEditTarget | null): void
+  maskPreview: ColorGradingPreview | null
+  setMaskPreview(preview: ColorGradingPreview | null): void
+  effectDocumentPreview: EffectDocumentPreview | null
   colorGradingPreview: ColorGradingPreview | null
   setColorGradingPreview(preview: ColorGradingPreview | null): void
   /** Current playhead position, integer frames at the document rate. */
@@ -364,6 +385,14 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   textOverlayPreview: null,
   clipVisualPreview: null,
   colorGradingPreview: null,
+  animationSelection: [],
+  animationFocus: null,
+  animationFilter: '',
+  animationVisibleRange: null,
+  animationPreview: null,
+  maskPreview: null,
+  maskEditorTarget: null,
+  effectDocumentPreview: null,
   mediaPlacementPreview: null,
   mediaPlacementStatus: '',
 })
@@ -372,6 +401,19 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
 // this sequence outside Zustand so resetTransport can still restore the
 // complete public transport state to the exact deterministic initial values.
 let transportResetRevision = 0
+
+const effectPreviewOwners = new Map<EffectDocumentPreview['owner'], { sequence: number; preview: EffectDocumentPreview }>()
+let effectPreviewSequence = 0
+function updateEffectPreview(owner: EffectDocumentPreview['owner'], preview: Pick<EffectDocumentPreview, 'sequenceId' | 'document'> | null): EffectDocumentPreview | null {
+  if (preview) effectPreviewOwners.set(owner, {
+    sequence: effectPreviewOwners.get(owner)?.sequence ?? ++effectPreviewSequence,
+    preview: { owner, sequenceId: preview.sequenceId, document: preview.document },
+  })
+  else effectPreviewOwners.delete(owner)
+  let active: { sequence: number; preview: EffectDocumentPreview } | null = null
+  for (const candidate of effectPreviewOwners.values()) if (!active || candidate.sequence > active.sequence) active = candidate
+  return active?.preview ?? null
+}
 
 interface OwnedClipVisualPreview {
   activationSequence: number
@@ -787,7 +829,27 @@ export const useTransportStore = create<TransportState>()((set) => ({
           }
         : null,
     }),
-  setColorGradingPreview: (colorGradingPreview) => set({ colorGradingPreview }),
+  setAnimationSelection: (keys, focus = keys[0] ?? null) => set((state) => {
+    if (animationSelectionError(keys) || (focus && animationSelectionError([focus]))) return state
+    if (keys.length === state.animationSelection.length && keys.every((key, index) => animationKeyKey(key) === animationKeyKey(state.animationSelection[index]))
+      && (focus ? animationKeyKey(focus) : null) === (state.animationFocus ? animationKeyKey(state.animationFocus) : null)) return state
+    const cloneKey = (key: AnimationKeyAddress): AnimationKeyAddress => {
+      const lane = { ...key.lane, owner: Object.freeze({ ...key.lane.owner }) }
+      if (lane.kind === 'effect' && lane.parameterIdentity) lane.parameterIdentity = Object.freeze({ ...lane.parameterIdentity })
+      return Object.freeze({ frame: key.frame, lane: Object.freeze(lane) })
+    }
+    return { animationSelection: Object.freeze(keys.map(cloneKey)), animationFocus: focus ? cloneKey(focus) : null }
+  }),
+  setAnimationFilter: (animationFilter) => { if (animationFilter.length <= 256) set({ animationFilter }) },
+  setAnimationVisibleRange: (animationVisibleRange) => {
+    if (animationVisibleRange && (!Number.isSafeInteger(animationVisibleRange.startFrame) || !Number.isSafeInteger(animationVisibleRange.endFrame)
+      || animationVisibleRange.startFrame < 0 || animationVisibleRange.endFrame < animationVisibleRange.startFrame)) return
+    set({ animationVisibleRange: animationVisibleRange ? { ...animationVisibleRange } : null })
+  },
+  setAnimationPreview: (animationPreview) => set({ animationPreview, effectDocumentPreview: updateEffectPreview('animation-gesture', animationPreview) }),
+  setMaskEditorTarget: (maskEditorTarget) => set({ maskEditorTarget }),
+  setMaskPreview: (maskPreview) => set({ maskPreview, effectDocumentPreview: updateEffectPreview('mask-gesture', maskPreview) }),
+  setColorGradingPreview: (colorGradingPreview) => set({ colorGradingPreview, effectDocumentPreview: updateEffectPreview('color-grading', colorGradingPreview) }),
   setClipVisualPreview: (clipVisualPreview) => {
     clearOwnedClipVisualPreviews()
     set({ clipVisualPreview: cloneClipVisualPreview(clipVisualPreview) })
@@ -841,6 +903,8 @@ export const useTransportStore = create<TransportState>()((set) => ({
     )),
   resetTransport: () => {
     transportResetRevision += 1
+    effectPreviewOwners.clear()
+    effectPreviewSequence = 0
     clearOwnedClipVisualPreviews()
     set({ ...INITIAL_TRANSPORT_STATE })
   },

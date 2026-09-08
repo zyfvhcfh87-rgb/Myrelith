@@ -60,6 +60,9 @@ export function animationEditLocationResult(
   if (loc.track.locked) {
     return { ok: false, reason: `track ${loc.track.id} is locked` }
   }
+  if (loc.clip.title !== undefined && property !== 'opacity') {
+    return { ok: false, reason: 'expanded titles expose only outer opacity; edit element geometry' }
+  }
   if (loc.clip.text !== undefined) {
     return {
       ok: false,

@@ -114,7 +114,7 @@ describe('multicam project-file seam', () => {
     const parsed = parseProjectFile(JSON.stringify(historical))
 
     expect(CURRENT_PROJECT_FORMAT_VERSION).toBe(8)
-    expect(CURRENT_TIMELINE_SCHEMA_VERSION).toBe(21)
+    expect(parsed.sequences[0].schemaVersion).toBe(CURRENT_TIMELINE_SCHEMA_VERSION)
     expect(parsed.multicams).toEqual([])
     expect(parsed.sequences[0].tracks[0].multicamInstances).toEqual([])
   })

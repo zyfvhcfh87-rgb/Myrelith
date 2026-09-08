@@ -329,6 +329,7 @@ export default function AnimationCurveEditor({
 
       {selected && (
         <div className="animation-keyframe-fields" aria-label={`Selected keyframe at frame ${selected.frame}`}>
+          <p className="inspector-note">Moving this key to an occupied frame replaces the existing key.</p>
           <DraftNumber
             label="Keyframe frame"
             value={selected.frame}

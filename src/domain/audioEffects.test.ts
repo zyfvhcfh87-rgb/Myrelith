@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test, vi } from 'vitest'
 import type { AudioEffectDescriptor, Clip, TimelineDoc, Track } from './schema'
 import {
@@ -68,7 +69,7 @@ function makeTrack(id: string, kind: Track['kind'], clips: Clip[], locked = fals
 
 function makeDoc(): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-audio-fx',
     name: 'Audio effects',
     frameRate: { num: 30, den: 1 },

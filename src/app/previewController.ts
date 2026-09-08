@@ -569,7 +569,7 @@ function currentPreviewDocument(): TimelineDoc {
   const transport = useTransportStore.getState()
   return documentWithClipVisualPreview(
     documentWithTextOverlayPreview(
-      transport.colorGradingPreview?.sequenceId === useDocumentStore.getState().activeSequenceId ? transport.colorGradingPreview.document : useDocumentStore.getState().doc,
+      transport.effectDocumentPreview?.sequenceId === useDocumentStore.getState().activeSequenceId ? transport.effectDocumentPreview.document : useDocumentStore.getState().doc,
       transport.textOverlayPreview,
     ),
     transport.clipVisualPreview,
@@ -955,7 +955,7 @@ function documentAssetIds(doc: TimelineDoc): Set<AssetId> {
       // Text clips render procedurally and never sample their backing asset.
       // Legacy projects may validly carry image-backed text clips, so treating
       // every clip id as a still-source reference would decode unused pixels.
-      if (clip.text === undefined) ids.add(clip.assetId)
+      if (clip.text === undefined && clip.title === undefined) ids.add(clip.assetId)
     }
   }
   return ids
@@ -1143,7 +1143,7 @@ export function initPreview(
       if (
         s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
-        || s.colorGradingPreview !== prev.colorGradingPreview
+        || s.effectDocumentPreview !== prev.effectDocumentPreview
       ) {
         syncPreviewDocument(bridge, deps)
       }
@@ -1157,7 +1157,7 @@ export function initPreview(
         || modeForTransport(s) !== modeForTransport(prev)
         || s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
-        || s.colorGradingPreview !== prev.colorGradingPreview
+        || s.effectDocumentPreview !== prev.effectDocumentPreview
       ) scheduleRender(deps)
     }),
     useMediaStore.subscribe(() => {

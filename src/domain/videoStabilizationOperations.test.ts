@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test, vi } from 'vitest'
 import { defaultClipVisualSettings } from './clipInspector'
 import {
@@ -35,7 +36,7 @@ function clip(): Clip {
 
 function doc(item = clip(), locked = false): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc',
     name: 'Doc',
     frameRate: { num: 30, den: 1 },

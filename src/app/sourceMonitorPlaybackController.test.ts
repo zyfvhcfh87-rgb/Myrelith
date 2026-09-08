@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * Source Monitor playback owner: signed-rate clock plus exclusive handoff.
  *
@@ -74,7 +75,7 @@ function makeTrack(id: string, clips: Clip[], kind: Track['kind'] = 'video'): Tr
 
 function makeDoc(durationFrames = 120): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-source-playback',
     name: 'source playback fixture',
     frameRate: { num: 30, den: 1 },

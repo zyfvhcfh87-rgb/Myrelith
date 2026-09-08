@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * pipeline/playback-audio.test.ts — bounded live timeline-audio scheduling.
  *
@@ -122,7 +123,7 @@ function makeDoc(
   frameRate: FrameRate = F10,
 ): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc',
     name: 'Playback audio test',
     frameRate,
@@ -192,7 +193,7 @@ function crossfadePlaybackFixture(
   videoTrack.transitions = [transition]
   return {
     doc: {
-      schemaVersion: 21,
+      schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
       id: 'crossfade-playback',
       name: 'Crossfade playback',
       frameRate: F10,

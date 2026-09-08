@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import {
   DEFAULT_MASTER_AUDIO,
@@ -26,7 +27,7 @@ function track(id: string, kind: Track['kind'], extra: Partial<Track> = {}): Tra
 
 function doc(tracks: Track[], masterAudio?: TimelineDoc['masterAudio']): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'mixer-doc',
     name: 'Mixer',
     frameRate: { num: 30, den: 1 },

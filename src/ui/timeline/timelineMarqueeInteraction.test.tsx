@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../../domain/projectFile'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../../domain/schema'
@@ -47,7 +48,7 @@ function track(id: string, clips: Clip[]): Track {
 
 function makeDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'marquee-doc',
     name: 'marquee fixture',
     frameRate: { num: 30, den: 1 },
