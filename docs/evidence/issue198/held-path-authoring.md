@@ -98,8 +98,36 @@ DEVELOPER_DIR=/Library/Developer/CommandLineTools npm run test:browser -- --conf
 Request exact committed source review before an exclusive slot: strict port
 5198, one muted headless Chromium worker, existing silent local 720p PNG, five
 bounded tests, expected under one minute. Browser plugin not available; repository
-Playwright is configured. No browser, full-suite or performance run was made for
-this slice. Earlier four-test browser success qualifies the earlier source only.
+Playwright is configured. No full-suite or performance run was made for this slice.
+
+## First browser run and fixture correction
+
+Parent accepted product source `f923315628f9d6692de756b3d29c3b5a5bb0907f` after
+independent 275 tests/14 files plus 17 runner checks and granted the five-test run.
+On that exact clean source the original four checks passed, but the new held-path
+test failed at its key-frame assertion: **4/5 checks passed in 15.7 seconds**.
+It expected `[[0, 0], [15, 15000000]]` but observed
+`[[1, 1000000], [15, 15000000]]`.
+
+Inspection confirmed `issue-196-grading-fixtures.ts:25` explicitly starts the
+playhead at frame 1. The product honored that frame; this new test had assumed
+zero without arranging it. The correction explicitly seeks and asserts frame
+zero before creating the first key. Both original key/tick expectations and all
+remaining pixel/history assertions stay unchanged. No production source changes.
+
+Exact log, five original-flow screenshots and complete failure trace/context/
+screenshot are retained in `.tmp/issue198-f923315/`. All six available screenshots
+were inspected: the original layouts remain consistent and the failure image
+shows the authored triangular mask and two held keys. The intended final
+`issue198-path-key.png` was not reached. The original four tests reported no
+console/page errors; inspection of the failed test's trace found no warning/error
+console or pageError events. Its final in-test error assertion was not reached.
+
+The run ended before testing the frame14/15 held pixel boundary, direct control
+edit, navigation and Clear/undo, so those remain unqualified in Chromium.
+Playwright exited and no port5198 listener or matching Chromium/Playwright/Vite
+test process remained. The slot was explicitly released. No rerun occurred;
+the committed fixture correction requires review and another exclusive grant.
 
 The accepted tracking contract is still a separate implementation gate. Its
 canonical architecture amendment has not been promoted here. Shared timing-editor

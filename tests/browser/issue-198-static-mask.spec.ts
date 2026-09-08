@@ -186,12 +186,16 @@ test('open path points stay temporary until explicit closure and cancel safely a
 
 test('held path keys preserve fallback, change Program pixels at the key and support direct edits and undo', async ({ page }) => {
   const problems = errors(page); await setup(page, 'bezier')
+  const seek = async (frame: number) => page.evaluate(async (value) => {
+    const t = '/src/state/transportStore.ts', transport = (await import(t)).useTransportStore
+    transport.getState().setPlayheadFrame(value)
+    return transport.getState().playheadFrame
+  }, frame)
+  // The shared grading fixture intentionally starts at frame 1; this gate owns its key anchors.
+  expect(await seek(0)).toBe(0)
   const initial = await snapshot(page), fallback = initial.project.sequences[0].tracks[0].clips[0].effects[0].params.path
   await expect.poll(() => pixel(page, 0.6, 0.6)).toEqual([64, 128, 192, 255])
   await page.getByRole('button', { name: 'Animate mask path', exact: true }).click()
-  const seek = async (frame: number) => page.evaluate(async (value) => {
-    const t = '/src/state/transportStore.ts'; (await import(t)).useTransportStore.getState().setPlayheadFrame(value)
-  }, frame)
   await seek(15)
   const field = page.locator('[data-testid^="inspector-effect-mask-path-"]')
   const path = 'M 0 0 C 0 0 1 0 1 0 C 1 0 0 1 0 1 C 0 1 0 0 0 0 Z'
