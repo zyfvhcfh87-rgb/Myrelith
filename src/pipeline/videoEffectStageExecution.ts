@@ -35,7 +35,11 @@ export interface PluginVideoEffectApplyRequest {
 export type PluginVideoEffectApplyResult =
   | {
       readonly status: 'applied'
-      /** Fresh exact-length straight RGBA8 output owned by the caller. */
+      /**
+       * Fresh exact-length, whole-ArrayBuffer straight RGBA8 output. Ownership
+       * transfers to the stage caller, which wipes it immediately after copying
+       * or rejecting it. The executor must not retain or reuse returned bytes.
+       */
       readonly rgba: Uint8Array
     }
   | {
@@ -144,41 +148,58 @@ export async function applyVideoEffectStagePlanToRgba(
       )
     }
 
-    let result: PluginVideoEffectApplyResult
+    let result: PluginVideoEffectApplyResult | undefined
+    const input = new Uint8Array(working)
     try {
-      result = await executor.applyPluginEffect({
-        execution: stage.execution,
-        effect: stage.effect,
-        timelineFrame: context.timelineFrame,
-        frameRate: context.frameRate,
-        width: context.surfaceWidth,
-        height: context.surfaceHeight,
-        stride: context.surfaceWidth * 4,
-        // Retain the transactional working copy if the executor transfers input
-        // or chooses the visible preview-bypass result.
-        rgba: new Uint8Array(working),
-      })
-    } catch (cause) {
-      throw new VideoEffectStageExecutionError(
-        `Plugin effect ${stage.effect.id} execution failed`,
-        cause,
-      )
-    }
-    grading?.check()
-    if (result.status === 'bypassed') {
-      if (executor.bypassPolicy === 'fail') {
+      try {
+        result = await executor.applyPluginEffect({
+          execution: stage.execution,
+          effect: stage.effect,
+          timelineFrame: context.timelineFrame,
+          frameRate: context.frameRate,
+          width: context.surfaceWidth,
+          height: context.surfaceHeight,
+          stride: context.surfaceWidth * 4,
+          // Keep the transactional working copy if the executor transfers input
+          // or chooses the visible preview-bypass result.
+          rgba: input,
+        })
+      } catch (cause) {
         throw new VideoEffectStageExecutionError(
-          `Plugin effect ${stage.effect.id} was bypassed during fail-closed execution`,
+          `Plugin effect ${stage.effect.id} execution failed`,
+          cause,
         )
       }
-      continue
+      grading?.check()
+      if (result.status === 'bypassed') {
+        if (executor.bypassPolicy === 'fail') {
+          throw new VideoEffectStageExecutionError(
+            `Plugin effect ${stage.effect.id} was bypassed during fail-closed execution`,
+          )
+        }
+        continue
+      }
+      if (!(result.rgba instanceof Uint8Array)
+        || result.rgba.byteLength !== expectedLength
+        || !(result.rgba.buffer instanceof ArrayBuffer)
+        || result.rgba.byteOffset !== 0
+        || result.rgba.buffer.byteLength !== expectedLength
+        || result.rgba.buffer === pixels.buffer
+        || result.rgba.buffer === working.buffer) {
+        throw new VideoEffectStageExecutionError(
+          `Plugin effect ${stage.effect.id} returned an invalid RGBA byte length or ownership`,
+        )
+      }
+      working.set(result.rgba)
+    } finally {
+      // The host can transfer/detach input. Any attached request copy and the
+      // caller-owned returned view end here, including cancellation/validation
+      // failures. Frame owners must not retain outputs across subsequent stages.
+      if (input.byteLength > 0) input.fill(0)
+      if (result?.status === 'applied' && result.rgba instanceof Uint8Array
+        && result.rgba.buffer !== pixels.buffer && result.rgba.buffer !== working.buffer
+        && result.rgba.byteLength > 0) result.rgba.fill(0)
     }
-    if (!(result.rgba instanceof Uint8Array) || result.rgba.byteLength !== expectedLength) {
-      throw new VideoEffectStageExecutionError(
-        `Plugin effect ${stage.effect.id} returned an invalid RGBA byte length`,
-      )
-    }
-    working.set(result.rgba)
   }
 
   grading?.check()

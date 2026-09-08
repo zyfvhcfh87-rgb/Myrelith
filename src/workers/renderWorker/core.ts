@@ -16,7 +16,7 @@ import {
 } from '../../domain/videoCompositionPlan';
 import { supportsCanvasEffectFilter, supportsCanvasEffectPixels } from '../../domain/effectStack';
 import { analyzeVideoScopes, VIDEO_SCOPE_SAMPLE_HEIGHT, VIDEO_SCOPE_SAMPLE_WIDTH } from '../../domain/videoScopes';
-import { assertRenderSurfaceBudget } from '../../domain/renderSurfaceBudget';
+import { renderWorkSurfaceBudget } from '../../domain/renderSurfaceBudget';
 import type { Composite2D, FrameSource, RenderFrameSource, TransitionSurfaceProvider, TransitionSurfaces, VideoEffectStageExecutor } from '../../pipeline/render';
 import { clearTextLayoutCaches, compositeFrame } from '../../pipeline/render';
 import { LensRemapUnavailableError, LENS_REMAP_BACKEND_VERSION, type LensRemapAvailability, type LensRemapProvider } from '../../pipeline/lensRemap';
@@ -74,6 +74,14 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   const pendingPluginEffects = new Map<number, PendingPluginEffect>()
   /** Composites run strictly one at a time (stale ones exit immediately). */
   let compositeChain: Promise<void> = Promise.resolve()
+  /** Logical document/profile changes cannot resize a borrowed frame's surfaces. */
+  let compositeInProgress = false
+  let canvasSyncPending = false
+  async function compositeWithOwnedSurfaces(...args: Parameters<typeof compositeFrame>) {
+    compositeInProgress = true
+    try { return await compositeFrame(...args) }
+    finally { compositeInProgress = false }
+  }
   /** Invalidates asset opens/configures that outlive a worker-wide close. */
   let workerLifecycle = 0
   /** Worker-global tokens prevent ABA when per-key revision entries retire. */
@@ -331,7 +339,6 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     renderGeneration: number,
     renderRequestId: number,
     workerGeneration: number,
-    returnedBuffers: Set<ArrayBuffer>,
   ): VideoEffectStageExecutor {
     return {
       bypassPolicy: 'allow',
@@ -356,12 +363,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
             workerGeneration,
             renderRequestId,
             expectedByteLength: request.rgba.byteLength,
-            resolve: (result) => {
-              if (result.status === 'applied') {
-                returnedBuffers.add(result.rgba.buffer)
-              }
-              resolve(result)
-            },
+            resolve,
           })
           env.post({
             type: 'pluginEffectApply',
@@ -406,7 +408,12 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   function prepareLensRemap(nextDoc: TimelineDoc): void {
     lensRemapProvider = null
     lensRemapAvailability = undefined
-    if (!documentHasLensCorrection(nextDoc)) return
+    if (!documentHasLensCorrection(nextDoc)) {
+      const profile = currentPresentationProfile()
+      lensRemapProvider = createDocumentLensRemapProvider(nextDoc, lensBackend,
+        profile?.outputWidth ?? nextDoc.width, profile?.outputHeight ?? nextDoc.height, false)
+      return
+    }
 
     if (documentHasSupportedLensCorrection(nextDoc) && !lensBackend) {
       if (lensOwnerTerminal) {
@@ -467,37 +474,57 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       lensRemapProvider = null
     }
     lensRemapAvailability = lensUnavailable(error.message)
-    syncCanvases()
+    publishRendererCapabilities()
+  }
+
+  function resizeCanvas(canvas: RenderCanvasLike, width: number, height: number): void {
+    if (canvas.width === width && canvas.height === height) return
+    // Avoid a temporary new-width × old-height backing on an aspect-ratio swap.
+    if (canvas.width !== width && canvas.height !== height) canvas.height = 0
+    if (canvas.width !== width) canvas.width = width
+    if (canvas.height !== height) canvas.height = height
   }
 
   /** Size every disposable canvas to the active presentation profile. */
   function syncCanvases(): void {
+    if (compositeInProgress) {
+      if (!canvasSyncPending) {
+        canvasSyncPending = true
+        compositeChain = compositeChain.then(() => {
+          canvasSyncPending = false
+          syncCanvases()
+        }).catch((error) => {
+          env.post({ type: 'error', message: `Render surface configuration failed: ${error instanceof Error ? error.message : String(error)}` })
+        })
+      }
+      return
+    }
     const profile = currentPresentationProfile()
     if (!visible || !profile) return
     const { outputWidth, outputHeight } = profile
-    assertRenderSurfaceBudget(outputWidth, outputHeight)
-    if (visible.width !== outputWidth || visible.height !== outputHeight) {
-      visible.width = outputWidth
-      visible.height = outputHeight
-    }
+    const budget = renderWorkSurfaceBudget(outputWidth, outputHeight, {
+      additionalOwnedBytes: gradingRuntime?.ledger().bytes ?? 0,
+      lensReusableBytes: lensBackend?.retainedBytes() ?? 0,
+    })
+    if (!budget.allowed) throw new RangeError(budget.reason ?? 'Render surface work exceeds its budget.')
+    resizeCanvas(visible, outputWidth, outputHeight)
     if (!scratch) {
       scratch = env.createCanvas(outputWidth, outputHeight)
       scratchCtx = scratch.getContext('2d', SRGB_2D_CONTEXT)
       if (!scratchCtx) {
         env.post({ type: 'error', message: 'scratch canvas 2d context unavailable' })
       }
-    } else if (scratch.width !== outputWidth || scratch.height !== outputHeight) {
-      scratch.width = outputWidth
-      scratch.height = outputHeight
-    }
+    } else resizeCanvas(scratch, outputWidth, outputHeight)
+    lensRemapProvider?.setOutputSurface?.(outputWidth, outputHeight, false)
+    publishRendererCapabilities()
+    if (transitionLeg) resizeCanvas(transitionLeg, outputWidth, outputHeight)
+    if (transitionGroup) resizeCanvas(transitionGroup, outputWidth, outputHeight)
+  }
+
+  function publishRendererCapabilities(): void {
     if (scratchCtx) {
       const canvasFilter = supportsCanvasEffectFilter(scratchCtx)
       const canvasPixelAccess = supportsCanvasEffectPixels(scratchCtx)
-      lensRemapProvider?.setOutputSurface?.(
-        outputWidth,
-        outputHeight,
-        false,
-      )
       const lensCapabilityKey = JSON.stringify(lensRemapAvailability ?? null)
       if (
         canvasFilter !== publishedCanvasFilterCapability
@@ -516,26 +543,6 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           },
         })
       }
-    }
-    if (
-      transitionLeg
-      && (
-        transitionLeg.width !== outputWidth
-        || transitionLeg.height !== outputHeight
-      )
-    ) {
-      transitionLeg.width = outputWidth
-      transitionLeg.height = outputHeight
-    }
-    if (
-      transitionGroup
-      && (
-        transitionGroup.width !== outputWidth
-        || transitionGroup.height !== outputHeight
-      )
-    ) {
-      transitionGroup.width = outputWidth
-      transitionGroup.height = outputHeight
     }
   }
 
@@ -659,14 +666,13 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
   const transitionSurfaceProvider: TransitionSurfaceProvider = {
     get: (): TransitionSurfaces => {
-      const profile = currentPresentationProfile()
-      if (!profile) throw new Error('transition surfaces requested before setDoc')
+      if (!scratch) throw new Error('transition surfaces requested before setDoc')
       if (!transitionLeg) {
-        transitionLeg = env.createCanvas(profile.outputWidth, profile.outputHeight)
+        transitionLeg = env.createCanvas(scratch.width, scratch.height)
         transitionLegCtx = transitionLeg.getContext('2d', { ...SRGB_2D_CONTEXT, willReadFrequently: true })
       }
       if (!transitionGroup) {
-        transitionGroup = env.createCanvas(profile.outputWidth, profile.outputHeight)
+        transitionGroup = env.createCanvas(scratch.width, scratch.height)
         transitionGroupCtx = transitionGroup.getContext('2d', { ...SRGB_2D_CONTEXT, willReadFrequently: true })
       }
       if (!transitionLegCtx || !transitionGroupCtx) {
@@ -695,10 +701,11 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       return compositeChain
     },
     composite: (plan, source) => {
+      syncCanvases()
       if (!doc || !scratchCtx) {
         throw new Error('legacy composite invoked before init/setDoc')
       }
-      return compositeFrame(
+      return compositeWithOwnedSurfaces(
         doc,
         plan,
         scratchCtx,
@@ -1842,6 +1849,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           'Failed to retire obsolete playback lanes',
         )
       }
+      syncCanvases()
       if (!visibleCtx || !scratch || !scratchCtx || !doc) {
         env.post({
           type: 'error',
@@ -1882,7 +1890,6 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       >()
       const loans: StreamingLoan[] = []
       const staticLoans: StaticImageLoan[] = []
-      const returnedPluginEffectBuffers = new Set<ArrayBuffer>()
       const source: FrameSource = {
         getFrame: (assetId, sourceFrame) => {
           const queue = queues.get(`${assetId}@${sourceFrame}`)
@@ -1926,7 +1933,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
       let result
       try {
-        result = await compositeFrame(
+        result = await compositeWithOwnedSurfaces(
           renderDoc,
           msg.plan,
           scratchCtx,
@@ -1938,16 +1945,12 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
             msg.generation,
             msg.requestId,
             myGen,
-            returnedPluginEffectBuffers,
           ),
           gradingFrame(myGen),
         )
       } finally {
         for (const loan of loans) loan.settle()
         for (const loan of staticLoans) loan.settle()
-        for (const buffer of returnedPluginEffectBuffers) {
-          zeroAttachedPluginEffectBuffer(buffer)
-        }
       }
 
       if (generation !== myGen) {

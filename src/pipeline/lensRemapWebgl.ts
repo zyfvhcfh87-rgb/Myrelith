@@ -1,5 +1,4 @@
-import { colorGradingAdditionalBytes, documentGradingEffects } from '../domain/colorGradingBudget'
-import { hasVideoBusEffects, videoBusAdditionalBytes } from '../domain/videoBusStage'
+import { documentPixelWorkBudget } from '../domain/videoPixelWorkBudget'
 import {
   createValidatedLensCorrectionMap,
   isManualLensCorrectionModel,
@@ -10,6 +9,8 @@ import {
 import type { TimelineDoc } from '../domain/schema'
 import {
   lensRemapSurfaceBudget,
+  renderWorkSurfaceBudget,
+  LENS_REMAP_REUSABLE_SURFACE_COUNT,
   RENDER_SURFACE_BYTES_PER_PIXEL,
 } from '../domain/renderSurfaceBudget'
 import {
@@ -297,6 +298,7 @@ export class WebGl2LensRemapBackend {
       throw new RangeError('Lens-remap WebGL2 input must own its complete backing buffer')
     }
     const gl = this.gl
+    if (this.canvas.width !== width && this.canvas.height !== height) this.canvas.height = 0
     this.canvas.width = width
     this.canvas.height = height
     this.width = width
@@ -551,6 +553,13 @@ export function createDocumentLensRemapProvider(
   let activeOutputWidth = outputWidth
   let activeOutputHeight = outputHeight
   let activeIncludeExportReadback = includeExportReadback
+  let frameWork: {
+    readonly additionalOwnedBytes: number
+    readonly outputWidth: number
+    readonly outputHeight: number
+    readonly includeExportReadback: boolean
+    retainedLensBytes: number
+  } | null = null
   const prepared = new Map<string, PreparedModel>()
   for (const track of doc.tracks) {
     for (const clip of track.clips) {
@@ -566,9 +575,34 @@ export function createDocumentLensRemapProvider(
       }
     }
   }
-  if (prepared.size === 0) return null
+  // A previous document may leave a reusable backend alive until its owner
+  // disposes it. Account for those bytes even when this document has no lens.
+  if (prepared.size === 0 && !backend) return null
+
+  const fallbackWork = () => {
+    const budget = documentPixelWorkBudget(doc, {
+      surfaceWidth: activeOutputWidth, surfaceHeight: activeOutputHeight,
+      projectWidth: doc.width, projectHeight: doc.height,
+    })
+    if (budget.reason) throw new LensRemapUnavailableError(budget.reason)
+    return { additionalOwnedBytes: budget.peakAdditionalBytes,
+      outputWidth: activeOutputWidth, outputHeight: activeOutputHeight,
+      includeExportReadback: activeIncludeExportReadback, retainedLensBytes: backend?.retainedBytes() ?? 0 }
+  }
 
   return {
+    reserveFrameWork: (work) => {
+      if (frameWork) throw new LensRemapUnavailableError('Lens frame work is already reserved by an unfinished composite.')
+      const retainedLensBytes = backend?.retainedBytes() ?? 0
+      const budget = renderWorkSurfaceBudget(work.outputWidth, work.outputHeight, {
+        additionalOwnedBytes: work.additionalOwnedBytes, includeExportReadback: work.includeExportReadback,
+        lensReusableBytes: retainedLensBytes,
+      })
+      if (budget.reason) throw new LensRemapUnavailableError(budget.reason)
+      const reservation = { ...work, retainedLensBytes }
+      frameWork = reservation
+      return () => { if (frameWork === reservation) frameWork = null }
+    },
     remap: (clip, source) => {
       const current = clip.lensCorrection ?? null
       if (current === null) return source
@@ -597,20 +631,23 @@ export function createDocumentLensRemapProvider(
           `Lens-remap source ${width}×${height} exceeds this renderer's ${backend.maximumTextureSize}-pixel texture limit.`,
         )
       }
+      const work = frameWork ?? fallbackWork()
+      const nextSourceBytes = width * height * RENDER_SURFACE_BYTES_PER_PIXEL * LENS_REMAP_REUSABLE_SURFACE_COUNT
+      const retainedLensBytes = Math.max(work.retainedLensBytes, backend.retainedBytes(), nextSourceBytes)
       const budget = lensRemapSurfaceBudget(
-        activeOutputWidth,
-        activeOutputHeight,
+        work.outputWidth,
+        work.outputHeight,
         width,
         height,
-        activeIncludeExportReadback,
-        Math.max(hasVideoBusEffects(doc) ? videoBusAdditionalBytes(activeOutputWidth, activeOutputHeight, doc.width, doc.height) : 0,
-          colorGradingAdditionalBytes(documentGradingEffects(doc), activeOutputWidth, activeOutputHeight, doc.width, doc.height)),
+        work.includeExportReadback,
+        work.additionalOwnedBytes + Math.max(0, retainedLensBytes - nextSourceBytes),
       )
       if (!budget.allowed) {
         throw new LensRemapUnavailableError(
           budget.reason ?? 'Lens remap exceeds the render surface budget.',
         )
       }
+      work.retainedLensBytes = retainedLensBytes
       return backend.renderSource(source, width, height, model.map)
     },
     setOutputSurface: (width, height, readback) => {

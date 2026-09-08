@@ -32,7 +32,6 @@ import type {
   Track,
 } from '../domain/schema'
 import { defaultTextProps } from '../domain/textOverlay'
-import { videoBusAdditionalBytes } from '../domain/videoBusStage'
 import { analyzeVideoScopes } from '../domain/videoScopes'
 import { defaultClipVisualSettings } from '../domain/clipInspector'
 import {
@@ -486,12 +485,64 @@ describe('previewController', () => {
     const setDoc = bridge.setDoc.bind(bridge)
     bridge.setDoc = (doc) => { reservations.push(mediaResourceAdmission.snapshot()); setDoc(doc) }
     initPreview(canvasEl(), deps)
-    expect(reservations[0].surfaceBytes).toBeGreaterThanOrEqual(videoBusAdditionalBytes(initialDoc.width, initialDoc.height))
+    // This color-only bus borrows compositor scratch and owns one RGBA
+    // readback; it does not allocate any spatial-effect scratch.
+    expect(reservations[0].surfaceBytes).toBeGreaterThanOrEqual(initialDoc.width * initialDoc.height * 4)
     expect(reservations[0].programReady).toBe(false)
     await nextFrame(); await flush()
     expect(mediaResourceAdmission.snapshot().programReady).toBe(true)
     await disposePreview()
     expect(mediaResourceAdmission.snapshot()).toEqual(original)
+  })
+
+  test('reserves future held mask scratch before dispatch without creating a decoder', async () => {
+    const doc = makeVideoDoc(['mask-reservation'])
+    doc.width = 3840; doc.height = 2160
+    const mask = createMaskEffect('reserve-mask', 'bezier')
+    const small = 'M 0 0 C 0 0 0.25 0 0.25 0 C 0.25 0 0.25 0.25 0.25 0.25 C 0.25 0.25 0 0.25 0 0.25 C 0 0.25 0 0 0 0 Z'
+    const large = mask.params.path as string
+    mask.params = { ...mask.params, x: 0, y: 0, width: 1, height: 1, feather: 0.05, path: small }
+    const clip = doc.tracks[0].clips[0]
+    clip.effects = [mask]
+    clip.animation = { tracks: [], effectPathTracks: [{ effectId: mask.id, parameter: 'path',
+      valueType: 'mask-bezier-path', valueVersion: 1, keyframes: [
+        { frame: 0, sourceTimeTicks: 0, value: small, easing: { type: 'hold' } },
+        { frame: 15, sourceTimeTicks: 15_000_000, value: large, easing: { type: 'hold' } },
+      ] }] }
+    useDocumentStore.getState().setDoc(doc)
+    const { deps, bridge } = makeDeps()
+    const reservations: ReturnType<typeof mediaResourceAdmission.snapshot>[] = []
+    const setDoc = bridge.setDoc.bind(bridge)
+    bridge.setDoc = (value) => { reservations.push(mediaResourceAdmission.snapshot()); setDoc(value) }
+    initPreview(canvasEl(), deps)
+    expect(reservations[0].surfaceBytes).toBeGreaterThanOrEqual(3840 * 2160 * 9)
+    expect(reservations[0].programReady).toBe(false)
+    expect(bridge.opened).toEqual([])
+  })
+
+  test('shows the current render failure, ignores a late old draw, and clears on a fresh successful draw', async () => {
+    const first = deferred<RenderFrameResult>(), second = deferred<RenderFrameResult>()
+    const { deps, bridge } = makeDeps()
+    const drawn: RenderFrameResult = { status: 'drawn', drawnClipIds: [], missingClipIds: [], renderMs: 1 }
+    bridge.renderImpl = () => first.promise
+    initPreview(canvasEl(), deps)
+    await nextFrame(); await flush()
+    bridge.renderImpl = () => second.promise
+    useTransportStore.getState().setPlayheadFrame(1)
+    await nextFrame(); await flush()
+    second.resolve({ status: 'error', drawnClipIds: [], missingClipIds: [], renderMs: 0,
+      message: 'renderFrame failed: VideoEffectStageExecutionError: Pixel work exceeds the 256 MiB limit.' })
+    await flush()
+    expect(usePreviewStatusStore.getState().renderError).toBe('Pixel work exceeds the 256 MiB limit.')
+    first.resolve(drawn); await flush()
+    expect(usePreviewStatusStore.getState().renderError).toBe('Pixel work exceeds the 256 MiB limit.')
+    bridge.renderImpl = async () => drawn
+    useTransportStore.getState().setPlayheadFrame(2)
+    await nextFrame(); await flush()
+    expect(usePreviewStatusStore.getState().renderError).toBeNull()
+    usePreviewStatusStore.getState().setRenderError('Old failure')
+    await disposePreview()
+    expect(usePreviewStatusStore.getState().renderError).toBeNull()
   })
 
   test('drains playback lanes before a queued paused repaint can run', async () => {

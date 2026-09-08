@@ -24,6 +24,9 @@ export interface PreviewTitleNotice extends TitleCompositionNotice {
 }
 
 export interface PreviewStatusState {
+  /** Failure of the latest requested Program render; cleared by a current draw. */
+  renderError: string | null
+  setRenderError(message: string | null): void
   readonly titleNotices: readonly PreviewTitleNotice[]
   setTitleNotices(notices: readonly PreviewTitleNotice[]): void
   /** Durable offline visual sources needed by the displayed timeline frame. */
@@ -49,6 +52,8 @@ function idsMatch(left: readonly AssetId[], right: readonly AssetId[]): boolean 
 }
 
 export const usePreviewStatusStore = create<PreviewStatusState>()((set) => ({
+  renderError: null,
+  setRenderError: (renderError) => set((state) => state.renderError === renderError ? state : { renderError }),
   titleNotices: [],
   offlineVisualAssetIds: EMPTY_OFFLINE_IDS,
   rendererCapabilities: null,
@@ -71,6 +76,7 @@ export const usePreviewStatusStore = create<PreviewStatusState>()((set) => ({
     set({ rendererCapabilities, effectStatuses: new Map(effectStatuses) }),
   resetPreviewStatus: () =>
     set({
+      renderError: null,
       titleNotices: [],
       offlineVisualAssetIds: EMPTY_OFFLINE_IDS,
       rendererCapabilities: null,

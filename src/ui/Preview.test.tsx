@@ -103,6 +103,20 @@ describe('Preview', () => {
     expect(previewController.initPreview).toHaveBeenCalledTimes(1)
   })
 
+  test('shows a renderer resource failure without remounting the canvas or changing the project', () => {
+    const before = useDocumentStore.getState().project
+    render(<Preview />)
+    const canvas = screen.getByTestId('preview-canvas')
+    act(() => usePreviewStatusStore.getState().setRenderError('This frame exceeds the 256 MiB render limit.'))
+    expect(screen.getByText('Preview unavailable')).toBeInTheDocument()
+    expect(screen.getByText('This frame exceeds the 256 MiB render limit.')).toBeInTheDocument()
+    expect(screen.getByTestId('preview-canvas')).toBe(canvas)
+    expect(useDocumentStore.getState().project).toBe(before)
+    act(() => usePreviewStatusStore.getState().setRenderError(null))
+    expect(screen.queryByText('Preview unavailable')).not.toBeInTheDocument()
+    expect(screen.getByTestId('preview-canvas')).toBe(canvas)
+  })
+
   test('offers an accessible Auto, Full, Half, and Quarter quality control', async () => {
     const user = userEvent.setup()
     render(<Preview />)

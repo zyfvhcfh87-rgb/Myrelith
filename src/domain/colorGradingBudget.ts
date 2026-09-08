@@ -1,8 +1,6 @@
 import { COLOR_LUT_LIMITS } from './colorLut'
 import { isColorGradingPixel, isColorGradingType, type ColorGradingContext } from './colorGradingEffects'
 import { effectRegistration, resolveEffectStack, type EffectCapability } from './effectStack'
-import { renderSurfaceBudget, MAX_RENDER_AGGREGATE_SURFACE_BYTES } from './renderSurfaceBudget'
-import { videoBusScratchBytes } from './videoBusStage'
 import type { EffectDescriptor, TimelineDoc } from './schema'
 import type { VideoCompositionPlan } from './videoCompositionPlan'
 
@@ -21,18 +19,8 @@ export function gradingPlanStacks(plan: VideoCompositionPlan): readonly (readonl
 export function documentGradingEffects(doc: TimelineDoc): EffectDescriptor[] {
   return [...(doc.masterVideoEffects ?? []), ...doc.tracks.flatMap((track) => [...(track.videoEffects ?? []), ...track.clips.flatMap((clip) => clip.effects), ...(track.adjustments ?? []).flatMap((item) => item.effects)])]
 }
-export function colorGradingAdditionalBytes(effects: readonly EffectDescriptor[], width: number, height: number, projectWidth = width, projectHeight = height): number {
-  if (!effects.some((effect) => effect.enabled && isColorGradingType(effect.type))) return 0
-  const active = effects.filter((effect) => effect.enabled)
-  const pixels = width * height
-  const copies = active.some((effect) => effect.type.startsWith('plugin:')) ? 4 : 1
-  const scratch = Math.max(
-    active.some((effect) => effect.type === 'builtin.mask' && effect.params.shape === 'bezier') ? pixels * 5 : 0,
-    active.some((effect) => ['builtin.box-blur', 'builtin.sharpen', 'builtin.vignette', 'builtin.drop-shadow', 'builtin.outline'].includes(effect.type)) ? videoBusScratchBytes(width, height, projectWidth, projectHeight) : 0,
-  )
-  return pixels * 4 * copies + scratch + COLOR_LUT_LIMITS.runtimeBytes
-}
-export function colorGradingPlanError(plan: VideoCompositionPlan, width: number, height: number, context: ColorGradingContext, policy: 'bypass' | 'fail', pixelsAvailable: boolean, projectWidth = width, projectHeight = height): string | null {
+/** Grading availability and visit limits; all buffer admission uses videoPixelWorkBudget. */
+export function colorGradingPlanError(plan: VideoCompositionPlan, width: number, height: number, context: ColorGradingContext, policy: 'bypass' | 'fail', pixelsAvailable: boolean): string | null {
   const stacks = gradingPlanStacks(plan)
   if (!stacks.some((stack) => stack.some((effect) => effect.enabled && isColorGradingType(effect.type)))) return null
   const available = new Set<EffectCapability>(['canvas2d-filter', ...(pixelsAvailable ? ['canvas2d-pixel-access' as const] : [])])
@@ -44,11 +32,7 @@ export function colorGradingPlanError(plan: VideoCompositionPlan, width: number,
     if (pixel && isColorGradingPixel(pixel)) stages++
   }
   if (stages * width * height > COLOR_LUT_LIMITS.pixelStageVisits) return 'This frame exceeds 134,217,728 color-grading pixel-stage visits. Bypass some grading stages or reduce the preview resolution.'
-  if (!stages) return null
-  const base = renderSurfaceBudget(width, height)
-  if (base.reason) return base.reason
-  const bytes = base.aggregateBytes + colorGradingAdditionalBytes(stacks.flat(), width, height, projectWidth, projectHeight)
-  return bytes > MAX_RENDER_AGGREGATE_SURFACE_BYTES ? 'Color grading, plugin copies, readback and scratch exceed the 256 MiB render surface allowance.' : null
+  return null
 }
 
 export function colorGradingPlanNeedsPixels(plan: VideoCompositionPlan, context: ColorGradingContext): boolean {

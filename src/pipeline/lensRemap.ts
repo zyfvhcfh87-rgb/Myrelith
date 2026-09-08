@@ -19,6 +19,13 @@ export class LensRemapUnavailableError extends Error {
 }
 
 export interface LensRemapProvider {
+  /** Pin one frame's exact work through its asynchronous composite; then release. */
+  reserveFrameWork?(work: {
+    readonly additionalOwnedBytes: number
+    readonly outputWidth: number
+    readonly outputHeight: number
+    readonly includeExportReadback: boolean
+  }): () => void
   /** Returns a reusable corrected source valid until the next remap call. */
   remap(clip: Readonly<Clip>, source: CanvasImageSource): CanvasImageSource
   /** Update disposable compositor/readback admission without revalidating models. */
