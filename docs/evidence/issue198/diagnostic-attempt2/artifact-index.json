@@ -1,0 +1,40 @@
+{
+  "testedSha": "1ae6baedf4e9788836e566cd58541fc459d702ee",
+  "outcome": "diagnostic-observations-collected-export-still-failed",
+  "rawEntries": 63,
+  "archiveMembersVerified": 64,
+  "files": {
+    "audit.json": {
+      "bytes": 19482,
+      "sha256": "cc4421fd29b69d6e124d15466913f0acf92ddca6c2f3c541966c16077136bf25"
+    },
+    "audit.py": {
+      "bytes": 9815,
+      "sha256": "71d6f0b3753c18e4de722e34d360c640f25b7192d71546766194daa06273476b"
+    },
+    "command.log": {
+      "bytes": 141,
+      "sha256": "42b5c8eda6175892deb1cf49ccd01c74b3a8fd3faa749bf721ffdfb20670d0b9"
+    },
+    "parent-audit.json": {
+      "bytes": 850,
+      "sha256": "175b6f08643005cfc23ab81a679ae2c2c77ec7c3c41ddefe258708fc94f4af75"
+    },
+    "raw-evidence.tar.gz": {
+      "bytes": 34356,
+      "sha256": "8555fafa20ac396a22807a9e94920df87fd2a28966b9e504db0dd583528a633a"
+    },
+    "raw-manifest.json": {
+      "bytes": 8491,
+      "sha256": "c88ca0d846069ed5f2c6c5875522c55bc6aa79d237e8399faf619ce9e746dc42"
+    },
+    "results.md": {
+      "bytes": 6552,
+      "sha256": "ecb4a22d60db11a2674e35edddf258aa0db6f78f40b25ff7570d39a62e261f6c"
+    },
+    "worker-cleanup.json": {
+      "bytes": 1090,
+      "sha256": "17f5fb1bc571a95a23b9661ea832d0c69cad4fb25d69c90cf638aff18598432a"
+    }
+  }
+}

@@ -1,9 +1,12 @@
 # Proposed resource and performance measurement protocol
 
-Status: **review proposal, not an execution grant or completed measurement**.
-The resource source gate must be reviewed first. Each executable measurement
-harness must then be committed and reviewed at an exact SHA before launch.
-The ignored `.tmp/issue198-performance-staging` draft is not an approved runner.
+Status: **executable harness review checkpoint, not an execution grant or completed
+measurement**. Parent accepted resource source `d9759917d202c39b1faa0df91ea90adad3603218`
+after independent review and the unchanged three-case spatial reproduction.
+The separate harness and precise executable thresholds are described in
+[scripts/issue198/README.md](../../../scripts/issue198/README.md). Its exact
+commit still requires review before launch. The ignored staging draft remains
+historical; focused fixture tests do not qualify a native run.
 
 ## Source and run identity
 
@@ -25,6 +28,14 @@ successful attachment metadata is insufficient. Final summaries must reference
 those bytes and their hashes. Stop on first numeric, pixel, owner, console or
 timeout failure. Keep the original run directory on every outcome.
 
+The corrected runner bounds browser/server setup, initial evaluation and cell
+enumeration, plus export UI setup, at 30 seconds per operation. Owner close and
+forced close each have separate 10-second bounds; a failed owner cannot prevent
+later cleanup or durable evidence finalization. An inert stalled-owner child
+test proves failure exit with raw/partial evidence and exact hashes retained.
+These setup/cleanup bounds do not change any measurement actions, thresholds or
+evidence caps below. Physical process/port release still requires verification.
+
 ## Raster matrix and held selection
 
 Proposed matrix: 180 unique cells, from three outputs (1280×720, 1920×1080,
@@ -42,10 +53,13 @@ statistics. Three samples per variant do not establish stable tail latency:
 nearest-rank p95 is the maximum. Label first versus subsequent samples without
 claiming a fresh BrowserContext for either one.
 
-The proposed safety ceiling is 10 seconds per 4K raster invocation. This is an
-abort ceiling, not a real-time playback promise; final raster performance
-thresholds still need parent review. The ignored draft does not yet persist a
-partial result before that ceiling fails and must be corrected before promotion.
+The confirmed safety ceiling is 10 seconds per 4K raster invocation, checked
+after that synchronous call returns. A separate 90-second host cell deadline
+closes a hung candidate. This is an abort ceiling, not a real-time playback
+promise. All 256 canonical held selections are checked for every cell; the
+parent confirmed that raster parity remains at 0/127/255, rather than expanding
+to 256 full raster pairs per cell. Raw trials and failures are durably written
+before a threshold throws.
 The harness itself owns two RGBA inputs, separately reported from renderer
 surfaces and actual mask scratch.
 
@@ -71,8 +85,18 @@ owner baseline/peak/settled snapshots, actual progress, cancellation result,
 decoder/worker/lease closure and elapsed time. Preserve project/history equality.
 Decode completed outputs at held-key boundaries 0/127/255 and the final frame;
 persist bytes/hashes and actual pixel/error values. A byte-length-only output
-check cannot qualify the result. Register export codec/profile, exact tolerances,
-timeout and expected counters with the committed harness before approval.
+check cannot qualify the result. The executable profile is compatibility
+MP4/AVC, 2 Mbps, 30 fps, audio off. Decoded-source/static-mask reference parity
+requires maximum RGB delta ≤12 and mean RGB delta ≤2 for the grayscale fixture.
+The browser attempt deadline is 120 seconds, host deadline 150 seconds. Sink
+canvases must reach their real 1×1 released extents, leases/media must close
+exactly, live sink/composite/readback counters and grading bytes/ports must be
+zero. Complete attempts add exactly 300 frames; cancellation adds exactly 60.
+Peak live leases must equal one, peak observed canvases stay within three full
+RGBA surfaces, and peak readback equals one full RGBA image. Completed-frame,
+composite and opened-lease counts must agree.
+Private decoder allocation counters remain explicitly unavailable through the
+current production interface; actual process snapshots are separate evidence.
 
 The later renderer admission exercise must also cover full versus small clipped
 4K masks, no lens versus differing lens source sizes, retained source growth and

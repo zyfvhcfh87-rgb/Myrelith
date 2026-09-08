@@ -1,0 +1,50 @@
+{
+  "testedSha": "8129d4ef0f3fc4df9a204c291f1d52f1ee700c3d",
+  "reviewedHarnessSha": "52a64ba78c72e0e3a077c63c8d9b0c3c33e11245",
+  "outcome": "failed-incomplete",
+  "rawOriginalDirectory": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-8129d4e-export-attempt1",
+  "rawEntries": 331,
+  "archiveMembersVerified": 332,
+  "files": {
+    "audit.json": {
+      "bytes": 5266,
+      "sha256": "5d60c6dff2a6259988c9325d03625dd0b0745f7220f751483897d6508a278b55"
+    },
+    "command.log": {
+      "bytes": 909,
+      "sha256": "02b77ab92db208041150203181ea545a8df24d4479970eeedcd0b646015a262f"
+    },
+    "mp4-metadata.json": {
+      "bytes": 3397,
+      "sha256": "93bb6a878853e34809106debd50bf9a87e6053da4fda121643640f390742caf3"
+    },
+    "parent-cleanup.json": {
+      "bytes": 442,
+      "sha256": "21827dfda9161018c92b2e792ca02508e45b47e09a156f9f301ca0402e9759ea"
+    },
+    "preflight.json": {
+      "bytes": 1311,
+      "sha256": "79b826d9332f6f476a227cf3b2fafcfa2c16adf5e75d1625af8cf72d7f274cc3"
+    },
+    "raw-evidence.tar.gz": {
+      "bytes": 1472155,
+      "sha256": "110c01cf3419814369afd990e3c202221de7a513e242014a1b073eb5e8c0408e"
+    },
+    "raw-manifest.json": {
+      "bytes": 44696,
+      "sha256": "c0afb06b49ad88b68dcb64076805bee754062f8538d4d4656539026f8e74bace"
+    },
+    "results.md": {
+      "bytes": 4753,
+      "sha256": "9508b8cce75aacbc173a12400f1e93cea7a8fbade1cd63e175a783f720cfff27"
+    },
+    "source-diagnosis.md": {
+      "bytes": 4328,
+      "sha256": "3bf402948d2de873b6896c07a2c1e481f3f56869c2d5d85657f27bc8a5c772ba"
+    },
+    "worker-cleanup.json": {
+      "bytes": 2305,
+      "sha256": "01a9e99d9d651eb5619197a56b33a89220e3c60de797b8c69523249684a1cf63"
+    }
+  }
+}

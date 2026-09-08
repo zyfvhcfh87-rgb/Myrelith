@@ -1,0 +1,82 @@
+{
+  "verifiedAt": "2026-09-08T19:45:32.814203+00:00",
+  "sha": "8129d4ef0f3fc4df9a204c291f1d52f1ee700c3d",
+  "clean": true,
+  "runnerExitCode": 1,
+  "session": 51355,
+  "pids": [
+    {
+      "pid": 18579,
+      "status": "absent"
+    },
+    {
+      "pid": 18608,
+      "status": "absent"
+    },
+    {
+      "pid": 18609,
+      "status": "absent"
+    },
+    {
+      "pid": 18610,
+      "status": "absent"
+    },
+    {
+      "pid": 18611,
+      "status": "absent"
+    },
+    {
+      "pid": 18613,
+      "status": "absent"
+    }
+  ],
+  "port": 5198,
+  "connectResult": 61,
+  "portOpen": false,
+  "psExitCode": 1,
+  "psOutput": "",
+  "psError": "",
+  "runnerTeardown": {
+    "kind": "run-teardown",
+    "cleanup": [
+      {
+        "name": "context",
+        "status": "closed"
+      },
+      {
+        "name": "browser",
+        "status": "closed"
+      },
+      {
+        "name": "browser-server",
+        "status": "closed"
+      },
+      {
+        "name": "vite",
+        "status": "closed"
+      }
+    ],
+    "capturedPids": [
+      18608,
+      18609,
+      18610,
+      18611,
+      18613
+    ],
+    "alivePids": [],
+    "portOpen": false,
+    "problems": [],
+    "error": "page.evaluate: Error: Decoded export parity failed at 127\n    at compareOutput (http://127.0.0.1:5198/scripts/issue198/exportResourceGate.ts:424:110)\n    at async Module.measureExportAttempt (http://127.0.0.1:5198/scripts/issue198/exportResourceGate.ts:498:4)\n    at async eval (eval at evaluate (:311:30), <anonymous>:3:13)\n    at async <anonymous>:337:30\n    at run (/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/run-resource-gate.mjs:166:30)\n    at async runCommand (/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/runnerLifecycle.mjs:33:9)\n    at async file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/run-resource-gate.mjs:221:3",
+    "nativeMemory": {
+      "measuredMemorySamples": 11,
+      "unavailableMemorySamples": 0,
+      "status": "sampled",
+      "exactAllocationPeakProven": false
+    },
+    "runnerPid": 18579,
+    "runnerExitMustBeVerifiedByParent": true,
+    "outcome": "failed",
+    "sequence": 327,
+    "receivedAt": "2026-09-08T19:44:55.265Z"
+  }
+}

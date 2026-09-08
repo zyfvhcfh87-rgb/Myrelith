@@ -1,0 +1,22 @@
+{
+  "verifiedAt": "2026-09-08T19:44:22.302196+00:00",
+  "sha": "8129d4ef0f3fc4df9a204c291f1d52f1ee700c3d",
+  "clean": true,
+  "branch": "codex/issue198",
+  "harnessReviewedSha": "52a64ba78c72e0e3a077c63c8d9b0c3c33e11245",
+  "changedFiles": [
+    "docs/evidence/issue198/raster-attempt1/artifact-audit.py",
+    "docs/evidence/issue198/raster-attempt1/artifact-index.json",
+    "docs/evidence/issue198/raster-attempt1/audit.json",
+    "docs/evidence/issue198/raster-attempt1/audit.log",
+    "docs/evidence/issue198/raster-attempt1/command.log",
+    "docs/evidence/issue198/raster-attempt1/parent-cleanup.json",
+    "docs/evidence/issue198/raster-attempt1/raw-evidence.tar.gz",
+    "docs/evidence/issue198/raster-attempt1/raw-manifest.json",
+    "docs/evidence/issue198/raster-attempt1/results.md",
+    "docs/evidence/issue198/raster-attempt1/worker-cleanup.json"
+  ],
+  "packageHashesVerified": 9,
+  "command": "DEVELOPER_DIR=/Library/Developer/CommandLineTools node scripts/issue198/run-resource-gate.mjs --segment export --expected-sha 8129d4ef0f3fc4df9a204c291f1d52f1ee700c3d --output /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-8129d4e-export-attempt1",
+  "grant": "Parent conditionally includes this evidence-only commit; ONE unchanged export segment only."
+}

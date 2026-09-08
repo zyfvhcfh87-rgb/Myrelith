@@ -1,0 +1,52 @@
+{
+  "at": "2026-09-08T20:58:56.977025+00:00",
+  "rawHashes": 63,
+  "parityComparisons": 12,
+  "zeroDeltaStages": [
+    "production-input-vs-ordinal127",
+    "production-unencoded-vs-matching-input-oracle"
+  ],
+  "pids": [
+    {
+      "pid": 36406,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 36426,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 36427,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 36428,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 36429,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 36431,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 36438,
+      "returncode": 1,
+      "output": ""
+    },
+    {
+      "pid": 36502,
+      "returncode": 1,
+      "output": ""
+    }
+  ],
+  "connectEx5198": 61
+}

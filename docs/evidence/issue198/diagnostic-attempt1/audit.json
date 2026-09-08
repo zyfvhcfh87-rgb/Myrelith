@@ -1,0 +1,146 @@
+{
+  "testedSha": "12449aafa3c5a84bf44f3071cc14a5b954b2880a",
+  "outcome": "failed-incomplete-before-decode",
+  "commandExitCode": 1,
+  "rawDirectory": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-12449aa-diagnostic-attempt1",
+  "rawEntries": 10,
+  "rawBytes": 11967,
+  "manifest": {
+    "bytes": 1349,
+    "sha256": "9a451a1bd39f5de43991e2d47a068eddfaee662c26e979446506bd1b76c6c47e"
+  },
+  "archive": {
+    "membersVerified": 11,
+    "bytes": 3349,
+    "sha256": "c880f3bd2e08607ad6a312e5f3545ad19434ad7f131106114733152b92d94d0f"
+  },
+  "startedAt": "2026-09-08T20:37:58.368Z",
+  "closedAt": "2026-09-08T20:37:58.931Z",
+  "recordedDurationMs": 563.0,
+  "kindCounts": {
+    "diagnostic-run-start": 1,
+    "diagnostic-provenance": 1,
+    "diagnostic-process-start": 1,
+    "diagnostic-start": 1,
+    "diagnostic-failed": 1,
+    "diagnostic-pixels-released": 1,
+    "diagnostic-run-failed": 1,
+    "diagnostic-process-before-close": 1,
+    "diagnostic-run-teardown": 1,
+    "evidence-closed": 1
+  },
+  "failedBrowserElapsedMs": 8.099999994039536,
+  "work": {
+    "ordinal": 0,
+    "sparse": 0,
+    "productionSource": 0,
+    "composite": 0,
+    "candidate": 0,
+    "publicSampleAndSourceRequests": 0,
+    "requestLimit": 740
+  },
+  "pixelOwner": {
+    "bytes": 0,
+    "peakBytes": 0,
+    "buffers": 0,
+    "allocations": 0,
+    "releases": 0,
+    "limitBytes": 67108864
+  },
+  "servedMediaRequests": 0,
+  "cleanup": [
+    {
+      "name": "context",
+      "status": "closed"
+    },
+    {
+      "name": "browser",
+      "status": "closed"
+    },
+    {
+      "name": "browser-server",
+      "status": "closed"
+    },
+    {
+      "name": "vite",
+      "status": "closed"
+    }
+  ],
+  "problems": [],
+  "workerPhysicalRelease": {
+    "checkedAt": "2026-09-08T20:38:37.499201+00:00",
+    "sourceCommit": "12449aafa3c5a84bf44f3071cc14a5b954b2880a",
+    "commandExitCode": 1,
+    "processes": [
+      {
+        "pid": 31490,
+        "kill0Alive": false,
+        "psReturncode": 1,
+        "psOutput": ""
+      },
+      {
+        "pid": 31510,
+        "kill0Alive": false,
+        "psReturncode": 1,
+        "psOutput": ""
+      },
+      {
+        "pid": 31511,
+        "kill0Alive": false,
+        "psReturncode": 1,
+        "psOutput": ""
+      },
+      {
+        "pid": 31512,
+        "kill0Alive": false,
+        "psReturncode": 1,
+        "psOutput": ""
+      },
+      {
+        "pid": 31513,
+        "kill0Alive": false,
+        "psReturncode": 1,
+        "psOutput": ""
+      },
+      {
+        "pid": 31515,
+        "kill0Alive": false,
+        "psReturncode": 1,
+        "psOutput": ""
+      },
+      {
+        "pid": 31522,
+        "kill0Alive": false,
+        "psReturncode": 1,
+        "psOutput": ""
+      },
+      {
+        "pid": 31547,
+        "kill0Alive": false,
+        "psReturncode": 1,
+        "psOutput": ""
+      }
+    ],
+    "port": 5198,
+    "connectEx": 61,
+    "allReleased": true
+  },
+  "immutableInputsVerifiedAfterRun": [
+    {
+      "name": "source.mp4",
+      "bytes": 1069647,
+      "sha256": "55a7094a0d645e5ec67c7d266890d9c6c8500a125f3454408bdd467ef8ed6264"
+    },
+    {
+      "name": "export-complete-0.mp4",
+      "bytes": 2103209,
+      "sha256": "f31104bd0a9d26d8ae1285bd15798b625281f8222268c79a34d006481eba0f2c"
+    }
+  ],
+  "productionAndArchitectureUnchangedFrom": "d9759917d202c39b1faa0df91ea90adad3603218",
+  "sourceInspection": {
+    "viteVersion": "8.1.2",
+    "viteInstalledNodeChunkSha256": "f31ebfcbd4c87dd62d3c7d541a5a4935c48178426e1ffbe2a4661b89f27feb89"
+  },
+  "qualification": "No diagnostic pixels, decode, candidates or composite observed. Routing setup failure leaves original export cause unresolved. No native retry or source correction."
+}

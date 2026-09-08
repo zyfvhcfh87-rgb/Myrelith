@@ -1,0 +1,11 @@
+Diagnostic evidence: /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-12449aa-diagnostic-attempt1
+page.evaluate: Error: Immutable input response extent differs
+    at immutableBlob (http://127.0.0.1:5198/scripts/issue198/exportPixelDiagnostic.ts:24:76)
+    at async runPixelDiagnostic (http://127.0.0.1:5198/scripts/issue198/exportPixelDiagnostic.ts:249:18)
+    at async eval (eval at evaluate (:311:30), <anonymous>:3:7)
+    at async <anonymous>:337:30
+    at failure (/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/run-export-diagnostic.mjs:143:24)
+    at async runWithDiagnosticEvidence (/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/diagnosticEvidence.mjs:49:9)
+    at async runDiagnostic (/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/run-export-diagnostic.mjs:106:22)
+    at async runCommand (/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/runnerLifecycle.mjs:33:9)
+    at async file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/run-export-diagnostic.mjs:181:72

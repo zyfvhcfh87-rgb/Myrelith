@@ -1,0 +1,9 @@
+Evidence: /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-8129d4e-export-attempt1
+page.evaluate: Error: Decoded export parity failed at 127
+    at compareOutput (http://127.0.0.1:5198/scripts/issue198/exportResourceGate.ts:424:110)
+    at async Module.measureExportAttempt (http://127.0.0.1:5198/scripts/issue198/exportResourceGate.ts:498:4)
+    at async eval (eval at evaluate (:311:30), <anonymous>:3:13)
+    at async <anonymous>:337:30
+    at run (/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/run-resource-gate.mjs:166:30)
+    at async runCommand (/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/runnerLifecycle.mjs:33:9)
+    at async file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/scripts/issue198/run-resource-gate.mjs:221:3

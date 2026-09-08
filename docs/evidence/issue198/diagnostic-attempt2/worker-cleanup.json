@@ -1,0 +1,59 @@
+{
+  "checkedAt": "2026-09-08T20:57:14.090298+00:00",
+  "sourceCommit": "1ae6baedf4e9788836e566cd58541fc459d702ee",
+  "sourceClean": true,
+  "commandExitCode": 0,
+  "processes": [
+    {
+      "pid": 36406,
+      "kill0Alive": false,
+      "psReturncode": 1,
+      "psOutput": ""
+    },
+    {
+      "pid": 36426,
+      "kill0Alive": false,
+      "psReturncode": 1,
+      "psOutput": ""
+    },
+    {
+      "pid": 36427,
+      "kill0Alive": false,
+      "psReturncode": 1,
+      "psOutput": ""
+    },
+    {
+      "pid": 36428,
+      "kill0Alive": false,
+      "psReturncode": 1,
+      "psOutput": ""
+    },
+    {
+      "pid": 36429,
+      "kill0Alive": false,
+      "psReturncode": 1,
+      "psOutput": ""
+    },
+    {
+      "pid": 36431,
+      "kill0Alive": false,
+      "psReturncode": 1,
+      "psOutput": ""
+    },
+    {
+      "pid": 36438,
+      "kill0Alive": false,
+      "psReturncode": 1,
+      "psOutput": ""
+    },
+    {
+      "pid": 36502,
+      "kill0Alive": false,
+      "psReturncode": 1,
+      "psOutput": ""
+    }
+  ],
+  "port": 5198,
+  "connectEx": 61,
+  "allReleased": true
+}

@@ -1,0 +1,51 @@
+{
+  "testedSha": "52a64ba78c72e0e3a077c63c8d9b0c3c33e11245",
+  "productSourceSha": "d9759917d202c39b1faa0df91ea90adad3603218",
+  "scope": "One preregistered raster segment; no export or renderer-admission native result.",
+  "command": "DEVELOPER_DIR=/Library/Developer/CommandLineTools node scripts/issue198/run-resource-gate.mjs --segment raster --expected-sha 52a64ba78c72e0e3a077c63c8d9b0c3c33e11245 --output /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-52a64ba-raster-attempt1",
+  "rawOriginalDirectory": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-52a64ba-raster-attempt1",
+  "rawEntries": 2559,
+  "archiveMembersVerified": 2560,
+  "files": {
+    "artifact-audit.py": {
+      "bytes": 7770,
+      "sha256": "ba1be527b55b4b16eb25e2178cd55afac6995bc4ad22f6cbf49809a77daee5bc"
+    },
+    "audit.json": {
+      "bytes": 6216,
+      "sha256": "c8130eef7985746cf13e5f2f937dd39f994e5f2813f5488fc5ae433cd46b4ca1"
+    },
+    "audit.log": {
+      "bytes": 3743,
+      "sha256": "3b24e7997820e6ecbc027bc6e6327152d22c66dbc8af82c1f6b083a4ab39881b"
+    },
+    "command.log": {
+      "bytes": 126,
+      "sha256": "f597425226a9251bccc699930a7e14da87e80881400c2243298c4ba8eab4d85f"
+    },
+    "parent-cleanup.json": {
+      "bytes": 501,
+      "sha256": "73f97b892516fc15dec7932d0ee3a88ad9edcb7fb77f580e3eef82f1533f26cd"
+    },
+    "raw-evidence.tar.gz": {
+      "bytes": 562232,
+      "sha256": "4f6713bb45d670d782a98d52508a009181fcff95b045569c260aff03984ee059"
+    },
+    "raw-manifest.json": {
+      "bytes": 343701,
+      "sha256": "7269effa6878ab748d3e17c6cb0f75ccbf5a0c896b9ca9e6e5dab7ec937eb7fb"
+    },
+    "results.md": {
+      "bytes": 5927,
+      "sha256": "2bc1510271a26dfc350faaa9113dd2f988486b8cdb8c084db6490c985e480267"
+    },
+    "worker-cleanup.json": {
+      "bytes": 1529,
+      "sha256": "807159bb2bb53306062c6635dc8df1897009c9716a2ca3a16dcb1c20e46b7581"
+    },
+    "parent-audit.json": {
+      "bytes": 255,
+      "sha256": "05c0c5a81fb99b6d99ede1560df6013511095b14463bc682f2ac80b56ed66aaf"
+    }
+  }
+}
