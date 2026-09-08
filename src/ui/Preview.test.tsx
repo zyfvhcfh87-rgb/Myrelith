@@ -13,6 +13,9 @@ import { analyzeVideoScopes } from '../domain/videoScopes'
 import Preview from './Preview'
 import { createTextClip } from '../domain/operations'
 import { useDocumentStore } from '../state/documentStore'
+import { useTransportStore } from '../state/transportStore'
+import { attributeClip } from '../test/clipAttributeFixtures'
+import { createMaskEffect } from '../domain/effectStack'
 
 const previewController = vi.hoisted(() => ({
   initPreview: vi.fn(),
@@ -60,6 +63,7 @@ const offlineImage: PortableAssetDescriptor = {
 }
 
 beforeEach(() => {
+  useTransportStore.getState().resetTransport()
   previewController.initPreview.mockClear()
   previewController.setPreviewViewport.mockClear()
   previewController.setVideoScopesEnabled.mockReset()
@@ -83,6 +87,22 @@ beforeEach(() => {
 })
 
 describe('Preview', () => {
+  test('docks mask controls outside the canvas without remounting the transferred canvas', () => {
+    const doc = structuredClone(useDocumentStore.getState().doc), clip = attributeClip('mask-clip')
+    clip.effects = [createMaskEffect('mask', 'rectangle')]; doc.tracks[0].clips = [clip]
+    useDocumentStore.getState().setDoc(doc)
+    useTransportStore.getState().setSelectedClip(clip.id)
+    const { container } = render(<Preview />), canvas = screen.getByTestId('preview-canvas')
+    act(() => useTransportStore.getState().setMaskEditorTarget({ sequenceId: doc.id, clipId: clip.id, effectId: 'mask' }))
+    expect(container.querySelector('.mask-editor-dock .mask-editor-toolbar')).not.toBeNull()
+    expect(container.querySelector('.preview-panel .mask-editor-toolbar')).toBeNull()
+    expect(screen.getByTestId('preview-canvas')).toBe(canvas)
+    act(() => useTransportStore.getState().setMaskEditorTarget(null))
+    expect(container.querySelector('.mask-editor-toolbar')).toBeNull()
+    expect(screen.getByTestId('preview-canvas')).toBe(canvas)
+    expect(previewController.initPreview).toHaveBeenCalledTimes(1)
+  })
+
   test('offers an accessible Auto, Full, Half, and Quarter quality control', async () => {
     const user = userEvent.setup()
     render(<Preview />)

@@ -9,7 +9,7 @@
  * engine/pipeline/workers (the controller is the facade).
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   initPreview,
   setPreviewViewport,
@@ -22,17 +22,21 @@ import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useProxyStore } from '../state/proxyStore'
 import { useVideoScopesStore } from '../state/videoScopesStore'
+import { useTransportStore } from '../state/transportStore'
 import TextOverlayControls from './TextOverlayControls'
 import VideoScopesPanel from './VideoScopesPanel'
 import VisualOverlayControls from './VisualOverlayControls'
 import MotionTrackingOverlay from './MotionTrackingOverlay'
+import MaskOverlayControls from './MaskOverlayControls'
 import { focusProgramMonitor } from '../app/sequenceEditController'
 
 export default function Preview() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const [maskControlsHost, setMaskControlsHost] = useState<HTMLDivElement | null>(null)
   const docWidth = useDocumentStore((state) => state.doc.width)
   const docHeight = useDocumentStore((state) => state.doc.height)
+  const editingMask = useTransportStore((state) => state.maskEditorTarget !== null)
   const qualityMode = usePreviewQualityStore((state) => state.qualityMode)
   const setQualityMode = usePreviewQualityStore((state) => state.setQualityMode)
   const scopesEnabled = useVideoScopesStore((state) => state.enabled)
@@ -126,6 +130,7 @@ export default function Preview() {
   }, [docHeight, docWidth])
 
   return (
+    <div className="preview-workspace">
     <div
       className="preview-panel"
       ref={panelRef}
@@ -160,9 +165,12 @@ export default function Preview() {
         className="preview-canvas"
         data-testid="preview-canvas"
       />
-      <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
-      <MotionTrackingOverlay canvasRef={canvasRef} panelRef={panelRef} />
-      <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+      {!editingMask && <>
+        <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+        <MotionTrackingOverlay canvasRef={canvasRef} panelRef={panelRef} />
+        <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+      </>}
+      <MaskOverlayControls canvasRef={canvasRef} panelRef={panelRef} toolbarHost={maskControlsHost} />
       {scopesEnabled ? <VideoScopesPanel /> : null}
       {offlineVisualAssetIds.length > 0 ? (
         <div className="preview-hint preview-hint-offline" role="status">
@@ -180,6 +188,8 @@ export default function Preview() {
           Visual sources are offline. Reconnect them in the Media panel.
         </div>
       ) : null}
+    </div>
+    <div className="mask-editor-dock" ref={setMaskControlsHost} />
     </div>
   )
 }

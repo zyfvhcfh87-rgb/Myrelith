@@ -147,7 +147,18 @@ export interface ColorGradingPreview {
   readonly document: TimelineDoc
 }
 
+export interface EffectDocumentPreview {
+  readonly owner: 'color-grading' | 'mask-gesture'
+  readonly sequenceId: string
+  readonly document: TimelineDoc
+}
+
 export interface TransportState {
+  maskEditorTarget: import('../domain/maskEditing').MaskEditTarget | null
+  setMaskEditorTarget(target: import('../domain/maskEditing').MaskEditTarget | null): void
+  maskPreview: ColorGradingPreview | null
+  setMaskPreview(preview: ColorGradingPreview | null): void
+  effectDocumentPreview: EffectDocumentPreview | null
   colorGradingPreview: ColorGradingPreview | null
   setColorGradingPreview(preview: ColorGradingPreview | null): void
   /** Current playhead position, integer frames at the document rate. */
@@ -364,6 +375,9 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
   textOverlayPreview: null,
   clipVisualPreview: null,
   colorGradingPreview: null,
+  maskPreview: null,
+  maskEditorTarget: null,
+  effectDocumentPreview: null,
   mediaPlacementPreview: null,
   mediaPlacementStatus: '',
 })
@@ -372,6 +386,19 @@ export const INITIAL_TRANSPORT_STATE = Object.freeze({
 // this sequence outside Zustand so resetTransport can still restore the
 // complete public transport state to the exact deterministic initial values.
 let transportResetRevision = 0
+
+const effectPreviewOwners = new Map<EffectDocumentPreview['owner'], { sequence: number; preview: EffectDocumentPreview }>()
+let effectPreviewSequence = 0
+function updateEffectPreview(owner: EffectDocumentPreview['owner'], preview: ColorGradingPreview | null): EffectDocumentPreview | null {
+  if (preview) effectPreviewOwners.set(owner, {
+    sequence: effectPreviewOwners.get(owner)?.sequence ?? ++effectPreviewSequence,
+    preview: { owner, sequenceId: preview.sequenceId, document: preview.document },
+  })
+  else effectPreviewOwners.delete(owner)
+  let active: { sequence: number; preview: EffectDocumentPreview } | null = null
+  for (const candidate of effectPreviewOwners.values()) if (!active || candidate.sequence > active.sequence) active = candidate
+  return active?.preview ?? null
+}
 
 interface OwnedClipVisualPreview {
   activationSequence: number
@@ -787,7 +814,9 @@ export const useTransportStore = create<TransportState>()((set) => ({
           }
         : null,
     }),
-  setColorGradingPreview: (colorGradingPreview) => set({ colorGradingPreview }),
+  setMaskEditorTarget: (maskEditorTarget) => set({ maskEditorTarget }),
+  setMaskPreview: (maskPreview) => set({ maskPreview, effectDocumentPreview: updateEffectPreview('mask-gesture', maskPreview) }),
+  setColorGradingPreview: (colorGradingPreview) => set({ colorGradingPreview, effectDocumentPreview: updateEffectPreview('color-grading', colorGradingPreview) }),
   setClipVisualPreview: (clipVisualPreview) => {
     clearOwnedClipVisualPreviews()
     set({ clipVisualPreview: cloneClipVisualPreview(clipVisualPreview) })
@@ -841,6 +870,8 @@ export const useTransportStore = create<TransportState>()((set) => ({
     )),
   resetTransport: () => {
     transportResetRevision += 1
+    effectPreviewOwners.clear()
+    effectPreviewSequence = 0
     clearOwnedClipVisualPreviews()
     set({ ...INITIAL_TRANSPORT_STATE })
   },

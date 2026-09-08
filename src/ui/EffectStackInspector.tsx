@@ -2,6 +2,7 @@ import ColorGradingAdd from './ColorGradingAdd'
 import ColorGradingFields from './ColorGradingFields'
 import ColorGradingAnimation from './ColorGradingAnimation'
 import EffectBrowser from './EffectBrowser'
+import MaskEditorToggle from './MaskEditorToggle'
 import { SPATIAL_EFFECT_PARAMETERS, spatialEffectKind, spatialEffectParams } from '../state/editorUi'
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import type {
@@ -337,6 +338,7 @@ function MaskFields({
   const parameters = ['x', 'y', 'width', 'height', 'feather'] as const
   return (
     <div className="inspector-effect-params">
+      <MaskEditorToggle clipId={clip.id} effectId={effect.id} />
       <label className="inspector-field">
         <span className="inspector-field-label">Mask shape</span>
         <select
