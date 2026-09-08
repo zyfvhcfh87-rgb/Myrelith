@@ -2,18 +2,19 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { beginMaskEdit, type MaskEditSession } from '../app/maskEditingController'
 import { focusProgramMonitor } from '../app/sequenceEditController'
-import { appendMaskBezierDraftPoint, closeMaskBezierDraft, maskPointToProject, MAX_MASK_BEZIER_SEGMENTS, monitorPointToProject, projectPointToMask, removeLastMaskBezierDraftPoint, type MaskEditTarget, type MaskMonitorViewport, type MaskPoint, type ParsedMaskPath } from '../state/maskEditor'
+import { appendMaskBezierDraftPoint, closeMaskBezierDraft, maskPointToProject, MAX_MASK_BEZIER_SEGMENTS, monitorPointToProject, projectPointToMask, removeLastMaskBezierDraftPoint, type MaskEditTarget, type MaskPoint, type ParsedMaskPath } from '../state/maskEditor'
 import type { MaskParams } from '../domain/effectStack'
 import type { TimelineDoc } from '../domain/schema'
 
-interface Viewport { canvas: MaskMonitorViewport; panelLeft: number; panelTop: number }
+import { sameMaskEditorViewport, type MaskEditorViewport as Viewport } from './maskMonitorViewport'
 
 /** An open path is only a bounded drawing draft; the existing mask stays rendered. */
-export default function MaskPathAuthoring({ doc, target, mask, viewport, toolbarHost, onFinish }: {
+export default function MaskPathAuthoring({ doc, target, mask, viewport, readViewport, toolbarHost, onFinish }: {
   doc: TimelineDoc
   target: MaskEditTarget
   mask: MaskParams
   viewport: Viewport
+  readViewport(): Viewport | null
   toolbarHost?: HTMLDivElement | null
   onFinish(error: string | null): void
 }) {
@@ -34,14 +35,25 @@ export default function MaskPathAuthoring({ doc, target, mask, viewport, toolbar
     return () => { mounted = false; window.removeEventListener('blur', cancel); cancel(); session.current = null }
   }, [origin, onFinish])
 
-  const current = doc === origin.doc && target === origin.target && (!pinnedViewport.current || viewport === pinnedViewport.current)
-  useEffect(() => { if (!current) session.current?.cancel() }, [current])
+  const current = doc === origin.doc && target === origin.target
+  useEffect(() => {
+    if (!current || (pinnedViewport.current && !sameMaskEditorViewport(readViewport(), pinnedViewport.current))) session.current?.cancel()
+  }, [current, viewport, readViewport])
+
+  function currentViewport(): Viewport | null {
+    const measured = readViewport()
+    if (!current || !session.current || !measured || (pinnedViewport.current && !sameMaskEditorViewport(measured, pinnedViewport.current))) {
+      session.current?.cancel(); return null
+    }
+    return measured
+  }
 
   function add(point: MaskPoint) {
-    if (!current || !session.current) { session.current?.cancel(); return }
+    const measured = currentViewport()
+    if (!measured) return
     const result = appendMaskBezierDraftPoint(draftRef.current, point)
     if (!result.ok) { setError(result.reason); return }
-    pinnedViewport.current ??= viewport
+    pinnedViewport.current ??= measured
     draftRef.current = result.draft; setDraft(result.draft); setError('')
     setNextX(String(point.x * 100)); setNextY(String(point.y * 100))
   }
@@ -50,17 +62,20 @@ export default function MaskPathAuthoring({ doc, target, mask, viewport, toolbar
     event.preventDefault(); event.stopPropagation(); event.currentTarget.focus(); focusProgramMonitor()
     // Keyboard activation uses the same numeric cursor as the accessible form.
     if (event.detail === 0) { add(numericPoint()); return }
-    try { add(projectPointToMask(monitorPointToProject({ x: event.clientX, y: event.clientY }, viewport.canvas, origin.doc), origin.mask, origin.doc)) }
+    const measured = currentViewport()
+    if (!measured) return
+    try { add(projectPointToMask(monitorPointToProject({ x: event.clientX, y: event.clientY }, measured.canvas, origin.doc), origin.mask, origin.doc)) }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not place this point.') }
   }
   function remove() {
+    if (!currentViewport()) return
     const result = removeLastMaskBezierDraftPoint(draftRef.current)
     if (!result.ok) { setError(result.reason); return }
     draftRef.current = result.draft; setDraft(result.draft); setError('')
   }
   function close() {
     const value = draftRef.current
-    if (!current || !session.current) { session.current?.cancel(); return }
+    if (!currentViewport() || !session.current) return
     if (!value || value.segments.length < 2) { setError('Place at least three points before closing the new path.'); return }
     const result = closeMaskBezierDraft(value)
     if (!result.ok) { setError(result.reason); return }
