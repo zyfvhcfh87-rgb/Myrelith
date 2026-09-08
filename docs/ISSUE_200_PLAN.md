@@ -1,22 +1,30 @@
 # Issue #200 — reusable titles and animated text
 
-Status: **initial contract proposed; stop before product implementation**.
+Status: **Gate 0 amended after internal review; stop before product implementation**.
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
 issue last updated 2026-08-25T21:36:47Z. [Issue #200](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/200).
 
-The Milestone 9 orchestrator reviews this commit and assigns migration order.
-This document assigns **no timeline schema number**. Current baseline is
-timeline schema 21 / project format 8. Product acceptance remains open.
+The orchestrator assigned this order on 2026-09-08: pure title element types and
+property adapters first (no Clip or migration changes), then #199's shared
+animation foundation as timeline schema 22, then this title-owner change as 23.
+Baseline is timeline schema 21 / project format 8. The assignments are reviewed
+coordination decisions; no schema implementation exists in this plan commit.
+Product acceptance remains open.
 
 ## Proposed outcome and boundaries
 
-A title remains one procedural video clip with no media/decoder/relink owner.
+A new multi-element title remains one procedural video clip with no media/decoder/relink owner.
 It contains up to 16 ordered text, rectangle, or ellipse elements. Users can
 edit each element, save a local template, instantiate independent copies, and
 apply roll/crawl by authoring ordinary scalar keys. Titles use the same exact
 integer-frame evaluator and compositor in scrub, playback, nested sequences,
 and export. Caption identity and legacy caption painting stay unchanged.
+
+Existing text clips remain a fully supported compact compatibility variant.
+Opening, saving or ordinary text editing never forces their conversion. Adding
+elements or title animation starts an explicit, budget-checked Upgrade to title
+transaction; Cancel or insufficient capacity leaves the existing text editable.
 
 No arbitrary HTML, SVG, CSS, script, expressions, remote font services, font
 enumeration, external template marketplace, or per-element media/effect stack.
@@ -33,15 +41,20 @@ coordinates; they never enter pixels, duration, export, or undo history.
 | `videoCompositionPlan.ts`: resolves animation before emitting text and never requests its media | Resolve title elements at this same boundary, with no UI interpolation or synthetic media asset. |
 | `clipAnimationKindError` and `operations/animation.ts`: text currently rejects all keys | Eligibility, editing, cloning, counting, shifting, source intent and persistence all need explicit title support. |
 | `geometry.ts`: text source maps reset to `[0, duration)` on split/trim; Slip/retime do not apply | Title keys need fixed-local source intent, including a deliberate reanchor when the clip origin changes. |
-| `projectSequences.ts`, project validation/serialization and selectors inspect `clip.text` | Replace all procedural-owner checks together; missing one can create ghost offline media or lose dormant title data. |
+| `projectSequences.ts`, project validation/serialization and selectors inspect `clip.text` | Extend all procedural-owner checks to both mutually exclusive variants; missing one can create ghost offline media or lose dormant title data. |
 | `TextProps`, `wrapTextLines` and `drawTextPayload` also serve captions | Keep the caption-facing type/painter stable; coordinate any mechanical extraction with #201. |
 
 See [source and check evidence](evidence/issue200/initial-gate.md).
 
 ## Title definition proposal
 
-Add `Clip.title?: TitleDefinition`; migrate existing `Clip.text` into it.
-Do not persist both authoritative forms. Keep the reserved procedural asset id,
+Add `Clip.title?: TitleDefinition` while preserving supported `Clip.text` exactly.
+These are mutually exclusive wire variants: a procedural clip owns text OR title,
+never both. A media clip owns neither. Schema 23 does not add a tag, title wrapper,
+element ID, font wrapper or empty title field to a legacy text clip. It keeps
+that clip's existing text, transform and visual ownership and old editing path.
+
+For newly created or explicitly upgraded titles, keep the reserved procedural asset id,
 clip id, name, source identity/range, timing, audio/link metadata, clip opacity,
 blend intent, and ordered effect descriptors. Media clips cannot own a title;
 titles remain video-only, non-retimeable, non-transition endpoints, with no lens
@@ -95,7 +108,7 @@ pixels, not CSS pixels or normalized coordinates. The same pure forward/inverse
 geometry must serve handles and numeric edits; zero scale offers numeric editing
 and an explicit unavailable drag status. A title has no lens-coordinate inversion.
 
-For migration, create one enabled text element with opacity 1, carrying the
+An explicit Upgrade to title creates one enabled text element with opacity 1, carrying the
 **exact original** transform, visual settings and text values. Move only
 `fontFamily` into `font.family`, with `fallbackFamily: null`. Reset only the
 outer geometric fields that now live in the element. The renderer passes those
@@ -103,18 +116,83 @@ exact values back to `drawTextPayload`, with the same context transform, crop,
 global alpha, font string, line-height, line count, wrap input, and draw order as
 before. Clip effects, clip opacity and blend still run once afterward. Shape
 support must not alter text/caption defaults, clipping, shadows or line wrapping.
+The upgrade preserves appearance but is a user-authored transaction, not a forced
+load/save migration. The static legacy editor remains usable indefinitely.
 
-Migration allocates element IDs deterministically against every existing and
-reserved identity in the complete project, without randomness or browser APIs.
-It must validate/count input before building output and be idempotent. A bounded
+The pure upgrade receives fresh bounded IDs from an injected allocator and
+reserves them against every existing/orphan target across the complete project.
+It validates a complete candidate, including exact portable serialized character
+count and retained-data budgets, before one history commit. Repeat on an already
+upgraded clip is an idempotent no-op. No mutation, consumed history or discarded
+redo occurs on failure. New title features offered from a legacy clip include
+this explicit upgrade in the same reviewable transaction, with its additional
+key/element payload already in the preflight; they never upgrade silently first.
+Template capture may create an independent title snapshot without upgrading the
+source clip, and validates library capacity independently.
+
+A bounded
 newer title/element version is retained as unavailable intent, not rewritten as
 v1. Enabled unsupported elements produce named preview status and block export;
 explicitly disabled ones remain editable as retained records. Malformed known
 v1 data rejects before rendering. Unknown extension data never becomes executable.
 
+### Exact legacy file-size boundary
+
+Keep the 10,000,000-character file cap unchanged. In-memory derived status/default
+views are not new portable data. Absent empty schema-22 `titleTracks` and other
+new empty animation collections remain valid and are omitted on serialization;
+#199 must coordinate this rule for its foundation. Compatibility schema-number
+updates 21→22→23 each use two digits and add zero characters. The outer project
+format stays 8. Legacy `Clip.text` serialization otherwise retains the baseline
+allow-listed fields and canonical ordering, with no required new version tag
+per legacy clip/element or default animation track. Nonempty new data uses the
+new schema and ordinary complete-file budget preflight.
+
+This promises no #200-induced growth for previously valid canonical schema-21
+text files. Older accepted schema migrations keep their existing compatibility
+path; #200 must not add another expansion after them. Schema-21 documents with
+ordinary/effect animation also need #199's default-version serialization to
+avoid adding unavoidable bytes: an implicit legacy v1 is not newly emitted just
+to open/save, and is never inferred for an explicitly unknown version. These
+are shared serialization acceptance obligations, not permission to raise limits.
+
+The executable [boundary fixture](evidence/issue200/legacy-size-boundary.mjs)
+uses the unchanged baseline parser, serializer, factory and text edit operation.
+It builds two same-settings sequences with 300 bounded legacy text clips each;
+one sequence is dormant. Ordinary ASCII text content fills the exact target
+character length without whitespace padding, unknown fields or oversized strings.
+Every text payload remains at most 20,000 characters. The recorded
+[result](evidence/issue200/legacy-size-boundary-result.json) is:
+
+| Existing canonical characters | Baseline open/save and equal-length content/color edit | Compatibility encoding projection | One proposed explicit upgrade | Size decision |
+| --- | --- | --- | --- | --- |
+| 9,999,614 | pass, same length | 9,999,614 | 10,000,000 | fits the character cap exactly |
+| 9,999,615 | pass, same length | 9,999,615 | 10,000,001 | upgrade must reject |
+| 9,999,999 | pass, same length | 9,999,999 | 10,000,385 | upgrade must reject |
+| 10,000,000 | pass, same length | 10,000,000 | 10,000,386 | upgrade must reject |
+| 10,000,001 | parser and serializer reject | no admission | no upgrade | cap unchanged |
+
+For this concrete identity/payload fixture, one expansion costs 386 characters;
+forcing all 600 expansions costs 232,500. The actual implementation must count
+its exact candidate, not hardcode those measured deltas. Proposed schema-23
+encoding sizes are projections only; the future parser and store were not tested
+by this baseline experiment.
+
+G1b must run these exact boundaries through the actual schema-22/23 parser,
+serializer, recovery and store. It must prove legacy reopen/edit/undo/redo and
+same-length save, exact-fit upgrade/undo restoring the original representation,
+one-over upgrade rejecting with project/history/redo unchanged, and template
+capture leaving the source legacy. Include escaped text and multibyte Unicode
+fixtures to distinguish JS serialized-character limits from UTF-8 retained-byte
+limits, plus dormant animation/future-intent cases. Size-growing ordinary edits
+obey the existing file cap; ordinary content/style/move edits do not require
+extra title metadata or a successful upgrade. No automatic conversion back,
+hidden retained original JSON, truncation or implicit limit increase is allowed.
+
 ### Legacy pixel gate (required before the authoring UI)
 
-Run the unchanged baseline and migrated renderer in the same real Chromium
+Run the unchanged baseline, compatibility renderer and explicitly upgraded title
+renderer in the same real Chromium
 runtime/font environment at identical canvas settings. Capture exact raw RGBA
 and line/layout facts for all six font families, both weights/styles, multiline,
 CRLF/whitespace, long-word wrapping, non-Latin/combining/emoji text, fractional
@@ -122,11 +200,12 @@ box/position/font values, anchors 0/0.5/1, scales 0/fractional, rotated/cropped/
 flipped text, transparent backgrounds, outlines/shadows, opacity/blend, and
 ordered effects. Full/Half/Quarter preview and full-resolution export inputs
 must use identical authored coordinates. Require **zero differing RGBA bytes**
-for baseline versus migrated output in the same runtime; include caption
+for baseline versus each supported representation in the same runtime; include caption
 canaries unchanged. Do not use image tolerances to conceal a migration change.
 
-Reopen the migrated project, edit the legacy element, undo/redo, and export.
-Canvas equality is the migration pixel claim. A lossy encoded reopen is a
+Reopen the compatibility project, edit legacy text, explicitly upgrade, edit the
+new element, undo/redo across the representation change, and export each version.
+Canvas equality is the compatibility/upgrade pixel claim. A lossy encoded reopen is a
 separate delivery check with a declared codec/tolerance, never called byte parity.
 Cross-platform font equality is not inferred from this same-runtime gate.
 
@@ -144,8 +223,8 @@ interface TitleAnimationTrack {
   property: string        // only registered names below can evaluate
   keyframes: ClipAnimationKeyframe[]
 }
-// Proposed optional-in-memory, required-on-current-save container extension:
-// ClipAnimation.titleTracks: TitleAnimationTrack[]
+// Optional additive container; absence resolves to [] and empty stays omitted:
+// ClipAnimation.titleTracks?: TitleAnimationTrack[]
 ```
 
 Use #199's structured selection address
@@ -153,8 +232,15 @@ Use #199's structured selection address
 identity and project generation in the command/session envelope. Persist only
 the last three target fields within the owning clip. Array indices,
 element names, displayed labels, locale, and concatenated dotted property paths
-are never identities. One track per exact `(elementId, propertyVersion, property)`.
-Property version 1 is immutable even if UI units/labels change later.
+are never identities. **One semantic lane per `(elementId, property)`**, regardless
+of propertyVersion. Version qualifies how one lane's values may be interpreted;
+it cannot create a competing writer. A v1 and future-version track for the same
+element/property reject as duplicate ownership, including disabled or orphan
+targets. Preserve a lone unknown version as unavailable; do not reinterpret or
+replace it when adding a current-version key. Version in the selection address
+is a stale-state/compatibility guard, not a second identity dimension. Version
+replacement needs an explicit separately validated operation. Property version
+1 is immutable even if UI units/labels change later.
 
 #200 supplies pure `titleAnimationPropertySpec(element, propertyVersion, property)`
 and `readTitleAnimationProperty(element, propertyVersion, property)` adapters;
@@ -183,13 +269,17 @@ does not quantize render values. Keep anchors, crop/flip, padding, content, font
 alignment, colors, booleans and element order static in this slice. #199's clip
 crop tracks remain a separate owner; do not reinterpret them as element crop.
 
-For a title clip, outer ordinary clip tracks may animate only its existing
+For an expanded title clip, outer ordinary clip tracks may animate only its existing
 clip-wide opacity. Element transform properties use `titleTracks`; outer
 position/scale/rotation/crop and audio lanes are not authorable there. Preserve
 unknown/ineligible incoming intent with status. Clip effect tracks may use only
 the owning registry's declared safe text-stage numeric parameters after the
 complete title layer; #198 owns path-track eligibility. This makes the absence
 of a second title transform authority explicit.
+
+Legacy compatibility text keeps its static clip/text editing contract. Element
+keys, multi-element edits and roll/crawl require the explicit upgrade described
+above; no synthetic element ID or ephemeral track becomes authored project data.
 
 Padding is static, and **every** base/key box width/height must be strictly
 greater than twice padding. Existing bounded easing is convex between endpoints,
@@ -285,14 +375,13 @@ colon, quote, function, or source expression. Whitespace at either end rejects
 instead of changing a saved name. Only an explicitly resolved allow-listed
 family reaches the legacy Canvas font string.
 
-**Internal acceptance decision required:** confirm that this visible
-platform-font compatibility mode satisfies the first slice's unavailable-font
-branch, or require a separate, reviewed bundled-font catalog before font
-acceptance can close. The latter needs pinned local font bytes, provenance,
-license/size/coverage review, exact worker/export registration and cleanup; no
-font package or remote service is selected or added by this plan. Generic
-compatibility must remain for identical legacy pixels either way. Do not claim
-the full font criterion passes merely because a missing-font badge exists.
+**Internal scope decision accepted 2026-09-08:** the orchestrator approved the six
+generic families with explicit platform-dependent status and unknown named fonts
+unavailable until an explicit persisted generic fallback. A bundled custom-font
+catalog is not required for this issue. Actual main/worker/export parity remains
+mandatory before font acceptance closes; the status badge alone is not proof.
+Legacy generic intent and pixels remain unchanged. No font bytes, dependency or
+remote service is added by this decision.
 
 The first render gate must compare actual main/worker/export line breaks and
 pixels at fixed requested frames, including fallback, combining marks, bidi and
@@ -331,14 +420,14 @@ changes instances. Library mutations are independent of project history.
 
 | Proposed bound | Scope and enforcement |
 | --- | --- |
-| 1–16 elements; 80-character element/template names; 256-character IDs; 128-character property/font names | Check array/string sizes before mapping, measuring or allocating. IDs unique project-wide; track tuples unique per clip. |
+| 1–16 elements; 80-character element/template names; 256-character IDs; 128-character property/font names | Check array/string sizes before mapping, measuring or allocating. IDs unique project-wide; semantic element/property targets unique regardless of version. |
 | 20,000 text characters/element; 80,000 total title content characters; 1 MiB serialized UTF-8/title including its tracks | Retain the complete existing per-element allowance. All independent limits must pass; no truncation. |
-| 100,000 total elements across every sequence; existing 10,000,000 project text-character and serialized-character ceilings remain | Legacy one-element migration cannot lower the former clip-count envelope. Dormant/hidden/disabled elements still count. Save/recovery and every live candidate use the same counters. |
+| 100,000 total logical elements across every sequence; existing 10,000,000 project text-character and serialized-character ceilings remain | Each compact legacy text clip counts as one logical element without allocating an element record. Dormant/hidden/disabled elements still count. Save/recovery and every live candidate use the same counters. |
 | 256 title tracks/clip; existing 1,024 keys/track and 100,000 project keys | Include unsupported versions, dangling targets, disabled elements and all sequences. All clone/split/paste/template/roll operations preflight growth. |
 | 4,096 expanded visible title elements/frame | Pure composition-cost preflight includes nested instance multiplicity before layout; this accommodates the existing 4,096-leaf legacy ceiling. No per-frame graph expansion stored in history. |
 | Text geometry/style ranges in the property table; static padding 0…1,024, positive inner box; static anchor/crop/flip unchanged | Checked before layout, including all key envelopes. Hex colors only; shapes are bounded primitives. No canvas sized from an element box. |
 | 512 rendered lines/element; 64 layout entries/context and at most 8 MiB conservative retained string storage/context | Bounded derived cache, clear on owner/font replacement. Reuse the existing project-sized leg/group surfaces; zero per-element canvases. |
-| 64 MiB conservative retained title payload/track data | Count current project, past/future snapshots and app element/title/key clipboards by immutable owned references, including dormant sequences. Validate before clearing redo. Reject growth with a reason; never prune history silently. Existing 100-history-entry cap remains. |
+| 64 MiB conservative retained expanded-title payload/track data | Count new title data in current project, past/future snapshots and app element/title/key clipboards by immutable owned references, including dormant sequences. Validate before clearing redo. Reject growth with a reason; never prune history silently. Compact legacy text retains its existing file/text/history bounds rather than acquiring a new upgrade-only quota. Existing 100-history-entry cap remains. |
 | 100 local user templates; 1 MiB/template; 8 MiB/library | Includes raw unsupported siblings. Capture and use apply both library and destination bounds; maximum additional retained library allowance is separate and explicit. |
 | Opaque future title: depth 8, 4,096 entries, same aggregate string/byte caps | Bounded non-executing JSON only; supported versions validate exact keys. No getter/prototype traversal of untrusted runtime objects. |
 
@@ -346,10 +435,11 @@ The 64 MiB retained-data figure is a conservative serialized-data admission
 measure, not total JS/browser memory. It needs a pure bounded size walker and
 reference-aware snapshot accounting, modeled on existing LUT retention. Immutable
 unchanged elements/tracks are shared; gestures keep one disposable draft and one
-commit. Validate old-format input within existing bounds before migration, then
-check any new envelope overhead. If a previously valid near-limit project would
-be rejected solely by added schema bytes, treat that as a migration defect to
-resolve at the schema gate, not a license to truncate or silently drop data.
+commit. The supported compact legacy representation avoids mandatory envelope
+overhead; only an explicit upgrade can introduce it, after the exact size
+preflight above. Existing legacy history remains governed by the unchanged
+100-snapshot/file/text bounds. Do not present the expanded-title quota as a total
+browser-memory bound, or use it to force an old clip into the new representation.
 
 ## Implementation gates and ownership
 
@@ -358,28 +448,33 @@ co-author. Update `docs/evidence/issue200/` and the orchestration report each tu
 Orchestrator owns HANDOFF/PLAN consolidation, shared schema assignment, review,
 integration, remote publication and issue closure.
 
-1. **G0 — this plan/contract review.** Commit documents only. #199 reviews target
-   tuples, field mapping, fixed-local ticks and helper preservation. Orchestrator
-   accepts title schema/migration direction and resolves the font acceptance
-   branch. Stop here until that review completes.
-2. **G1 — reviewed foundations and migration.** Implement pure title validation,
-   property specs, identity allocation/remapping, all-sequence/retained budgets,
-   migration/serialization/clone/source/media-owner checks. Coordinate #199's
-   empty title-track container and scalar hooks before any renderer/UI support.
-   Focused adversarial/round-trip/split/trim/history checks; no unsupported future
-   data loss. Font support decision becomes a concrete status contract here.
-3. **G2 — shared rendering and parity.** Resolve scalar elements in the canonical
+1. **G0 — amended plan/contract review.** Commit planning/evidence only. #199
+   reviews semantic target uniqueness, field mapping, fixed-local ticks, helper
+   preservation and omission of unused compatibility metadata. Font scope and
+   migration order are now assigned. Stop before product code until approval.
+2. **G1a — independent pure title foundation.** After approval, implement only
+   `domain/titleElements.ts` types, bounds, validation and property spec/read/apply
+   adapters with focused tests. No Clip, store, migration, renderer or UI edits.
+   Commit this module for orchestrator review and sharing with #199. Its shared
+   animation foundation then lands as timeline 22.
+3. **G1b — title ownership, compatibility and upgrade.** After the shared
+   foundation is approved, add title-owner schema 23 with retained `Clip.text`,
+   explicit upgrade, serialization/clone/source/media-owner checks, identity
+   allocation/remapping and all-sequence/retained budgets. Run the exact boundary
+   fixtures against the real parser/serializer/store, plus adversarial,
+   round-trip, split/trim/history checks. No unsupported future data loss.
+4. **G2 — shared rendering and parity.** Resolve scalar elements in the canonical
    plan; paint ordered elements into one existing isolated leg. Implement strict
    title font status in preview/export owners and cache invalidation. Pass the
    legacy zero-difference gate, caption canaries, multi-element/raw export parity,
    effect/blend/scale/sequence cases and cleanup/capacity checks before UI polish.
-4. **G3 — authoring, templates and generated motion.** Accessible element list,
+5. **G3 — authoring, templates and generated motion.** Accessible element list,
    numeric Inspector and direct manipulation, add/delete/reorder, safe guides,
    template library/capture/instantiate, explicit fallback, roll/crawl preview and
    one-commit Apply. Pin project generation/sequence/selection while a dialog is
    open; a raced/locked/changed owner rejects without history. Integrate #199's
    shared dope sheet/property controls without inventing animation state.
-5. **G4 — complete acceptance on the committed implementation.** Focused/full
+6. **G4 — complete acceptance on the committed implementation.** Focused/full
    tests, build/typecheck, lint, production audit, architecture/diff checks and
    real muted headless Chromium on port 5200. Reserve the orchestrator's exclusive
    slot for full suites, browser/performance runs and final timing evidence.
@@ -399,11 +494,11 @@ Any new architecture exception requires explicit review, not an implicit import.
 
 | Issue criterion | Required evidence before closing |
 | --- | --- |
-| Existing text migrates identically and stays editable | Same-runtime zero-RGBA-difference matrix, migrated reopen/edit/undo/export; original generic intent preserved. |
+| Existing text migrates identically and stays editable | Compact compatibility survives schema updates without title expansion; exact-limit save/edit/undo/recovery; same-runtime zero-RGBA-difference for legacy and explicit upgrade; original generic intent preserved. |
 | Hostile budgets reject before layout/surface allocation | Unknown keys/versions, duplicate IDs/tuples, excessive arrays/depth/strings/elements, invalid font/color/shape/numbers, coupled box envelopes; allocation spies stay at zero on reject. |
 | Local templates are safe/fresh/editable | Built-ins plus capture/use/delete; IDs disjoint across duplicate/split/paste/sequence/template; atomic quota/future-envelope behavior; no source network request or executable path. |
 | Roll/crawl/animated properties use exact frames everywhere | Every property at boundary/interior frames and all easing modes; arbitrary nonsequential seeks equal sequential playback/export; trim/split/extend/reapply preserve manual edits. |
-| Deterministic or visibly unavailable fonts/layout | Accepted G0/G1 font mode decision, actual worker/export proof, missing/unknown/fallback and reopen tests; cross-platform qualification stated honestly. |
+| Deterministic or visibly unavailable fonts/layout | Approved generic compatibility mode, actual main/worker/export proof, missing/unknown/fallback and reopen tests; cross-platform qualification stated honestly. |
 | Accessibility and responsive editing | Keyboard element selection/order/add/delete, labeled numeric alternatives, focus return/trap/Escape, screen-reader status, safe-area labels and contrast, 1280×720 and 720×800 with no overflow. |
 | Real Chromium flow and cleanup | Legacy title, multiple coordinated elements, user template create/use, roll/crawl, #199 keys, missing-font explicit fallback, save/reopen, export raw pixels/reopen, cancel/dispose/retry and clean console. |
 | Full engineering gates | Exact commit provenance, focused/full result separation, build/typecheck, lint, audit, diff and production graph exclusion of any evidence-only harness. |

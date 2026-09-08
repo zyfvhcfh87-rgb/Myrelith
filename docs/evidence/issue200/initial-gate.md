@@ -10,6 +10,8 @@ Source inspection and a small unchanged-baseline test run support the proposed
 implementation contract. There is no product code, schema migration, browser
 pixel proof, full-suite run, build, lint, audit, or implementation acceptance in
 this gate. Those remain explicitly scheduled in `docs/ISSUE_200_PLAN.md`.
+The initial proposal was committed at `f096da4`; the amended-gate section below
+records the review corrections and additional real baseline size experiment.
 
 Read coordination instructions, worktree AGENTS.md and the full ARCHITECTURE.md;
 reviewed HANDOFF's current status and working agreements, PLAN's #33/#43 gates,
@@ -96,6 +98,58 @@ Primary sources consulted 2026-09-08 (CSSWG working drafts):
 Therefore the plan does not treat `check()` or a width sentinel as proof of
 font identity or complete glyph coverage. Generic compatibility is visibly
 qualified; missing named intent cannot be silently sent through browser fallback.
-The orchestrator must accept that first-slice mode or require a reviewed local
-font catalog before the font acceptance gate closes. No font has been fetched,
+The orchestrator accepted that first-slice generic compatibility mode on
+2026-09-08, with real main/worker/export parity still required. A bundled custom
+font catalog is not required for this issue. No font has been fetched,
 registered, licensed, bundled or added as a dependency in this gate.
+
+## Amended Gate 0 — semantic targets and exact file-size boundaries
+
+The orchestrator requested two corrections before approval: semantic title lane
+identity is `(elementId, property)` independent of propertyVersion; and valid
+legacy text must not be forced into a larger title representation on open/save.
+The amended plan now retains mutually exclusive supported `Clip.text` and
+`Clip.title` variants, with title creation/upgrade requiring full candidate
+validation. #199 was notified about semantic uniqueness and omission of empty
+new collections/default-version metadata needed for zero-growth compatibility.
+
+The orchestrator assigned pure titleElements first (no Clip/migration changes),
+#199 animation foundation as timeline 22, then title ownership as timeline 23.
+This is a reviewed order, not an implemented migration or approval to begin it.
+
+```sh
+export DEVELOPER_DIR=/Library/Developer/CommandLineTools
+NODE_OPTIONS=--no-experimental-webstorage node \
+  docs/evidence/issue200/legacy-size-boundary.mjs
+```
+
+The evidence-only Node script uses Vite's in-process TypeScript loader with no
+listening server, watcher or websocket; it closes that owner in `finally`.
+It asserts it is running in its own worktree and that the production source
+tree equals baseline `ce91074`. It writes only the small checked-in result,
+not four 10 MB fixture files. Production source imports none of this fixture.
+
+Observed final run: exit 0. Source tree
+`5da2bb78f3d4aa7afa494fef2d487fa0cc0bca39`. Four deterministic real legacy projects
+at exactly 9,999,614; 9,999,615; 9,999,999; and 10,000,000 serialized characters
+passed actual baseline parse/serialize equality and equal-length content/color
+editing plus save/reopen. The parser and serializer both rejected 10,000,001.
+Each fixture contains 600 real text clips across root and dormant sequences,
+bounded to 20,000 characters each; no unknown field or whitespace filler cheats.
+
+The proposed single expanded title adds 386 characters in this fixture. The
+exact character threshold is 9,999,614→10,000,000; the next input character would
+make the upgrade exceed the cap. Forced expansion of all 600 adds 232,500.
+Preserving legacy Clip.text and omitting new empty fields projects zero growth
+for two-digit schema 21→22→23. See `legacy-size-boundary-result.json`.
+
+Qualification: baseline parser/serializer/edit results are executed evidence.
+The future compatibility and title-envelope sizes are data-shape projections,
+not proof of a schema-23 parser, undo/recovery implementation or title renderer.
+G1b must run the same fixtures against those actual production boundaries.
+
+The script's first attempt resolved its root one directory too high and could
+not load the domain module. It was corrected to resolve its own worktree and
+assert the running directory. The rerun passed, then the fixture was expanded
+with exact-fit/one-over upgrade thresholds and passed again. No product files or
+schema limits changed. Node syntax and whitespace/diff checks also passed.
