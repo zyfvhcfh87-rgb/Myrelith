@@ -1,0 +1,15 @@
+(node:5402) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ actual generated binary defines exactly one bounded unshared wasm32 memory (0.279916ms)
+✔ memory sharing, memory64, unbounded/changed/missing memory and truncation reject (3.585667ms)
+✔ all generated imports resolve and all eleven adapter exports have their C ABI (6.7275ms)
+✔ actual generated supplied-byte loader resolves the exact name with no fetch/XHR/read (1.05225ms)
+✔ unapproved generated filenames fail before the byte-consumption boundary (0.353292ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 137.831083

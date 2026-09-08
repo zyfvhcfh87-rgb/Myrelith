@@ -1,0 +1,71 @@
+{
+  "scope": "Conservative notice coverage for linked upstream/runtime archive inputs; not an archive-member dead-strip map",
+  "sources": [
+    {
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "path": "install/emscripten/LICENSE",
+      "bytes": 5093,
+      "sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86"
+    },
+    {
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "path": "install/emscripten/AUTHORS",
+      "bytes": 29142,
+      "sha256": "018d4191aa649d5c82ba1b2f9117b9902648792c89d5f0d5564a689dc4198aaa"
+    },
+    {
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "path": "install/emscripten/system/lib/libc/musl/COPYRIGHT",
+      "bytes": 6196,
+      "sha256": "b870108ec5e7790e9f9919064f1b9421d62d5f9b0e6c230c6adf7ea2da62e97b"
+    },
+    {
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "path": "install/emscripten/system/lib/libcxx/LICENSE.TXT",
+      "bytes": 16703,
+      "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+    },
+    {
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "path": "install/emscripten/system/lib/libcxxabi/LICENSE.TXT",
+      "bytes": 16706,
+      "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+    },
+    {
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "path": "install/emscripten/system/lib/compiler-rt/LICENSE.TXT",
+      "bytes": 16708,
+      "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+    },
+    {
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "path": "install/emscripten/system/lib/libunwind/LICENSE.TXT",
+      "bytes": 16706,
+      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+    },
+    {
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "path": "install/emscripten/system/lib/llvm-libc/LICENSE.TXT",
+      "bytes": 15140,
+      "sha256": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47"
+    },
+    {
+      "archive": "wasm-binaries-arm64.tar.xz",
+      "path": "install/emscripten/system/lib/dlmalloc.c",
+      "bytes": 236570,
+      "sha256": "175ef7cab6d59b858471ad8ba16ee8a2f0536ddf666742b5e044b187171695d6"
+    },
+    {
+      "source": "accepted pinned preparation evidence",
+      "path": "whisper-LICENSE",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "source": "accepted pinned preparation evidence",
+      "path": "openai-whisper-LICENSE",
+      "bytes": 1063,
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d"
+    }
+  ]
+}
