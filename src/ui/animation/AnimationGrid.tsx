@@ -98,10 +98,14 @@ export default memo(function AnimationGrid({ index, rows, focused, frame, mode, 
                 const offset = glyph.first, keyFrame = row.frames[offset], selectedFrames = selected.get(row.id) ?? []
                 const selectedCount = animationLowerBound(selectedFrames, row.frames[glyph.end - 1] + 1) - animationLowerBound(selectedFrames, keyFrame)
                 const pressed = selectedCount > 0
-                return <g key={offset} transform={`translate(${(glyph.globalFrame - start) * zoom} ${ROW / 2})`} data-animation-glyph
+                // Preview reserves room for ghosts and can change bucket boundaries.
+                // Keep the captured element alive in the bucket containing its original offset.
+                const captured = drag.capturedGlyph
+                const elementKey = captured?.rowId === row.id && captured.offset >= glyph.first && captured.offset < glyph.end ? captured.offset : offset
+                return <g key={elementKey} transform={`translate(${(glyph.globalFrame - start) * zoom} ${ROW / 2})`} data-animation-glyph
                   role="gridcell" aria-selected={pressed} aria-label={`${row.label}, local frame ${keyFrame}${glyph.count > 1 ? `, ${glyph.count} keys in this bucket, ${selectedCount} selected; use arrow keys for exact selection` : ''}`}
                   className={pressed ? 'animation-key is-selected' : 'animation-key'}
-                  onPointerDown={(event) => { const local = event.clientX - event.currentTarget.ownerSVGElement!.getBoundingClientRect().left; const nearest = animationLowerBound(row.globalFrames, start + local / zoom); drag.down(event, row, Math.max(glyph.first, Math.min(glyph.end - 1, nearest))); root.current?.focus() }}
+                  onPointerDown={(event) => { const local = event.clientX - event.currentTarget.ownerSVGElement!.getBoundingClientRect().left; const nearest = animationLowerBound(row.globalFrames, start + local / zoom); drag.down(event, row, Math.max(glyph.first, Math.min(glyph.end - 1, nearest)), glyph.first); root.current?.focus() }}
                   onPointerMove={drag.move} onPointerUp={drag.up} onPointerCancel={drag.cancel} onLostPointerCapture={drag.cancel}>
                   {glyph.count > 1 ? <><rect x={-10} y={-9} width={20} height={18} rx={3} /><text textAnchor="middle" y={4}>{glyph.count}</text></> : <path d="M 0 -6 L 6 0 L 0 6 L -6 0 Z" />}
                 </g>

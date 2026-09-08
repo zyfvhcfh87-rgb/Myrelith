@@ -1,0 +1,69 @@
+{
+  "at": "2026-09-08T19:15:07.019Z",
+  "componentRegression": {
+    "correctedFixtureRed": 3,
+    "targetedGreen": 3,
+    "focusedGreen": 64,
+    "runnerChecks": 17
+  },
+  "lintPassed": true,
+  "productionBuild": {
+    "status": "passed",
+    "verifiedAt": "2026-09-08T19:18:54.915Z",
+    "existingChunkAdvisoryRetained": true
+  },
+  "nativeRun": "ONE unchanged large segment conditionally granted after clean commit/source identity freeze; not executed for this patch yet",
+  "sourcePaths": 242,
+  "changedSourcePaths": [
+    "src/ui/animation/AnimationGrid.tsx",
+    "src/ui/animation/AnimationWorkspace.test.tsx",
+    "src/ui/animation/useAnimationPointer.ts"
+  ],
+  "unchangedSourcePaths": 239,
+  "harnessCheckpointFilesUnchanged": 58,
+  "copies": [
+    {
+      "name": "setup-failure.log",
+      "rawPath": ".tmp/issue199/dense-capture-red.log",
+      "rawSha256": "7af1a683876b0e07571f5a00812c7fe8523c17a02452142cb751ba339844de7d",
+      "copySha256": "9aab5a01951827215af8f39ed03ca3d346d9eb3ed320c753ea665e610c44f8f0",
+      "normalization": "ANSI/CR and trailing whitespace removed; raw retained"
+    },
+    {
+      "name": "red.log",
+      "rawPath": ".tmp/issue199/dense-capture-red2.log",
+      "rawSha256": "70346035dad2834b6382b0cc4c986d1531188cb3088640ba02731f5beb18eaf7",
+      "copySha256": "074a40f082004e6b0811ced339761f24f9270f82ec100cf322163d968e8ea2c6",
+      "normalization": "ANSI/CR and trailing whitespace removed; raw retained"
+    },
+    {
+      "name": "targeted.log",
+      "rawPath": ".tmp/issue199/dense-capture-green.log",
+      "rawSha256": "2ffcf3dbfad95f3e2ea89fd3e11bea3645c45b8ef1a5d074c1ae5d8d34cb210b",
+      "copySha256": "2ffcf3dbfad95f3e2ea89fd3e11bea3645c45b8ef1a5d074c1ae5d8d34cb210b",
+      "normalization": "ANSI/CR and trailing whitespace removed; raw retained"
+    },
+    {
+      "name": "focused.log",
+      "rawPath": ".tmp/issue199/dense-capture-focused.log",
+      "rawSha256": "60d5acf59ae445ecc661bbda1c5b0a8a7dccec8859dc5a2a3ff39a9a43259c7c",
+      "copySha256": "60d5acf59ae445ecc661bbda1c5b0a8a7dccec8859dc5a2a3ff39a9a43259c7c",
+      "normalization": "ANSI/CR and trailing whitespace removed; raw retained"
+    },
+    {
+      "name": "lint.log",
+      "rawPath": ".tmp/issue199/dense-capture-lint.log",
+      "rawSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "copySha256": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c",
+      "normalization": "ANSI/CR and trailing whitespace removed; raw retained"
+    },
+    {
+      "name": "build.log",
+      "rawPath": ".tmp/issue199/dense-capture-build.log",
+      "rawSha256": "662eaa5d7761fcb25fc7c68d8baded66a28111bb0783aab94f4f992422be9230",
+      "copySha256": "15170579d56c5ba3e9786ea43459b9284e6ad0152bc61ef1ea8ed367eb715f00",
+      "normalization": "ANSI/CR and trailing whitespace removed; raw retained"
+    }
+  ],
+  "parentReview": "Exact three-file patch accepted; independent same three-case component run passed."
+}

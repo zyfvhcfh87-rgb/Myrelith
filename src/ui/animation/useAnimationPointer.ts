@@ -1,15 +1,17 @@
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { beginAnimationKeyDrag, animationCommandResult } from '../../app/animationWorkspaceController'
 import { animationKeyKey, type AnimationLaneIndex, type AnimationLaneRow } from '../../state/animationEditor'
 import { useTransportStore } from '../../state/transportStore'
 
 export function useAnimationPointer(index: AnimationLaneIndex, zoom: number, select: (row: AnimationLaneRow, offset: number, extend: boolean, toggle: boolean) => void) {
   const session = useRef<{ pointer: number; startX: number; moved: boolean; target: SVGElement; drag: ReturnType<typeof beginAnimationKeyDrag> } | null>(null)
+  const [capturedGlyph, setCapturedGlyph] = useState<{ rowId: string; offset: number } | null>(null)
   const cancel = () => session.current?.drag.cancel()
   useEffect(() => () => { session.current?.drag.cancel() }, [index, zoom])
   return {
+    capturedGlyph,
     cancel,
-    down(event: ReactPointerEvent<SVGElement>, row: AnimationLaneRow, offset: number) {
+    down(event: ReactPointerEvent<SVGElement>, row: AnimationLaneRow, offset: number, glyphOffset: number) {
       if (event.button !== 0 || row.owner.track.locked) return
       event.preventDefault(); event.stopPropagation(); cancel()
       const key = { lane: row.address, frame: row.frames[offset] }, state = useTransportStore.getState()
@@ -21,9 +23,11 @@ export function useAnimationPointer(index: AnimationLaneIndex, zoom: number, sel
       try {
         const drag = beginAnimationKeyDrag(index, () => {
           session.current = null
+          setCapturedGlyph(null)
           if (target.hasPointerCapture?.(pointer)) target.releasePointerCapture(pointer)
         })
         session.current = { pointer, startX: event.clientX, moved: false, target, drag }
+        setCapturedGlyph({ rowId: row.id, offset: glyphOffset })
         target.setPointerCapture?.(pointer)
       } catch (error) { animationCommandResult(error instanceof Error ? error.message : 'Cannot move these keys.', '') }
     },

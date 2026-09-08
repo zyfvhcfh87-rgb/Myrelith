@@ -7,7 +7,7 @@ import { useMediaStore } from '../../state/mediaStore'
 import { usePreferencesStore } from '../../state/preferencesStore'
 import { animationEditorController } from '../../app/animationEditorController'
 import { legacyTitleProject, expandedTitleProject } from '../../test/titleOwnerFixtures'
-import { foundationProject, scalarKey } from '../../test/animationFoundationFixtures'
+import { ATTRIBUTE_ASSET_DESCRIPTOR, foundationProject, scalarKey } from '../../test/animationFoundationFixtures'
 import { clipWithAnimationKeyframeCount } from '../../test/animationBudgetFixtures'
 import * as laneIndex from '../../domain/animationLaneIndex'
 import AnimationWorkspace from './AnimationWorkspace'
@@ -120,6 +120,65 @@ describe('unified animation workspace', () => {
     expect(document.getElementById(grid().getAttribute('aria-activedescendant')!)).toHaveTextContent('local frame 1023')
     keyDown('a', { ctrlKey: true }); expect(transport().animationSelection).toHaveLength(1)
     expect(screen.getByRole('status').textContent).toMatch(/4,096/)
+  })
+
+  test.each(['commit', 'capture loss', 'Escape'])('dense bucket identity survives preview rebucketing through %s with all 1,024 keys selected', (ending) => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1224)
+    const project = foundationProject(), clip = project.sequences[0].tracks[0].clips[0]
+    clip.animation = { tracks: [{ property: 'opacity', keyframes: Array.from({ length: 1024 }, (_, frame) => scalarKey(frame, frame % 2)) }] }
+    project.sequences[0].tracks[0].clips[0] = clipWithAnimationKeyframeCount(clip)
+    useMediaStore.setState({ descriptors: new Map([[ATTRIBUTE_ASSET_DESCRIPTOR.id, ATTRIBUTE_ASSET_DESCRIPTOR]]) })
+    act(() => store().setProject(project))
+    const { container } = render(<AnimationWorkspace />)
+    fireEvent.change(screen.getByLabelText('Filter animation lanes'), { target: { value: 'Opacity' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Fit keys' }))
+    keyDown('Home'); keyDown('End', { shiftKey: true })
+    keyDown('ArrowRight', { ctrlKey: true })
+    expect(store().past, screen.getByRole('status').textContent ?? '').toHaveLength(1)
+    keyDown('z', { ctrlKey: true })
+    keyDown('Home'); keyDown('End', { shiftKey: true }); keyDown('c', { ctrlKey: true })
+    expect(transport().animationSelection).toHaveLength(1024)
+    const before = store(), clipboard = animationEditorController.getClipboard()
+    expect(before.future).toHaveLength(1); expect(clipboard).not.toBeNull()
+    const target = [...container.querySelectorAll<SVGGElement>('.is-focused [data-animation-glyph]')].at(-1)!
+    const originalLabel = target.getAttribute('aria-label')
+    expect(originalLabel).toContain('keys in this bucket')
+    let captured = false
+    const releasedWhileConnected: boolean[] = []
+    Object.assign(target, {
+      setPointerCapture: () => { captured = true }, hasPointerCapture: () => captured,
+      releasePointerCapture: () => { releasedWhileConnected.push(target.isConnected); captured = false },
+    })
+    const unchanged = () => {
+      expect(store().project).toBe(before.project); expect(store().past).toBe(before.past); expect(store().future).toBe(before.future)
+      expect(animationEditorController.getClipboard()).toBe(clipboard)
+    }
+    fireEvent.pointerDown(target, { button: 0, pointerId: 72, clientX: 0, altKey: true })
+    expect(captured).toBe(true)
+    fireEvent.pointerMove(target, { pointerId: 72, clientX: 4, altKey: true }); flushFrames()
+    expect(transport().animationPreview?.selection).toHaveLength(1024); unchanged()
+    expect(target.isConnected).toBe(true); expect(captured).toBe(true)
+    expect(target.getAttribute('aria-label')).not.toBe(originalLabel)
+    expect(container.querySelectorAll('.animation-key-ghost').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('[data-animation-glyph]').length).toBeLessThanOrEqual(512)
+    fireEvent.pointerMove(target, { pointerId: 72, clientX: 8, altKey: true }); flushFrames()
+    expect(target.isConnected).toBe(true); expect(transport().animationPreview?.selection).toHaveLength(1024); unchanged()
+    if (ending === 'commit') {
+      const delta = Math.round(12 / transport().zoom)
+      fireEvent.pointerUp(target, { pointerId: 72, clientX: 12, altKey: true })
+      expect(store().past).toHaveLength(before.past.length + 1); expect(store().future).toHaveLength(0)
+      expect(keys().map((key) => key.frame)).toEqual(Array.from({ length: 1024 }, (_, frame) => frame + delta))
+      expect(animationEditorController.getClipboard()).toBe(clipboard)
+      keyDown('z', { ctrlKey: true }); expect(store().project).toBe(before.project)
+    } else {
+      if (ending === 'capture loss') { captured = false; fireEvent.lostPointerCapture(target, { pointerId: 72 }) }
+      else keyDown('Escape')
+      unchanged()
+      fireEvent.pointerMove(target, { pointerId: 72, clientX: 12, altKey: true })
+      fireEvent.pointerUp(target, { pointerId: 72, clientX: 12, altKey: true }); flushFrames(); unchanged()
+    }
+    expect(captured).toBe(false); expect(releasedWhileConnected).toEqual(ending === 'capture loss' ? [] : [true])
+    expect(transport().animationPreview).toBeNull(); expect(transport().effectDocumentPreview).toBeNull(); expect(frames.size).toBe(0)
   })
 
   test('a click makes no edit; captured drag is data-only until release and lost capture/Escape cancel it', () => {
