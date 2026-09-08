@@ -1,0 +1,15 @@
+{
+  "sourceHead": "b643025c1cd4e0c4284f79f8b5f2d11cc87a934b",
+  "rawDirectory": "/private/tmp/issue199-g4/2026-09-08T21-36-36.768Z",
+  "resultSha256": "b8fd5c38fd3f385c19849334edc18491fcf264fd5e7b193b56769cb1e09f57dc",
+  "passedCheckpoints": 7,
+  "failure": {
+    "step": "real VP9/Opus export, reopen decode and frozen pixel/PCM predicates",
+    "error": "AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:\n\n  assert.ok(Math.abs(result.videoPackets.averagePacketRate - 30) < 0.001)\n\n    at verifyEncoded (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/g4/oracles.mjs:12:61)\n    at file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/g4/execute.mjs:146:92\n    at async step (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/g4/execute.mjs:51:20)\n    at async file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/g4/execute.mjs:140:3"
+  },
+  "sessionEvents": 28,
+  "sessionErrors": [],
+  "problems": [],
+  "traceEntries": 252,
+  "qualification": "Failed G4. No final application admission drain or persistence settle. Saved metadata inspection is not a native retry."
+}
