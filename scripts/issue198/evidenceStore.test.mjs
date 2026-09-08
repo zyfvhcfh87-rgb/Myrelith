@@ -65,8 +65,8 @@ test('the runner requires a full immutable SHA and exactly one reviewed segment'
   assert.throws(() => parseOptions([]), /full commit/)
   assert.throws(() => parseOptions(['--expected-sha', 'a'.repeat(40), '--segment', 'all']), /segment/)
   assert.deepEqual(parseOptions(['--expected-sha', 'a'.repeat(40), '--segment', 'raster']), { port: 5198, segment: 'raster', expectedSha: 'a'.repeat(40), output: null })
-  assert.equal(parseOptions(['--expected-sha', 'a'.repeat(40), '--segment', 'export-completion']).segment, 'export-completion')
-  assert.throws(() => parseOptions(['--expected-sha', 'a'.repeat(40), '--segment', 'export-completion', '--port', '5200']), /strict port 5198/)
+  assert.equal(parseOptions(['--expected-sha', 'a'.repeat(40), '--segment', 'export-lifecycle']).segment, 'export-lifecycle')
+  assert.throws(() => parseOptions(['--expected-sha', 'a'.repeat(40), '--segment', 'export-lifecycle', '--port', '5200']), /strict port 5198/)
 })
 test('the single codec-control artifact is retained without permitting arbitrary binary names', async () => directory(async (path) => {
   const store = await createEvidenceStore(path)

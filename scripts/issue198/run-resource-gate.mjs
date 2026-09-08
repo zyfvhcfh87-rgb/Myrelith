@@ -29,9 +29,9 @@ export function parseOptions(args) {
     else throw new Error(`Unknown option ${args[index]}`)
   }
   if (!/^[0-9a-f]{40}$/.test(options.expectedSha ?? '')) throw new Error('--expected-sha must pin a full commit SHA')
-  if (!['raster', 'export', 'export-completion'].includes(options.segment)) throw new Error('--segment must be raster, export or export-completion')
+  if (!['raster', 'export', 'export-lifecycle'].includes(options.segment)) throw new Error('--segment must be raster, export or export-lifecycle')
   if (!Number.isSafeInteger(options.port) || options.port < 1024 || options.port > 65535) throw new Error('Invalid strict port')
-  if (options.segment === 'export-completion' && options.port !== 5198) throw new Error('Export completion requires strict port 5198')
+  if (options.segment === 'export-lifecycle' && options.port !== 5198) throw new Error('Export completion requires strict port 5198')
   return options
 }
 
@@ -69,8 +69,8 @@ export async function run(options) {
   const initial = await sourceIdentity(root)
   if (initial.commit !== options.expectedSha || initial.dirty) throw new Error('The reviewed source SHA must match a clean worktree')
   if (await portIsOpen(options.port)) throw new Error('The strict port is already occupied')
-  const completion = options.segment === 'export-completion', files = new Map()
-  if (completion) for (const expected of DIAGNOSTIC_INPUTS) {
+  const completion = options.segment === 'export-lifecycle', files = new Map()
+  if (completion) for (const expected of DIAGNOSTIC_INPUTS.slice(0, 1)) {
     files.set(expected.name, await bounded(readDiagnosticInput(join(root, '.tmp/issue198-8129d4e-export-attempt1', expected.name), expected), 5000, 'Pinned completion input'))
   }
   await mkdir(join(root, '.tmp'), { recursive: true })
@@ -110,7 +110,7 @@ export async function run(options) {
     }
     await record({ kind: 'run-start', options, source: initial, runnerPid: process.pid, awakePid: awake?.pid ?? null,
       host: { node: process.version, platform: platform(), release: release(), arch: arch(), cpus: cpus(), totalMemoryBytes: totalmem() } })
-    vite = await setup(() => completion ? createDiagnosticVite(root, files, () => ++servedMediaRequests)
+    vite = await setup(() => completion ? createDiagnosticVite(root, files, () => ++servedMediaRequests === 1 ? 1 : 3)
       : createServer({ root, server: { host: '127.0.0.1', port: options.port, strictPort: true }, logLevel: 'warn' }), 'Vite creation')
     await setup(() => vite.listen(), 'Vite listen')
     const launch = { headless: true, args: ['--mute-audio', '--enable-precise-memory-info'], timeout: 30_000 }
@@ -130,7 +130,7 @@ export async function run(options) {
       checkCaller(caller)
       if (completion) {
         if (!binaryNames.has(part.name)) {
-          if (binaryNames.size >= 7 || !Number.isSafeInteger(part.totalBytes) || part.totalBytes <= 0
+          if (binaryNames.size >= 6 || !Number.isSafeInteger(part.totalBytes) || part.totalBytes <= 0
             || binaryBytes + part.totalBytes > 128 * 1024 * 1024) throw new Error('Completion aggregate binary cap exceeded')
           binaryNames.add(part.name); binaryBytes += part.totalBytes
         }
@@ -158,6 +158,7 @@ export async function run(options) {
     const check = async () => {
       if (stopping) throw new Error('Run interrupted')
       if (completion && evidence.failure) throw evidence.failure
+      if (completion && servedMediaRequests > 1) throw new Error('Lifecycle immutable request cap exceeded')
       if (problems.length) throw new Error(`Browser or evidence problem: ${JSON.stringify(problems)}`)
       assertSourceIdentityUnchanged(initial, await sourceIdentity(root))
     }
@@ -187,10 +188,10 @@ export async function run(options) {
         const gate = await import('/scripts/issue198/exportResourceGate.ts'), io = await import('/scripts/issue198/browserIO.ts')
         if (completion) return (await import('/scripts/issue198/exportCompletionGate.ts')).prepareExportCompletion(io.recordEvidence, io.persistBinary)
         return gate.prepareExportFixture(io.recordEvidence, io.persistBinary)
-      }, completion), completion ? 150_000 : 120_000, 'Export fixture/control preparation')
+      }, completion), 120_000, 'Export fixture preparation')
       let lifecycleComplete = false
       try {
-        if (completion && servedMediaRequests !== 2) throw new Error('Completion immutable request count differs')
+        if (completion && servedMediaRequests !== 1) throw new Error('Completion immutable request count differs')
         for (let index = 0; index < 3; index++) for (const mode of ['complete', 'cancel', 'retry']) {
           await check(); await sampleMemory(`export-${index}-${mode}-before`)
           await bounded(page.evaluate(async ({ index, mode, fixture }) => {

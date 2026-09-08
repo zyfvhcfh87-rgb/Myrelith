@@ -15,7 +15,7 @@ import { applyOrderedPixelEffectsToRgba } from '../../src/domain/effectPixels'
 import { maskParams } from '../../src/domain/effectStack'
 import { videoPixelWorkBudget } from '../../src/domain/videoPixelWorkBudget'
 import { createMediabunnyExportDeps, createMediabunnyExportMediaSource } from '../../src/pipeline/export-mediabunny'
-import { exportTimeline } from '../../src/pipeline/export'
+import { exportTimeline, type ExportDeps } from '../../src/pipeline/export'
 import type { Composite2D } from '../../src/pipeline/render'
 import type { ColorGradingFrame } from '../../src/pipeline/colorGradingRuntime'
 import { matrixFixture, type RecordEvidence } from './maskPerformanceGate'
@@ -37,6 +37,8 @@ export interface ExportFixture {
   identity: string
   compareOutput?: (buffer: ArrayBuffer, record: RecordEvidence) => Promise<void>
   claimSourceRequest?: () => void
+  observeComposite?: (composite: ExportDeps['composite'], request: Parameters<ExportDeps['composite']>, record: RecordEvidence) => ReturnType<ExportDeps['composite']>
+  finishAttempt?: (mode: 'complete' | 'cancel' | 'retry', success: boolean) => Promise<void>
 }
 
 async function fixtureVideo(): Promise<Blob> {
@@ -87,7 +89,7 @@ export async function prepareExportFixture(record: RecordEvidence, persist: Pers
 }
 
 /** Interface-level observations. Decoder internals remain explicitly unavailable. */
-function observedProductionDeps(claimSourceRequest?: () => void) {
+function observedProductionDeps(fixture: ExportFixture, record: RecordEvidence) {
   const counters = { mediaOpened: 0, mediaClosed: 0, leasesOpened: 0, leasesClosed: 0, liveLeases: 0,
     peakLeases: 0, sourceRequests: 0, sinksOpened: 0, sinksFinalized: 0, sinksCancelled: 0, liveSinks: 0,
     framesAdded: 0, composites: 0, activeComposites: 0, readbacks: 0, liveReadbackBytes: 0,
@@ -131,7 +133,7 @@ function observedProductionDeps(claimSourceRequest?: () => void) {
         openFrame: async (frame) => {
           const lease = await source.openFrame(frame); counters.leasesOpened++; counters.liveLeases++
           counters.peakLeases = Math.max(counters.peakLeases, counters.liveLeases)
-          return { plan: lease.plan, getFrame: (...request) => { claimSourceRequest?.(); counters.sourceRequests++; return lease.getFrame(...request) },
+          return { plan: lease.plan, getFrame: (...request) => { fixture.claimSourceRequest?.(); counters.sourceRequests++; return lease.getFrame(...request) },
             close: async () => { await lease.close(); counters.leasesClosed++; counters.liveLeases-- } }
         },
         close: async () => { await source.close(); counters.mediaClosed++ },
@@ -148,7 +150,7 @@ function observedProductionDeps(claimSourceRequest?: () => void) {
               surfaceHeight: profile?.outputHeight ?? doc.height, projectWidth: doc.width, projectHeight: doc.height }, grading?.context)
             if (work.reason) throw new Error(work.reason)
             counters.modeledPixelWorkBytesPeak = Math.max(counters.modeledPixelWorkBytesPeak, work.peakAdditionalBytes)
-            return await real.composite(...request)
+            return fixture.observeComposite ? await fixture.observeComposite(real.composite, request, record) : await real.composite(...request)
           }
           finally { counters.activeComposites--; readbacks.clear(); counters.liveReadbackBytes = 0; sampleSurfaces() }
         },
@@ -219,7 +221,9 @@ async function compareOutput(buffer: ArrayBuffer, original: Blob, record: Record
 
 export async function measureExportAttempt(index: number, mode: 'complete' | 'cancel' | 'retry', fixture: ExportFixture,
   record: RecordEvidence, persist: PersistBinary) {
-  const observer = observedProductionDeps(fixture.claimSourceRequest), started = performance.now(), progress: number[] = []
+  const outputRecord: RecordEvidence = (event) => record({ ...event, index, mode })
+  const observer = observedProductionDeps(fixture, outputRecord), started = performance.now(), progress: number[] = []
+  let attemptPassed = false
   let cancellation: Promise<void> | undefined, cancellationAt: number | null = null, timedOut = false
   let progressWrites: Promise<void> = Promise.resolve(), recordFailure: unknown
   const timer = setTimeout(() => { timedOut = true; cancellation = cancelExport() }, EXPORT_TIMEOUT_MS)
@@ -259,19 +263,23 @@ export async function measureExportAttempt(index: number, mode: 'complete' | 'ca
     } else {
       if (!result || result.destination !== 'download' || owners.framesAdded !== EXPORT_FRAMES || owners.sinksFinalized !== 1) throw new Error('Export did not complete exactly 300 frames')
       await persist(`export-${mode}-${index}.mp4`, result.buffer)
-      const outputRecord: RecordEvidence = (event) => record({ ...event, index, mode })
       if (fixture.compareOutput) await fixture.compareOutput(result.buffer, outputRecord)
       else await compareOutput(result.buffer, fixture.blob, outputRecord)
     }
     if (timedOut) throw new Error('Export attempt and parity exceeded the 120-second ceiling')
     await record({ kind: 'export-attempt-complete', index, mode })
+    attemptPassed = true
   } catch (cause) {
     await progressWrites
     await record({ kind: 'export-attempt-failed', index, mode, progress, cancellationAt, timedOut,
       owners: observer.snapshot(), error: cause instanceof Error ? cause.message : String(cause) })
     throw cause
   } finally {
-    clearTimeout(timer); await disposeExport(); if (cancellation) await cancellation
-    await record({ kind: 'export-attempt-released', index, mode, owners: observer.snapshot(), admission: mediaResourceAdmission.snapshot() })
+    clearTimeout(timer)
+    try { await disposeExport(); if (cancellation) await cancellation }
+    finally {
+      try { await fixture.finishAttempt?.(mode, attemptPassed) }
+      finally { await record({ kind: 'export-attempt-released', index, mode, owners: observer.snapshot(), admission: mediaResourceAdmission.snapshot() }) }
+    }
   }
 }

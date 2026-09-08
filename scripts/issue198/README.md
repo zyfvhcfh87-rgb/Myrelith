@@ -131,32 +131,34 @@ remain intact. Its 5 ms injected close deadlines are test-only; the actual
 runner retains the deadlines above. All ten Node checks passed (306 ms), with
 typecheck and lint passing. Full native execution remains pending.
 
-## Completion follow-up: one reviewed native run
+## Remaining lifecycle completion
 
-The original export's max-12 failure remains recorded (frame 127 max 19).
-`export-completion` reuses its two pinned MP4s from
-`.tmp/issue198-8129d4e-export-attempt1`; it does not regenerate the source.
-One independent static/held-path control uses the unchanged production codec
-profile. Exact decoded control/old-output RGB at 0/127/255/299 and mean <= 2
-against the independent pre-encode reference must pass before the existing
-three complete/cancel60/retry cycles can start. Every subsequent completed
-output uses those same four control/reference targets. Per-target maxima and
-the original max-12 outcome remain visible, including failures. This qualifies
-those four targets, not lossless encoding or all-frame codec quality.
+Both historical failures remain recorded: production exceeded max12, and the
+independent lossy control reproduced maxima19/16/16 but did not match a separate
+encode exactly. Parent review replaced those unsuitable universal codec
+guarantees with **exact actual pre-encode RGB parity at 0/127/255/299**, plus
+unchanged encoded mean <= 2, exact metadata/timing and all original owners,
+history and complete/cancel60/retry checks. Maximum error is still measured and
+reported for every target; the historical max12 outcomes remain visible.
+
+`export-lifecycle` reuses only pinned `source.mp4` from
+`.tmp/issue198-8129d4e-export-attempt1`. It never generates another control.
+The existing compositor callback borrows the actual source once, builds the
+independent static oracle and reads the completed native sink before returning
+to lease cleanup and encoding. Extra observation buffers/canvas are accounted
+separately from production readbacks. Four reference arrays survive until the
+output comparisons; every attempt, including cancellation, releases them.
 
 Source review and one fresh exclusive grant are required before this command:
 
 ```sh
-DEVELOPER_DIR=/Library/Developer/CommandLineTools node scripts/issue198/run-resource-gate.mjs --segment export-completion --expected-sha <reviewed-full-sha> --output .tmp/<fresh-owned-run>
+DEVELOPER_DIR=/Library/Developer/CommandLineTools node scripts/issue198/run-resource-gate.mjs --segment export-lifecycle --expected-sha <reviewed-full-sha> --output .tmp/<fresh-owned-run>
 ```
 
-Caps: one 300-frame control, 2,700 ordinal samples (900 control qualification +
-1,800 completed outputs), 1,980 production source requests, 64 MiB comparison
-RGBA, seven output files/128 MiB aggregate. The eight retained target/reference
-arrays are reused across attempts and wiped on release. Existing production
-owner/cancel/history checks remain; setup/close deadlines remain bounded.
-Control and each attempt have a 120-second browser/150-second host ceiling;
-the combined work has a 1,500-second host ceiling. Stop on first control,
-mean, ownership, console or evidence failure. Reuse the accepted raster,
-resource-source, pre-encode diagnostic and seven-flow evidence; the previously
-proposed broad resource matrix is not part of completion.
+Caps: one pinned GET, no extra control encode, 1,800 ordinal output samples,
+1,980 production source requests, 27 pre-encode target checks (four per complete
+attempt, frame0 for each cancellation), 64 MiB comparison RGBA, six output
+files/128 MiB aggregate. Each attempt keeps its 120-second browser/150-second
+host ceiling; combined work keeps the 1,500-second host ceiling and existing
+separate setup/cleanup bounds. Stop on first exact pre-encode, mean, ownership,
+console or evidence failure. No further codec investigation or resource matrix.
