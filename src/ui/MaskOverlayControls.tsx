@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { beginMaskEdit, commitMaskParams, type MaskEditSession } from '../app/maskEditingController'
 import { focusProgramMonitor } from '../app/sequenceEditController'
 import { useDocumentStore } from '../state/documentStore'
@@ -23,7 +24,7 @@ const corners: readonly MaskBoxCorner[] = ['top-left', 'top-right', 'bottom-left
 const partKey = (part: MaskPathPart) => part.kind === 'anchor' ? `anchor:${part.index}` : `control:${part.segment}:${part.control}`
 const partLabel = (part: MaskPathPart) => part.kind === 'anchor' ? `Point ${part.index + 1}` : `Control ${part.segment + 1}.${part.control}`
 
-export default function MaskOverlayControls({ canvasRef, panelRef }: { canvasRef: RefObject<HTMLCanvasElement | null>; panelRef: RefObject<HTMLDivElement | null> }) {
+export default function MaskOverlayControls({ canvasRef, panelRef, toolbarHost }: { canvasRef: RefObject<HTMLCanvasElement | null>; panelRef: RefObject<HTMLDivElement | null>; toolbarHost?: HTMLDivElement | null }) {
   const doc = useDocumentStore((state) => state.doc)
   const target = useTransportStore((state) => state.maskEditorTarget)
   const frame = useTransportStore((state) => state.playheadFrame)
@@ -181,7 +182,8 @@ export default function MaskOverlayControls({ canvasRef, panelRef }: { canvasRef
   }
 
   if (!target) return null
-  if (!shown || !viewport || unavailable) return <div className="mask-editor-toolbar" role="status">{unavailable || 'The Program canvas is not visible.'}<button onClick={stop}>Close mask editor</button></div>
+  const dock = (toolbar: ReactNode) => toolbarHost ? createPortal(toolbar, toolbarHost) : toolbar
+  if (!shown || !viewport || unavailable) return dock(<div className="mask-editor-toolbar" role="status">{unavailable || 'The Program canvas is not visible.'}<button onClick={stop}>Close mask editor</button></div>)
   const displayPosition = (point: { x: number; y: number }) => {
     const client = projectPointToMonitor(maskPointToProject(point, shown, doc), viewport.canvas, doc)
     return { left: client.x - viewport.panelLeft, top: client.y - viewport.panelTop }
@@ -203,7 +205,7 @@ export default function MaskOverlayControls({ canvasRef, panelRef }: { canvasRef
     {handle('Move mask', { kind: 'move' }, { x: 0.5, y: 0.5 })}
     {corners.map((corner) => handle(`Resize mask ${corner}`, { kind: 'resize', corner }, { x: corner.endsWith('left') ? 0 : 1, y: corner.startsWith('top') ? 0 : 1 }))}
     {path && parts.map((point) => handle(`Mask ${partLabel(point).toLowerCase()}`, { kind: 'point', part: point }, maskPathPartPoint(path, point)!))}
-    <div className="mask-editor-toolbar">
+    {dock(<div className="mask-editor-toolbar">
       <span>Mask · arrows move 1 px · Shift 10 px · Esc cancels</span>
       {path && <>
         <label>Mask point<select value={partKey(part)} onChange={(event) => { const next = parts.find((part) => partKey(part) === event.target.value); if (next) setPart(next) }}>{parts.map((part) => <option key={partKey(part)} value={partKey(part)}>{partLabel(part)}</option>)}</select></label>
@@ -217,6 +219,6 @@ export default function MaskOverlayControls({ canvasRef, panelRef }: { canvasRef
       </>}
       <button type="button" onClick={stop}>Close mask editor</button>
       {error && <span role="alert">{error}</span>}
-    </div>
+    </div>)}
   </div>
 }

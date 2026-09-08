@@ -110,3 +110,19 @@ at that narrow layout is not established. This is a remaining layout concern
 for the orchestrator's UI review; the three passing checks do not erase it.
 The static slice is ready for review, not final issue acceptance. No claim is
 made for animated path wires, source tracking, export/reopen or 4K timing.
+
+## Required narrow-layout follow-up
+
+The orchestrator required pointer access before accepting the UI gate. The
+follow-up gives Program a stable flex wrapper and places mask controls in a
+separate scrollable dock below its manipulation panel. The dock is capped at
+45% of the available height. It cannot cover handles; the remaining panel uses
+the existing canvas CSS measurement, quality publication and ResizeObserver
+cancellation. React portals keep ephemeral gesture/point ownership in the same
+component. The transferred canvas stays mounted when opening/closing controls.
+
+A focused Preview test checks the separate dock and stable canvas identity.
+53 focused tests plus 17 runner checks pass; build/typecheck and lint passed.
+The browser follow-up adds native hit testing and a real lower-right pointer
+resize at 768px, asserting larger width/height, one history entry, exact undo
+and a screenshot. This corrected layout awaits its committed Chromium run.

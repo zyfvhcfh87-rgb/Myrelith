@@ -123,6 +123,21 @@ test('ellipse editor cancels on resize and stays usable across desktop and small
     await move.focus(); await move.press('ArrowRight')
     await move.press('ArrowLeft')
   }
+  const beforeResize = await snapshot(page)
+  const lowerCorner = page.getByRole('button', { name: 'Resize mask bottom-right', exact: true })
+  await expect(lowerCorner).toBeVisible()
+  const lower = (await lowerCorner.boundingBox())!, toolbar = (await page.locator('.mask-editor-toolbar').boundingBox())!
+  expect(lower.y + lower.height).toBeLessThan(toolbar.y)
+  // A trial click proves native hit testing reaches the formerly covered handle.
+  await lowerCorner.click({ trial: true })
+  await page.mouse.move(lower.x + lower.width / 2, lower.y + lower.height / 2)
+  await page.mouse.down(); await page.mouse.move(lower.x + lower.width / 2 + 8, lower.y + lower.height / 2 + 5, { steps: 3 }); await page.mouse.up()
+  const afterResize = await snapshot(page)
+  expect(afterResize.past).toBe(beforeResize.past + 1)
+  expect(afterResize.project.sequences[0].tracks[0].clips[0].effects[0].params.width).toBeGreaterThan(0.5)
+  expect(afterResize.project.sequences[0].tracks[0].clips[0].effects[0].params.height).toBeGreaterThan(0.5)
+  await page.evaluate(async () => { const d = '/src/state/documentStore.ts'; (await import(d)).useDocumentStore.getState().undo() })
+  expect((await snapshot(page)).project).toEqual(beforeResize.project)
   await page.screenshot({ path: '.tmp/issue198-small.png' })
   expect(problems).toEqual([])
 })

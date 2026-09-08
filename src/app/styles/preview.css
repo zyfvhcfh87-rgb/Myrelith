@@ -711,6 +711,21 @@
 .preview-hint {
   color: #65778e;
 }
+.preview-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.mask-editor-dock {
+  flex: 0 0 auto;
+  max-height: 45%;
+  overflow: auto;
+  background: #0f1a28;
+}
+.mask-editor-dock:empty { display: none; }
 .mask-editor-overlay {
   position: absolute;
   inset: 0;
@@ -737,11 +752,7 @@
 .mask-editor-control { width: 24px; height: 24px; border-radius: 3px; background: #283a51cc; }
 .mask-editor-handle:focus-visible { outline: 2px solid white; outline-offset: 2px; }
 .mask-editor-toolbar {
-  position: absolute;
-  z-index: 9;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
+  margin: 8px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
