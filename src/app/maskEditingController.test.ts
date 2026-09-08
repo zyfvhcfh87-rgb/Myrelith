@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { beginMaskEdit, commitMaskParams } from './maskEditingController'
 import { attributeClip } from '../test/clipAttributeFixtures'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
@@ -130,4 +130,28 @@ test.each(['locked', 'hidden', 'disabled', 'future', 'outside'] as const)('%s ma
   if (kind === 'outside') useTransportStore.getState().setPlayheadFrame(60)
   expect(() => beginMaskEdit(target)).toThrow()
   expect(useDocumentStore.getState().past).toEqual([])
+})
+
+test('long-lived authoring owners are notified once when invalidated or replaced', () => {
+  const canceled = vi.fn(), first = beginMaskEdit(target, canceled)
+  useTransportStore.getState().setClipSelection(['other', 'clip'], 'clip')
+  expect(canceled).toHaveBeenCalledTimes(1)
+  first.cancel(); expect(first.commit({ shape: 'bezier' })).toMatch(/changed/)
+  expect(canceled).toHaveBeenCalledTimes(1)
+  const replaced = vi.fn(), second = beginMaskEdit(target, replaced), third = beginMaskEdit(target)
+  expect(replaced).toHaveBeenCalledTimes(1)
+  second.cancel(); expect(replaced).toHaveBeenCalledTimes(1)
+  expect(third.commit({ x: 0.3 })).toBeNull()
+  expect(useDocumentStore.getState().past).toHaveLength(1)
+})
+
+test('a new owner started during the end notification prevents an older release from committing', () => {
+  let replacement: ReturnType<typeof beginMaskEdit> | null = null
+  const before = useDocumentStore.getState().project
+  const original = beginMaskEdit(target, () => { replacement = beginMaskEdit(target); replacement.preview({ x: 0.7 }) })
+  expect(original.commit({ x: 0.3 })).toMatch(/changed/)
+  expect(useDocumentStore.getState().project).toBe(before)
+  expect(useTransportStore.getState().maskPreview?.params.x).toBe(0.7)
+  expect(replacement!.commit({ x: 0.7 })).toBeNull()
+  expect(useDocumentStore.getState().past).toHaveLength(1)
 })
