@@ -36,6 +36,12 @@ export default function AnimationWorkspace({ onClose = closeAnimationWorkspace }
   useEffect(() => () => animationEditorController.cancel(), [])
   useEffect(() => { root.current?.querySelector<HTMLElement>('[role="grid"]')?.focus() }, [])
   const revealFocus = useCallback(() => { setRequestedFrame(null); setReveal((value) => value + 1) }, [])
+  function changeMode(next: typeof mode) {
+    // End the outgoing gesture while its captured input still exists. Removed
+    // glyphs cannot be relied on to receive a later lost-capture event.
+    if (next !== mode) animationEditorController.cancel()
+    setMode(next); revealFocus()
+  }
   const edit = useCallback((command: AnimationBatchCommand, success: string) => {
     const error = animationEditorController.edit(command)
     animationCommandResult(error, success)
@@ -130,7 +136,7 @@ export default function AnimationWorkspace({ onClose = closeAnimationWorkspace }
   const copiedLane = clipboard?.lanes[mappingPage]
   return <section ref={root} className="animation-workspace" aria-label="Animation workspace" onKeyDown={onKeyDown}>
     <div className="animation-toolbar">
-      <strong>Animation</strong><button type="button" aria-pressed={mode === 'sheet'} onClick={() => { setMode('sheet'); revealFocus() }}>Dope sheet</button><button type="button" aria-pressed={mode === 'curve'} onClick={() => { setMode('curve'); revealFocus() }}>Curve</button>
+      <strong>Animation</strong><button type="button" aria-pressed={mode === 'sheet'} onClick={() => changeMode('sheet')}>Dope sheet</button><button type="button" aria-pressed={mode === 'curve'} onClick={() => changeMode('curve')}>Curve</button>
       <input aria-label="Filter animation lanes" placeholder="Find track, item or property" value={text} onChange={(event) => useTransportStore.getState().setAnimationFilter(event.target.value)} />
       <label><input type="checkbox" checked={selectedOnly} onChange={(event) => setSelectedOnly(event.target.checked)} />Selected items</label>
       <label><input type="checkbox" checked={animatedOnly} onChange={(event) => setAnimatedOnly(event.target.checked)} />Animated only</label>

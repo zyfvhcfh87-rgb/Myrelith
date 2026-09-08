@@ -136,6 +136,48 @@ describe('unified animation workspace', () => {
     expect(store().past).toHaveLength(1); expect(transport().animationPreview).toBeNull()
   })
 
+  test.each(['sheet', 'handle 1', 'handle 2'].flatMap((view) => ['queued', 'admitted'].map((phase) => ({ view, phase }))))('mode transitions cancel $view gestures with $phase previews before removing their input target', ({ view, phase }) => {
+    const { container } = render(<AnimationWorkspace />); keyDown('Home')
+    fireEvent.change(screen.getByLabelText('Key easing'), { target: { value: 'Ease in/out' } })
+    keyDown('ArrowRight', { ctrlKey: true }); keyDown('z', { ctrlKey: true }); keyDown('Home'); keyDown('c', { ctrlKey: true })
+    const source = view === 'sheet' ? 'Dope sheet' : 'Curve', destination = view === 'sheet' ? 'Curve' : 'Dope sheet'
+    fireEvent.click(screen.getByRole('button', { name: source }))
+    const inputTarget = () => view === 'sheet' ? container.querySelector('[data-animation-glyph]')! : screen.getByRole('button', { name: `Drag Bézier ${view}; numeric alternatives in key controls` })
+    const target = inputTarget(), before = store(), clipboard = animationEditorController.getClipboard()
+    const clientX = view === 'sheet' ? 0 : Number(target.getAttribute('cx')), clientY = view === 'sheet' ? 0 : Number(target.getAttribute('cy'))
+    let captured = false
+    const releasedWhileConnected: boolean[] = []
+    Object.assign(target, {
+      setPointerCapture: () => { captured = true }, hasPointerCapture: () => captured,
+      releasePointerCapture: () => { releasedWhileConnected.push(target.isConnected); captured = false },
+    })
+    const unchanged = () => {
+      expect(store().project).toBe(before.project); expect(store().past).toBe(before.past); expect(store().future).toBe(before.future)
+      expect(animationEditorController.getClipboard()).toBe(clipboard)
+    }
+    expect(before.future).toHaveLength(1); expect(clipboard).not.toBeNull()
+    fireEvent.pointerDown(target, { button: 0, pointerId: 42, clientX, clientY })
+    fireEvent.pointerMove(target, { pointerId: 42, clientX: clientX + 20, clientY: clientY - 10 })
+    expect(captured).toBe(true); expect(transport().animationPreview).toBeNull(); unchanged()
+    if (phase === 'admitted') {
+      flushFrames(); expect(transport().animationPreview).not.toBeNull()
+      fireEvent.pointerMove(target, { pointerId: 42, clientX: clientX + 24, clientY: clientY - 12 })
+    }
+    expect(frames.size).toBe(1)
+    // The view transition must end its gesture without relying on a later
+    // lost-capture event bubbling from an input element that has been removed.
+    fireEvent.click(screen.getByRole('button', { name: destination }))
+    expect(screen.getByRole('button', { name: destination })).toHaveAttribute('aria-pressed', 'true')
+    expect(target.isConnected).toBe(false); expect(releasedWhileConnected).toEqual([true]); expect(captured).toBe(false)
+    expect(transport().animationPreview).toBeNull(); expect(transport().effectDocumentPreview).toBeNull(); expect(frames.size).toBe(0); unchanged()
+    flushFrames(); expect(transport().animationPreview).toBeNull(); unchanged()
+    fireEvent.click(screen.getByRole('button', { name: source }))
+    const replacement = inputTarget(); expect(replacement).not.toBe(target)
+    fireEvent.pointerMove(replacement, { pointerId: 42, clientX: clientX + 30, clientY: clientY - 15 })
+    fireEvent.pointerUp(replacement, { pointerId: 42, clientX: clientX + 30, clientY: clientY - 15 }); flushFrames()
+    expect(transport().animationPreview).toBeNull(); expect(frames.size).toBe(0); expect(releasedWhileConnected).toEqual([true]); unchanged()
+  })
+
   test('curve and easing use bounded samples and reject invalid numeric handles without a stale UI draft', async () => {
     const user = userEvent.setup(); const { container } = render(<AnimationWorkspace />); keyDown('Home')
     fireEvent.change(screen.getByLabelText('Key easing'), { target: { value: 'Ease in/out' } })
