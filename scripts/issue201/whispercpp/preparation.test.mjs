@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createHash, webcrypto } from 'node:crypto';
 import vm from 'node:vm';
 import { inspectTinyQ8, MODEL_SHA256 } from './model-format.mjs';
-import { readSegments, createSpeechWorkerProtocol } from './worker-protocol.mjs';
+import { readSegments, createSpeechWorkerProtocol, WASM_FILE_NAME } from './worker-protocol.mjs';
 import { createSpeechWorkerOwner } from './worker-owner.mjs';
 import { createResidentCoverage, captureCompleteResident, RSS_INTERVAL_MS, RSS_DELTA_CAP } from './resident-coverage.mjs';
 import { LAB_CASE_NAMES } from '../lab-contract.mjs';
@@ -141,8 +141,10 @@ function protocolHarness(overrides = {}) {
   Object.assign(m, { _speech_model_alloc: () => 4, _speech_load: () => { owned = 1; return 0; },
     _speech_pcm_alloc: () => 4, _speech_run: () => { m.HEAPU8.set(new TextEncoder().encode(' hi\0'), 4); return 0; },
     _speech_tokens: () => 448, _speech_owned: () => owned, _speech_close: () => { owned = 0; return 0; } }, overrides.module);
-  const receive = createSpeechWorkerProtocol({ createModule: async () => { calls++; return m; },
-    wasmIdentity: { bytes: wasm.length, sha256: sha(wasm) }, crypto: webcrypto,
+  const receive = createSpeechWorkerProtocol({ createModule: async options => {
+    calls++; assert.match(options.locateFile(WASM_FILE_NAME), /^urn:myrelith:verified-wasm:[a-f0-9]{64}$/); return m;
+  },
+    wasmIdentity: { bytes: wasm.length, sha256: sha(wasm), fileName: WASM_FILE_NAME }, crypto: webcrypto,
     emit: x => events.push(x), close: () => { closed++; }, ...overrides.options });
   const load = () => receive({ v: 1, owner: 'o', id: 1, kind: 'load',
     model: model.buffer.slice(model.byteOffset, model.byteOffset + model.byteLength), wasm: wasm.buffer.slice(0) });

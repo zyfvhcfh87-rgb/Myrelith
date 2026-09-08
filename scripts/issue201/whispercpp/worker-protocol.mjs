@@ -2,9 +2,22 @@ import { inspectTinyQ8, MODEL_BYTES, MODEL_SHA256 } from './model-format.mjs';
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 const MAX_HEAP = 536_870_912;
+export const WASM_FILE_NAME = 'myrelith-whisper.wasm';
 const exactKeys = (value, keys) => value && Object.getPrototypeOf(value) === Object.prototype
   && Object.keys(value).sort().join(',') === keys.slice().sort().join(',');
 const fail = (code) => { throw Error(code); };
+
+export function verifiedWasmLocator(identity) {
+  if (identity.fileName !== WASM_FILE_NAME || !/^[a-f0-9]{64}$/.test(identity.sha256)) fail('unreviewed-runtime');
+  const { fileName: expectedName, sha256 } = identity;
+  // Emscripten resolves a name even when wasmBinary is already supplied. This
+  // locator grants only that exact resolution. Its opaque, non-network result
+  // cannot become an HTTP fallback if the generated loader loses its bytes.
+  return (fileName) => {
+    if (fileName !== expectedName) fail('unexpected-runtime-asset');
+    return `urn:myrelith:verified-wasm:${sha256}`;
+  };
+}
 
 export function readSegments(module, samples) {
   const count = module._speech_segment_count();
@@ -32,8 +45,10 @@ export function readSegments(module, samples) {
 // or built-artifact identity in this source-preparation package yet.
 export function createSpeechWorkerProtocol({ createModule, wasmIdentity, crypto, emit, close,
   now = () => performance.now() }) {
-  if (!exactKeys(wasmIdentity, ['bytes', 'sha256']) || !Number.isSafeInteger(wasmIdentity.bytes)
+  if (!exactKeys(wasmIdentity, ['bytes', 'sha256', 'fileName']) || !Number.isSafeInteger(wasmIdentity.bytes)
     || wasmIdentity.bytes <= 0 || !/^[a-f0-9]{64}$/.test(wasmIdentity.sha256)) fail('unreviewed-runtime');
+  const locateFile = verifiedWasmLocator(wasmIdentity);
+  const expectedWasmBytes = wasmIdentity.bytes, expectedWasmSha256 = wasmIdentity.sha256;
   let module = null, owner = null, lastId = 0, busy = false, ended = false;
   let state = 'empty', windows = 0;
   const current = () => { if (ended) fail('terminated'); };
@@ -80,12 +95,12 @@ export function createSpeechWorkerProtocol({ createModule, wasmIdentity, crypto,
         if (state !== 'empty') fail('load-state');
         state = 'loading'; modelBuffer = message.model; wasmBuffer = message.wasm;
         if (!(modelBuffer instanceof ArrayBuffer) || modelBuffer.byteLength !== MODEL_BYTES
-          || !(wasmBuffer instanceof ArrayBuffer) || wasmBuffer.byteLength !== wasmIdentity.bytes) fail('asset-size');
+          || !(wasmBuffer instanceof ArrayBuffer) || wasmBuffer.byteLength !== expectedWasmBytes) fail('asset-size');
         if (await digest(modelBuffer) !== MODEL_SHA256) fail('model-digest'); current();
         inspectTinyQ8(new Uint8Array(modelBuffer));
-        if (await digest(wasmBuffer) !== wasmIdentity.sha256) fail('runtime-digest'); current();
+        if (await digest(wasmBuffer) !== expectedWasmSha256) fail('runtime-digest'); current();
         const created = await createModule({ wasmBinary: new Uint8Array(wasmBuffer),
-          locateFile: () => fail('unexpected-runtime-fetch'), print: () => {}, printErr: () => {},
+          locateFile, print: () => {}, printErr: () => {},
           onAbort: () => { state = 'faulted'; } });
         if (ended) { try { created._speech_close(); } catch { /* Owner already closed. */ } return; }
         module = created; current(); heap();

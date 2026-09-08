@@ -1,5 +1,10 @@
 # Issue201 whisper.cpp source-preparation checkpoint
 
+Follow-up source review found a startup-blocking locator in checkpoint763baed.
+[WHISPER_CPP_LOADER_CORRECTION.md](WHISPER_CPP_LOADER_CORRECTION.md) records the
+separate correction, pinned-loader regressions and current source checkpoint.
+The original48-check evidence below is retained as historical preparation.
+
 2026-09-08. **Prepared for source review only. Speech remains NO-GO.** The
 supervisor authorized downloads, byte/format verification, a bounded build patch,
 an explicit core token-budget patch, and owned adapter/protocol source after

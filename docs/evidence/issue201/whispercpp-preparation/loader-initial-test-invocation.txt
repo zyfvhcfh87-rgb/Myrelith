@@ -1,0 +1,77 @@
+✔ exact composite replaces only the historical encoder and retains six current components, runtime and thresholds (0.985083ms)
+✔ every per-file source, logical/local path and byte identity is bound to bundle/cache identity (4.164625ms)
+✔ rejects missing/duplicate/extra component fields, unsafe paths and fabricated current-revision encoder URLs (0.360708ms)
+✔ source-only preparation and runner preflight rehash all actual components without modifying any input or manifest (90.521334ms)
+✔ missing and tampered components reject preparation before any proposed writes (0.486375ms)
+(node:77260) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ retiring idle owner remains reserved while concurrent requests await one disposal (12.170709ms)
+✔ active cancellation rejects its promise before replacement and rejects late results (2.5845ms)
+✔ idle deadline terminates before releasing the retiring reservation (7.971416ms)
+✔ timestamps accept the exact source end and retain every overshoot/missing/order failure (0.361875ms)
+✔ result aggregate is bounded before retaining segment copies (0.13925ms)
+✔ request closure rejects unknown same-origin paths, queries, origins and methods (0.046417ms)
+✔ resident ceiling triggers on the first byte above the frozen incremental allowance (0.04575ms)
+✔ overlapping named memory samples each capture a fresh state after the periodic drain (0.48375ms)
+✔ a stop during the periodic observation prevents queued named captures (0.189125ms)
+✔ pinned model lookup includes the observed local key and rejects other revisions/files/queries (0.090583ms)
+✔ actual controller preserves structured initialization failure and can retry without overlapping owners (1.869584ms)
+✔ an unrelated loader error cannot pass corrupt-audio decoding acceptance (0.080083ms)
+✔ worker module startup errors also produce a terminal initialization prerequisite (1.603083ms)
+✔ overall acceptance cannot pass missing, aborted, failed or unexpected planned cases (0.124584ms)
+✔ model cache compatibility includes session settings, runtime bytes and encoder fetch policy (6.249916ms)
+✔ actual worker forwards the frozen optimizer setting without mutating its manifest (1.517167ms)
+✔ encoder fetch adapter preserves receiver, input/result ownership and every decoder output (0.348583ms)
+✔ encoder fetch adapter rejects changed IO/policies and propagates runtime failures without fallback (0.243667ms)
+✔ actual controller rejects changed cache source headers before creating an inference owner (5.070375ms)
+✔ actual controller registry requires the explicit bundle and configuration revision (1.23225ms)
+file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/loader-startup.test.mjs:41
+      const frame = stack.at(-1); active = frame.parent && !frame.choice;
+                                                 ^
+
+TypeError: Cannot read properties of undefined (reading 'parent')
+    at select (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/loader-startup.test.mjs:41:50)
+    at file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/loader-startup.test.mjs:48:20
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v26.8.1
+✖ scripts/issue201/whispercpp/loader-startup.test.mjs (25.576792ms)
+✔ approved model exact SHA, complete tensor profile and no trailing bytes (14.372375ms)
+✔ format rejects wrong endian/English-only shape, corrupt vocab, tensor and tail (29.29ms)
+✔ actual C helper reserves token 448, rejects 449 before sample and cannot reset on retry (0.124ms)
+✔ all admitted integer limits exhaust exactly; a new call owns a fresh counter (1.385208ms)
+✔ both patches apply with exact hunk context and exact before/after hashes (2.041208ms)
+✔ guard scope and profile dominate every greedy sample across seek and temperature loops (0.347667ms)
+✔ wrapper uses only single-context full, fixed guard and complete-output admission (0.126959ms)
+✔ build recipe fixes non-shared CPU SIMD memory and excludes demo/runtime alternatives (0.062209ms)
+✔ outputs preserve centiseconds and reject malformed/overlapping/overhanging times (0.175208ms)
+✔ outputs reject bad UTF8, pointers, empty/oversized text and aggregate overflow (0.576459ms)
+✔ lazy factory, exact assets, one context, bounded complete output and close (21.997166ms)
+✔ corrupt model fails before factory; malformed identity and nonfinite PCM terminate (32.752625ms)
+✔ token exhaustion, OOM/trap, output overhang and late deadlines never emit partial results (94.198ms)
+✔ stale/duplicate ids and overlapping async load cannot revive a closed owner (31.341ms)
+✔ one job owns at most twelve windows and every heap growth refreshes the copy view (31.217625ms)
+✔ busy cancel terminates synchronously, rejects pending and never claims cooperative zero (0.38775ms)
+✔ idle close allows actual zero acknowledgement and terminates before disposal resolution (0.088ms)
+✔ host 120s deadline and idle 100ms fallback terminate even without worker event processing (0.07675ms)
+✔ late replies cannot beat a delayed host timer; idle malformed replies are ignored (0.060208ms)
+✔ 100ms target does not relax actual 250ms cadence; 256ms failure is permanent (0.207209ms)
+✔ missing, duplicate, new or vanished Chromium process rows invalidate complete coverage (0.074833ms)
+✔ resident ceiling and terminal tail/in-flight capture gaps fail independently (0.085666ms)
+✔ complete RSS capture brackets the actual read with full Chromium inventories (0.053667ms)
+ℹ tests 49
+ℹ suites 0
+ℹ pass 48
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 522.697834
+
+✖ failing tests:
+
+test at scripts/issue201/whispercpp/loader-startup.test.mjs:1:1
+✖ scripts/issue201/whispercpp/loader-startup.test.mjs (25.576792ms)
+  'test failed'
