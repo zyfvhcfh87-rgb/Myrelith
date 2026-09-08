@@ -1,5 +1,9 @@
 # Issue #198 tracking attachment implementation
 
+Current status: pure gate `9c3cb54` is accepted. The parent found three real
+app defects on `8d22cbc`; the correction below is ready for review. Inspector
+work is saved outside production source until this controller gate is accepted.
+
 ## Scope and provenance
 
 This separate slice starts from clean held-path evidence `1254007` and implements
@@ -141,6 +145,47 @@ and `.tmp/issue198-tracking-schema23-animation-controller-tests.log`.
 The parent independently accepted pure source `9c3cb54` with 50 checks in four
 files plus 17 runner checks. App source and this combined checkpoint are now
 ready for parent review. No combined tracking browser or performance claim is made.
+
+## Parent review corrections
+
+The parent independently reproduced three failures on unchanged app/transport
+source `8d22cbc`. The worker then reproduced the same **3 failures / 24 passes**
+using the parent's unchanged `.tmp/root-mask-review.test.ts` and config. The
+all-sequence case logged a successful, changed Apply while the project identity
+and empty history were unchanged. These were product defects, not baseline or
+fixture failures. Original logs remain at `.tmp/root-mask-review-confirmed.log`
+and `.tmp/issue198-root-mask-review-before-fix.log`.
+
+1. `replaceProjectSequence` returns the original project when replacement exceeds
+   the all-sequence budget. The app now rejects a changed operation whose project
+   replacement returns that original identity, both before preview and on fresh
+   Apply. A genuine unchanged operation remains a valid no-op. New tests install
+   actual valid portable projects with 99,994, 99,995 and 100,000 scalar keys in
+   a dormant sequence. Six new tracking keys reach exactly 100,000, or fail
+   before preview; exact-edge Apply changes the project and records one history
+   entry. Equal replacement stays a true no-op at capacity. A defensive mutation
+   case also exercises the fresh Apply boundary while preserving project identity.
+2. Apply now rechecks playing and scrubbing after preview cleanup callbacks and
+   before the portable commit. Both callback-triggered transport changes reject
+   with project, history and populated redo preserved.
+3. Temporary range suppression now hides an owner without deleting its activation
+   sequence. Passive reentry cannot outrank a newer animation gesture. Explicit
+   disable/cancel still releases the owner. Tests cover activation inside and
+   outside the accepted range, repeated exits/reentries, sibling restoration and
+   final teardown; all four existing preview owners remain available.
+
+The parent's unchanged reproduction now passes **27/27 tests plus 17 runner
+checks**. The expanded focused run passes **253 tests in 16 files plus 17 runner
+checks**, including the actual animation editing controller file. Build/typecheck,
+lint and diff hygiene pass. Only the existing Vite chunk advisory appeared.
+Logs: `.tmp/issue198-root-mask-review-after-fix.log` and
+`.tmp/issue198-tracking-review-correction-final-{tests,build,lint}.log`.
+
+The app test file now contains 32 tests. This correction was validated with the
+Inspector activation removed from production source. That unfinished UI work is
+preserved as `.tmp/issue198-tracking-ui-pending.patch` and
+`.tmp/MaskTrackingAttachmentEditor.pending.tsx`; it requires dedicated UI tests
+and source review before quiet browser acceptance. No heavy slot was requested.
 
 ## Remaining gates
 

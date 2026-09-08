@@ -775,11 +775,12 @@ export function beginMaskMotionTrackingReview(session: MotionTrackingSession, ta
   const proposed = applyMaskTrackingWithResult(document.doc, plan, plan.reviewKey)
   if (!proposed.ok) throw new Error(proposed.reason)
   const candidate = replaceProjectSequence(document.project, document.activeSequenceId, proposed.doc)
+  if (proposed.changed && candidate === document.project) throw new Error('The mask attachment could not replace its sequence within the complete project limits.')
   const admissionError = () => !sequenceProjectWithinEditBudget(candidate) ? 'The mask attachment exceeds project limits.'
     : animationRetentionError(useDocumentStore.getState(), candidate) ?? portableProjectEditError(document.project, document.projectGeneration, candidate)
   const error = admissionError()
   if (error) throw new Error(error)
-  let enabled = false, published = false
+  let enabled = false, published: boolean | null = null
   let unsubscribeDocument = () => {}, unsubscribeTransport = () => {}, unsubscribeMedia = () => {}, unsubscribeSelection = () => {}
   const contextCurrent = () => {
     const next = useDocumentStore.getState(), cursor = useTransportStore.getState()
@@ -795,16 +796,18 @@ export function beginMaskMotionTrackingReview(session: MotionTrackingSession, ta
     unsubscribeDocument(); unsubscribeTransport(); unsubscribeMedia(); unsubscribeSelection()
     if (activeMaskTrackingReview !== review) return
     activeMaskTrackingReview = null
-    published = false
+    published = null
     useTransportStore.getState().setMaskTrackingPreview(null)
     onEnd?.()
   }
   function updatePreview() {
     const frame = useTransportStore.getState().playheadFrame
-    const visible = enabled && frame >= plan.firstAcceptedGlobalFrame && frame <= plan.lastAcceptedGlobalFrame
+    const visible = enabled ? frame >= plan.firstAcceptedGlobalFrame && frame <= plan.lastAcceptedGlobalFrame : null
     if (published === visible) return
     published = visible
-    useTransportStore.getState().setMaskTrackingPreview(visible ? { sequenceId: plan.sequenceId, document: proposed.doc } : null)
+    // A range exit hides this owner's pixels but retains the review's activation.
+    // Only explicit disable/cancel releases it; passive reentry cannot steal focus.
+    useTransportStore.getState().setMaskTrackingPreview(visible === null ? null : { sequenceId: plan.sequenceId, document: proposed.doc }, visible ?? false)
   }
   const review: MaskMotionTrackingReview = {
     plan, cancel,
@@ -825,10 +828,12 @@ export function beginMaskMotionTrackingReview(session: MotionTrackingSession, ta
       const applied = applyMaskTrackingWithResult(document.doc, fresh.plan, replacementConsent)
       if (!applied.ok) return fail(applied.reason)
       const candidate = replaceProjectSequence(document.project, document.activeSequenceId, applied.doc)
+      if (applied.changed && candidate === document.project) return fail('The mask attachment could not replace its sequence within the complete project limits.')
       const error = animationRetentionError(useDocumentStore.getState(), candidate) ?? portableProjectEditError(document.project, document.projectGeneration, candidate)
       if (error) return fail(error)
       cancel()
-      if (activeMaskTrackingReview !== null || !contextCurrent()) return { ok: false, reason: 'The tracking review changed during cleanup. Review the attachment again.' }
+      const afterCleanup = useTransportStore.getState()
+      if (activeMaskTrackingReview !== null || !contextCurrent() || afterCleanup.isPlaying || afterCleanup.isScrubbing) return { ok: false, reason: 'The tracking review or playback changed during cleanup. Pause and review the attachment again.' }
       const commitError = commitPortableProjectEdit(document.project, document.projectGeneration, candidate)
       return commitError ? { ok: false, reason: commitError } : { ok: true, changed: applied.changed }
     },

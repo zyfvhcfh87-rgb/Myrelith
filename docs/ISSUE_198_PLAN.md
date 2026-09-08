@@ -373,3 +373,7 @@ activation yet. See
 The shared schema 23 checkpoint `4340f967` is now merged with the canonical title
 guard and all preview owners preserved. Inspector authoring and tracking browser
 acceptance remain open. No tracking code was included in the held-path gate.
+Parent review found three app defects on `8d22cbc`; the corrected project-budget,
+post-cleanup playback and preview-priority boundaries pass the unchanged parent
+reproducer and 253 focused tests. Inspector work is preserved outside production
+source pending this corrected app gate's acceptance.

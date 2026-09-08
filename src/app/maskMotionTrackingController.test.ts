@@ -227,3 +227,90 @@ test('mask dispatch refuses preserved future title owners even if connected medi
   expect(planMotionTrackingAttachment(analyzed, target, false)).toMatchObject({ ok: false, reason: expect.stringMatching(/media clip/) })
   expect(useDocumentStore.getState().past).toEqual([])
 })
+
+function installDormantKeys(count: number) {
+  const project = useDocumentStore.getState().project
+  const dormant = structuredClone(project.sequences[0]!), filler = structuredClone(dormant.tracks[0]!.clips[0]!)
+  dormant.id = 'dormant-sequence'; filler.id = 'dormant-filler'; filler.effects = []
+  filler.animation = { tracks: [], effectTracks: [] }
+  let remaining = count
+  while (remaining > 0) {
+    const length = Math.min(1024, remaining)
+    filler.animation.effectTracks!.push({ effectId: `future-${remaining}`, parameter: 'future', keyframes: Array.from({ length }, (_, frame) => ({ frame, sourceTimeTicks: frame * 1_000_000, value: 1, easing: { type: 'linear' } })) })
+    remaining -= length
+  }
+  dormant.tracks = [{ ...dormant.tracks[0]!, id: 'dormant-track', clips: [filler] }]
+  useDocumentStore.getState().setProject({ ...project, sequences: [...project.sequences, dormant] })
+  expect(serializeProjectFile(createProjectFileSnapshot(useDocumentStore.getState().project, useMediaStore.getState().descriptors.values())).length).toBeLessThanOrEqual(10_000_000)
+  return filler
+}
+
+test.each([99_995, 100_000])('a valid project with %i dormant keys refuses tracking growth before preview without clearing redo', async (count) => {
+  installDormantKeys(count)
+  const analyzed = await session(), before = useDocumentStore.getState().project, future = [before]
+  useDocumentStore.setState({ future })
+  expect(() => reviewed(analyzed)).toThrow(/complete project limits/)
+  expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+  expect(useDocumentStore.getState()).toMatchObject({ project: before, past: [], future })
+  expect(useDocumentStore.getState().future).toBe(future)
+})
+
+test('an all-sequence exact-edge Apply records one real edit; identical tracking remains a genuine no-op at capacity', async () => {
+  installDormantKeys(99_994)
+  const analyzed = await session(), before = useDocumentStore.getState().project
+  const review = reviewed(analyzed); expect(review.preview(true)).toBeNull()
+  expect(review.apply(null)).toEqual({ ok: true, changed: true })
+  const applied = useDocumentStore.getState()
+  expect(applied.project).not.toBe(before); expect(applied.past).toEqual([before])
+  expect(applied.doc.tracks.at(-1)!.clips[0]!.animation!.effectTracks!.flatMap((track) => track.keyframes)).toHaveLength(6)
+  expect(() => serializeProjectFile(createProjectFileSnapshot(applied.project, useMediaStore.getState().descriptors.values()))).not.toThrow()
+  const repeated = reviewed(analyzed)
+  expect(repeated.apply(repeated.plan.reviewKey)).toEqual({ ok: true, changed: false })
+  expect(useDocumentStore.getState().project).toBe(applied.project)
+  expect(useDocumentStore.getState().past).toBe(applied.past)
+  useDocumentStore.getState().undo(); expect(useDocumentStore.getState().project).toBe(before)
+  useDocumentStore.getState().redo(); expect(useDocumentStore.getState().project).toBe(applied.project)
+})
+
+test('fresh Apply refuses a failed all-sequence replacement even when the original project identity survives', async () => {
+  const filler = installDormantKeys(99_994)
+  const analyzed = await session(), review = reviewed(analyzed), before = useDocumentStore.getState().project, future = [before]
+  useDocumentStore.setState({ future }); review.preview(true)
+  // Defensive current-boundary case: a consumer changed an existing project object.
+  // The still-valid current project now has 99,995 keys; the proposed edit needs six.
+  const lane = filler.animation!.effectTracks!.at(-1)!, frame = lane.keyframes.at(-1)!.frame + 1
+  lane.keyframes.push({ frame, sourceTimeTicks: frame * 1_000_000, value: 1, easing: { type: 'linear' } })
+  expect(review.apply(null)).toMatchObject({ ok: false, reason: expect.stringMatching(/complete project limits/) })
+  expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+  expect(useDocumentStore.getState()).toMatchObject({ project: before, past: [], future })
+  expect(useDocumentStore.getState().future).toBe(future)
+})
+
+test.each(['playing', 'scrubbing'] as const)('cleanup starting %s prevents the final commit and leaves redo intact', async (mode) => {
+  const analyzed = await session(), before = useDocumentStore.getState().project, future = [before]
+  useDocumentStore.setState({ future })
+  const review = reviewed(analyzed, target, () => mode === 'playing' ? useTransportStore.getState().setIsPlaying(true) : useTransportStore.getState().setIsScrubbing(true))
+  review.preview(true)
+  expect(review.apply(null)).toMatchObject({ ok: false, reason: expect.stringMatching(/playback changed during cleanup/) })
+  expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+  expect(useDocumentStore.getState()).toMatchObject({ project: before, past: [], future })
+  expect(useDocumentStore.getState().future).toBe(future)
+})
+
+test.each(['inside', 'outside'] as const)('passive range reentry preserves a newer preview when tracking was enabled %s its range', async (start) => {
+  const analyzed = await session(), review = reviewed(analyzed), doc = useDocumentStore.getState().doc
+  if (start === 'outside') useTransportStore.getState().setPlayheadFrame(3)
+  review.preview(true)
+  useTransportStore.getState().setAnimationPreview({ sequenceId: doc.id, document: doc })
+  for (const frame of [3, 1, 4, 0, 2]) {
+    useTransportStore.getState().setPlayheadFrame(frame)
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('animation-gesture')
+  }
+  useTransportStore.getState().setAnimationPreview(null)
+  expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('mask-tracking')
+  useTransportStore.getState().setPlayheadFrame(3)
+  expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+  review.cancel()
+  useTransportStore.getState().setPlayheadFrame(1)
+  expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+})
