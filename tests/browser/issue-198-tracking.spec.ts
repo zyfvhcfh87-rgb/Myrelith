@@ -180,9 +180,12 @@ test('real point tracking previews, applies once, saves/reopens through UI and m
 
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
-  const download = await downloadPromise, downloadPath = await download.path()
-  expect(download.suggestedFilename()).toMatch(/\.myrelith$/)
-  if (!downloadPath) throw new Error('No downloaded portable project')
+  const download = await downloadPromise, downloadName = download.suggestedFilename()
+  expect(downloadName).toMatch(/\.myrelith$/)
+  // Playwright's internal download path has a UUID basename. Reopen the real
+  // downloaded bytes under the portable filename offered by the Save action.
+  const downloadPath = testInfo.outputPath(downloadName)
+  await download.saveAs(downloadPath)
   const serialized = await readFile(downloadPath, 'utf8')
   expect(serialized).not.toMatch(/blob:|cacheKey|fingerprint|decodePolicy/)
   const downloadedTracks = await page.evaluate(async (text) => {

@@ -98,12 +98,17 @@ export async function presentedAction(page: Page, frame: number, action: () => P
     if (!probe) throw new Error('Presentation observer was not installed')
     probe.arm(frame, options.connected ?? true, options.allowCurrent ?? false, options.event)
   }, { frame, options })
+  const cancelArm = () => page.evaluate(() => window.__issue198Presentation?.cancelArm())
   try {
     await action()
     await expect.poll(() => page.evaluate(() => window.__issue198Presentation?.ready() ?? false), {
       timeout: 10_000, message: `Program must present the requested frame ${frame} and visual state`,
     }).toBe(true)
-  } finally {
-    await page.evaluate(() => window.__issue198Presentation?.cancelArm())
+  } catch (error) {
+    // A test deadline may close the target before cleanup runs. Keep the
+    // original action/assertion failure; afterEach also disposes probes.
+    await cancelArm().catch(() => undefined)
+    throw error
   }
+  await cancelArm()
 }
