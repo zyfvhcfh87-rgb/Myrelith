@@ -1,11 +1,15 @@
 # Issue #198: direct masks and bounded manual path animation
 
-Status: **initial plan gate ready for internal review; product implementation has not started.**
+Status: **plan approved; independent pure value/geometry gate implemented for review.**
 
 Prepared on `codex/issue198` from `ce91074c276ca6892a74addb7dd673b9a19c7eeb`.
 The Milestone 9 orchestrator owns approval, migration ordering, integration and
-publication. This document proposes contracts; it does not assign a final
-timeline schema number or advertise implemented functionality.
+publication. The orchestrator approved the independent pure gate before shared
+integration and assigned timeline schema 22 to #199; no separate mask migration
+is needed. Product UI, shared traversal and rendering integration remain pending.
+
+Independent gate evidence and concrete APIs:
+[pure foundation](evidence/issue198/pure-foundation.md).
 
 ## Outcome and decisions proposed for review
 
@@ -31,9 +35,10 @@ continue through the canonical evaluator.
    project-space handles do not need a lens inverse; source feature picking
    and tracking remain unavailable whenever the source has lens intent.
 
-The issue expressly permits hold-only v1. No additional user choice has been
-identified; the orchestrator must approve this concrete proposal and settle
-the shared #199 contract before implementation.
+The issue expressly permits hold-only v1. The orchestrator approved these
+decisions, caps and the narrow mask-tracking target proposal, and authorized the
+pure gate first. Shared #199 integration and the tracking architecture amendment
+still require their reviewed foundations/evidence before promotion.
 
 ## Evidence from the starting tree
 
@@ -241,7 +246,7 @@ These are limits to implement and prove, not measured acceptance yet.
 | One path track | 256 held keys; 256 path tracks/clip maximum, additionally constrained by global totals. |
 | All active/dormant sequence path keys | 4,096 keys and 1,048,576 value code units (2 MiB conservative UTF-16 payload allowance). Every key also consumes the existing 100,000-key aggregate. |
 | Strings/import | All path key strings, including unknown/malformed values, count toward that allowance and the existing 10,000,000 effect-string characters; serialized project remains at most 10,000,000 characters. Static descriptor paths retain existing limits/compatibility. |
-| Retained path animation | 32 MiB of accounted bytes across candidate/current/past/future and both attribute/key clipboards: two bytes per value/identity/type/parameter code unit, plus 128 bytes per key and 128 per track. Count each key occurrence conservatively; shared immutable project snapshots may be deduplicated by object identity, never assumed engine string interning. |
+| Retained path animation | 32 MiB of accounted bytes across candidate/current/past/future and both attribute/key clipboards: two bytes per value/identity/type/parameter code unit, plus 128 bytes per key and 128 per track. Count each key in each distinct immutable track; shared snapshot/track objects may be deduplicated by identity, never assumed engine string interning. |
 | Static paths in history | Remain under existing per-project effect and whole-file bounds and the 100-snapshot history cap. Inventory their bytes too; the new 32 MiB animation allowance must not retroactively reject otherwise-valid static-only projects. Report this separate inherited bound explicitly. |
 | Clipboard and drafts | At most one attribute snapshot and one #199 key snapshot; each obeys the project path key/string limits, shares the 32 MiB retained accounting, and clears on project generation change. One active mask draft, one pending rAF, at most one 2,048-character replacement path. |
 | Render geometry | Existing eight subdivisions/cubic, at most 65 flattened vertices. No geometry indexed by clip duration; parse at most the selected held path per frame/owner. |
@@ -286,8 +291,9 @@ terminal owner cleanup. Record unavailable native-memory instrumentation honestl
 Propose one timeline migration adding empty `effectPathTracks` to all animation
 owners, preserving omitted historical animation and existing descriptor strings.
 No project-level resource table or project-format bump is presently needed.
-**The orchestrator assigns the final timeline version/order after #199/#200/#201
-review.** Do not independently rewrite fixture schema literals before that choice.
+**Assigned integration order:** #199 owns timeline schema 22, including the path
+collection/common traversal; #200 owns title migration 23; #201 owns caption
+migration 24. #198 imports the reviewed 22 foundation and adds no separate bump.
 
 #198 owns the path value validator/evaluator/editor, geometry, render integration,
 tracking adapter and its acceptance. #199 owns common property identities,
@@ -345,8 +351,12 @@ push, PR, merge or issue closure is part of these gates.
 - [x] Exact held-string representation, compatibility, geometry, timing and bounds proposed.
 - [x] Shared #199 contract sent to the orchestrator; final contract/migration pending review.
 - [x] Existing focused animation/timing checks, build/typecheck and lint passed.
-- [ ] Orchestrator approves this plan, retained-byte limits and tracking target amendment.
-- [ ] #199 shared timing/identity foundation and schema integration order frozen.
+- [x] Orchestrator approves the plan, retained-byte limits and narrow tracking target proposal.
+- [x] Schema integration order frozen: #199 owns 22, #200 owns 23, #201 owns 24.
+- [ ] #199 shared timing/identity foundation reviewed and consumed.
 - [ ] All product and issue-specific acceptance gates above remain unimplemented/unrun.
 
-Stop here for internal review. No product source file was changed for this gate.
+The independent pure foundation is an explicitly authorized reordering of Gate 1
+and the geometry part of Gate 3. Only new domain modules/tests are implemented;
+shared schema/traversal, existing pixel stages and UI remain unchanged. Its next
+decision is internal review and sharing its accepted APIs with #199.
