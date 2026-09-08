@@ -1,10 +1,12 @@
 # Issue #200 — reusable titles and animated text
 
-Status: **G2 accepted with its recorded readback-warning/narrow-layout qualifications.
-Evidence24eb4e2 is accepted; exact approved schema24/tracking integration e6a64a7
-merged cleanly at05b370a. G3 authoring/templates/motion implementation is authorized
-and preparing its source-review checkpoint. No G3 browser/native/full/performance
-grant has been used. Final shared #199 workspace wiring awaits supervisor sync.**
+Status: **G2 and the six G3 functional flows are accepted with their recorded
+qualifications. The separate fallback first-paint result is accepted and archived
+at f8e7370: an early blank canvas followed by exact automatic glyph rendering in
+the same unchanged run. Remaining title keyboard/focus/narrow-controls acceptance,
+the shared #199 key/encoded gate and root final engineering checks remain open.**
+See the [current evidence matrix](evidence/issue200/remaining-acceptance-matrix.md).
+No further source fix, integration sync or native/build run is authorized here.
 Source baseline: `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue200`. Issue snapshot: 2026-09-08 orchestration `issues.json`,
 issue last updated 2026-08-25T21:36:47Z. [Issue #200](https://github.com/zyfvhcfh87-rgb/Myrelith/issues/200).
@@ -506,7 +508,10 @@ integration, remote publication and issue closure.
 6. **G4 — complete acceptance on the committed implementation.** Focused/full
    tests, build/typecheck, lint, production audit, architecture/diff checks and
    real muted headless Chromium on port 5200. Reserve the orchestrator's exclusive
-   slot for full suites, browser/performance runs and final timing evidence.
+   slot for full suites and browser/export gates. Root owns the final combined
+   engineering run. No standalone title timing benchmark is required; existing
+   budget/renderer evidence and #199's mixed playback/export gate cover that scope
+   unless an actual regression warrants more.
    Reproduce suspected baseline failures on unchanged `ce91074` before classifying
    them; no weakening of assertions or invented complete-suite green labels.
 
@@ -528,7 +533,7 @@ Any new architecture exception requires explicit review, not an implicit import.
 | Local templates are safe/fresh/editable | Built-ins plus capture/use/delete; IDs disjoint across duplicate/split/paste/sequence/template; atomic quota/future-envelope behavior; no source network request or executable path. |
 | Roll/crawl/animated properties use exact frames everywhere | Every property at boundary/interior frames and all easing modes; arbitrary nonsequential seeks equal sequential playback/export; trim/split/extend/reapply preserve manual edits. |
 | Deterministic or visibly unavailable fonts/layout | Approved generic compatibility mode, actual main/worker/export proof, missing/unknown/fallback and reopen tests; cross-platform qualification stated honestly. |
-| Accessibility and responsive editing | Keyboard element selection/order/add/delete, labeled numeric alternatives, focus return/trap/Escape, screen-reader status, safe-area labels and contrast, 1280×720 and 720×800 with no overflow. |
+| Accessibility and responsive editing | Keyboard element selection/order/add/delete, labeled numeric alternatives, focus return/trap/Escape, accessible status, safe-area labels and contrast; title controls and dialogs remain reachable/readable at 1280×720 and 720×800. Record surrounding workspace clipping separately for root disposition. |
 | Real Chromium flow and cleanup | Legacy title, multiple coordinated elements, user template create/use, roll/crawl, #199 keys, missing-font explicit fallback, save/reopen, export raw pixels/reopen, cancel/dispose/retry and clean console. |
 | Full engineering gates | Exact commit provenance, focused/full result separation, build/typecheck, lint, audit, diff and production graph exclusion of any evidence-only harness. |
 
