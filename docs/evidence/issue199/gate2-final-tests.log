@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/domain/animationFoundation.test.ts src/domain/animationLifecycle.test.ts src/domain/projectCropAnimation.test.ts src/domain/cropAnimationCertificate.test.ts src/domain/scalarAnimation.test.ts src/domain/animationTiming.test.ts src/domain/titleElements.test.ts src/domain/titleBudgets.test.ts src/domain/maskPathAnimation.test.ts src/domain/effectStack.test.ts src/domain/clipAnimation.test.ts src/domain/clipAnimationOperations.test.ts src/domain/adjustmentItems.test.ts src/domain/sourceTimeMap.test.ts src/domain/projectFile.test.ts src/domain/projectSequences.test.ts src/domain/clipAttributes.test.ts src/domain/colorLutCatalog.test.ts src/domain/pluginVideoEffectStagePlan.test.ts src/domain/dynamicZoomOperations.test.ts src/domain/motionTrackingOperations.test.ts src/domain/videoStabilizationOperations.test.ts src/domain/videoCompositionPlan.test.ts src/domain/projectVideoCompositionPlan.test.ts src/domain/audioMixPlan.test.ts src/domain/projectAudioMixPlan.test.ts src/state/documentStore.test.ts src/state/clipAnimationStore.test.ts src/app/clipAttributeController.test.ts src/app/animationBindingController.test.ts src/app/animationFileBoundary.test.ts src/app/animationAdmission.test.ts src/app/pluginPreparedExportController.test.ts src/app/pluginDescriptorMigrationController.test.ts src/test/architecture.test.ts src/domain/maskChroma.test.ts src/domain/nestedSequenceProjectFile.test.ts src/domain/multicamProjectFile.test.ts src/domain/videoBusPersistence.test.ts src/domain/adjustmentProjectFile.test.ts src/app/colorGradingController.test.ts src/app/colorLutController.test.ts src/domain/animationBatch.test.ts src/app/animationEditingController.test.ts src/state/transportStore.test.ts src/app/EditorShell.test.tsx src/app/selectionReconciliationController.test.ts src/app/maskEditingController.test.ts src/ui/AnimationCurveEditor.test.tsx src/ui/Inspector.test.tsx --maxWorkers=2
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+
+ Test Files  50 passed (50)
+      Tests  674 passed (674)
+   Start at  13:29:55
+   Duration  11.78s (transform 1.34s, setup 743ms, import 4.60s, tests 6.86s, environment 8.87s)
+
+✔ cold samples each use and close a fresh BrowserContext (0.602708ms)
+✔ source identity rejects end-of-run drift (0.155291ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (188.762333ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (103.95675ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.23175ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.6495ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.099167ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.22425ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.116417ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.090709ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.2ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.462541ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.801583ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.08725ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.136375ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.144667ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.103416ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 461.594791

@@ -1,0 +1,8 @@
+Gate 2 development failures (all fixed before final evidence)
+
+- Initial typecheck found union-key and clipboard narrowing errors plus an unused import; the typed key/value boundary and lane filters were corrected.
+- Initial controller typecheck inferred the optional context provider as an empty object; it now has an explicit AnimationEditContext return type.
+- The first five-file focused run passed 68 tests but could not load animationFileBoundary.test.ts because useTransportStore was imported twice. The duplicate import was removed. Its redo fixture now reuses the existing undoable equal-length edit.
+- The added path mapping test initially used a nonexistent defaultEffectParams helper. It now uses the canonical createMaskEffect factory. The title intent fixture also uses the actual SourceTimeMap shape.
+- Review found and fixed compact scalar edits adding an absent effectTracks collection. A focused compatibility regression now verifies exact optional-field preservation and focused-key mapping.
+- Final evidence: 50 files / 674 Vitest tests, 17 runner checks, TypeScript/Vite production build, lint and diff checks pass. No remaining failure is classified as baseline or omitted from this matrix.

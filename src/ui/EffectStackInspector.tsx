@@ -200,6 +200,7 @@ function EffectParameterAnimation({
           </button>
         )}
       </div>
+      {track && <p className="inspector-note">Moving a key to an occupied frame replaces the existing key.</p>}
       {track && (
         <ol className="animation-keyframe-list" aria-label={`${spec.label} keyframes`}>
           {track.keyframes.map((keyframe, index) => (
