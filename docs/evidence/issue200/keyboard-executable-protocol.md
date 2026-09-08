@@ -88,6 +88,15 @@ edit. DOM value and original literal fallback assertions both apply. Missing and
 text, literal family, exact history increments and restored project wire are checked.
 This is status/keyboard evidence; it repeats no glyph or export matrix.
 
+After the retained third failure, the supervisor explicitly permits one scoped
+qualification: if Space leaves the popup closed for the existing wait, require the
+select to remain focused/serif and exact project/full history unchanged. Record an
+`unverified` test annotation and evidence event, then return from only the final
+native font-selection segment. Read errors still fail. All other controls/dialog
+cases continue; if the popup opens, original selection assertions apply unchanged.
+Reported case passes must prominently retain this unverified segment. The headless
+cause is not definitively proved, and no native font selection is claimed.
+
 **Dialogs/cancellation, at each viewport:** open Roll / crawl by keyboard and
 check modal semantics, initial focus and exact forward/reverse DOM control order,
 full wrap and focus containment. Change direction to down and preview frame to 48;
