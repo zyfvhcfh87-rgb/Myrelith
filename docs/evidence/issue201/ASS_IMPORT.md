@@ -8,7 +8,9 @@ persistence, painter and retained-history admission remain separate work.
 Supported v4+ input requires explicit resolution, complete duplicate-free style
 and event formats, bounded styles and dialogue, and valid semantic caption text.
 The importer preserves hard newlines, text commas, font/size/RGBA/outline,
-bold/italic, alignment/margins and supported static prefix overrides. Defaults
+bold/italic, alignment/margins and supported static prefix overrides. Empty
+arguments reset individual supported fields; full `\r` style resets are outside
+this profile and receive an explicit loss report. Defaults
 live once on the proposed track; cues store only differing style fields. The
 same caption collection validator enforces IDs, text, timing and eight-active-cue
 overlap. Its extraction from `captionDocumentValidationError` preserves existing
