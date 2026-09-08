@@ -174,7 +174,7 @@ export function planCaptionBatch(document: TimelineDoc, trackId: string, scope: 
   }
 }
 
-export function captionReadingSpeed(item: CaptionItem, rate: FrameRate, advisoryCps = CAPTION_BATCH_LIMITS.defaultReadingCps): {
+export function captionReadingSpeed(item: CaptionItem, rate: FrameRate, advisoryCps: number = CAPTION_BATCH_LIMITS.defaultReadingCps): {
   characters: number; charactersPerSecond: number; aboveAdvisory: boolean;
 } {
   if (!Number.isSafeInteger(rate.num) || rate.num < 1 || !Number.isSafeInteger(rate.den) || rate.den < 1

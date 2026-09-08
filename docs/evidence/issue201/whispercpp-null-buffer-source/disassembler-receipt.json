@@ -1,0 +1,10 @@
+{
+  "command": ".tmp/issue201-whispercpp-build/toolchain/install/bin/wasm-dis .tmp/issue201-whispercpp-build/output-link-settings/myrelith-whisper.wasm -o .tmp/issue201-whispercpp-run02-static.wat",
+  "exitCode": 0,
+  "toolBytes": 13220464,
+  "toolSha256": "fbe6415bb4d2df29af90fb688330608a7ad9573456d77a4cdbc5d238ca7df2d7",
+  "outputBytes": 44662869,
+  "outputSha256": "343ddbc06f4c8a13ff0d990d87880dfa5dac2a9e02e652f9a7bd6c6e13829c4d",
+  "wasmExecuted": false,
+  "compiled": false
+}

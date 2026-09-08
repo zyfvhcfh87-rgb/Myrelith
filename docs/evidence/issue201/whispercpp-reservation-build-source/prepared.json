@@ -1,0 +1,41 @@
+{
+  "status": "source-prepared-uncompiled",
+  "sourceFiles": 1882,
+  "patches": [
+    {
+      "path": "ggml/src/ggml-backend.cpp",
+      "beforeBytes": 96019,
+      "beforeSha256": "507577061d22e673a4f002bb215c65aa9c63b88a4e6d1586f52c74ca0b98fa07",
+      "afterBytes": 96141,
+      "afterSha256": "ba799b8d2ef1045a4b9fc0df1f1114989578159977e76908de42c88c0ad42603",
+      "patchPath": "docs/evidence/issue201/whispercpp-null-buffer-source/proposed-reservation-guard.patch"
+    },
+    {
+      "path": "ggml/src/ggml-alloc.c",
+      "beforeBytes": 47819,
+      "beforeSha256": "881083e2f5d0126738ffe5b246d60cacf7db7b524f1ea471f116697c3211026a",
+      "afterBytes": 48060,
+      "afterSha256": "ef30215c5021f2754823383d28d860d2c874b2102ef0e74d0117b06ca4427464",
+      "patchPath": "docs/evidence/issue201/whispercpp-null-buffer-source/proposed-allocation-failure-diagnostics.patch"
+    }
+  ],
+  "recipe": [
+    {
+      "path": "CMakeLists.txt",
+      "bytes": 3550,
+      "sha256": "bc68e94197b6e819f8d5257a536b02bd0a5931c525005b994c2046fad80ba0a6"
+    },
+    {
+      "path": "adapter.cpp",
+      "bytes": 6827,
+      "sha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22"
+    },
+    {
+      "path": "myrelith-token-budget.h",
+      "bytes": 403,
+      "sha256": "e0dc2d7ec04a52e47214de3536ca479f710b6957d422260eb5bc87b7bfe9ff9b"
+    }
+  ],
+  "compilerExecuted": false,
+  "wasmExecuted": false
+}

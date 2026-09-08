@@ -1,0 +1,108 @@
+{
+  "status": "actual-wired-source-and-generated-js-syntax-verified",
+  "checks": [
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/candidate.mjs",
+      "bytes": 3478,
+      "sha256": "9e5c04e79c59749ee9fd789883121f7a5ade238c2d1a78ec3b4804285321e12d",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/client.test.mjs",
+      "bytes": 5747,
+      "sha256": "6ff3353e9e283638c604161524856ac676ae67d5ac296371b397ee35bbf754ce",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/lab-client.mjs",
+      "bytes": 13987,
+      "sha256": "6557e298323ae411894bbb122c44297962b1b3684aa6e3b2ff51c74fe61d30d8",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/model-worker.mjs",
+      "bytes": 12908,
+      "sha256": "3ea881639185ffbb76859ac1934418134b56304e2bfb313d9f58f758e29c105c",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/preflight.mjs",
+      "bytes": 4229,
+      "sha256": "857697544fef1159d9bef0e9728d225da74c7bb4c7f5daf656f3cb544a575edb",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/run-lab.mjs",
+      "bytes": 41208,
+      "sha256": "df65d3a6eb695a28b2a9a493b363abd42a9493570b88d9f47c2cc630f01ccc4c",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/runner.test.mjs",
+      "bytes": 15219,
+      "sha256": "5b39632aa9deb3b1bfa98d76a0eda195c5538622ab424a613f13ab69d4da6603",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/source.test.mjs",
+      "bytes": 18414,
+      "sha256": "43c1f7f37f43eb4342242754b7dca8ca5f73067a4b91351aeb32690ab794c04a",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-diagnostic-wiring/scripts/issue201/whispercpp-lab/model-worker.mjs",
+      "bytes": 12908,
+      "sha256": "3ea881639185ffbb76859ac1934418134b56304e2bfb313d9f58f758e29c105c",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-diagnostic-wiring/scripts/issue201/whispercpp-lab/preflight.mjs",
+      "bytes": 4065,
+      "sha256": "e3e3a5b8743e2695d6611a4b7e3302f6033ae4a2f0e5244eeaf4c94656eb1659",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-diagnostic-wiring/scripts/issue201/whispercpp-diagnostic/observe-module.mjs",
+      "bytes": 3103,
+      "sha256": "f09df803982b932355225e1fb7854c16451bdd5a73a6532e2d6393ad526e6a68",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": ".tmp/issue201-whispercpp-diagnostic-wiring/assets/myrelith-whisper.mjs",
+      "bytes": 22350,
+      "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "wiredWorkerMatchesProposedEntry": true,
+  "generatedJsWasmMatchAcceptedArtifacts": true,
+  "clientUnchanged": true,
+  "run01MarkerAndEvidenceUnchanged": true,
+  "attempt02ArtifactsExist": false,
+  "generatedFactoryExecuted": false,
+  "wasmExecuted": false
+}

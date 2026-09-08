@@ -1,0 +1,51 @@
+(node:34826) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ actual client bounds a worker with no first reply and records forced cleanup without cooperative claims (29.041584ms)
+✔ an old client error or deadline cannot terminate the replacement worker or publish late output (34.523ms)
+✔ model and inference phase guards retain 120s and preparation retains 10s (18.842833ms)
+(node:34827) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ the real runner refuses an absent exclusive grant before server, browser or attempt writes (2.649708ms)
+✔ the real runner stops on its first failed case and retains raw process samples and owned cleanup (4.84975ms)
+✔ process churn stops before any acceptance case without discarding the incomplete raw observation (2.750167ms)
+✔ an already existing profile is not adopted or removed after mkdir rejects (1.617125ms)
+✔ the attempt marker prevents a second run after an earlier failure (3.348291ms)
+✔ actual runner reaches final evidence and bounded release when page-operation never settles (32.045125ms)
+✔ actual runner reaches final evidence and bounded release when setup-cdp never settles (3.546917ms)
+✔ actual runner reaches final evidence and bounded release when browser-close never settles (5.007292ms)
+✔ actual runner reaches final evidence and bounded release when server-close never settles (5.629625ms)
+✔ the actual guarded proxy preserves explicit 120s phase waits within the case deadline (2.036583ms)
+✔ an after-inventory timeout retains the actual before inventory and RSS rows in partial evidence (3.546667ms)
+✔ the overall host deadline interrupts a still-pending case before its own deadline (7.362125ms)
+✔ a stuck partial-evidence write prevents launch and emits bounded fallback evidence (4.171709ms)
+✔ attempt02 preserves the existing attempt01 marker, partial journal and final evidence (2.44375ms)
+(node:34828) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ exact candidate identity includes both generated artifacts and all unchanged fixture/acceptance limits (1.863667ms)
+✔ continuous epochs retain all samples and distinguish verified browser absence from model work (0.326042ms)
+✔ late samples, process churn, missing RSS, ceilings and unverified shutdown remain failures (0.329125ms)
+✔ reopen cannot reset away the original resident baseline (0.087041ms)
+✔ original bounded native audio preparation is byte-identical in the separate worker (0.235958ms)
+✔ worker seam verifies glue before import and sends the exact WASM bytes to the existing core authority (7.797959ms)
+✔ worker rejects changed candidate metadata or changed glue before generated module import (6.704791ms)
+✔ worker seam keeps twelve bounded windows, charges the C PCM copy, and closes every fake native sample (358.078333ms)
+✔ a core work-budget failure discards completion and releases audio owners in finally (6.276125ms)
+✔ all original acceptance case bodies are unchanged except the reviewed browser reopen lifecycle (0.37125ms)
+✔ diagnostic metadata changes cache identity while exact native artifacts/model/limits remain unchanged (0.246584ms)
+✔ actual wired worker and frozen protocol publish diagnostics before factory-failure error with no repeated native calls (39.828334ms)
+✔ actual wired worker and frozen protocol publish diagnostics before alloc-failure error with no repeated native calls (35.664291ms)
+✔ actual wired worker and frozen protocol publish diagnostics before load-failure error with no repeated native calls (41.007334ms)
+✔ actual wired successful load preserves the ready result and invokes allocation/load exactly once (37.897125ms)
+✔ factory abort context and the original exception survive the actual protocol message-only reduction (20.343333ms)
+✔ actual protocol diagnostics identify an abort in _speech_model_alloc and retain the cleanup attempt (17.914792ms)
+✔ actual protocol diagnostics identify an abort in _speech_load and retain the cleanup attempt (20.869083ms)
+✔ successful control flow retains module identity, live heap views, arguments, return values and callback forwarding (1.221084ms)
+✔ diagnostics remain bounded, retain the latest fatal tail and never stringify arbitrary objects (3.348125ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 577.874958

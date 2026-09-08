@@ -1,0 +1,57 @@
+{
+  "upstreamRevision": "371b5a7561823ab2bb32142d2751e35e7534727b",
+  "acceptedOriginalGeneratedCheckpoint": "26370ca81410aaf797cf9c71f84b0928c38fa68a",
+  "sourceReviewCommit": "4fea3baddbfb3a3427df7339a7e0d9e82e892449",
+  "previousPatchIdentities": {
+    "sourceCommit": "371b5a7561823ab2bb32142d2751e35e7534727b",
+    "build": [
+      {
+        "path": "CMakeLists.txt",
+        "before": "ad8d5b3f05151f3e7a7a782242ebcefd65ebf01a652501d9ee7e53176880830f",
+        "after": "46c3ed5ec4e3dfa0ee5629ec0a2ed2441241b1630161d20eb6eb20af53df6bd2"
+      },
+      {
+        "path": "ggml/CMakeLists.txt",
+        "before": "5c97a1112c1e038259447f73924f1132bf0d412a8964b068971dd641acfb03f0",
+        "after": "7ea6e4b481b45cee13dc647907b2ae7dfe1647e41b5702d9e135bf7f1a70f104"
+      },
+      {
+        "path": "ggml/src/CMakeLists.txt",
+        "before": "b4210d3aded4f4d217209624f981ecb5c65b1592eca7e049ff14b13c60743cb5",
+        "after": "55b311363d891a67d86ea96a9c65fd22a4a5ca506b11374ec24ce676125cb492"
+      }
+    ],
+    "guard": [
+      {
+        "path": "include/whisper.h",
+        "before": "a7d19f7feb5be52426628ff07e0602de28a30dc4312d0d0603e1e536753f76dd",
+        "after": "b9e16a7318de71c4edb0f1a3f8c4b7c1f790428e8167ae239f868352b68807ac"
+      },
+      {
+        "path": "src/whisper.cpp",
+        "before": "dc70e14a08119b58ed2a7c7c2919f87b120897f75648002202cce58d8e09191f",
+        "after": "85617366fdfce12ea3d56ebb36d1267d2e70618b0151b17e6d84f4736ba9c2ad"
+      }
+    ]
+  },
+  "additionalPatches": [
+    {
+      "path": "ggml/src/ggml-backend.cpp",
+      "beforeBytes": 96019,
+      "beforeSha256": "507577061d22e673a4f002bb215c65aa9c63b88a4e6d1586f52c74ca0b98fa07",
+      "afterBytes": 96141,
+      "afterSha256": "ba799b8d2ef1045a4b9fc0df1f1114989578159977e76908de42c88c0ad42603",
+      "patchPath": "docs/evidence/issue201/whispercpp-null-buffer-source/proposed-reservation-guard.patch"
+    },
+    {
+      "path": "ggml/src/ggml-alloc.c",
+      "beforeBytes": 47819,
+      "beforeSha256": "881083e2f5d0126738ffe5b246d60cacf7db7b524f1ea471f116697c3211026a",
+      "afterBytes": 48060,
+      "afterSha256": "ef30215c5021f2754823383d28d860d2c874b2102ef0e74d0117b06ca4427464",
+      "patchPath": "docs/evidence/issue201/whispercpp-null-buffer-source/proposed-allocation-failure-diagnostics.patch"
+    }
+  ],
+  "recipeChange": "None: original accepted CMake, adapter and token-header bytes remain exact",
+  "runtimeSettingsChange": null
+}

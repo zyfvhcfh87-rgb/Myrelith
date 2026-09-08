@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-09-08T21:33:52.686940+00:00",
+  "pids": [
+    48798,
+    48987
+  ],
+  "groups": [
+    48798,
+    48987
+  ],
+  "remaining": [],
+  "commands": [
+    {
+      "label": "configure",
+      "exitCode": 0,
+      "elapsedSeconds": 4.391,
+      "remainingGroupTerminated": false
+    },
+    {
+      "label": "compile-link",
+      "exitCode": 0,
+      "elapsedSeconds": 28.96,
+      "remainingGroupTerminated": false
+    }
+  ],
+  "runtimeExecuted": false
+}

@@ -4,6 +4,11 @@ import type { TextProps } from './schema'
 
 export const MAX_RENDERED_TEXT_LINES = 512
 
+/** Exact Canvas font used for both drawing and caption layout advisories. */
+export function textCanvasFont(text: Pick<TextProps, 'italic' | 'bold' | 'fontSizePx' | 'fontFamily'>): string {
+  return `${text.italic ? 'italic' : 'normal'} ${text.bold ? '700' : '400'} ${text.fontSizePx}px ${text.fontFamily}`
+}
+
 /** Shared painter capacity, including its historical one-line minimum. */
 export function textLayoutMetrics(text: Pick<TextProps, 'fontSizePx' | 'boxWidthPx' | 'boxHeightPx' | 'paddingPx'>) {
   const lineHeight = Math.ceil(text.fontSizePx * 1.2)
