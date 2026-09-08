@@ -1,6 +1,6 @@
 # Issue 199 — bounded Animation continuation
 
-Status: **source and fixture checkpoint for review; no continuation has run.**
+Status: **current source accepted; one gestures-only run authorized after the mechanical repin is committed and verified.**
 The supervisor accepted `095e6d9463580e3502ba7c210d3982bed548a52f` as the
 six-checkpoint early pass, not all of Gate 3. The early runner and its attempt
 evidence remain unchanged. This protocol implements the remaining scope in
@@ -9,7 +9,7 @@ Each selected segment needs source/protocol review and a separate explicit slot.
 
 ## Exact source and fixtures
 
-Product source: `b33b7531027979b8886f5db979d57cd96b96175d`, on the frozen
+Product source: `75b89ef6b70460a03ea99ca44d888b5ec06373ec`, on the frozen
 `4340f9675ad56aa320f2498cf107fd55f8819568` integration lineage. There is no
 midpoint integration or product/configuration edit in this checkpoint.
 `../observation-source-hashes.json` pins all 242 source/test/configuration files.
@@ -75,7 +75,7 @@ identity. It does not use a saved user browser profile or create a visible windo
 | Locator click/fill/selectOption/setChecked/focus/scrollIntoView and setInputFiles | Actual application DOM controls and portable-open flow. These are browser automation operations; they do not qualify an OS file picker, screen-reader speech, or a physical keyboard/IME. Accepted early evidence separately used Chromium `Input.imeSetComposition` and `Input.dispatchKeyEvent` for IME containment. |
 | Actual captured element `releasePointerCapture`, then one native pointer move while held | The release request clears pending capture. The following real move processes pending capture; require trusted capture/loss on the same pointer and element, no mouseup, then a cleared preview and unchanged document/history/clipboard before release. This trigger combines a browser API call with native input. |
 | Production `setPlayheadFrame` | Explicit transient scenario positioning and ten playhead updates. Native transport-button playback/pause is separate. This does not claim native Timeline seeking or continuous playback index measurement. |
-| Production `setColorGradingPreview` / `setMaskPreview` | Explicit sibling-preview setup/restoration around a native Animation drag. It checks the three owners present at b33b753. It does not qualify native grading/mask authoring, the later fourth tracking owner, or later title-effect helper parity. |
+| Production `setColorGradingPreview` / `setMaskPreview` | Explicit sibling-preview setup/restoration around a native Animation drag. It checks the three owners present at 75b89ef. It does not qualify native grading/mask authoring, the later fourth tracking owner, or later title-effect helper parity. |
 | Already-requested production module exports | Read-only store/history/clipboard observations plus the explicitly named transient setup above. No dev module, product test route, bundled-code replacement, or document edit API is injected into the page. Diagnostic project/history references retain at most four checkpoints and are cleared on portable project replacement. |
 | Canonical host snapshot/serializer/parser followed by UI reopen | Portable-file round trip of the actual mixed edits, with exact full project payload equality and explicit negative source-time intent. No native Save/Save As picker or downloaded-media claim. |
 | Component spy and pure indexed-read tests | Exact index-build reuse across playhead updates and bounded indexed reads. The unmodified browser bundle exposes no public build counter, so browser checks establish stable document/history and DOM bounds, not a separately measured browser rebuild count. |
@@ -146,3 +146,14 @@ include target identity comparison, trust, buttons and coordinates. Failure stat
 now preserves this ring and the current pointer/capture state, as success already
 does. Product source, other gesture actions, bounds and slot rules remain unchanged.
 This correction requires separate source review and a new native execution grant.
+
+## Mode-fix source repin
+
+Current product source is accepted `75b89ef6b70460a03ea99ca44d888b5ec06373ec`. The continuation
+actions/assertions remain identical to reviewed `7e7cfade097446c6f68219919fac838a8134f664`;
+only source identity and diagnostic provenance labels change. Prior source and
+checkpoint manifests are preserved under `docs/evidence/issue199/mode-repin/`.
+All earlier attempt evidence and all four fixture bytes are unchanged. Fixture
+generation remains recorded at its original source, including the supplemental
+b33b753 provenance. Only gestures is granted now; editing/large fixtures and
+qualification are subject to their later separate review/slot.

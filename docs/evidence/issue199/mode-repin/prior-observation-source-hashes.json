@@ -1,7 +1,7 @@
 {
-  "productSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
-  "previousProductSource": "b33b7531027979b8886f5db979d57cd96b96175d",
-  "scope": "Exact accepted mode-corrected product/test/configuration source for one gestures-only continuation. Fixture bytes and original generation manifests remain unchanged.",
+  "productSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+  "previousProductSource": "42eb93bf082dceb8fe7bc66434436c5d4614e7ba",
+  "scope": "Exact accepted focus-corrected product/test/configuration source for the early observable rerun. Canonical portable fixtures remain unchanged from their separately recorded87d8032 generation provenance.",
   "sha256": {
     "package-lock.json": "affe6090fa9a422aeadf6dd2e06ff65dd55f31457d7645ac9bf3f33e13bc44df",
     "package.json": "8b42c90b07c4cab70c4a5203a2bbe596c02c9a4e27c8d130fd38c40086df54c6",
@@ -222,8 +222,8 @@
     "src/ui/animation/AnimationEntry.tsx": "e9d3e73e4f49ffd8503575650472f7f75b36f6bd32f30659358d9c723f182c19",
     "src/ui/animation/AnimationGrid.tsx": "dd371a2d2ca9de37b07fcf30b575df7979feec17b33fa99a09ec3aae2395953c",
     "src/ui/animation/AnimationKeyControls.tsx": "6cae4b35a49fa6558511dd1b69f059d2747f29c698561fe06c60e51280025d45",
-    "src/ui/animation/AnimationWorkspace.test.tsx": "e956582d2f02e791029b9d65699c3e0208219e9167f2aba5d2637a9e5082b6eb",
-    "src/ui/animation/AnimationWorkspace.tsx": "df10f1fe3392e246354b8db9dc6cbb8870f1795b9699dfdad43347883728b899",
+    "src/ui/animation/AnimationWorkspace.test.tsx": "5a6992ec35f5a70259b202be00f86bdf5149e7e9c4dcb7597f26be99d157351d",
+    "src/ui/animation/AnimationWorkspace.tsx": "e8f1165ba59a096ba1b892803312efcc34dc3f85af1393028a92f88f79d1f669",
     "src/ui/animation/animation.css": "34b2213f34cc0099b0bad42ddfe9d4d98a8be475fbf3f2ea36a656599a7e403d",
     "src/ui/animation/useAnimationPointer.ts": "2bc3d8ecf963bd9f98a2146be79fd71a6ef722cd694c03a87cc620e4c317a3df",
     "src/ui/exportProfileUi.test.ts": "e3babaf495e47b2cee9f62f47fb5c9069faecacf49c0e12df876af4f75895847",

@@ -1,7 +1,7 @@
 {
-  "productSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "productSource": "b33b7531027979b8886f5db979d57cd96b96175d",
   "acceptedEarlyEvidence": "095e6d9463580e3502ba7c210d3982bed548a52f",
-  "scope": "Mechanical source repin to accepted mode fix; one gestures-only run authorized after clean commit/hash verification. Prior evidence and original fixture generation provenance retained.",
+  "scope": "Capture-event harness correction; original failed gestures preserved. Corrected gestures, editing and large require separately granted execution.",
   "sha256": {
     "docs/evidence/issue199/capture-event-correction-checks.json": "904fa09f46a7c4f35937826a770320311b33bb68d97f1849ef7dbc4d95aae9fa",
     "docs/evidence/issue199/capture-event-correction-lint.log": "8a74b6f8f684739c98720b3ecbb30cb9f14c0a941b75ba78ca93a3824227b65c",
@@ -28,12 +28,8 @@
     "docs/evidence/issue199/gestures-attempt1/step-04-dom.txt": "57837bba75b64ee4b0892b8df6133e8f5599f5a1b8a3f436367f529b238fa551",
     "docs/evidence/issue199/gestures-attempt1/step-05-dom.txt": "57837bba75b64ee4b0892b8df6133e8f5599f5a1b8a3f436367f529b238fa551",
     "docs/evidence/issue199/gestures-attempt1/step-06-dom.txt": "4ca765d091aed707bb01ef2e4bcafca648e3d4b1b3664d1e42f18281cee34275",
-    "docs/evidence/issue199/mode-repin.md": "3d2769455747624110eff847c29bc98f0224c5ac4174cd327b6c9981b808a1e4",
-    "docs/evidence/issue199/mode-repin/prior-checkpoint-hashes.json": "5db312818e1cda57ed020395111d08a5122205c3f419a0e19c346f55a31cea68",
-    "docs/evidence/issue199/mode-repin/prior-observation-source-hashes.json": "370f9ec0b87ea3be22426ee56a775811ea3bda9796833fe398b87a8350b6bbc3",
-    "docs/evidence/issue199/mode-repin/verification.json": "43d3d2d9d1a6ec728c636f6509e410b05d3f6895f5584c59576203598c35512c",
-    "scripts/issue199/continuation/PROTOCOL.md": "be63270eb878a6cad997cbac1f6768551cf1d5a2e9069a93d740d58d49be8dbd",
-    "scripts/issue199/continuation/observations.mjs": "4fd6c85b71d65b98d23d06524ae91afc4dfee6a7ff16e8f24495622442ce51d1",
+    "scripts/issue199/continuation/PROTOCOL.md": "2699757975844625c17068f4bec7a2c2129749379b102c398bdfbf525687e442",
+    "scripts/issue199/continuation/observations.mjs": "63d66a456a329243e13495e17c955497aa3d201233ddb950c1bf2b6c0e6be41f",
     "scripts/issue199/continuation/portable.mjs": "a6b86530470c51fc9e84dda28470fad3219b46accad54fa5f9b7579a933d4ad0",
     "scripts/issue199/continuation/process-identities.mjs": "271b6b40c64b702d3ba2f9223bdfe62a887a43739b5615cfabd5c8c6ae01fac4",
     "scripts/issue199/continuation/process-identities.test.mjs": "cb3f584019943921ec95ba372f1953195deea8e7a03ad11ae8745f56619b0da8",
@@ -43,12 +39,10 @@
     "scripts/issue199/fixtures/manifest.json": "6c8286b76e5a7741fd4acc0e49d78917b6f13192ebf961fb13e673b0b5807d65",
     "scripts/issue199/fixtures/many-lanes.myrelith": "2461ff539f8db3515c5845dbdbe1d3427fbe792d8a852906c6504f74221fda4c",
     "scripts/issue199/fixtures/mixed.myrelith": "e510cb67197ed771049dea65cfccf02820d4550841f6b32dde9ac6c0f4618ac0",
-    "scripts/issue199/observation-source-hashes.json": "5c47e553d1c6eb726ad38ae692dbefbf392691153a9532ef35551d272d3e0b0c",
+    "scripts/issue199/observation-source-hashes.json": "370f9ec0b87ea3be22426ee56a775811ea3bda9796833fe398b87a8350b6bbc3",
     "scripts/issue199/prepare-browser-fixtures.mjs": "1f6a4b43bacf20c8e896b29c23c31ee94c6202c7b46e8f118ff83551f4e1084c",
     "scripts/issue199/prepare-continuation-fixtures.mjs": "4a8eae83bfcadec63ee382c38dfeefcbc9c4922eb5fd7f621cb10643248db765",
     "scripts/issue199/run-animation-continuation.mjs": "9f01d1d2d7c52fd14786d90deb3694f217230295bb983daa0c3a5582b99c651a"
   },
-  "priorContinuationSource": "379634405c15b1e553c1e36996aac6ac83e61d39",
-  "previousCheckpointProductSource": "b33b7531027979b8886f5db979d57cd96b96175d",
-  "reviewedActionsSource": "7e7cfade097446c6f68219919fac838a8134f664"
+  "priorContinuationSource": "379634405c15b1e553c1e36996aac6ac83e61d39"
 }
