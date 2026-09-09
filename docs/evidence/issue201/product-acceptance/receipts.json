@@ -237,5 +237,49 @@
     "originalBytes": 18,
     "originalSha256": "0cb4411ab605ba6229cd28a3e7b8049a3b698e06a5853872c3edd1d6fa10f32b",
     "gzipSha256": "40336320a4adce7cd7ea1a142fb7ea10211f189715780f0aeb81832dbca0e2ea"
+  },
+  {
+    "path": "review-fixes/browser-check.mjs.gz",
+    "originalBytes": 3407,
+    "originalSha256": "b43fff711e27b0d7517431d18a0c8b486103704de6ed6df42fa0cd114ab88514",
+    "gzipSha256": "99210c28a47b7b9ba080b930e9560f51377bcab90db88fe45aa0098156950687"
+  },
+  {
+    "path": "review-fixes/build.log.gz",
+    "originalBytes": 5427,
+    "originalSha256": "16c77d207afdd769a2fd0cefe6f3a4710824e64cdc8a2f051389083abd6c0a23",
+    "gzipSha256": "ee6f153b262bb603a242231640ab3a153233fd24af7b3739f0739376eb46ca62"
+  },
+  {
+    "path": "review-fixes/delayed-window.png",
+    "bytes": 196214,
+    "sha256": "30ab771be084e8e7867c6da99ba98661fb7d0636f17b105bbe83683e64bc70d8"
+  },
+  {
+    "path": "review-fixes/fixture.json",
+    "bytes": 447,
+    "sha256": "7f5fb30676bbb964c9bfbcf767a57fea1dbf612d358eaaf18ea47a4a1421a499"
+  },
+  {
+    "path": "review-fixes/focused-tests.log.gz",
+    "originalBytes": 2168,
+    "originalSha256": "446b6eb0b27fc23ba25a277dcc4104f156176ca62db4588458a98c48ac0952cb",
+    "gzipSha256": "dd44580adffb2486ff290fc5c375617b0b1ae3d5e01f9b8d92110183016f86e6"
+  },
+  {
+    "path": "review-fixes/independent-release.json",
+    "bytes": 189,
+    "sha256": "6a728fb0f832c6bc5458988b99dad7648020616922c24b3b99bec1febb15dcf2"
+  },
+  {
+    "path": "review-fixes/lint.log.gz",
+    "originalBytes": 853,
+    "originalSha256": "ac7ba5fff3e982995b5c9226b058976081c383c65704183b863e038112aca18a",
+    "gzipSha256": "3fc8fcce1f19fb95103aee4d2c995663f14cf2374a26cd77e00e3a207db4403a"
+  },
+  {
+    "path": "review-fixes/result.json",
+    "bytes": 492,
+    "sha256": "3fed94cccbff9df0221ab98445bdd128a22f9f30e6710c02c7b1720a3a6466b7"
   }
 ]

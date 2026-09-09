@@ -1,0 +1,9 @@
+{
+  "bytes": 188245,
+  "sha256": "8a306f0370af39530d5b6d0f70283a3f52eb535c2bbc125cedd1eb29753ef0a7",
+  "source": "../whispercpp-runtime-source/manifest.json English WAV",
+  "derivation": "Original 16 kHz mono PCM16 in one-second blocks, timestamps offset by 0.25 seconds, Mediabunny MkvOutputFormat/AudioSampleSource pcm-s16. No silence padding.",
+  "firstTimestampSeconds": 0.25,
+  "endTimestampSeconds": 6.018,
+  "mediabunnyVersion": "1.50.9"
+}

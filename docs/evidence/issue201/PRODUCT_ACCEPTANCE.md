@@ -141,3 +141,30 @@ was independently checked before the next run.
 Compact build/test/audit logs are archived alongside these records. The first
 focus test used the wrong matcher name; it was corrected, the focused regression
 and build were rerun successfully, and the final full suite above includes it.
+
+## PR #227 review fixes
+
+Bugbot found two actionable issues on `f815383`: native browser spellcheck was
+not disabled on transcript text, and the default source window ignored delayed
+audio coverage. The review textarea now has `spellCheck={false}`. Source defaults
+use the connected asset's exact audio bounds, rounded inward to the displayed
+millisecond grid and capped at 300 seconds. The controller rejects pre-roll and
+video-only tails before model lookup or worker creation. Source timestamps and
+the strict streaming coverage check are unchanged; no silence is fabricated.
+
+Three new regressions cover the privacy attribute, delayed/long source defaults,
+and early range rejection followed by a valid unchanged request. All **13 tests
+in the three affected files**, **17 runner checks**, build and lint pass. The
+initial PR CI also passed **5,228 tests in 384 files**, 17 runner checks, build,
+lint and audit; the three new tests await the next CI head. Existing warnings
+are unchanged. No dependency or native runtime bytes changed.
+
+A focused built-product Chromium check imported a real delayed PCM Matroska
+fixture. Its defaults correctly show **0.25–6.018 seconds**; no model was
+installed and no speech worker was created. Root inspected the
+[screenshot](product-acceptance/review-fixes/delayed-window.png) and independently
+verified all four browser PIDs gone, port 5201 closed and the profile removed.
+This checks real import/default selection, not new AAC/native inference or
+resident-memory qualification. The earlier 13-case product/model gates remain
+the accepted runtime evidence. Raw result, fixture identity, runner, release
+receipt and focused engineering logs are in `product-acceptance/review-fixes`.

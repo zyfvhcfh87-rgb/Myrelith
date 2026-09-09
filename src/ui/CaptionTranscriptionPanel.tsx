@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { captionTranscription as controller, SPEECH_MODEL } from '../app/captionTranscriptionController'
+import { captionTranscription as controller, SPEECH_MODEL, speechSourceRange } from '../app/captionTranscriptionController'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
 const PAGE_SIZE = 40
@@ -27,7 +27,11 @@ export default function CaptionTranscriptionPanel({ onClose }: { onClose(): void
     target?.focus()
   }, [snapshot.phase, busy, reviewing])
   useEffect(() => {
-    setStart('0'); setEnd(source ? String(Math.min(300, Math.floor(source.durationMicroseconds / 1000) / 1000)) : '')
+    if (!source) { setStart('0'); setEnd(''); return }
+    const range = speechSourceRange(source)
+    // Round inward to the UI's millisecond grid without changing source time.
+    const first = Math.ceil(range.startMicroseconds / 1000) / 1000
+    setStart(String(first)); setEnd(String(Math.min(first + 300, Math.floor(range.endMicroseconds / 1000) / 1000)))
   }, [source])
   const pageCount = Math.max(1, Math.ceil(snapshot.rows.length / PAGE_SIZE))
   const currentPage = Math.min(page, pageCount - 1)
@@ -80,7 +84,7 @@ export default function CaptionTranscriptionPanel({ onClose }: { onClose(): void
         return <fieldset key={row.id} className="caption-track-settings"><legend>Caption {number} · {row.timing === 'manual' ? 'Manual timing required' : 'Model timing — review required'}</legend>
           <p>Source audio: {(row.sourceStartSample / snapshot.sourceSampleRate).toFixed(3)}–{((row.sourceStartSample + row.sourceSampleCount) / snapshot.sourceSampleRate).toFixed(3)} seconds. This is source coverage, not authored cue timing.</p>
           <label><input type="checkbox" checked={row.included} onChange={event => controller.updateRow(row.id, { included: event.target.checked })} />Include caption {number}</label>
-          <label>Text {number}<textarea maxLength={20_000} value={row.text} onChange={event => controller.updateRow(row.id, { text: event.target.value })} /></label>
+          <label>Text {number}<textarea spellCheck={false} maxLength={20_000} value={row.text} onChange={event => controller.updateRow(row.id, { text: event.target.value })} /></label>
           <label>Start frame {number}<input type="number" min="0" step="1" value={row.startFrame ?? ''} onChange={event => controller.updateRow(row.id, { startFrame: event.target.value === '' ? null : Number(event.target.value) })} /></label>
           <label>End frame {number}<input type="number" min="1" step="1" value={row.endFrame ?? ''} onChange={event => controller.updateRow(row.id, { endFrame: event.target.value === '' ? null : Number(event.target.value) })} /></label>
           <button type="button" onClick={() => controller.splitRow(row.id)}>Split text for manual timing</button>

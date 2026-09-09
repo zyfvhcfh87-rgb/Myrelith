@@ -148,10 +148,11 @@ export class CaptionTranscriptionController {
       this.available()
       const document = useDocumentStore.getState(), media = useMediaStore.getState(), asset = media.assets.get(selection.assetId)
       if (!asset || !asset.hasAudio || !['audio', 'video'].includes(asset.kind)) throw new Error('Choose one connected source with audio')
-      if (!['en', 'fr'].includes(selection.language) || !Number.isSafeInteger(selection.startMicroseconds) || selection.startMicroseconds < 0
-        || !Number.isSafeInteger(selection.endMicroseconds) || selection.endMicroseconds > asset.durationMicroseconds
+      const range = speechSourceRange(asset)
+      if (!['en', 'fr'].includes(selection.language) || !Number.isSafeInteger(selection.startMicroseconds) || selection.startMicroseconds < range.startMicroseconds
+        || !Number.isSafeInteger(selection.endMicroseconds) || selection.endMicroseconds > range.endMicroseconds
         || selection.endMicroseconds - selection.startMicroseconds < 1_000_000 || selection.endMicroseconds - selection.startMicroseconds > 300_000_000
-        || !Number.isSafeInteger(selection.targetFrame) || selection.targetFrame < 0 || selection.targetFrame > 1_000_000_000) throw new Error('Select 1–300 seconds inside the source and a nonnegative insertion frame')
+        || !Number.isSafeInteger(selection.targetFrame) || selection.targetFrame < 0 || selection.targetFrame > 1_000_000_000) throw new Error(`Select 1–300 seconds inside audio coverage (${range.startMicroseconds / 1_000_000}–${range.endMicroseconds / 1_000_000} seconds) and a nonnegative insertion frame`)
       this.review?.session.dispose(); this.review = null
       this.pin = { project: document.project, projectGeneration: document.projectGeneration, sequence: document.activeSequenceId,
         asset, compatibilityRequest: media.compatibility.get(asset.id)?.requestId ?? null }
@@ -270,6 +271,15 @@ export class CaptionTranscriptionController {
       this.publish({ phase: 'idle', rows: [], error: null, message: `Added ${items.length} captions. Undo removes the whole transcription.` })
       return true
     } catch (cause) { this.publish({ error: message(cause) }); return false }
+  }
+}
+/** Source timestamps stay absolute; never pad or shift delayed audio. */
+export function speechSourceRange(asset: MediaAsset) {
+  const audio = asset.sourceBounds.audio
+  return {
+    startMicroseconds: audio?.status === 'exact' ? Math.max(0, audio.firstTimestampUs) : 0,
+    endMicroseconds: audio?.status === 'exact'
+      ? Math.min(asset.durationMicroseconds, audio.endTimestampUs) : asset.durationMicroseconds,
   }
 }
 export const captionTranscription = new CaptionTranscriptionController()

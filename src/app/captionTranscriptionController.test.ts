@@ -124,3 +124,18 @@ test('worker constructor failure is visible and releases known-unused scheduler 
   await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('Worker construction denied'))
   expect(mediaResourceAdmission.snapshot().blockers).not.toContain('analysis')
 })
+
+test('audio coverage rejects pre-roll and video-only tail before model or worker allocation', async () => {
+  const { controller, port, worker } = harness()
+  useMediaStore.setState({ assets: new Map([['audio', { ...source, durationMicroseconds: 5_000_000,
+    sourceBounds: { video: null, audio: { status: 'exact', firstTimestampUs: 250_000, endTimestampUs: 2_000_000 } } }]]) })
+  for (const range of [{ startMicroseconds: 0, endMicroseconds: 2_000_000 }, { startMicroseconds: 250_000, endMicroseconds: 3_000_000 }]) {
+    controller.start({ ...selection, ...range })
+    expect(controller.getSnapshot().error).toContain('audio coverage (0.25–2 seconds)')
+    expect(port.installed).not.toHaveBeenCalled(); expect(port.createWorker).not.toHaveBeenCalled()
+  }
+  controller.start({ ...selection, startMicroseconds: 250_000, endMicroseconds: 2_000_000 })
+  await vi.waitFor(() => expect(port.createWorker).toHaveBeenCalledOnce())
+  expect(worker.postMessage).toHaveBeenCalledWith(
+    expect.objectContaining({ startMicroseconds: 250_000, endMicroseconds: 2_000_000 }))
+})
