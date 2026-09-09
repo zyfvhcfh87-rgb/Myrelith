@@ -2,8 +2,9 @@
 
 Local accepted source: `34540a6`. The subsequent merge `c82c3c8` adds only
 reviewed isolated speech research/scripts/evidence; `src`, dependencies and
-build configuration are identical. Publication and the scope decision for
-unfinished transcription remain pending. This is not milestone closure.
+build configuration are identical. The user approved publishing the completed
+batch with #201 remaining open for transcription. Normal PR checks, review and
+merge still govern publication. This delivery does not close the milestone.
 
 | Check | Result |
 | --- | --- |
