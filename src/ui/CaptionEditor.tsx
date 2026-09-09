@@ -305,7 +305,7 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
     if (focusable.length === 0) return
     const first = focusable[0]!
     const last = focusable[focusable.length - 1]!
-    if (event.shiftKey && (document.activeElement === first || ['caption-review-heading', 'caption-import-heading', 'caption-export-heading', 'caption-speech-heading'].includes(document.activeElement?.id ?? ''))) {
+    if (event.shiftKey && (document.activeElement === first || ['caption-review-heading', 'caption-import-heading', 'caption-export-heading', 'caption-speech-heading', 'caption-speech-review-heading'].includes(document.activeElement?.id ?? ''))) {
       event.preventDefault()
       last.focus()
     } else if (!event.shiftKey && document.activeElement === last) {

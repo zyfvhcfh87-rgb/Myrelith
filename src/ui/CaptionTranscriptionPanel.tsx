@@ -13,10 +13,19 @@ export default function CaptionTranscriptionPanel({ onClose }: { onClose(): void
   const [target, setTarget] = useState(String(playhead)), [language, setLanguage] = useState<'en' | 'fr'>('en')
   const [page, setPage] = useState(0)
   const heading = useRef<HTMLHeadingElement>(null)
+  const reviewHeading = useRef<HTMLHeadingElement>(null)
+  const cancelButton = useRef<HTMLButtonElement>(null)
+  const closeButton = useRef<HTMLButtonElement>(null)
   const source = assets.get(sourceId)
   const busy = ['installing', 'preparing', 'running', 'stopping'].includes(snapshot.phase)
   const reviewing = snapshot.phase === 'review'
-  useEffect(() => { heading.current?.focus(); void controller.refresh() }, [])
+  useEffect(() => { void controller.refresh() }, [])
+  // Disabling/removing the active control must not strand keyboard focus on body.
+  useEffect(() => {
+    const target = reviewing ? reviewHeading.current : snapshot.phase === 'stopping'
+      ? closeButton.current : busy ? cancelButton.current : heading.current
+    target?.focus()
+  }, [snapshot.phase, busy, reviewing])
   useEffect(() => {
     setStart('0'); setEnd(source ? String(Math.min(300, Math.floor(source.durationMicroseconds / 1000) / 1000)) : '')
   }, [source])
@@ -61,9 +70,10 @@ export default function CaptionTranscriptionPanel({ onClose }: { onClose(): void
     <p role="status" aria-live="polite">{snapshot.message}</p>
     {busy && <><progress max={1} value={snapshot.progress} aria-label="Speech progress" />
       <p>Cancel, playback and export wait for the current native window to finish, typically a few seconds and at most its 120 second deadline.</p>
-      <button type="button" disabled={snapshot.phase === 'stopping'} onClick={() => { void controller.cancel().catch(() => undefined) }}>Cancel speech</button></>}
+      <button type="button" ref={cancelButton} disabled={snapshot.phase === 'stopping'} onClick={() => { void controller.cancel().catch(() => undefined) }}>Cancel speech</button></>}
     {snapshot.error && <p role="alert">{snapshot.error}</p>}
     {reviewing && <>
+      <h4 id="caption-speech-review-heading" tabIndex={-1} ref={reviewHeading}>Review transcript</h4>
       <p>{snapshot.rows.length} review rows · {included.length} included. Rows with missing timing cannot be applied. Splitting a row clears both halves’ timing for manual review.</p>
       <div className="caption-speech-rows" aria-label="Transcript review">{snapshot.rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map((row, index) => {
         const number = currentPage * PAGE_SIZE + index + 1
@@ -82,6 +92,6 @@ export default function CaptionTranscriptionPanel({ onClose }: { onClose(): void
       <button type="button" disabled={!included.length || needTiming} onClick={() => { if (controller.apply()) onClose() }}>Apply transcription as one edit</button>
       <button type="button" onClick={() => { void controller.cancel('Transcript review discarded') }}>Discard review</button>
     </>}
-    <button type="button" onClick={onClose}>Close transcription</button>
+    <button type="button" ref={closeButton} onClick={onClose}>Close transcription</button>
   </section>
 }
