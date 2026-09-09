@@ -1,5 +1,8 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": [
+    "public/speech-runtime/db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7.mjs"
+  ],
   "plugins": ["react", "typescript", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
