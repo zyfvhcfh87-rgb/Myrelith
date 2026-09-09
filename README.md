@@ -49,6 +49,7 @@ Projects created before the rename with a `.webcut` filename or
 | Projects | Horizontal 16:9, vertical 9:16, square 1:1, and 4:5 canvases from 720p to 4K; exact common frame and audio rates; Save, Save As, live save, Resume, Recent, recovery, and workspace presets |
 | Media | Video, audio, PNG, JPEG, WebP, and AVIF; byte-level container inspection; searchable virtualized pool; collections; thumbnails, filmstrips, and waveforms; offline relink; optional local editing proxies |
 | Timeline | Four video and four audio tracks by default; select, razor, trim, ripple trim, slip, slide, linked editing, track controls, markers, snapping, caption tracks with SRT/VTT, and undo/redo |
+| Captions | SRT/VTT/semantic ASS interchange, batch editing, and optional local English/French transcription with editable text/timing review and one-step Apply/Undo |
 | Effects | Text overlays, transforms, crop, blend modes, opacity, volume, color correction, masks and chroma key, keyframed animation, dynamic zoom presets, visual crossfades, and synchronized audio fades when valid handles exist |
 | Motion | Constant-speed retiming and speed ramps; video stabilization; point and box tracking; manual lens correction when WebGL2 is available |
 | Preview | Direct Program Monitor manipulation; Auto/Full/Half/Quarter quality; histogram, waveform, and vectorscope; playback audio meters; command palette |
@@ -100,8 +101,12 @@ the static app; editing remains in the visitor's browser.
 Myrelith does not upload selected media or projects. It uses browser storage for
 preferences, browser-managed file handles you authorize, and bounded recovery
 snapshots that contain project structure and source metadata—but never the
-source video, audio, or image bytes. Clearing the site's browser data removes
-these conveniences.
+source video, audio, or image bytes. Optional local transcription stores a
+verified speech model separately in Cache Storage (96 MiB budget including an
+install). Choosing Download contacts Hugging Face and its file-delivery hosts;
+selecting the exact local model file avoids that download. Audio and transcripts
+are not uploaded. Remove the model in the transcription panel or clear local
+site data.
 
 Browser storage is bound to the exact site origin. Moving to the Myrelith
 hostname cannot automatically transfer Recents, recovery copies, preferences,
@@ -125,6 +130,11 @@ security metadata. Cloudflare Web Analytics is disabled. Read the full
   and manual reconnection.
 - Recovery copies are origin-local browser conveniences, not user-owned
   `.myrelith` saves. Multi-tab recovery ownership is not coordinated.
+- Local transcription supports English/French and one 1–300 second source
+  window at a time, with continuous mono/stereo audio at 8–96 kHz. Review model
+  text and timing; some windows require manual timing, and overlapping windows
+  may repeat words. Cached speech assets support a loaded app offline; opening
+  the app can require a connection. Spellcheck and translation are unavailable.
 - Local ProRes and AC-3/E-AC-3 extensions cover import only. There is no proxy
   converter or local export-encoder fallback. Editing proxies are optional
   preview helpers; export always uses the original source.
