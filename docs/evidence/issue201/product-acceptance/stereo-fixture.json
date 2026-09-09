@@ -1,0 +1,9 @@
+{
+  "path": ".tmp/issue201-product/english-stereo-48k.wav",
+  "sha256": "6202eb6dc9c73c7d0d1c655b8841fe9fe4f1b351e342a41451848ba5d6bde5f9",
+  "sourceSha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46",
+  "frames": 329040,
+  "sampleRate": 48000,
+  "channels": 2,
+  "description": "Pinned English recording with one second leading silence; deterministic linear 3x interpolation, left original amplitude and right half amplitude; PCM16 stereo. Source range 1..6.855 seconds."
+}

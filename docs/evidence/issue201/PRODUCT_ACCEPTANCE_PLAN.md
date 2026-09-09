@@ -1,8 +1,9 @@
 # Issue 201 product acceptance checkpoint
 
-Status: source implemented, browser/build unexecuted. Supervisor owns the exclusive
-runtime slot and publication. This is the existing issue acceptance step, not a
-new model or runtime research gate.
+Historical execution plan. [Final product acceptance](PRODUCT_ACCEPTANCE.md)
+records the completed checks, exact scope, qualifications and preserved failures.
+Publication remains supervisor-owned. This is the existing issue acceptance
+step, not a new model or runtime research gate.
 
 ## Source changes
 

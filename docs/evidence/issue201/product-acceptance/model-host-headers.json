@@ -1,0 +1,14 @@
+{
+  "exitCode": 0,
+  "headers": [
+    "HTTP/2 302 ",
+    "content-type: text/plain; charset=utf-8",
+    "content-length: 1101",
+    "access-control-allow-origin: https://myrelith.pages.dev",
+    "HTTP/2 200 ",
+    "content-type: application/octet-stream",
+    "content-length: 43537433",
+    "access-control-allow-origin: *"
+  ],
+  "error": ""
+}

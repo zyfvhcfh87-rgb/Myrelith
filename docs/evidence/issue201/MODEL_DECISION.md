@@ -2,9 +2,10 @@
 
 Date: 2026-09-09. **Supervisor-approved GO for the exact candidate and bounded production
 integration below.** Runtime09
-passed all 23 laboratory cases. The production speech feature is not yet wired
-or qualified; this is not a general accuracy, browser, security or performance
-guarantee. [Runtime09 outcome](WHISPER_CPP_RUNTIME_RUN_09.md) and its adjacent
+passed all 23 laboratory cases. The later [product acceptance](PRODUCT_ACCEPTANCE.md)
+qualifies the bounded app integration separately; this is not a general accuracy,
+browser, security or performance guarantee.
+[Runtime09 outcome](WHISPER_CPP_RUNTIME_RUN_09.md) and its adjacent
 exact raw records support this decision. No exclusive runtime slot remains held.
 
 ## Exact candidate and model

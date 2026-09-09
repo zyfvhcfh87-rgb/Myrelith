@@ -1,12 +1,13 @@
 # Issue #201 — semantic ASS, batch captions, and optional local speech
 
-Status: **caption editing/interchange accepted; the exact local speech model
-passed all 23 laboratory cases and received supervisor GO on 2026-09-09.
-Production transcription source is implemented; the built-product browser gate
-is pending.** The
+Status: **implementation and local acceptance complete.** The exact local speech
+model passed all 23 laboratory cases and received supervisor GO on 2026-09-09;
+the built product subsequently passed [all 13 acceptance checks](evidence/issue201/PRODUCT_ACCEPTANCE.md),
+5,226 full-suite tests, 17 runner checks, build/typecheck, lint and production audit.
+Publication and issue closure are verified separately. The
 [current model decision](evidence/issue201/MODEL_DECISION.md) records exact
 candidate identity, measured limits and the updated untimed/offline/cancellation
-contracts. #201 remains open until production integration and acceptance finish.
+contracts.
 The root's [caption browser workflows](evidence/milestone9/caption-workflows.md)
 remain the accepted baseline for editing, Undo/Redo, Save/Open and downloads.
 

@@ -7,12 +7,12 @@ and the open list below.
 
 ## Milestone 9 integration (2026-09-09)
 
-The combined work is on `codex/milestone9-integration`. Issue-specific local
-acceptance is complete for masks (#198), unified animation (#199), titles
-(#200), and the HDR research decision (#202). Caption authoring from #201 is
-also accepted; local transcription remains incomplete. Publication and the
-combined engineering result are recorded separately; this entry does not
-claim the milestone or #201 is closed.
+The initial combined branch was merged through PR #226 as `4fc0ac8`, closing
+#198, #199, #200 and #202. It also delivered #201's caption authoring work.
+Local transcription is now implemented and accepted on
+`codex/issue201-completion`; its [product acceptance](evidence/issue201/PRODUCT_ACCEPTANCE.md)
+records 13 real-browser checks after the separate 23-case model GO. The focused
+follow-up PR owns publication and #201 closure.
 
 - [Masks](ISSUE_198_PLAN.md): direct Program handles and cubic path editing,
   explicit held path keys, and reviewed tracking attachment. Path morphing is
@@ -27,9 +27,12 @@ claim the milestone or #201 is closed.
   with no remote font service.
 - [Captions](ISSUE_201_PLAN.md): semantic track/cue style, bounded ASS interchange
   with explicit loss review, atomic batch edits and actual SRT/VTT/ASS downloads.
-  The speech lab has useful short-input results but fails its resident-memory
-  gate around rapid worker replacement. No product transcription control ships
-  from that evidence; #201 remains open until its required work is delivered.
+  Optional English/French transcription accepts one 1–300 second source window,
+  with explicit exact-model installation, bounded streaming audio and editable
+  review. Untimed text requires manual timing or exclusion. Cooperative cleanup
+  retains admission through cancellation; a complete review holds text only.
+  A loaded app with warm speech assets works offline; reopening can require
+  an app connection. No spelling/translation language assets are bundled.
 - [HDR research](ISSUE_202_PLAN.md): the measured eight-bit pipeline and proposed
   managed output do not qualify 10-bit/HDR promotion. The completed research
   decision adds no product HDR mode, preset, dependency or format change.
@@ -39,7 +42,11 @@ portable project format remains 8. Unknown versioned intent stays preserved.
 Reviewed browser evidence covers [mask export/cancel/retry](evidence/issue198/export-lifecycle-attempt2.md),
 [mixed animation/title/audio export](evidence/issue199/g4-completion.md),
 [title keyboard/dialogs](evidence/issue200/keyboard-results.md) and
-[caption editing/Save/Open/downloads](evidence/milestone9/caption-workflows.md).
+[caption editing/Save/Open/downloads](evidence/milestone9/caption-workflows.md),
+and [local transcription](evidence/issue201/PRODUCT_ACCEPTANCE.md). The speech
+completion passes 5,226 full-suite tests plus 17 runner checks, build/typecheck,
+lint and a zero-vulnerability production audit. Its browser memory increase is
+881,033,216 bytes, below 1 GiB, with complete cleanup and process release.
 Keep the documented lossy-codec limits, staged title coverage, headless Mac
 font-popup limitation and unqualified physical HDR display explicit. These
 focused results do not assert that the broader browser suite is green.
