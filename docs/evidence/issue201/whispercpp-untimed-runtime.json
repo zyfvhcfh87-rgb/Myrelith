@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "adapterSourceCommit": "ac2c447509946ecbab05486297e9080846e5889d",
+  "frozenRuntimeCheckpoint": "b9cab56866d04e41984b20c5d9d52e786106bb4f4622cc33b8e9777e26349114",
+  "wasm": {
+    "name": "myrelith-whisper.wasm",
+    "bytes": 1198548,
+    "sha256": "2f05c1ba7a828ba93a5ab1c7dd752f0d055360d02aa23edc9b60572424e01ef2",
+    "packedPath": "docs/evidence/issue201/whispercpp-untimed-runtime/myrelith-whisper.wasm.gz"
+  },
+  "sourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp-untimed-review/run-lab.mjs",
+      "bytes": 44410,
+      "sha256": "bf6668fdb7220518c52edf5ca57b1145d44ff3532e65b472d997641abd338500"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-untimed-review/preflight.mjs",
+      "bytes": 2817,
+      "sha256": "79dbbd021d9c8a97280f279a0de548357861b7fbb8ebfa0849c660a0b2d276c9"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-untimed-review/candidate.mjs",
+      "bytes": 3478,
+      "sha256": "65ad10acdd50575deff9c92c78087bfa27a2380698d7c0dcd5f35c2c451c5d5b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-untimed-review/review-acceptance.mjs",
+      "bytes": 2242,
+      "sha256": "8fea2f99b877a9cf6d51509779c777ef79256c8a7f77bac935389c48b20ff589"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-untimed-review/review-acceptance.test.mjs",
+      "bytes": 1963,
+      "sha256": "08ffc2eff92ddf55973c9843f75744f72151c77ac10970d2dfa9a6f52936612d"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-untimed-review/preflight.test.mjs",
+      "bytes": 972,
+      "sha256": "c5541f69e7ee2568a88fc5a164517484c84ce470dedc5f58391b871128c19783"
+    }
+  ],
+  "referenceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp-untimed-review/model-worker.mjs",
+      "bytes": 15259,
+      "sha256": "95a87985bc9645c139ea4cac76915cb0f3b4491d13c3eb1a9eccd068f7ed8c9a"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-untimed-review/worker-protocol.mjs",
+      "bytes": 8658,
+      "sha256": "2527fde442ceae7d976321b88c422871735fcf2f290a9caa8b8004642067976e"
+    },
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_UNTIMED_RUNTIME.md",
+      "bytes": 2481,
+      "sha256": "1edf6d876437cc589135690ea79bddb2ce3529b17620f440427177deb6b9f4ca"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-cancellation-runtime.json",
+      "bytes": 1438,
+      "sha256": "b9cab56866d04e41984b20c5d9d52e786106bb4f4622cc33b8e9777e26349114"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-untimed-runtime/myrelith-whisper.wasm.gz",
+      "bytes": 386581,
+      "sha256": "17d92e07f08cce9dab41b865053e0a4fbfb3a3c9c166bb6c39a74ea9da693d6d"
+    }
+  ]
+}
