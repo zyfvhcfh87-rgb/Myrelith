@@ -29,6 +29,7 @@ import type { ExportFileDestinationCapability } from './exportFilePicker'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { resetDocumentStoreForTest } from '../test/storeFixtures'
+import { registerSpeechRetirement } from './speechRetirement'
 import {
   cancelExport,
   disposeExport,
@@ -1469,6 +1470,44 @@ describe('exportController wiring and completion', () => {
 })
 
 describe('exportController cancellation', () => {
+  test('speech retirement gates export probes and cancellation prevents stale allocation after settlement', async () => {
+    const retirement = deferred()
+    const retire = vi.fn(() => retirement.promise)
+    const unregister = registerSpeechRetirement(retire)
+    const h = makeHarness()
+    try {
+      const completion = startExport(SETTINGS, {}, h.deps)
+      await vi.waitFor(() => expect(retire).toHaveBeenCalledExactlyOnceWith('Export'))
+      expect(h.preparePlaybackForExport).not.toHaveBeenCalled()
+      expect(h.preflightProfile).not.toHaveBeenCalled()
+      expect(h.fetchBlob).not.toHaveBeenCalled()
+      expect(h.createMediaSource).not.toHaveBeenCalled()
+      expect(h.createPipelineDeps).not.toHaveBeenCalled()
+      expect(h.runExport).not.toHaveBeenCalled()
+
+      let cancelled = false
+      const cancellation = cancelExport().then(() => { cancelled = true })
+      await Promise.resolve()
+      expect(cancelled).toBe(false)
+      await expect(startExport(SETTINGS, {}, h.deps)).rejects.toThrow('An export is already in progress')
+      retirement.resolve()
+      await expect(completion).resolves.toBeUndefined()
+      await cancellation
+      expect(cancelled).toBe(true)
+      expect(h.preparePlaybackForExport).not.toHaveBeenCalled()
+      expect(h.preflightProfile).not.toHaveBeenCalled()
+      expect(h.fetchBlob).not.toHaveBeenCalled()
+      expect(h.createMediaSource).not.toHaveBeenCalled()
+      expect(h.createPipelineDeps).not.toHaveBeenCalled()
+      expect(h.runExport).not.toHaveBeenCalled()
+
+      const retry = makeHarness()
+      await expect(startExport(SETTINGS, {}, retry.deps)).resolves.toBe(RESULT)
+      expect(retry.preflightProfile).toHaveBeenCalledOnce()
+      expect(retry.createMediaSource).toHaveBeenCalledOnce()
+    } finally { retirement.resolve(); unregister() }
+  })
+
   test('returns a committed file when cancellation loses the terminal race', async () => {
     const finalizeGate = deferred<void>()
     const observed = observeRun(
