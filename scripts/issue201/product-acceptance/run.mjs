@@ -269,7 +269,7 @@ try {
     const transcript = await transcribe()
     assert.equal(transcript.sourceSampleRate, 48000); assert.equal(transcript.channels, 2); assert.equal(transcript.sourceStartSample, 48000)
     assert(transcript.windows.some(window => window.timing === 'model' && window.segments.length))
-    await page.getByLabel('Text 1', { exact: true }).fill('Reviewed local speech')
+    await speech().getByLabel(/^Text 1(?!\d)/).fill('Reviewed local speech')
     await page.screenshot({ path: path.join(output, 'stereo-review.png') }); result.screenshots.push('stereo-review.png')
     await button('Apply transcription as one edit').click(); await button('Close caption editor').click()
     return { rate: transcript.sourceSampleRate, channels: transcript.channels, sourceStartSample: transcript.sourceStartSample }
