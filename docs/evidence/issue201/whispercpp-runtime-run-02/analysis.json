@@ -1,0 +1,139 @@
+{
+  "status": "raw-evidence-recomputed",
+  "runtimeSourceCommit": "406cbcb6af10c3e57b71a367caf3b193ae03dddd",
+  "checkpointSha256": "5351db3c709f200338a6cad122320dcfe1d5908494064de31c1eda6e1458186b",
+  "acceptance": {
+    "automatedStatus": "failed-incomplete",
+    "expectedCases": 23,
+    "completedCases": 9,
+    "missing": [
+      "transcribe-english-9",
+      "transcribe-french-10",
+      "transcribe-silence-11",
+      "one-second-speech-window",
+      "corrupt-audio-rejection",
+      "cancel-model-load",
+      "cancel-prepare",
+      "cancel-infer",
+      "project-replacement",
+      "300-second-bounded-workload",
+      "offline-loaded-app-and-fresh-worker",
+      "offline-page-reload",
+      "offline-persistent-browser-reopen",
+      "remove-model-and-offline-no-model"
+    ],
+    "failed": [
+      "transcribe-english-8"
+    ],
+    "unexpected": [],
+    "duplicateNames": false,
+    "qualification": "Automatic laboratory checks only; no production/model enablement verdict."
+  },
+  "passed": 8,
+  "failedCaseElapsedMs": 122,
+  "firstFailure": {
+    "type": "case-failure",
+    "case": "transcribe-english-8",
+    "message": "page.evaluate: Error: Core Aborted(). Build with -sASSERTIONS for more info.; cooperativeZero=false\n    at worker.onmessage (http://127.0.0.1:5201/lab-client.mjs:236:23)",
+    "at": 1788901284779
+  },
+  "rawSampleCount": 15,
+  "partialJournalRecords": 46,
+  "baselineBytes": 288129024,
+  "sampledPeakBytes": 834797568,
+  "sampledPeakDeltaBytes": 546668544,
+  "maximumActiveEpochGapMs": 109,
+  "observedEpochQualified": true,
+  "fullRuntimeQualification": false,
+  "readyEvent": false,
+  "audioPreparationReached": false,
+  "inferenceReached": false,
+  "transcriptProduced": false,
+  "diagnosticRecords": 12,
+  "diagnosticCharacters": 1628,
+  "omittedRecords": 0,
+  "truncatedRecords": 0,
+  "nativeDiagnostics": [
+    {
+      "kind": "enter",
+      "phase": "factory",
+      "text": "factory",
+      "truncated": false
+    },
+    {
+      "kind": "return",
+      "phase": "factory",
+      "text": "factory",
+      "truncated": false
+    },
+    {
+      "kind": "enter",
+      "phase": "_speech_model_alloc",
+      "text": "_speech_model_alloc",
+      "truncated": false
+    },
+    {
+      "kind": "return",
+      "phase": "_speech_model_alloc",
+      "text": "5933608",
+      "truncated": false
+    },
+    {
+      "kind": "enter",
+      "phase": "_speech_load",
+      "text": "_speech_load",
+      "truncated": false
+    },
+    {
+      "kind": "stderr",
+      "phase": "_speech_load",
+      "text": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/source/whisper.cpp-371b5a7561823ab2bb32142d2751e35e7534727b/ggml/src/ggml-backend.cpp:124: GGML_ASSERT(buffer) failed",
+      "truncated": false
+    },
+    {
+      "kind": "abort",
+      "phase": "_speech_load",
+      "text": "",
+      "truncated": false
+    },
+    {
+      "kind": "abort-stack",
+      "phase": "_speech_load",
+      "text": "Error: Native abort callback\n    at Object.onAbort (http://127.0.0.1:5201/observe-module.mjs:32:33)\n    at abort (http://127.0.0.1:5201/assets/myrelith-whisper.mjs:1:1602)\n    at __abort_js (http://127.0.0.1:5201/assets/myrelith-whisper.mjs:1:7786)\n    at wasm://wasm/00492c36:wasm-function[126]:0x62bb\n    at wasm://wasm/00492c36:wasm-function[59]:0x1347\n    at wasm://wasm/00492c36:wasm-function[219]:0xe72f\n    at wasm://wasm/00492c36:wasm-function[540]:0x473b5\n    at wasm://wasm/00492c36:wasm-function[198]:0xd613\n    at wasm://wasm/00492c36:wasm-function[948]:0xd0d52\n    at invoke_iiiii (http://127.0.0.1:5201/assets/myrelith-whisper.mjs:1:16574)",
+      "truncated": false
+    },
+    {
+      "kind": "stderr",
+      "phase": "_speech_load",
+      "text": "Aborted()",
+      "truncated": false
+    },
+    {
+      "kind": "exception",
+      "phase": "_speech_load",
+      "text": "RuntimeError: Aborted(). Build with -sASSERTIONS for more info.\n    at abort (http://127.0.0.1:5201/assets/myrelith-whisper.mjs:1:1709)\n    at __abort_js (http://127.0.0.1:5201/assets/myrelith-whisper.mjs:1:7786)\n    at wasm://wasm/00492c36:wasm-function[126]:0x62bb\n    at wasm://wasm/00492c36:wasm-function[59]:0x1347\n    at wasm://wasm/00492c36:wasm-function[219]:0xe72f\n    at wasm://wasm/00492c36:wasm-function[540]:0x473b5\n    at wasm://wasm/00492c36:wasm-function[198]:0xd613\n    at wasm://wasm/00492c36:wasm-function[948]:0xd0d52\n    at invoke_iiiii (http://127.0.0.1:5201/assets/myrelith-whisper.mjs:1:16574)\n    at wasm://wasm/00492c36:wasm-function[821]:0xb2d3a",
+      "truncated": false
+    },
+    {
+      "kind": "enter",
+      "phase": "_speech_close",
+      "text": "_speech_close",
+      "truncated": false
+    },
+    {
+      "kind": "return",
+      "phase": "_speech_close",
+      "text": "-92",
+      "truncated": false
+    }
+  ],
+  "workerCleanup": {
+    "mode": "terminated-error",
+    "reason": "initialization-failed",
+    "elapsedMs": 0.09999999403953552,
+    "cooperativeZero": false
+  },
+  "browserCloseMs": 59,
+  "independentReleaseAt": "2026-09-08T21:02:08.528434+00:00",
+  "sourceAndServedBytesUnchanged": true
+}

@@ -1,5 +1,7 @@
 import { ColorGradingExecutionError, ColorGradingCancelledError, type ColorGradingFrame } from './colorGradingRuntime'
 import { colorGradingPlanError, colorGradingPlanNeedsPixels } from '../domain/colorGradingBudget'
+import { videoPixelWorkBudget } from '../domain/videoPixelWorkBudget'
+import { renderWorkSurfaceBudget } from '../domain/renderSurfaceBudget'
 import { EMPTY_COLOR_GRADING_CONTEXT, isColorGradingPixel, isColorGradingType } from '../domain/colorGradingEffects'
 /**
  * pipeline/render.ts — compositeFrame(doc, frame): draw one timeline frame.
@@ -37,7 +39,8 @@ import { EMPTY_COLOR_GRADING_CONTEXT, isColorGradingPixel, isColorGradingType } 
  *   Preview and export consume that same
  *   ordered plan; this compositor never reconstructs groups by adjacency.
  */
-import { resolveVideoBusEffects, videoBusRenderBudgetError } from '../domain/videoBusStage'
+import { resolveVideoBusEffects } from '../domain/videoBusStage'
+import { titleCompositionBudgetError } from '../domain/titleComposition'
 
 import type {
   AssetId,
@@ -51,7 +54,8 @@ import type {
   Transform,
 } from '../domain/schema'
 import type { PresentationProfile } from '../domain/presentationProfile'
-import { wrapTextLines } from '../domain/textLayout'
+import { textCanvasFont, textLayoutMetrics, wrapTextLines } from '../domain/textLayout'
+import type { TitlePaintElement } from '../domain/titleComposition'
 import { textPropsValidationError } from '../domain/textOverlay'
 import {
   videoCompositionRequests,
@@ -59,6 +63,8 @@ import {
   type PlannedCrossfadeFrameRequest,
   type PlannedVideoFrameRequest,
   type VideoCompositionPlan,
+  type TextOverlayPlanItem,
+  type TitleCompositionPlanItem,
 } from '../domain/videoCompositionPlan'
 import type { VideoFrameRequest } from '../domain/crossfadePlan'
 import { clipVisualSettings } from '../domain/clipInspector'
@@ -156,6 +162,9 @@ export interface Composite2D {
     dHeight?: number,
   ): void
   beginPath?(): void
+  ellipse?(x: number, y: number, radiusX: number, radiusY: number, rotation: number, startAngle: number, endAngle: number): void
+  fill?(): void
+  stroke?(): void
   rect?(x: number, y: number, w: number, h: number): void
   clip?(): void
   measureText?(text: string): Pick<TextMetrics, 'width'>
@@ -276,20 +285,53 @@ export async function compositeFrame(
   videoEffectStageExecutor?: VideoEffectStageExecutor | null,
   grading?: ColorGradingFrame,
 ): Promise<CompositeResult> {
+  const titleBudgetError = titleCompositionBudgetError(plan)
+  if (titleBudgetError) throw new RangeError(titleBudgetError)
   grading?.check()
+  const gradingContext = grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT
+  const geometry = { surfaceWidth: presentation?.outputWidth ?? doc.width,
+    surfaceHeight: presentation?.outputHeight ?? doc.height, projectWidth: doc.width, projectHeight: doc.height }
+  const pixelWork = videoPixelWorkBudget(plan, geometry, gradingContext)
+  // A preceding frame can leave the grading cache alive even when this frame
+  // executes only masks/spatial effects. Count that actual retained owner too.
+  const additionalOwnedBytes = pixelWork.peakAdditionalBytes
+    + Math.max(0, (grading?.runtime.ledger().bytes ?? 0) - pixelWork.gradingCacheBytes)
+  const workBudget = renderWorkSurfaceBudget(geometry.surfaceWidth, geometry.surfaceHeight, {
+    additionalOwnedBytes, includeExportReadback: presentation?.reason === 'export',
+  })
+  const workError = pixelWork.reason ?? workBudget.reason
+  if (workError) throw new VideoEffectStageExecutionError(workError)
+  // Pin all resolved child stacks before provider surfaces or readback exist.
+  // The lens owner also checks its already-retained source allocation here and
+  // rechecks exact new source dimensions immediately before remapping.
+  const releaseFrameWork = lensRemapProvider?.reserveFrameWork?.({
+    additionalOwnedBytes,
+    outputWidth: geometry.surfaceWidth, outputHeight: geometry.surfaceHeight,
+    includeExportReadback: presentation?.reason === 'export',
+  })
+  try {
+    return await compositeAdmittedFrame(doc, plan, ctx, source, transitionSurfaceProvider,
+      presentation, lensRemapProvider, videoEffectStageExecutor, grading)
+  } finally { releaseFrameWork?.() }
+}
+
+async function compositeAdmittedFrame(
+  doc: TimelineDoc,
+  plan: VideoCompositionPlan,
+  ctx: Composite2D,
+  source: FrameSource,
+  transitionSurfaceProvider: TransitionSurfaceProvider,
+  presentation?: PresentationProfile,
+  lensRemapProvider?: LensRemapProvider | null,
+  videoEffectStageExecutor?: VideoEffectStageExecutor | null,
+  grading?: ColorGradingFrame,
+): Promise<CompositeResult> {
   const gradingContext = grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT
   const gradingPixels = colorGradingPlanNeedsPixels(plan, gradingContext)
   const gradingError = colorGradingPlanError(plan, presentation?.outputWidth ?? doc.width, presentation?.outputHeight ?? doc.height,
-    gradingContext, grading?.policy ?? 'fail', !gradingPixels || supportsCanvasEffectPixels(transitionSurfaceProvider.get().leg.ctx), doc.width, doc.height)
+    gradingContext, grading?.policy ?? 'fail', !gradingPixels || supportsCanvasEffectPixels(transitionSurfaceProvider.get().leg.ctx))
   if (gradingError) throw new ColorGradingExecutionError(gradingError)
   if (!gradingPixels) { grading?.runtime.clearCache(); grading = undefined }
-  const hasBuses = plan.items.some((item) => item.kind === 'video-bus'
-    ? resolveVideoBusEffects(item.effects, true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT).pixelEffects.length > 0
-    : 'trackEffects' in item && resolveVideoBusEffects(item.trackEffects ?? [], true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT).pixelEffects.length > 0)
-  if (hasBuses) {
-    const error = videoBusRenderBudgetError(presentation?.outputWidth ?? doc.width, presentation?.outputHeight ?? doc.height, doc.width, doc.height)
-    if (error) throw new VideoEffectStageExecutionError(error)
-  }
   // Phase 1 — collect what needs pixels, bottom-to-top.
   const requests = videoCompositionRequests(plan)
 
@@ -392,21 +434,18 @@ export async function compositeFrame(
         continue
       }
 
+      if (item.kind === 'title') {
+        if (item.title.elements.length > 0) await compositeProceduralLayer(doc, ctx, transitionSurfaceProvider, item, item.blendMode, presentationScale, videoEffectStageExecutor, grading)
+        drawn.push(item.clip.id)
+        continue
+      }
+
       if (item.kind === 'text') {
         try {
           await compositeVideoTrackBus(doc, ctx, transitionSurfaceProvider, item.trackEffects, item.blendMode, presentationScale, async (target, blend) => {
-            await compositeTextLayer(
-              doc,
-              target,
-              transitionSurfaceProvider,
-              item.clip,
-              item.opacity,
-              blend,
-              presentationScale,
-              item.effectStagePlan,
-              videoEffectStageExecutor,
-              item.frame,
-              grading,
+            await compositeProceduralLayer(
+              doc, target, transitionSurfaceProvider, item, blend,
+              presentationScale, videoEffectStageExecutor, grading,
             )
           }, grading)
           drawn.push(item.clip.id)
@@ -513,20 +552,25 @@ export async function compositeFrame(
 }
 
 const MAX_CACHED_TEXT_LAYOUTS_PER_CONTEXT = 64
-const MAX_RENDERED_TEXT_LINES = 512
-const textLayoutCaches = new WeakMap<object, Map<string, readonly string[]>>()
+const MAX_CACHED_TEXT_BYTES_PER_CONTEXT = 8 * 1024 * 1024
+interface TextLayoutCache {
+  readonly owner: WeakRef<TimelineDoc>
+  readonly entries: Map<string, { readonly lines: readonly string[]; readonly bytes: number }>
+  bytes: number
+}
+const textLayoutCaches = new WeakMap<object, TextLayoutCache>()
+
+/** Called by a render owner on replacement, resize and completed disposal. */
+export function clearTextLayoutCaches(contexts: readonly (Composite2D | null)[]): void {
+  for (const context of contexts) if (context) textLayoutCaches.delete(context)
+}
 
 function textLines(
   ctx: TextComposite2D,
   text: TextProps,
+  doc: TimelineDoc,
 ): readonly string[] {
-  const lineHeight = Math.ceil(text.fontSizePx * 1.2)
-  const innerWidth = text.boxWidthPx - text.paddingPx * 2
-  const innerHeight = text.boxHeightPx - text.paddingPx * 2
-  const maxLines = Math.max(
-    1,
-    Math.min(MAX_RENDERED_TEXT_LINES, Math.floor(innerHeight / lineHeight)),
-  )
+  const { innerWidth, maxLines } = textLayoutMetrics(text)
   const key = [
     text.content,
     text.fontFamily,
@@ -537,22 +581,30 @@ function textLines(
     maxLines,
   ].join('\u0000')
   let cache = textLayoutCaches.get(ctx as object)
-  if (!cache) {
-    cache = new Map()
+  if (!cache || cache.owner.deref() !== doc) {
+    cache = { owner: new WeakRef(doc), entries: new Map(), bytes: 0 }
     textLayoutCaches.set(ctx as object, cache)
   }
-  const cached = cache.get(key)
-  if (cached) return cached
+  const cached = cache.entries.get(key)
+  if (cached) return cached.lines
   const lines = wrapTextLines(
     text.content,
     innerWidth,
     maxLines,
     (value) => ctx.measureText(value).width,
   )
-  cache.set(key, lines)
-  if (cache.size > MAX_CACHED_TEXT_LAYOUTS_PER_CONTEXT) {
-    const oldest = cache.keys().next().value as string | undefined
-    if (oldest !== undefined) cache.delete(oldest)
+  // UTF-16 payload plus conservative string/array/map entry headers. This is a
+  // retained-data bound, not a claim about the browser's actual heap allocator.
+  const bytes = 96 + key.length * 2 + lines.reduce((total, line) => total + 32 + line.length * 2, 0)
+  if (bytes <= MAX_CACHED_TEXT_BYTES_PER_CONTEXT) {
+    cache.entries.set(key, { lines, bytes })
+    cache.bytes += bytes
+  }
+  while (cache.entries.size > MAX_CACHED_TEXT_LAYOUTS_PER_CONTEXT || cache.bytes > MAX_CACHED_TEXT_BYTES_PER_CONTEXT) {
+    const oldest = cache.entries.keys().next().value
+    if (oldest === undefined) break
+    cache.bytes -= cache.entries.get(oldest)!.bytes
+    cache.entries.delete(oldest)
   }
   return lines
 }
@@ -604,7 +656,7 @@ function drawTextPayload(
   const anchorY = transform.anchorY * text.boxHeightPx
   const canvasX = (doc.width - text.boxWidthPx) / 2 + anchorX + transform.x
   const canvasY = (doc.height - text.boxHeightPx) / 2 + anchorY + transform.y
-  const lineHeight = Math.ceil(text.fontSizePx * 1.2)
+  const { lineHeight } = textLayoutMetrics(text)
   const x = text.align === 'left'
     ? text.paddingPx
     : text.align === 'right'
@@ -633,11 +685,11 @@ function drawTextPayload(
       ctx.fillStyle = text.backgroundColor
       ctx.fillRect(0, 0, text.boxWidthPx, text.boxHeightPx)
     }
-    ctx.font = `${text.italic ? 'italic' : 'normal'} ${text.bold ? '700' : '400'} ${text.fontSizePx}px ${text.fontFamily}`
+    ctx.font = textCanvasFont(text)
     ctx.textAlign = text.align
     ctx.textBaseline = 'top'
     ctx.lineJoin = 'round'
-    const lines = textLines(ctx, text)
+    const lines = textLines(ctx, text, doc)
     for (let index = 0; index < lines.length; index++) {
       const y = text.paddingPx + index * lineHeight
       if (text.outlineEnabled && text.outlineWidthPx > 0) {
@@ -659,6 +711,76 @@ function drawTextPayload(
   } finally {
     ctx.restore()
   }
+}
+
+function drawTitleElement(ctx: Composite2D, doc: TimelineDoc, paint: TitlePaintElement): void {
+  const { element } = paint
+  if (paint.kind === 'text') {
+    drawTextPayload(ctx, doc, paint.text, element.transform, element.visual, 1, NORMAL_BLEND_MODE)
+    return
+  }
+  if (!ctx.beginPath || !ctx.rect || !ctx.clip || !ctx.fill || !ctx.stroke || !ctx.ellipse) {
+    throw new TypeError('The compositor context does not support title shape drawing.')
+  }
+  const { transform, visual, shape } = paint.element
+  const width = shape.boxWidthPx, height = shape.boxHeightPx
+  const anchorX = transform.anchorX * width, anchorY = transform.anchorY * height
+  ctx.save()
+  try {
+    ctx.globalAlpha = 1
+    applyCanvasBlendMode(ctx, NORMAL_BLEND_MODE)
+    ctx.translate((doc.width - width) / 2 + anchorX + transform.x, (doc.height - height) / 2 + anchorY + transform.y)
+    ctx.rotate(transform.rotation * Math.PI / 180)
+    ctx.scale(transform.scaleX * (visual.flipHorizontal ? -1 : 1), transform.scaleY * (visual.flipVertical ? -1 : 1))
+    ctx.translate(-anchorX, -anchorY)
+    ctx.beginPath()
+    ctx.rect(visual.crop.left * width, visual.crop.top * height,
+      width * (1 - visual.crop.left - visual.crop.right), height * (1 - visual.crop.top - visual.crop.bottom))
+    ctx.clip()
+    ctx.beginPath()
+    if (paint.element.kind === 'rectangle') ctx.rect(0, 0, width, height)
+    else ctx.ellipse(width / 2, height / 2, width / 2, height / 2, 0, 0, Math.PI * 2)
+    ctx.fillStyle = shape.fillColor
+    ctx.fill()
+    if (shape.outlineEnabled && shape.outlineWidthPx > 0) {
+      ctx.strokeStyle = shape.outlineColor
+      ctx.lineWidth = shape.outlineWidthPx
+      ctx.lineJoin = 'round'
+      ctx.stroke()
+    }
+  } finally { ctx.restore() }
+}
+
+/** Opacity belongs to the complete element. Reuse group before any track bus
+ * starts borrowing it; element opacity one preserves the legacy direct draw.
+ */
+function drawTitleElements(
+  surfaces: TransitionSurfaces, doc: TimelineDoc, elements: readonly TitlePaintElement[],
+  scale: { readonly x: number; readonly y: number },
+): void {
+  const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
+  inPresentationSpace(surfaces.leg.ctx, scale, () => {
+    clearSurface(surfaces.leg.ctx, doc)
+    for (const paint of elements) {
+      if (paint.element.opacity <= 0) continue
+      if (paint.element.opacity === 1) {
+        drawTitleElement(surfaces.leg.ctx, doc, paint)
+        continue
+      }
+      try {
+        inPresentationSpace(surfaces.group.ctx, scale, () => {
+          clearSurface(surfaces.group.ctx, doc)
+          drawTitleElement(surfaces.group.ctx, doc, paint)
+        })
+        surfaces.leg.ctx.save()
+        try {
+          surfaces.leg.ctx.globalAlpha = paint.element.opacity
+          applyCanvasBlendMode(surfaces.leg.ctx, NORMAL_BLEND_MODE)
+          surfaces.leg.ctx.drawImage(surfaces.group.canvas, 0, 0, width, height, 0, 0, doc.width, doc.height)
+        } finally { surfaces.leg.ctx.restore() }
+      } finally { releaseSurfacePixels(surfaces.group.ctx, doc, scale) }
+    }
+  })
 }
 
 function idsNotIn(left: ClipId[], right: ClipId[]): ClipId[] {
@@ -1077,27 +1199,29 @@ function releaseSurfacePixels(
 }
 
 /** Render procedural text into one transparent layer, then blend it once. */
-async function compositeTextLayer(
+async function compositeProceduralLayer(
   doc: TimelineDoc,
   destination: Composite2D,
   surfaceProvider: TransitionSurfaceProvider,
-  clip: Clip,
-  opacity: number,
+  item: TextOverlayPlanItem | TitleCompositionPlanItem,
   blendMode: BlendModeResolution,
   presentationScale: { readonly x: number; readonly y: number },
-  effectStagePlan: VideoEffectStagePlan | undefined,
   videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
-  timelineFrame: number,
   grading?: ColorGradingFrame,
 ): Promise<void> {
+  const { clip, opacity, effectStagePlan, frame: timelineFrame } = item
   const surfaces = surfaceProvider.get()
   const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
   const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
   try {
-    inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
-      clearSurface(surfaces.leg.ctx, doc)
-      drawTextClip(surfaces.leg.ctx, doc, clip, 1, NORMAL_BLEND_MODE)
-    })
+    if (item.kind === 'title') {
+      drawTitleElements(surfaces, doc, item.title.elements, presentationScale)
+    } else {
+      inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
+        clearSurface(surfaces.leg.ctx, doc)
+        drawTextClip(surfaces.leg.ctx, doc, clip, 1, NORMAL_BLEND_MODE)
+      })
+    }
 
     const orderedPixelPath = effectStagePlan?.requiresOrderedPixelPath === true
       && supportsCanvasEffectPixels(surfaces.leg.ctx)
@@ -1133,28 +1257,31 @@ async function compositeTextLayer(
       )
     }
 
-    destination.save()
-    try {
-      destination.globalAlpha = opacity
-      applyCanvasBlendMode(destination, blendMode)
-      // Filter the completed transparent text layer once. Applying filters
-      // while painting its background/stroke/fill primitives changes their
-      // overlap semantics and compounds the authored stack.
-      if (!pixelCorrection) applyCanvasEffectStack(destination, clip)
-      destination.drawImage(
-        surfaces.leg.canvas,
-        0,
-        0,
-        surfaceWidth,
-        surfaceHeight,
-        0,
-        0,
-        doc.width,
-        doc.height,
-      )
-    } finally {
-      destination.restore()
+    const paintCompletedLayer = async (target: Composite2D, blend: BlendModeResolution) => {
+      target.save()
+      try {
+        target.globalAlpha = opacity
+        applyCanvasBlendMode(target, blend)
+        // Filter the completed transparent text layer once. Applying filters
+        // while painting its background/stroke/fill primitives changes their
+        // overlap semantics and compounds the authored stack.
+        if (!pixelCorrection) applyCanvasEffectStack(target, clip)
+        target.drawImage(
+          surfaces.leg.canvas,
+          0,
+          0,
+          surfaceWidth,
+          surfaceHeight,
+          0,
+          0,
+          doc.width,
+          doc.height,
+        )
+      } finally { target.restore() }
     }
+    // Title element scratch is fully released before the track bus borrows group.
+    if (item.kind === 'title') await compositeVideoTrackBus(doc, destination, surfaceProvider, item.trackEffects, blendMode, presentationScale, paintCompletedLayer, grading)
+    else await paintCompletedLayer(destination, blendMode)
   } finally {
     releaseSurfacePixels(surfaces.leg.ctx, doc, presentationScale)
   }

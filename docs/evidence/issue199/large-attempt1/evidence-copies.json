@@ -1,0 +1,114 @@
+{
+  "rawDirectory": "/private/tmp/issue199-continuation/2026-09-08T18-58-03.738Z-large",
+  "copies": [
+    {
+      "name": "build.log",
+      "copyName": "build.log",
+      "mode": "normalized text; raw preserved",
+      "rawBytes": 3939,
+      "copyBytes": 3933,
+      "rawSha256": "a21ed25e2d9c21270d93a367f2c7eb4023322ff82816479cc794b84fe5ba4073",
+      "copySha256": "772904c2a739ecec94ba65cfe7c1730347bf50c54b8e130dc38c0d5601e2b43a"
+    },
+    {
+      "name": "console.log",
+      "copyName": "console.log",
+      "mode": "normalized text; raw preserved",
+      "rawBytes": 529,
+      "copyBytes": 529,
+      "rawSha256": "eccd8b8ed68c0476a91d20105637a08975c8d5775c983acdd14084d448872238",
+      "copySha256": "eccd8b8ed68c0476a91d20105637a08975c8d5775c983acdd14084d448872238"
+    },
+    {
+      "name": "failure-dom.txt",
+      "copyName": "failure-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawBytes": 3368,
+      "copyBytes": 3369,
+      "rawSha256": "bf7b017ec96e8a13930354f350b44a6707e8f2b39130aa09cf92fc38f83375ed",
+      "copySha256": "9e7c158591b4678c301bc6c71a65e1a1e1c9a2eaa159d5ecf794c6ab45e8ba57"
+    },
+    {
+      "name": "failure-summary.json",
+      "copyName": "failure-summary.json",
+      "mode": "exact JSON",
+      "rawBytes": 8831,
+      "copyBytes": 8831,
+      "rawSha256": "2057afa10e9481c1d714820f899c8f395c5d0ea02bea2f41dd314b1235a296ed",
+      "copySha256": "2057afa10e9481c1d714820f899c8f395c5d0ea02bea2f41dd314b1235a296ed"
+    },
+    {
+      "name": "independent-cleanup-source.json",
+      "copyName": "independent-cleanup-source.json",
+      "mode": "exact JSON",
+      "rawBytes": 7595,
+      "copyBytes": 7595,
+      "rawSha256": "c96904c1800c028af1d8b2172959a97d805936c335e31bcbdc285d795f8fc7c4",
+      "copySha256": "c96904c1800c028af1d8b2172959a97d805936c335e31bcbdc285d795f8fc7c4"
+    },
+    {
+      "name": "prelaunch-source.json",
+      "copyName": "prelaunch-source.json",
+      "mode": "exact JSON",
+      "rawBytes": 513,
+      "copyBytes": 513,
+      "rawSha256": "4a73c034d00d0e0d6e1561cbbe6c8c148501dbdf03c97069f7b04513ad6b4237",
+      "copySha256": "4a73c034d00d0e0d6e1561cbbe6c8c148501dbdf03c97069f7b04513ad6b4237"
+    },
+    {
+      "name": "result.json",
+      "copyName": "result.json.gz",
+      "mode": "lossless gzip of exact raw JSON bytes; decoded hash equals raw hash",
+      "rawBytes": 33412146,
+      "copyBytes": 640322,
+      "rawSha256": "f6c5c978277183ce0b848dd1f27b27db9fa16f0835b00305f1e65ba915fb5954",
+      "copySha256": "90a64cbc3377ce1ddb7dc7cc8c942297d57efc6c6a286156e1e54cc656e5d053",
+      "decodedSha256": "f6c5c978277183ce0b848dd1f27b27db9fa16f0835b00305f1e65ba915fb5954"
+    },
+    {
+      "name": "server.log",
+      "copyName": "server.log",
+      "mode": "normalized text; raw preserved",
+      "rawBytes": 39,
+      "copyBytes": 39,
+      "rawSha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d",
+      "copySha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d"
+    },
+    {
+      "name": "step-01-dom.txt",
+      "copyName": "step-01-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawBytes": 1050,
+      "copyBytes": 1051,
+      "rawSha256": "391e96e976bb2729c502f64bb5e09dc362aab8be1361f10d9a8d6d3ec49301a2",
+      "copySha256": "747a4aca46360283a50cdf047cb3cd7877437042c233e323c5208eb29d4ed4de"
+    },
+    {
+      "name": "step-02-dom.txt",
+      "copyName": "step-02-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawBytes": 5385,
+      "copyBytes": 5386,
+      "rawSha256": "655b9124d5434492384ae4e521ff5a978d6e8236179fd3500e34958900860813",
+      "copySha256": "ad95a072ad506775705c7966a52fe9aeb04b9e70d829ec9fe051325127c83009"
+    },
+    {
+      "name": "wrapper-identities.json",
+      "copyName": "wrapper-identities.json",
+      "mode": "exact JSON",
+      "rawBytes": 335,
+      "copyBytes": 335,
+      "rawSha256": "e4bec76fd24dcb4f7a7ed9b3bcb1a81d2d5277bc5b7f30b1ae7532ffe21d6f9e",
+      "copySha256": "e4bec76fd24dcb4f7a7ed9b3bcb1a81d2d5277bc5b7f30b1ae7532ffe21d6f9e"
+    },
+    {
+      "name": "artifacts.json",
+      "copyName": "artifacts.json",
+      "mode": "exact JSON",
+      "rawBytes": 2309,
+      "copyBytes": 2309,
+      "rawSha256": "60ea1ef99559ad90a3c1680f54e0d4f3467277b22b2760302475c173efa8f271",
+      "copySha256": "60ea1ef99559ad90a3c1680f54e0d4f3467277b22b2760302475c173efa8f271"
+    }
+  ]
+}

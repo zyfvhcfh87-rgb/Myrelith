@@ -5,6 +5,45 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
+## Milestone 9 integration (2026-09-09)
+
+The combined work is on `codex/milestone9-integration`. Issue-specific local
+acceptance is complete for masks (#198), unified animation (#199), titles
+(#200), and the HDR research decision (#202). Caption authoring from #201 is
+also accepted; local transcription remains incomplete. Publication and the
+combined engineering result are recorded separately; this entry does not
+claim the milestone or #201 is closed.
+
+- [Masks](ISSUE_198_PLAN.md): direct Program handles and cubic path editing,
+  explicit held path keys, and reviewed tracking attachment. Path morphing is
+  not supported. Shared pixel-work admission and prompt plugin-result cleanup
+  retain the 256 MiB known-resource limit, distinct from native process RSS.
+- [Animation](ISSUE_199_PLAN.md): one lazy dope sheet/curve workspace with exact
+  multi-key timing, scalar easing, keyboard/numeric alternatives and shared
+  title/path lanes. Buses and semantic captions stay static.
+- [Titles](ISSUE_200_PLAN.md): editable text/rectangle elements, local templates,
+  roll/crawl keys and editor-only safe guides. Compact text stays editable;
+  expansion is explicit and undoable. Font intent/fallback remains portable,
+  with no remote font service.
+- [Captions](ISSUE_201_PLAN.md): semantic track/cue style, bounded ASS interchange
+  with explicit loss review, atomic batch edits and actual SRT/VTT/ASS downloads.
+  The speech lab has useful short-input results but fails its resident-memory
+  gate around rapid worker replacement. No product transcription control ships
+  from that evidence; #201 remains open until its required work is delivered.
+- [HDR research](ISSUE_202_PLAN.md): the measured eight-bit pipeline and proposed
+  managed output do not qualify 10-bit/HDR promotion. The completed research
+  decision adds no product HDR mode, preset, dependency or format change.
+
+Timeline schema 24 composes animation (22), titles (23) and caption styles (24);
+portable project format remains 8. Unknown versioned intent stays preserved.
+Reviewed browser evidence covers [mask export/cancel/retry](evidence/issue198/export-lifecycle-attempt2.md),
+[mixed animation/title/audio export](evidence/issue199/g4-completion.md),
+[title keyboard/dialogs](evidence/issue200/keyboard-results.md) and
+[caption editing/Save/Open/downloads](evidence/milestone9/caption-workflows.md).
+Keep the documented lossy-codec limits, staged title coverage, headless Mac
+font-popup limitation and unqualified physical HDR display explicit. These
+focused results do not assert that the broader browser suite is green.
+
 ## Myrelith rebrand (2026-08-09)
 
 The current product, package, repository, documentation, UI, benchmark, future

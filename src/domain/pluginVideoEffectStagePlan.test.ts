@@ -11,6 +11,7 @@ import {
   type PluginVideoEffectContributionDeclarationInput,
 } from './pluginVideoEffectStagePlan'
 import type { Clip, EffectDescriptor } from './schema'
+import { expandedTitleProject, legacyTitleProject } from '../test/titleOwnerFixtures'
 
 const SIGNER = `sha256:${'1'.repeat(64)}`
 const PACKAGE = `sha256:${'2'.repeat(64)}`
@@ -159,6 +160,7 @@ describe('plugin video effect stage plan', () => {
         {
           effectId: 'plugin-effect',
           parameter: 'strength',
+          parameterIdentity: { version: 1, effectType: EFFECT_TYPE, descriptorVersion: source.descriptorVersion, contributionId: source.contributionId, contributionVersion: source.contributionVersion, packageDigest: source.packageDigest },
           keyframes: [
             { frame: 0, value: 0, easing: { type: 'linear' } },
             { frame: 10, value: 1, easing: { type: 'linear' } },
@@ -188,6 +190,16 @@ describe('plugin video effect stage plan', () => {
     expect(Object.isFrozen(stage.execution.parameterRecord)).toBe(true)
     expect(Object.isFrozen(installed)).toBe(true)
     expect(Object.isFrozen(installed.declarations[0].parameters)).toBe(true)
+
+    const expanded = { ...expandedTitleProject().sequences[0].tracks[0].clips[0], timelineRange: animated.timelineRange, effects: animated.effects, animation: animated.animation }
+    for (const title of [expanded.title, { version: 99 }]) {
+      const titlePlan = resolveVideoEffectStagePlan({ ...expanded, title }, 15, installed)
+      expect(titlePlan?.stages[0]).toMatchObject({ kind: 'plugin', status: 'ready', detail: expect.stringContaining('unavailable on titles'),
+        execution: { parameterRecord: { strength: 0.2 } } })
+    }
+    const legacy = { ...legacyTitleProject().sequences[0].tracks[0].clips[0], timelineRange: animated.timelineRange, effects: animated.effects, animation: animated.animation }
+    expect(resolveVideoEffectStagePlan(legacy, 15, installed)?.stages[0]).toMatchObject({ execution: { parameterRecord: { strength: 0.5 } } })
+    expect(expanded.animation).toBe(animated.animation)
 
     const strength = source.parameters[0]
     if (strength.kind !== 'number') return

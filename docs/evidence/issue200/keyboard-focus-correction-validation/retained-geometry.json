@@ -1,0 +1,352 @@
+{
+  "testedHead": "b2fc657040e34643a77ea5b5d0cf18b6cdc4d8a8",
+  "source": "/private/tmp/issue200-keyboard-b2fc657-01/results/keyboard.gate.ts-1280x720-keyboard-title-controls-and-status-chromium/keyboard-evidence.json",
+  "sourceSha256": "f67ed82b19c77375de0a836737f83ca622c2adacd315d6c502d14dd33fc26ae3",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "control": {
+    "id": 93,
+    "tag": "INPUT",
+    "role": null,
+    "ariaLabel": null,
+    "text": "",
+    "tabIndex": 0,
+    "focusVisible": true,
+    "order": 80,
+    "disabled": false,
+    "rect": {
+      "x": 793,
+      "y": 305.171875,
+      "width": 13,
+      "height": 13
+    },
+    "region": {
+      "x": 761,
+      "y": 101,
+      "width": 518,
+      "height": 218
+    },
+    "ancestors": [
+      {
+        "id": 20,
+        "tag": "DIV",
+        "bounds": {
+          "x": 761,
+          "y": -1945,
+          "width": 518,
+          "height": 3618
+        },
+        "overflowX": "auto",
+        "overflowY": "auto",
+        "scrollTop": 0,
+        "scrollLeft": 0
+      },
+      {
+        "id": 18,
+        "tag": "ASIDE",
+        "bounds": {
+          "x": 761,
+          "y": 101,
+          "width": 518,
+          "height": 218
+        },
+        "overflowX": "auto",
+        "overflowY": "auto",
+        "scrollTop": 2142,
+        "scrollLeft": 0
+      },
+      {
+        "id": 1,
+        "tag": "DIV",
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720
+        },
+        "overflowX": "hidden",
+        "overflowY": "hidden",
+        "scrollTop": 0,
+        "scrollLeft": 0
+      }
+    ],
+    "fullyVisible": true,
+    "labels": [
+      {
+        "text": "Safe guides \u00b7 title 90% / action 95%",
+        "rect": {
+          "x": 789,
+          "y": 306.171875,
+          "width": 222.75,
+          "height": 15
+        },
+        "region": {
+          "x": 761,
+          "y": 101,
+          "width": 518,
+          "height": 218
+        },
+        "ancestors": [
+          {
+            "id": 20,
+            "tag": "DIV",
+            "bounds": {
+              "x": 761,
+              "y": -1945,
+              "width": 518,
+              "height": 3618
+            },
+            "overflowX": "auto",
+            "overflowY": "auto",
+            "scrollTop": 0,
+            "scrollLeft": 0
+          },
+          {
+            "id": 18,
+            "tag": "ASIDE",
+            "bounds": {
+              "x": 761,
+              "y": 101,
+              "width": 518,
+              "height": 218
+            },
+            "overflowX": "auto",
+            "overflowY": "auto",
+            "scrollTop": 2142,
+            "scrollLeft": 0
+          },
+          {
+            "id": 1,
+            "tag": "DIV",
+            "bounds": {
+              "x": 0,
+              "y": 0,
+              "width": 1280,
+              "height": 720
+            },
+            "overflowX": "hidden",
+            "overflowY": "hidden",
+            "scrollTop": 0,
+            "scrollLeft": 0
+          }
+        ],
+        "fullyVisible": false,
+        "paint": {
+          "color": "rgb(220, 230, 242)",
+          "layers": [
+            {
+              "background": "rgba(0, 0, 0, 0)",
+              "opacity": 1,
+              "image": "none"
+            },
+            {
+              "background": "rgba(0, 0, 0, 0)",
+              "opacity": 1,
+              "image": "none"
+            },
+            {
+              "background": "rgba(0, 0, 0, 0)",
+              "opacity": 1,
+              "image": "none"
+            },
+            {
+              "background": "rgb(16, 29, 43)",
+              "opacity": 1,
+              "image": "none"
+            },
+            {
+              "background": "rgb(8, 19, 32)",
+              "opacity": 1,
+              "image": "none"
+            },
+            {
+              "background": "rgba(0, 0, 0, 0)",
+              "opacity": 1,
+              "image": "none"
+            },
+            {
+              "background": "rgba(0, 0, 0, 0)",
+              "opacity": 1,
+              "image": "none"
+            },
+            {
+              "background": "rgb(20, 20, 20)",
+              "opacity": 1,
+              "image": "none"
+            },
+            {
+              "background": "rgba(0, 0, 0, 0)",
+              "opacity": 1,
+              "image": "none"
+            }
+          ],
+          "measured": {
+            "ratio": 13.502504441707385,
+            "foregroundPaint": [
+              0.8627450980392157,
+              0.9019607843137255,
+              0.9490196078431372,
+              1
+            ],
+            "backgroundPaint": [
+              0.06274509803921569,
+              0.11372549019607843,
+              0.16862745098039217,
+              1
+            ]
+          }
+        },
+        "inlineText": []
+      }
+    ],
+    "paint": {
+      "color": "rgb(255, 255, 255)",
+      "layers": [
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgb(16, 29, 43)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgb(8, 19, 32)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgb(20, 20, 20)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        }
+      ],
+      "measured": {
+        "ratio": 17.03630914866798,
+        "foregroundPaint": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "backgroundPaint": [
+          0.06274509803921569,
+          0.11372549019607843,
+          0.16862745098039217,
+          1
+        ]
+      }
+    },
+    "outline": {
+      "style": "auto",
+      "width": 1,
+      "offset": "2px",
+      "color": "rgb(153, 200, 255)",
+      "shadow": "none",
+      "measured": {
+        "ratio": 9.78384811471859,
+        "foregroundPaint": [
+          0.6,
+          0.7843137254901961,
+          1,
+          1
+        ],
+        "backgroundPaint": [
+          0.06274509803921569,
+          0.11372549019607843,
+          0.16862745098039217,
+          1
+        ]
+      },
+      "layers": [
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgb(16, 29, 43)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgb(8, 19, 32)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgb(20, 20, 20)",
+          "opacity": 1,
+          "image": "none"
+        },
+        {
+          "background": "rgba(0, 0, 0, 0)",
+          "opacity": 1,
+          "image": "none"
+        }
+      ],
+      "backdropScope": "computed DOM ancestors"
+    },
+    "value": "on",
+    "inputType": "checkbox",
+    "min": null,
+    "max": null,
+    "step": null
+  },
+  "overflowCssPx": 2.171875,
+  "originalToleranceCssPx": 1
+}

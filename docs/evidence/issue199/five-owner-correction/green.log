@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs src/app/animationEditingController.test.ts src/app/colorGradingController.test.ts -t replacement Animation|invalidates a grading|grading cleanup reentrancy
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199
+
+
+ Test Files  2 passed (2)
+      Tests  9 passed | 38 skipped (47)
+   Start at  21:44:55
+   Duration  607ms (transform 465ms, setup 62ms, import 570ms, tests 12ms, environment 423ms)
+
+✔ cold samples each use and close a fresh BrowserContext (0.599625ms)
+✔ source identity rejects end-of-run drift (0.155666ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (190.863208ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (104.6325ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.237166ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.640416ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.096708ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.226125ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.117667ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.090625ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.1925ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.566333ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (0.803458ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.083875ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.13525ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.152375ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.109166ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 462.330542

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "archive": "keyboard-b2fc657-first-failure.tar.gz",
+  "testedHead": "b2fc657040e34643a77ea5b5d0cf18b6cdc4d8a8",
+  "bytes": 14232339,
+  "members": 62,
+  "verifiedMemberHashes": 61,
+  "sha256": "0225123bee0251948b1bb7992dda7d899537353f02ea1b540e2ea51c21ca6c50",
+  "result": "0 passed; 1 failed on safe-guide label bounds; 3 unrun; no retry",
+  "qualifications": [
+    "Checkbox itself was fully visible; inline label box overflow was 2.171875 CSS px.",
+    "No standalone font/status, safe-guide activation, dialog or narrow-case acceptance.",
+    "Original predicates and source remain unchanged."
+  ],
+  "sourceArchiveName": "issue200-keyboard-b2fc657-01-evidence.tar.gz"
+}

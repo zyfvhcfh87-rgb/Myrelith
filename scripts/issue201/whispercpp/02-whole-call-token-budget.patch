@@ -1,0 +1,77 @@
+--- a/include/whisper.h
++++ b/include/whisper.h
+@@ -509,6 +509,14 @@
+         bool  split_on_word;    // split on word rather than on token (when used with max_len)
+         int   max_tokens;       // max tokens per segment (0 = no limit)
+ 
++        // Private Myrelith candidate ABI: 0 disables; otherwise 1..448 total
++        // selected tokens for this full call, including discarded retries,
++        // timestamps and EOT. Supports one greedy decoder / one thread only.
++        // -90 rejects an unsupported profile; -91 clears partial results when
++        // the next sample would exceed the total. Prompt tokens do not count.
++        int   max_tokens_total;
++        int * tokens_generated; // optional caller-owned counter; synchronous use
++
+         // [EXPERIMENTAL] speed-up techniques
+         // note: these can significantly reduce the quality of the output
+         bool debug_mode;        // enable debug_mode provides extra info (eg. Dump log_mel)
+--- a/src/whisper.cpp
++++ b/src/whisper.cpp
+@@ -1,5 +1,6 @@
+ #include "whisper.h"
+ #include "whisper-arch.h"
++#include "myrelith-token-budget.h"
+ 
+ #include "ggml.h"
+ #include "ggml-cpp.h"
+@@ -5966,6 +5967,8 @@
+         /*.max_len           =*/ 0,
+         /*.split_on_word     =*/ false,
+         /*.max_tokens        =*/ 0,
++        /*.max_tokens_total  =*/ 0,
++        /*.tokens_generated  =*/ nullptr,
+ 
+         /*.debug_mode        =*/ false,
+         /*.audio_ctx         =*/ 0,
+@@ -6837,6 +6840,19 @@
+ 
+     result_all.clear();
+ 
++    // One counter per full call: deliberately outside seek, segment,
++    // temperature fallback and decode loops. No retries reset this counter.
++    myrelith_token_budget token_budget = { params.max_tokens_total, 0 };
++    if (params.tokens_generated) *params.tokens_generated = 0;
++    if (params.max_tokens_total < 0 || params.max_tokens_total > 448 ||
++        (params.max_tokens_total > 0 &&
++         (params.n_threads != 1 || params.strategy != WHISPER_SAMPLING_GREEDY ||
++          params.greedy.best_of != 1 || params.vad || params.detect_language ||
++          params.language == nullptr ||
++          (strcmp(params.language, "en") != 0 && strcmp(params.language, "fr") != 0)))) {
++        return -90;
++    }
++
+     if (n_samples > 0) {
+         // compute log mel spectrogram
+         if (whisper_pcm_to_mel_with_state(ctx, state, samples, n_samples, params.n_threads) != 0) {
+@@ -7219,6 +7235,21 @@
+             }
+ 
+             for (int i = 0, n_max = whisper_n_text_ctx(ctx)/2 - 4; i < n_max; ++i) {
++                // Reserve BEFORE either greedy whisper_sample_token call.
++                // The admitted profile has exactly one synchronous decoder.
++                if (params.max_tokens_total > 0) {
++                    if (n_decoders_cur != 1) {
++                        result_all.clear();
++                        return -90;
++                    }
++                    if (!state->decoders[0].completed && !state->decoders[0].failed) {
++                        if (!myrelith_reserve_token(&token_budget)) {
++                            result_all.clear();
++                            return -91;
++                        }
++                        if (params.tokens_generated) *params.tokens_generated = token_budget.used;
++                    }
++                }
+                 const int64_t t_start_sample_us = ggml_time_us();
+ 
+                 if (params.strategy == whisper_sampling_strategy::WHISPER_SAMPLING_BEAM_SEARCH) {

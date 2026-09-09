@@ -1,0 +1,1210 @@
+{
+  "scope": "Pinned AST argument/settings source simulation only; no compiler, generated artifact, WASM or inference execution",
+  "originalLink": {
+    "ok": false,
+    "error": "PTHREADS is an internal setting and cannot be set from command line",
+    "warnings": []
+  },
+  "settingsIndividually": [
+    {
+      "argument": "-sDISABLE_EXCEPTION_CATCHING=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "DISABLE_EXCEPTION_CATCHING": 0
+        },
+        "classifications": {
+          "DISABLE_EXCEPTION_CATCHING": "public"
+        },
+        "types": {
+          "DISABLE_EXCEPTION_CATCHING": "int"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sABORTING_MALLOC=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "ABORTING_MALLOC": 0
+        },
+        "classifications": {
+          "ABORTING_MALLOC": "public"
+        },
+        "types": {
+          "ABORTING_MALLOC": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sMODULARIZE=1",
+      "result": {
+        "ok": true,
+        "settings": {
+          "MODULARIZE": 1
+        },
+        "classifications": {
+          "MODULARIZE": "public"
+        },
+        "types": {
+          "MODULARIZE": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sEXPORT_ES6=1",
+      "result": {
+        "ok": true,
+        "settings": {
+          "EXPORT_ES6": 1
+        },
+        "classifications": {
+          "EXPORT_ES6": "public"
+        },
+        "types": {
+          "EXPORT_ES6": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sEXPORT_NAME=createMyrelithWhisper",
+      "result": {
+        "ok": true,
+        "settings": {
+          "EXPORT_NAME": "createMyrelithWhisper"
+        },
+        "classifications": {
+          "EXPORT_NAME": "public"
+        },
+        "types": {
+          "EXPORT_NAME": "str"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sENVIRONMENT=worker",
+      "result": {
+        "ok": true,
+        "settings": {
+          "ENVIRONMENT": [
+            "worker"
+          ]
+        },
+        "classifications": {
+          "ENVIRONMENT": "public"
+        },
+        "types": {
+          "ENVIRONMENT": "list"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sFILESYSTEM=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "FILESYSTEM": 0
+        },
+        "classifications": {
+          "FILESYSTEM": "public"
+        },
+        "types": {
+          "FILESYSTEM": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sDYNAMIC_EXECUTION=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "DYNAMIC_EXECUTION": 0
+        },
+        "classifications": {
+          "DYNAMIC_EXECUTION": "public"
+        },
+        "types": {
+          "DYNAMIC_EXECUTION": "int"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sCROSS_ORIGIN_STORAGE=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "CROSS_ORIGIN_STORAGE": 0
+        },
+        "classifications": {
+          "CROSS_ORIGIN_STORAGE": "public"
+        },
+        "types": {
+          "CROSS_ORIGIN_STORAGE": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sCROSS_ORIGIN=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "CROSS_ORIGIN": 0
+        },
+        "classifications": {
+          "CROSS_ORIGIN": "public"
+        },
+        "types": {
+          "CROSS_ORIGIN": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sSPLIT_MODULE=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "SPLIT_MODULE": 0
+        },
+        "classifications": {
+          "SPLIT_MODULE": "public"
+        },
+        "types": {
+          "SPLIT_MODULE": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sMAIN_MODULE=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "MAIN_MODULE": 0
+        },
+        "classifications": {
+          "MAIN_MODULE": "public"
+        },
+        "types": {
+          "MAIN_MODULE": "int"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sSIDE_MODULE=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "SIDE_MODULE": 0
+        },
+        "classifications": {
+          "SIDE_MODULE": "public"
+        },
+        "types": {
+          "SIDE_MODULE": "int"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sAUTOLOAD_DYLIBS=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "AUTOLOAD_DYLIBS": 0
+        },
+        "classifications": {
+          "AUTOLOAD_DYLIBS": "public"
+        },
+        "types": {
+          "AUTOLOAD_DYLIBS": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sWASM=1",
+      "result": {
+        "ok": true,
+        "settings": {
+          "WASM": 1
+        },
+        "classifications": {
+          "WASM": "public"
+        },
+        "types": {
+          "WASM": "int"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sSINGLE_FILE=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "SINGLE_FILE": 0
+        },
+        "classifications": {
+          "SINGLE_FILE": "public"
+        },
+        "types": {
+          "SINGLE_FILE": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sSOURCE_PHASE_IMPORTS=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "SOURCE_PHASE_IMPORTS": 0
+        },
+        "classifications": {
+          "SOURCE_PHASE_IMPORTS": "public"
+        },
+        "types": {
+          "SOURCE_PHASE_IMPORTS": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sWASM_ESM_INTEGRATION=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "WASM_ESM_INTEGRATION": 0
+        },
+        "classifications": {
+          "WASM_ESM_INTEGRATION": "public"
+        },
+        "types": {
+          "WASM_ESM_INTEGRATION": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sWASM_ASYNC_COMPILATION=1",
+      "result": {
+        "ok": true,
+        "settings": {
+          "WASM_ASYNC_COMPILATION": 1
+        },
+        "classifications": {
+          "WASM_ASYNC_COMPILATION": "public"
+        },
+        "types": {
+          "WASM_ASYNC_COMPILATION": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sWASM_WORKERS=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "WASM_WORKERS": 0
+        },
+        "classifications": {
+          "WASM_WORKERS": "public"
+        },
+        "types": {
+          "WASM_WORKERS": "int"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sPROXY_TO_PTHREAD=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "PROXY_TO_PTHREAD": 0
+        },
+        "classifications": {
+          "PROXY_TO_PTHREAD": "public"
+        },
+        "types": {
+          "PROXY_TO_PTHREAD": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sFETCH=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "FETCH": 0
+        },
+        "classifications": {
+          "FETCH": "public"
+        },
+        "types": {
+          "FETCH": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sWASMFS=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "WASMFS": 0
+        },
+        "classifications": {
+          "WASMFS": "public"
+        },
+        "types": {
+          "WASMFS": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sALLOW_TABLE_GROWTH=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "ALLOW_TABLE_GROWTH": 0
+        },
+        "classifications": {
+          "ALLOW_TABLE_GROWTH": "public"
+        },
+        "types": {
+          "ALLOW_TABLE_GROWTH": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sPTHREADS=0",
+      "result": {
+        "ok": false,
+        "error": "PTHREADS is an internal setting and cannot be set from command line",
+        "warnings": []
+      }
+    },
+    {
+      "argument": "-sALLOW_MEMORY_GROWTH=1",
+      "result": {
+        "ok": true,
+        "settings": {
+          "ALLOW_MEMORY_GROWTH": 1
+        },
+        "classifications": {
+          "ALLOW_MEMORY_GROWTH": "public"
+        },
+        "types": {
+          "ALLOW_MEMORY_GROWTH": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sIMPORTED_MEMORY=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "IMPORTED_MEMORY": 0
+        },
+        "classifications": {
+          "IMPORTED_MEMORY": "public"
+        },
+        "types": {
+          "IMPORTED_MEMORY": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": 0,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sINITIAL_MEMORY=67108864",
+      "result": {
+        "ok": true,
+        "settings": {
+          "INITIAL_MEMORY": 67108864
+        },
+        "classifications": {
+          "INITIAL_MEMORY": "public"
+        },
+        "types": {
+          "INITIAL_MEMORY": "int"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": 67108864,
+          "MAXIMUM_MEMORY": 67108864,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sMAXIMUM_MEMORY=536870912",
+      "result": {
+        "ok": true,
+        "settings": {
+          "MAXIMUM_MEMORY": 16777216
+        },
+        "classifications": {
+          "MAXIMUM_MEMORY": "public"
+        },
+        "types": {
+          "MAXIMUM_MEMORY": "int"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": 16777216,
+          "MAXIMUM_MEMORY": 16777216,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [
+          [
+            "unused-command-line-argument",
+            "MAXIMUM_MEMORY is only meaningful with ALLOW_MEMORY_GROWTH"
+          ]
+        ],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sMEMORY_GROWTH_GEOMETRIC_STEP=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.0
+        },
+        "classifications": {
+          "MEMORY_GROWTH_GEOMETRIC_STEP": "public"
+        },
+        "types": {
+          "MEMORY_GROWTH_GEOMETRIC_STEP": "float"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.0
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sMEMORY_GROWTH_LINEAR_STEP=16777216",
+      "result": {
+        "ok": true,
+        "settings": {
+          "MEMORY_GROWTH_LINEAR_STEP": 16777216
+        },
+        "classifications": {
+          "MEMORY_GROWTH_LINEAR_STEP": "public"
+        },
+        "types": {
+          "MEMORY_GROWTH_LINEAR_STEP": "int"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": 16777216,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sSTACK_SIZE=5242880",
+      "result": {
+        "ok": true,
+        "settings": {
+          "STACK_SIZE": 5242880
+        },
+        "classifications": {
+          "STACK_SIZE": "public"
+        },
+        "types": {
+          "STACK_SIZE": "int"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 5242880,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sEXIT_RUNTIME=0",
+      "result": {
+        "ok": true,
+        "settings": {
+          "EXIT_RUNTIME": 0
+        },
+        "classifications": {
+          "EXIT_RUNTIME": "public"
+        },
+        "types": {
+          "EXIT_RUNTIME": "bool"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sMALLOC=dlmalloc",
+      "result": {
+        "ok": true,
+        "settings": {
+          "MALLOC": "dlmalloc"
+        },
+        "classifications": {
+          "MALLOC": "public"
+        },
+        "types": {
+          "MALLOC": "str"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sINCOMING_MODULE_JS_API=['wasmBinary','locateFile','print','printErr','onAbort']",
+      "result": {
+        "ok": true,
+        "settings": {
+          "INCOMING_MODULE_JS_API": [
+            "wasmBinary",
+            "locateFile",
+            "print",
+            "printErr",
+            "onAbort"
+          ]
+        },
+        "classifications": {
+          "INCOMING_MODULE_JS_API": "public"
+        },
+        "types": {
+          "INCOMING_MODULE_JS_API": "list"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','HEAPF32']",
+      "result": {
+        "ok": true,
+        "settings": {
+          "EXPORTED_RUNTIME_METHODS": [
+            "HEAPU8",
+            "HEAPF32"
+          ]
+        },
+        "classifications": {
+          "EXPORTED_RUNTIME_METHODS": "public"
+        },
+        "types": {
+          "EXPORTED_RUNTIME_METHODS": "list"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    },
+    {
+      "argument": "-sEXPORTED_FUNCTIONS=['_speech_model_alloc','_speech_load','_speech_pcm_alloc','_speech_run','_speech_tokens','_speech_segment_count','_speech_segment_t0','_speech_segment_t1','_speech_segment_text','_speech_close','_speech_owned']",
+      "result": {
+        "ok": true,
+        "settings": {
+          "EXPORTED_FUNCTIONS": [
+            "_speech_model_alloc",
+            "_speech_load",
+            "_speech_pcm_alloc",
+            "_speech_run",
+            "_speech_tokens",
+            "_speech_segment_count",
+            "_speech_segment_t0",
+            "_speech_segment_t1",
+            "_speech_segment_text",
+            "_speech_close",
+            "_speech_owned"
+          ]
+        },
+        "classifications": {
+          "EXPORTED_FUNCTIONS": "public"
+        },
+        "types": {
+          "EXPORTED_FUNCTIONS": "list"
+        },
+        "memory": {
+          "PTHREADS": false,
+          "SHARED_MEMORY": false,
+          "WASM_WORKERS": 0,
+          "IMPORTED_MEMORY": false,
+          "INITIAL_MEMORY": -1,
+          "MAXIMUM_MEMORY": 2147483648,
+          "STACK_SIZE": 65536,
+          "MEMORY_GROWTH_LINEAR_STEP": -1,
+          "MEMORY_GROWTH_GEOMETRIC_STEP": 0.2
+        },
+        "warnings": [],
+        "remaining": []
+      }
+    }
+  ],
+  "correctedRecipe": {
+    "ok": true,
+    "settings": {
+      "DISABLE_EXCEPTION_CATCHING": 0,
+      "ABORTING_MALLOC": 0,
+      "MODULARIZE": 1,
+      "EXPORT_ES6": 1,
+      "EXPORT_NAME": "createMyrelithWhisper",
+      "ENVIRONMENT": [
+        "worker"
+      ],
+      "FILESYSTEM": 0,
+      "DYNAMIC_EXECUTION": 0,
+      "CROSS_ORIGIN_STORAGE": 0,
+      "CROSS_ORIGIN": 0,
+      "SPLIT_MODULE": 0,
+      "MAIN_MODULE": 0,
+      "SIDE_MODULE": 0,
+      "AUTOLOAD_DYLIBS": 0,
+      "WASM": 1,
+      "SINGLE_FILE": 0,
+      "SOURCE_PHASE_IMPORTS": 0,
+      "WASM_ESM_INTEGRATION": 0,
+      "WASM_ASYNC_COMPILATION": 1,
+      "WASM_WORKERS": 0,
+      "PROXY_TO_PTHREAD": 0,
+      "FETCH": 0,
+      "WASMFS": 0,
+      "ALLOW_TABLE_GROWTH": 0,
+      "ALLOW_MEMORY_GROWTH": 1,
+      "IMPORTED_MEMORY": 0,
+      "INITIAL_MEMORY": 67108864,
+      "MAXIMUM_MEMORY": 536870912,
+      "MEMORY_GROWTH_GEOMETRIC_STEP": 0.0,
+      "MEMORY_GROWTH_LINEAR_STEP": 16777216,
+      "STACK_SIZE": 5242880,
+      "EXIT_RUNTIME": 0,
+      "MALLOC": "dlmalloc",
+      "INCOMING_MODULE_JS_API": [
+        "wasmBinary",
+        "locateFile",
+        "print",
+        "printErr",
+        "onAbort"
+      ],
+      "EXPORTED_RUNTIME_METHODS": [
+        "HEAPU8",
+        "HEAPF32"
+      ],
+      "EXPORTED_FUNCTIONS": [
+        "_speech_model_alloc",
+        "_speech_load",
+        "_speech_pcm_alloc",
+        "_speech_run",
+        "_speech_tokens",
+        "_speech_segment_count",
+        "_speech_segment_t0",
+        "_speech_segment_t1",
+        "_speech_segment_text",
+        "_speech_close",
+        "_speech_owned"
+      ]
+    },
+    "classifications": {
+      "DISABLE_EXCEPTION_CATCHING": "public",
+      "ABORTING_MALLOC": "public",
+      "MODULARIZE": "public",
+      "EXPORT_ES6": "public",
+      "EXPORT_NAME": "public",
+      "ENVIRONMENT": "public",
+      "FILESYSTEM": "public",
+      "DYNAMIC_EXECUTION": "public",
+      "CROSS_ORIGIN_STORAGE": "public",
+      "CROSS_ORIGIN": "public",
+      "SPLIT_MODULE": "public",
+      "MAIN_MODULE": "public",
+      "SIDE_MODULE": "public",
+      "AUTOLOAD_DYLIBS": "public",
+      "WASM": "public",
+      "SINGLE_FILE": "public",
+      "SOURCE_PHASE_IMPORTS": "public",
+      "WASM_ESM_INTEGRATION": "public",
+      "WASM_ASYNC_COMPILATION": "public",
+      "WASM_WORKERS": "public",
+      "PROXY_TO_PTHREAD": "public",
+      "FETCH": "public",
+      "WASMFS": "public",
+      "ALLOW_TABLE_GROWTH": "public",
+      "ALLOW_MEMORY_GROWTH": "public",
+      "IMPORTED_MEMORY": "public",
+      "INITIAL_MEMORY": "public",
+      "MAXIMUM_MEMORY": "public",
+      "MEMORY_GROWTH_GEOMETRIC_STEP": "public",
+      "MEMORY_GROWTH_LINEAR_STEP": "public",
+      "STACK_SIZE": "public",
+      "EXIT_RUNTIME": "public",
+      "MALLOC": "public",
+      "INCOMING_MODULE_JS_API": "public",
+      "EXPORTED_RUNTIME_METHODS": "public",
+      "EXPORTED_FUNCTIONS": "public"
+    },
+    "types": {
+      "DISABLE_EXCEPTION_CATCHING": "int",
+      "ABORTING_MALLOC": "bool",
+      "MODULARIZE": "bool",
+      "EXPORT_ES6": "bool",
+      "EXPORT_NAME": "str",
+      "ENVIRONMENT": "list",
+      "FILESYSTEM": "bool",
+      "DYNAMIC_EXECUTION": "int",
+      "CROSS_ORIGIN_STORAGE": "bool",
+      "CROSS_ORIGIN": "bool",
+      "SPLIT_MODULE": "bool",
+      "MAIN_MODULE": "int",
+      "SIDE_MODULE": "int",
+      "AUTOLOAD_DYLIBS": "bool",
+      "WASM": "int",
+      "SINGLE_FILE": "bool",
+      "SOURCE_PHASE_IMPORTS": "bool",
+      "WASM_ESM_INTEGRATION": "bool",
+      "WASM_ASYNC_COMPILATION": "bool",
+      "WASM_WORKERS": "int",
+      "PROXY_TO_PTHREAD": "bool",
+      "FETCH": "bool",
+      "WASMFS": "bool",
+      "ALLOW_TABLE_GROWTH": "bool",
+      "ALLOW_MEMORY_GROWTH": "bool",
+      "IMPORTED_MEMORY": "bool",
+      "INITIAL_MEMORY": "int",
+      "MAXIMUM_MEMORY": "int",
+      "MEMORY_GROWTH_GEOMETRIC_STEP": "float",
+      "MEMORY_GROWTH_LINEAR_STEP": "int",
+      "STACK_SIZE": "int",
+      "EXIT_RUNTIME": "bool",
+      "MALLOC": "str",
+      "INCOMING_MODULE_JS_API": "list",
+      "EXPORTED_RUNTIME_METHODS": "list",
+      "EXPORTED_FUNCTIONS": "list"
+    },
+    "memory": {
+      "PTHREADS": false,
+      "SHARED_MEMORY": false,
+      "WASM_WORKERS": 0,
+      "IMPORTED_MEMORY": 0,
+      "INITIAL_MEMORY": 67108864,
+      "MAXIMUM_MEMORY": 536870912,
+      "STACK_SIZE": 5242880,
+      "MEMORY_GROWTH_LINEAR_STEP": 16777216,
+      "MEMORY_GROWTH_GEOMETRIC_STEP": 0.0
+    },
+    "warnings": [],
+    "remaining": [
+      "-msimd128",
+      "-fexceptions"
+    ]
+  }
+}

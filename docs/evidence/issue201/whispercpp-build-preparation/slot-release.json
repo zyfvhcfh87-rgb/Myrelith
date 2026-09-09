@@ -1,0 +1,10 @@
+{
+  "status": "build-slot-released",
+  "checkedAt": "2026-09-08T16:48:47Z",
+  "reason": "Pinned Node rejected proposed no-expose-wasm version flag before compilation",
+  "ownedProcessesRemaining": [],
+  "configureAttempted": false,
+  "compileAttempted": false,
+  "wasmExecuted": false,
+  "buildGrantConsumed": false
+}

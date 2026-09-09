@@ -8,8 +8,10 @@ import { colorLutController } from './colorLutController'
  */
 
 import {
+  lazy,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -39,6 +41,7 @@ import { useEditShortcuts } from './useEditShortcuts'
 import { initMediaVisuals } from './mediaVisualsController'
 import { initMediaCapabilityLifecycle } from './mediaCapabilityController'
 import { initSelectionReconciliation } from './selectionReconciliationController'
+import { animationEditorController } from './animationEditorController'
 import { initClipAttributeClipboard } from './clipAttributeController'
 import { initProxyController } from './proxyController'
 import { initMotionAnalysisRuntime } from './motionAnalysisRuntime'
@@ -60,6 +63,10 @@ import { initSourceMonitorLifecycle } from './sourceMonitorController'
 import { initAudioEffectStatusProjection } from './audioEffectStatus'
 import SequenceControls from '../ui/SequenceControls'
 import MulticamControls from '../ui/MulticamControls'
+import LazySurfaceBoundary from '../ui/LazySurfaceBoundary'
+import { closeAnimationWorkspace } from './animationWorkspaceController'
+
+const AnimationWorkspace = lazy(() => import('../ui/animation/AnimationWorkspace'))
 
 const pluginAppController = getPluginAppController()
 
@@ -74,6 +81,21 @@ export default function EditorShell({ closing }: EditorShellProps) {
   const [ProxyBenchmarkPanel, setProxyBenchmarkPanel] = useState<ComponentType | null>(null)
   const workspace = useWorkspaceLayoutStore()
   const documentId = useDocumentStore((state) => state.doc.id)
+  const animationOpen = useTransportStore((state) => state.animationWorkspaceOpen)
+  const animationReturnFocus = useRef(false)
+  const closeAnimationPanel = useCallback(() => {
+    // Only the deliberate Back/Close command requests focus restoration.
+    // Transport resets and project teardown must keep their own focus behavior.
+    animationReturnFocus.current = useTransportStore.getState().animationWorkspaceOpen
+    closeAnimationWorkspace()
+  }, [])
+  useLayoutEffect(() => {
+    if (animationOpen || !animationReturnFocus.current) return
+    animationReturnFocus.current = false
+    if (!closing) shellRef.current?.querySelector<HTMLButtonElement>(
+      '.transport-tools button[aria-controls="workspace-timeline-panel"]',
+    )?.focus({ preventScroll: true })
+  }, [animationOpen, closing])
   const fitted = fitWorkspaceLayout(workspace, viewport)
   useUndoRedoShortcuts()
   useEditShortcuts()
@@ -97,6 +119,7 @@ export default function EditorShell({ closing }: EditorShellProps) {
   useEffect(() => initMediaCapabilityLifecycle(), [])
   useEffect(() => initSelectionReconciliation(), [])
   useEffect(() => initClipAttributeClipboard(), [])
+  useEffect(() => animationEditorController.init(), [])
   useEffect(() => colorLutController.init(), [])
   useEffect(() => initSourceMonitorLifecycle(), [])
   useEffect(() => initAudioEffectStatusProjection(), [])
@@ -357,10 +380,9 @@ export default function EditorShell({ closing }: EditorShellProps) {
         aria-hidden={fitted.timelineHeight === 0 || undefined}
         inert={closing || fitted.timelineHeight === 0}
       >
-        <AudioMixer />
-        <div className="timeline-scroll-host" data-timeline-scroll>
-          <Timeline />
-        </div>
+        {animationOpen ? <LazySurfaceBoundary loadingLabel="Loading Animation workspace…" failureTitle="Animation workspace could not load" onClose={closeAnimationPanel}>
+          <AnimationWorkspace onClose={closeAnimationPanel} />
+        </LazySurfaceBoundary> : <><AudioMixer /><div className="timeline-scroll-host" data-timeline-scroll><Timeline /></div></>}
       </section>
       {ProxyBenchmarkPanel ? <ProxyBenchmarkPanel /> : null}
       <MediaDropStatus />

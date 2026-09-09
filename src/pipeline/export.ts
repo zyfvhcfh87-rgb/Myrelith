@@ -1,3 +1,4 @@
+import { titleCompositionError } from '../domain/titleComposition'
 import { ColorGradingRuntime, ColorGradingCancelledError, type ColorGradingFrame } from './colorGradingRuntime'
 import type { PortableColorLut } from '../domain/colorLutCatalog'
 /**
@@ -202,19 +203,6 @@ async function compositeAndCloseLease(
 ): Promise<void> {
   let failed = false
   let failure: unknown
-  const returnedPluginBuffers = new Set<Uint8Array>()
-  const trackedVideoEffectStageExecutor = videoEffectStageExecutor
-    ? Object.freeze({
-        bypassPolicy: videoEffectStageExecutor.bypassPolicy,
-        async applyPluginEffect(
-          request: Parameters<VideoEffectStageExecutor['applyPluginEffect']>[0],
-        ) {
-          const result = await videoEffectStageExecutor.applyPluginEffect(request)
-          if (result.status === 'applied') returnedPluginBuffers.add(result.rgba)
-          return result
-        },
-      }) satisfies VideoEffectStageExecutor
-    : videoEffectStageExecutor
   let sourceFailed = false
   let sourceFailure: unknown
   const observedSource: FrameSource = {
@@ -235,6 +223,11 @@ async function compositeAndCloseLease(
     if (lease.plan.frame !== frame) {
       throw new Error('Export media lease returned a plan for the wrong frame')
     }
+    for (const item of lease.plan.items) {
+      if (item.kind !== 'title') continue
+      const error = titleCompositionError(item.title)
+      if (error) throw new Error(`Title cannot be exported: ${item.clip.name}: ${error}`)
+    }
     const result = await composite(
       doc,
       lease.plan,
@@ -243,7 +236,7 @@ async function compositeAndCloseLease(
       sink.transitionSurfaceProvider,
       fullResolutionPresentationProfile(doc, 'export'),
       sink.lensRemapProvider,
-      trackedVideoEffectStageExecutor,
+      videoEffectStageExecutor,
       grading,
     )
     // Preview intentionally softens source failures into `missing` so a later
@@ -260,11 +253,6 @@ async function compositeAndCloseLease(
     failed = true
     failure = cause
   }
-
-  for (const bytes of returnedPluginBuffers) {
-    if (bytes.byteLength > 0) bytes.fill(0)
-  }
-  returnedPluginBuffers.clear()
 
   try {
     await lease.close()

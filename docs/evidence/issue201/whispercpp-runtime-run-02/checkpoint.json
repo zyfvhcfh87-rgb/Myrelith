@@ -1,0 +1,110 @@
+{
+  "parentHead": "406cbcb6af10c3e57b71a367caf3b193ae03dddd",
+  "status": "failed-incomplete-null-backend-buffer-during-load",
+  "sourceFiles": [
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_RUNTIME_RUN_02.md",
+      "bytes": 4734,
+      "sha256": "2d0ccfd4f308d78ce3ef1a896c2e04b6cf1df5048372be781ba1fb6e748bde1d"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-evidence/verify-run02.mjs",
+      "bytes": 4497,
+      "sha256": "8726afe61dc0e7c99c1126a52f9398e7e628d43505e586ae86ca8f1838789b55"
+    }
+  ],
+  "referenceFiles": [
+    {
+      "path": "docs/evidence/issue201/whispercpp-diagnostic-runtime-source/checkpoint.json",
+      "bytes": 25679,
+      "sha256": "5351db3c709f200338a6cad122320dcfe1d5908494064de31c1eda6e1458186b"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-diagnostic-runtime-source/manifest.json",
+      "bytes": 6680,
+      "sha256": "4b38b234b965e1fd8326323806af90ca6d98c2270578b02b82bf644de6642070"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-runtime-run-01/checkpoint.json",
+      "bytes": 2974,
+      "sha256": "e79fea909580f04d41a4e0e6fde169e2b63f9a09bb311f02f090cd4d4c99ccc3"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-build-preparation/extraction-inventory.json.gz",
+      "bytes": 1864139,
+      "sha256": "ba24ca7b38f5f82b909da0214bcf7983e2f693e9f1db9e63ba2967270a6f2d10"
+    },
+    {
+      "path": "scripts/issue201/lab-contract.mjs",
+      "bytes": 4604,
+      "sha256": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/resident-monitor.mjs",
+      "bytes": 3519,
+      "sha256": "93a7d21b4a1624abbe69b0df7c78f2f2386e6554f4c2bd11025b1eb1fa6d7ebb"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/resident-coverage.mjs",
+      "bytes": 2809,
+      "sha256": "96114f08b414309ae94b76777327257b75d96bfa6555da96ec189d3c4a1cd7bf"
+    }
+  ],
+  "records": [
+    {
+      "path": "analysis.json",
+      "bytes": 5141,
+      "sha256": "c4531fb16ed5173a7bf8577130c48d57784b6a53b7bbb955cca74e88180f6c60"
+    },
+    {
+      "path": "assertion-source.json",
+      "bytes": 1466,
+      "sha256": "1aebfb64df489f6bbc116be135989cef15a322e9ad708d55793b78e7f9c387a5"
+    },
+    {
+      "path": "grant-preflight.json",
+      "bytes": 670,
+      "sha256": "dcd4da01adaf27d9281afa5d89166a1a2999996fc29bd8d20a6cbcd2b68ca513"
+    },
+    {
+      "path": "input-preflight.json",
+      "bytes": 2914,
+      "sha256": "b9cc8414a0d338af735fc529efcc8f35a2b1f68c40eda3037d7648b665b61a0f"
+    },
+    {
+      "path": "outer-log.txt",
+      "bytes": 2063,
+      "sha256": "c609a672653b355cae7d1c4de40ace8bce0545c5924f8d9a6986df8c3f8efa87"
+    },
+    {
+      "path": "runtime-attempt-02.json",
+      "bytes": 208,
+      "sha256": "0beb80d01a11408c8520d86fe952d77d8f0583bb73bcbaa6486a7b3fbcbd46e1"
+    },
+    {
+      "path": "runtime-independent-release-02.json",
+      "bytes": 6618,
+      "sha256": "756e2a2b1e286cd120784992f4d42ca60a62f650942baa20d1c682c3470e63f7"
+    },
+    {
+      "path": "runtime-partial-02.jsonl",
+      "bytes": 71742,
+      "sha256": "e4917630b1611fa14051f18676e2f5d28567713dd93f4a818c209ab269bc0603"
+    },
+    {
+      "path": "runtime-results-02.json",
+      "bytes": 86344,
+      "sha256": "085c76884e2a3c1374740d353e0d18b94cc4b4740f8e448cb372163d325efc0a"
+    }
+  ],
+  "attemptIdentity": "02",
+  "runtimeAttemptsAtThisCheckpoint": 1,
+  "retryPerformed": false,
+  "sourceAndInputHashesVerified": true,
+  "rawAcceptanceAndResidentAssessmentRecomputed": true,
+  "originalRun01EvidenceUnchanged": true,
+  "sharedHeavySlotHeld": false,
+  "independentPhysicalReleaseVerified": true,
+  "runtimeQualified": false,
+  "speechProductionGo": false
+}

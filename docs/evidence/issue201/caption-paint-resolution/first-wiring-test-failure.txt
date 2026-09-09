@@ -1,0 +1,37 @@
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201
+
+ ❯ src/domain/captionExport.test.ts (18 tests | 1 failed) 7ms
+     × checks known styles against the actual canvas pixel limits 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/domain/captionExport.test.ts > caption export availability > checks known styles against the actual canvas pixel limits
+AssertionError: expected { sequenceId: 'root', …(4) } to match object { cueId: 'too-small', frame: +0, …(1) }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "cueId": "too-small",
+    "frame": 0,
+-   "reason": StringMatching /fontSizePx/,
++   "reason": "Font size must be from 8 to 1024 pixels.",
+  }
+
+ ❯ src/domain/captionExport.test.ts:28:63
+     26|     const root = { ...doc('root', [captions('cc', [{ ...cue('too-small…
+     27|       style: { version: 1, params: { fontSizePermille: 8 } } }])]), wi…
+     28|     expect(firstCaptionExportBlocker(project(root), root.id)).toMatchO…
+       |                                                               ^
+     29|       cueId: 'too-small', frame: 0, reason: expect.stringMatching(/fon…
+     30|     const hidden = { ...root, captionTracks: root.captionTracks.map((t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 4 passed (5)
+      Tests  1 failed | 149 passed (150)
+   Start at  20:39:53
+   Duration  1.90s (transform 728ms, setup 99ms, import 1.02s, tests 1.08s, environment 936ms)

@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * Capability-aware export-flow integration at Toolbar.
  *
@@ -176,7 +177,7 @@ function audioTrack(clips: Clip[]): Track {
 
 function doc(withContent = true): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'export-ui-doc',
     name: 'My / Rough: Cut.mp4',
     frameRate: { num: 30, den: 1 },

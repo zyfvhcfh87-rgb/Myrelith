@@ -18,7 +18,7 @@ export function commitPortableColorEdit(expected: SequenceProject, generation: n
       const media = useMediaStore.getState()
       serializeProjectFile(createProjectFileSnapshot(candidate, media.descriptors.values(), media.collections))
     }
-    return useDocumentStore.getState().commitColorLutEdit(expected, generation, candidate)
+    return useDocumentStore.getState().commitProjectEdit(expected, generation, candidate)
   } catch (cause) { return cause instanceof Error ? cause.message : 'The grading edit could not be saved.' }
 }
 interface ImportWorker {

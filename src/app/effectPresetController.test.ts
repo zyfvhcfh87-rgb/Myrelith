@@ -5,10 +5,12 @@ import { mutateEffectPresetLibrary, readEffectPresetLibrary } from '../domain/ef
 import { useEffectPresetStore } from '../state/effectPresetStore'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
-import { attributeProject } from '../test/clipAttributeFixtures'
+import { ATTRIBUTE_ASSET_DESCRIPTOR, attributeProject } from '../test/clipAttributeFixtures'
+import { useMediaStore } from '../state/mediaStore'
 import type { EffectPresetRepository } from './localEffectPresetStorage'
 
 beforeEach(() => {
+  useMediaStore.setState({ descriptors: new Map([['asset', ATTRIBUTE_ASSET_DESCRIPTOR]]), collections: [] })
   useDocumentStore.getState().setProject(attributeProject())
   useTransportStore.setState({ selectedClipIds: ['source'], selectedClipId: 'source', playheadFrame: 5 })
   useEffectPresetStore.setState({ presets: [], unavailable: [], loaded: false, busy: false, readOnlyReason: null, error: null, message: '' })

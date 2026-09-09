@@ -1,10 +1,12 @@
+import { isProceduralTitleClip, proceduralTextAssetId } from '../textOverlay'
+import { copyTitleForNewOwner, createTitleElementIdAllocator, projectTitleOwnershipError } from '../titleOwnership'
 import type { Clip, ClipId, EffectId, SourceTimeRate, SourceTimeMap, SourceTimeSpeedEasing, TimeRange, TimelineDoc, TrackId } from '../schema';
 import { clipAnimation, clipAnimationKeyframeCount, cloneClipAnimation, documentAnimationKeyframeGrowthAllowed, shiftClipAnimation, remapEffectAnimationIds } from '../clipAnimation';
 import { rangeEnd, rangeOverlap } from '../time';
 import { effectCollectionAppendBudgetError } from '../effectBounds';
 import { audioEffectCollectionAppendBudgetError, clipAudioEffects } from '../audioEffectBounds';
 import { cloneAudioEffectDescriptor } from '../audioEffectStack';
-import { clipSourceTimeMap, cloneSourceTimeMap, defaultSourceTimeMap, retimeClipAnimation, shiftClipAnimationSourceTimeIntent, sourceRangeForMap, sourceTimeMapAtOffset, sourceTimeMapForTimelineDuration, sourceTimeMapUsesSpeedCurve, sourceTimeMapValidationError, sourceTimeMapWithSpeedPoint, sourceTimeMapWithoutSpeedCurve, sourceTimeMapWithoutSpeedPoint, sourceTimeRateValidationError, timelineFramesWithinSourceMap, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
+import { reanchorProceduralAnimation, clipSourceTimeMap, cloneSourceTimeMap, defaultSourceTimeMap, retimeClipAnimation, shiftClipAnimationSourceTimeIntent, sourceRangeForMap, sourceTimeMapAtOffset, sourceTimeMapForTimelineDuration, sourceTimeMapUsesSpeedCurve, sourceTimeMapValidationError, sourceTimeMapWithSpeedPoint, sourceTimeMapWithoutSpeedCurve, sourceTimeMapWithoutSpeedPoint, sourceTimeRateValidationError, timelineFramesWithinSourceMap, SOURCE_TIME_TICKS_PER_FRAME } from '../sourceTimeMap';
 import { byStart, clipsOverlapAdjustments, locateClip, newId, overlapsAny, reconcileTransitions, reject, shiftLaterAdjustments, withClampedAudioFades, withTrack, type ClipLocation } from './operationInternals';
 import type { TrimEdge } from './operationTypes';
 
@@ -18,6 +20,7 @@ export function splitClipAtFrame(
   doc: TimelineDoc,
   clipId: ClipId,
   frame: number,
+  allocateTitleId?: () => string,
 ): TimelineDoc {
   const op = 'splitClipAtFrame'
   if (!Number.isInteger(frame)) {
@@ -48,7 +51,7 @@ export function splitClipAtFrame(
 
   const offset = frame - tl.startFrame
   const stillSource = clip.sourceMode === 'still'
-  const textSource = clip.text !== undefined
+  const textSource = isProceduralTitleClip(clip)
   const sourceTimeMap = clipSourceTimeMap(clip)
   const leftSourceTimeMap = textSource || stillSource
     ? defaultSourceTimeMap(0, stillSource ? 1 : offset)
@@ -71,7 +74,16 @@ export function splitClipAtFrame(
     ...cloneAudioEffectDescriptor(effect),
     id: newId('afx'),
   }))
-  const rightAnimation = remapEffectAnimationIds(shiftedRightAnimation, effectIdMap)
+  const rightAnimation = remapEffectAnimationIds(textSource ? reanchorProceduralAnimation(shiftedRightAnimation) : shiftedRightAnimation, effectIdMap)
+  let titleCopy: ReturnType<typeof copyTitleForNewOwner> = null
+  if (clip.title !== undefined || clip.animation?.titleTracks?.length) {
+    try {
+      titleCopy = copyTitleForNewOwner({ ...clip, animation: rightAnimation }, allocateTitleId
+        ?? createTitleElementIdAllocator({ sequences: [doc] }, () => newId('title-element')))
+    } catch { return reject(doc, op, 'could not allocate independent title element identities') }
+    if (!titleCopy) return reject(doc, op, 'this future title definition cannot be split safely')
+  }
+  const rightClipId = newId('clip')
   const left: Clip = withClampedAudioFades({
     ...clip,
     sourceRange: stillSource
@@ -84,7 +96,8 @@ export function splitClipAtFrame(
   })
   const right: Clip = withClampedAudioFades({
     ...clip,
-    id: newId('clip'),
+    id: rightClipId,
+    ...(textSource ? { assetId: proceduralTextAssetId(rightClipId) } : {}),
     sourceRange: stillSource
       ? { startFrame: 0, durationFrames: 1 }
       : textSource
@@ -93,6 +106,7 @@ export function splitClipAtFrame(
     sourceTimeMap: rightSourceTimeMap,
     timelineRange: { startFrame: frame, durationFrames: tl.durationFrames - offset },
     animation: rightAnimation,
+    ...(titleCopy ?? {}),
     effects: rightEffects,
     audioEffects: rightAudioEffects,
     ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
@@ -113,7 +127,9 @@ export function splitClipAtFrame(
     clips,
     transitions,
   })
-  return withTrack(doc, loc.trackIndex, nextTrack)
+  const candidate = withTrack(doc, loc.trackIndex, nextTrack)
+  const ownerError = projectTitleOwnershipError({ sequences: [candidate] })
+  return ownerError ? reject(doc, op, ownerError) : candidate
 }
 
 /**
@@ -142,7 +158,7 @@ export function trimClip(
   const tl = clip.timelineRange
   const src = clip.sourceRange
   const stillSource = clip.sourceMode === 'still'
-  const textSource = clip.text !== undefined
+  const textSource = isProceduralTitleClip(clip)
   const sourceTimeMap = clipSourceTimeMap(clip)
 
   let newTl: TimeRange
@@ -200,7 +216,7 @@ export function trimClip(
     timelineRange: newTl,
     sourceRange: newSrc,
     sourceTimeMap: newSourceTimeMap,
-    animation: nextAnimation,
+    animation: textSource && edge === 'start' ? reanchorProceduralAnimation(nextAnimation) : nextAnimation,
   })
   clips.sort(byStart)
   const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
@@ -292,7 +308,7 @@ function speedEditLocation(
     reject(doc, op, `track ${loc.track.id} is locked`)
     return null
   }
-  if (loc.clip.sourceMode === 'still' || loc.clip.text !== undefined) {
+  if (loc.clip.sourceMode === 'still' || isProceduralTitleClip(loc.clip)) {
     reject(doc, op, 'only timed media clips can be retimed')
     return null
   }
@@ -617,7 +633,7 @@ export function slipClip(
   }
   const loc = locateClip(doc, clipId)
   if (!loc) return reject(doc, op, `clip ${clipId} not found`)
-  if (loc.clip.sourceMode === 'still' || loc.clip.text !== undefined) return doc
+  if (loc.clip.sourceMode === 'still' || isProceduralTitleClip(loc.clip)) return doc
   if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
 
   // Historical pure fixtures can still omit the schema-11 map. Preserve the
@@ -725,7 +741,7 @@ export function slideClip(
     if (newDur < 1) {
       return reject(doc, op, 'left neighbor cannot shrink below 1 frame')
     }
-    const leftIsText = left.text !== undefined
+    const leftIsText = isProceduralTitleClip(left)
     const leftSourceTimeMap = leftIsText || left.sourceMode === 'still'
       ? defaultSourceTimeMap(0, left.sourceMode === 'still' ? 1 : newDur)
       : sourceTimeMapForTimelineDuration(clipSourceTimeMap(left), newDur)
@@ -747,7 +763,7 @@ export function slideClip(
       return reject(doc, op, 'right neighbor cannot shrink below 1 frame')
     }
     const rightIsStill = right.sourceMode === 'still'
-    const rightIsText = right.text !== undefined
+    const rightIsText = isProceduralTitleClip(right)
     const rightSourceTimeMap = rightIsStill || rightIsText
       ? defaultSourceTimeMap(0, rightIsStill ? 1 : newDur)
       : sourceTimeMapAtOffset(clipSourceTimeMap(right), deltaFrames)
@@ -770,7 +786,7 @@ export function slideClip(
           ? { startFrame: 0, durationFrames: newDur }
         : sourceRangeForMap(rightSourceTimeMap, newDur),
       sourceTimeMap: rightSourceTimeMap,
-      animation: rightAnimation,
+      animation: rightIsText ? reanchorProceduralAnimation(rightAnimation) : rightAnimation,
     })
   }
   clips[clipIndex] = {
@@ -830,7 +846,7 @@ export function rippleTrim(
   const src = clip.sourceRange
   const oldEnd = rangeEnd(tl)
   const stillSource = clip.sourceMode === 'still'
-  const textSource = clip.text !== undefined
+  const textSource = isProceduralTitleClip(clip)
   const sourceTimeMap = clipSourceTimeMap(clip)
 
   let newClip: Clip

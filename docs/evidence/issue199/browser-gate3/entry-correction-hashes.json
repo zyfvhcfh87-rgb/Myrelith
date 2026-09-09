@@ -1,0 +1,14 @@
+{
+  "acceptedProductSource": "87d8032f25ef469449d59741fba56d1b76eda6aa",
+  "scope": "entry correction source plus focused tests; other accepted source unchanged",
+  "sha256": {
+    "src/app/EditorShell.tsx": "8e52427be0bebe0e967e8d7d3e446d46f37a351fc99bd50fa1efbd95281624b2",
+    "src/app/EditorShell.test.tsx": "9b02b4802778345bb3b324ef6ef2d5f371d24d772bd0d7096f3c6937ab8ab5c9",
+    "src/ui/ToolButtons.tsx": "4293ebba8898d96d20ac1598277733109136401dedb5070da853635f9980672e",
+    "src/ui/animation/AnimationEntry.tsx": "e9d3e73e4f49ffd8503575650472f7f75b36f6bd32f30659358d9c723f182c19",
+    "src/ui/ToolButtons.test.tsx": "e3ffd481ad8d0fe5467dcee91d4930f0fec5b3c07704a52f1d9e8129272afd73",
+    "src/ui/animation/AnimationWorkspace.test.tsx": "a3f63559e314a5a8769e37dfef4d2609b3eafe731e53436ccff0d9d9e3d1f7b4",
+    "src/ui/timeline/TimelineZoomControls.test.tsx": "9dbc4826072b7b48203c55246f1dcb6377fbac674fa74f905bee3fa3a78a9792",
+    "src/test/architecture.test.ts": "5dcd2156cf404af75421b890791032fc3c31f7df9c210eea6e6d42bff3482b5c"
+  }
+}

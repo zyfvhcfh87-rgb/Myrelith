@@ -1,0 +1,50 @@
+{
+  "directory": "/private/tmp/issue199-g4/2026-09-08T20-45-37.918Z",
+  "files": {
+    "artifacts.json": {
+      "bytes": 273,
+      "sha256": "0fc359cf3d44607888fc1e8d96431c37c21493d87e21da8b7212d46e2412ee4d"
+    },
+    "failure-dom.txt": {
+      "bytes": 4836,
+      "sha256": "0c8f7e9a9277bc11fe3062de15021dfd6f2dc5d6357dfaea3119544f62a14df5"
+    },
+    "failure.png": {
+      "bytes": 136980,
+      "sha256": "75a8941662574cf8d608b2edf7f94264070e55ec6d9237686d498dfee3bdc06c"
+    },
+    "result.json": {
+      "bytes": 155182,
+      "sha256": "d2ae72b3196f5335d8ad73f3985a235c433f0c97b44a947a8720fa755ecb67fc"
+    },
+    "server.log": {
+      "bytes": 71,
+      "sha256": "d875390d276443e4a02975e90cbad2d12741db01948f8904c02ff466a0aa301b"
+    },
+    "step-01-dom.txt": {
+      "bytes": 4837,
+      "sha256": "e447c0e6d673c7099c021d3342f9965eedf32aed894b804f775ccced17248a2b"
+    },
+    "step-01.png": {
+      "bytes": 136975,
+      "sha256": "a8fba0461c585562ddd6320f4f813695feb6737cda4a5dc137d6bc2aeacd43cc"
+    },
+    "step-02-dom.txt": {
+      "bytes": 4836,
+      "sha256": "0c8f7e9a9277bc11fe3062de15021dfd6f2dc5d6357dfaea3119544f62a14df5"
+    },
+    "step-02.png": {
+      "bytes": 137156,
+      "sha256": "579c4ad8fa7f4a10fc60c2df511a44e8e6e19fd1d4f5771afa082616a7132cec"
+    },
+    "supervisor.json": {
+      "bytes": 622,
+      "sha256": "90fa40e20b2530ef2faecf9ac6b58e9660b61da1833f77875b199f28ce84e87a"
+    },
+    "trace.zip": {
+      "bytes": 4595167,
+      "sha256": "71bebf745f0c5ae82887ffcbccf60e1178f8ae5b4e663a045eb7a7f64bdeb716"
+    }
+  },
+  "profile": "Private Chromium profile retained under raw directory; not included in top-level file manifest."
+}

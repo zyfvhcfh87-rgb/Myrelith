@@ -9,7 +9,7 @@
  * engine/pipeline/workers (the controller is the facade).
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   initPreview,
   setPreviewViewport,
@@ -22,23 +22,28 @@ import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useProxyStore } from '../state/proxyStore'
 import { useVideoScopesStore } from '../state/videoScopesStore'
+import { useTransportStore } from '../state/transportStore'
 import TextOverlayControls from './TextOverlayControls'
+import TitleOverlayControls from './TitleOverlayControls'
 import VideoScopesPanel from './VideoScopesPanel'
 import VisualOverlayControls from './VisualOverlayControls'
 import MotionTrackingOverlay from './MotionTrackingOverlay'
+import MaskOverlayControls from './MaskOverlayControls'
 import { focusProgramMonitor } from '../app/sequenceEditController'
 
 export default function Preview() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const [maskControlsHost, setMaskControlsHost] = useState<HTMLDivElement | null>(null)
   const docWidth = useDocumentStore((state) => state.doc.width)
   const docHeight = useDocumentStore((state) => state.doc.height)
+  const editingMask = useTransportStore((state) => state.maskEditorTarget !== null)
   const qualityMode = usePreviewQualityStore((state) => state.qualityMode)
   const setQualityMode = usePreviewQualityStore((state) => state.setQualityMode)
   const scopesEnabled = useVideoScopesStore((state) => state.enabled)
   const scopesSupported = useVideoScopesStore((state) => state.rendererSupported)
   const hasTextOverlay = useDocumentStore((state) =>
-    state.doc.tracks.some((track) => track.clips.some((clip) => clip.text !== undefined)),
+    state.doc.tracks.some((track) => track.clips.some((clip) => (clip.text !== undefined || clip.title !== undefined))),
   )
   const hasVisibleCaption = useDocumentStore((state) =>
     (state.doc.captionTracks ?? []).some(
@@ -66,6 +71,8 @@ export default function Preview() {
     }
     return false
   })
+  const renderError = usePreviewStatusStore((state) => state.renderError)
+  const titleNotices = usePreviewStatusStore((state) => state.titleNotices)
   const offlineVisualAssetIds = usePreviewStatusStore(
     (state) => state.offlineVisualAssetIds,
   )
@@ -126,6 +133,7 @@ export default function Preview() {
   }, [docHeight, docWidth])
 
   return (
+    <div className="preview-workspace">
     <div
       className="preview-panel"
       ref={panelRef}
@@ -160,10 +168,22 @@ export default function Preview() {
         className="preview-canvas"
         data-testid="preview-canvas"
       />
-      <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
-      <MotionTrackingOverlay canvasRef={canvasRef} panelRef={panelRef} />
-      <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+      {!editingMask && <>
+        <VisualOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+        <MotionTrackingOverlay canvasRef={canvasRef} panelRef={panelRef} />
+        <TextOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+        <TitleOverlayControls canvasRef={canvasRef} panelRef={panelRef} />
+      </>}
+      <MaskOverlayControls canvasRef={canvasRef} panelRef={panelRef} toolbarHost={maskControlsHost} />
       {scopesEnabled ? <VideoScopesPanel /> : null}
+      {renderError ? <div className="preview-title-status" role="status">
+        <strong>Preview unavailable</strong>
+        <span>{renderError}</span>
+      </div> : titleNotices.length > 0 && <div className="preview-title-status" role="status">
+        <strong>{titleNotices.some((notice) => notice.kind === 'unavailable') ? 'Title unavailable' : 'Title font notice'}</strong>
+        <span>{titleNotices.slice(0, 2).map((notice) => `${notice.clipName} / ${notice.name}: ${notice.detail}`).join(' ')}</span>
+        {titleNotices.length > 2 && <span> {titleNotices.length - 2} more title notices.</span>}
+      </div>}
       {offlineVisualAssetIds.length > 0 ? (
         <div className="preview-hint preview-hint-offline" role="status">
           <strong>Source offline</strong>
@@ -180,6 +200,8 @@ export default function Preview() {
           Visual sources are offline. Reconnect them in the Media panel.
         </div>
       ) : null}
+    </div>
+    <div className="mask-editor-dock" ref={setMaskControlsHost} />
     </div>
   )
 }

@@ -1,0 +1,51 @@
+{
+  "productCommit": "54581222b3c46208efea47f71a0d865f52778bc9",
+  "baselineCommit": "ce91074c276ca6892a74addb7dd673b9a19c7eeb",
+  "fixtures": [
+    {
+      "id": "sans-serif-plain",
+      "legacy": "3ed0fd5d41e111aa7e6b94a77a190f830b963812f4c885ce6c981f0962897411",
+      "expanded": "adcecddc3a4cd464e741f3b5603b4e9cbfe567e8046f875f084de52f02cc0b37"
+    },
+    {
+      "id": "sans-serif-combining-emoji",
+      "legacy": "35f06d6e04a72f9b040ee68eff53afb101dad4c43609e2ac1ec6a614d7350c74",
+      "expanded": "928fd4fbe0d45f7ad60aecb19caa4c728f020e6691b11985671301d4d04e3a4f"
+    },
+    {
+      "id": "sans-serif-crop-flip",
+      "legacy": "c3d49bdbd51e1637930321ff9fa6709efc7036b30741dc0bce09d515c35ef9e5",
+      "expanded": "608f4e064723979b552b394364ca246cb1102cc1d16a85d7aabc08fbe5ef2c5e"
+    },
+    {
+      "id": "sans-serif-background",
+      "legacy": "72286d60a419c907ae299428b58f1893392acc23fbb27df8adf08cbbdde24c6b",
+      "expanded": "823ac2c68fc95f68c2d98ea1c95241467c722a7e9d8ac95035638c022be11e63"
+    },
+    {
+      "id": "sans-serif-outline-shadow",
+      "legacy": "05c78322279245598b1a32f98901402dfb0e307d99826528d7a339e53b326e03",
+      "expanded": "7098f2456b57b6d060649340dd2932042d3818c9d3d2e9d24c05a26d35c8487b"
+    },
+    {
+      "id": "monospace-caption-canary",
+      "legacy": "4db5e8adcb59426e57b75db92be333ea02e0418b5809f13b474e25ee86b9ca29",
+      "expanded": "e09a19300745e5cb99ed9a8b4ee8d93726a7a84cfc9c066db96938dac9f88764"
+    },
+    {
+      "id": "fantasy-fractional",
+      "legacy": "2b0859a55e23f104895989332f31be64df08ad5e4473ff7d04cdaccb508e7346",
+      "expanded": "4ae31a26340e637bebbfdbc19bdf111aa1519358c3d1cef9531920b9656f3e4b"
+    },
+    {
+      "id": "fantasy-anchor-zero",
+      "legacy": "502f105751ee100b8f145f027a12d07c7ad7b9d9071651d8dc3f4397e06e8fd8",
+      "expanded": "b34b4de28c41987d92f65cb37ebd1f5a4ecf2880aa70e0af4141326bf3ee03fa"
+    },
+    {
+      "id": "fantasy-anchor-one",
+      "legacy": "1da274290b93547e099f52d69721802963ac5e935b13c5d1f5c011b317d8d885",
+      "expanded": "c8e47ae9248865548d8f648d0640e187aaf189853011040c248c138570d4e115"
+    }
+  ]
+}

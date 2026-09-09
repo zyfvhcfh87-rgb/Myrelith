@@ -1,0 +1,82 @@
+{
+  "verifiedAt": "2026-09-08T19:35:25.660665+00:00",
+  "sha": "52a64ba78c72e0e3a077c63c8d9b0c3c33e11245",
+  "clean": true,
+  "runnerExitCode": 0,
+  "session": 6485,
+  "pids": [
+    {
+      "pid": 11230,
+      "status": "absent"
+    },
+    {
+      "pid": 11259,
+      "status": "absent"
+    },
+    {
+      "pid": 11260,
+      "status": "absent"
+    },
+    {
+      "pid": 11261,
+      "status": "absent"
+    },
+    {
+      "pid": 11262,
+      "status": "absent"
+    },
+    {
+      "pid": 11264,
+      "status": "absent"
+    }
+  ],
+  "port": 5198,
+  "connectResult": 61,
+  "portOpen": false,
+  "psExitCode": 1,
+  "psOutput": "",
+  "psError": "",
+  "runnerTeardown": {
+    "kind": "run-teardown",
+    "cleanup": [
+      {
+        "name": "context",
+        "status": "closed"
+      },
+      {
+        "name": "browser",
+        "status": "closed"
+      },
+      {
+        "name": "browser-server",
+        "status": "closed"
+      },
+      {
+        "name": "vite",
+        "status": "closed"
+      }
+    ],
+    "capturedPids": [
+      11259,
+      11260,
+      11261,
+      11262,
+      11264
+    ],
+    "alivePids": [],
+    "portOpen": false,
+    "problems": [],
+    "error": null,
+    "nativeMemory": {
+      "measuredMemorySamples": 210,
+      "unavailableMemorySamples": 0,
+      "status": "sampled",
+      "exactAllocationPeakProven": false
+    },
+    "runnerPid": 11230,
+    "runnerExitMustBeVerifiedByParent": true,
+    "outcome": "segment-complete",
+    "sequence": 2557,
+    "receivedAt": "2026-09-08T19:34:34.218Z"
+  }
+}

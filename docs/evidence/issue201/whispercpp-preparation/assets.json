@@ -1,0 +1,320 @@
+{
+  "schemaVersion": 1,
+  "status": "source-preparation-only-no-built-runtime",
+  "source": {
+    "release": "b4938",
+    "commit": "371b5a7561823ab2bb32142d2751e35e7534727b",
+    "license": "MIT"
+  },
+  "model": {
+    "repository": "ggerganov/whisper.cpp",
+    "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "file": "ggml-tiny-q8_0.bin",
+    "license": "MIT (publisher card)",
+    "quantizerRevision": null,
+    "upstreamNoticeCommit": "86098128c0b4f24f0e2aa2994de830614b474227",
+    "upstreamNoticeQualification": "Pinned upstream MIT notice; this commit is not claimed to identify the model converter/quantizer."
+  },
+  "toolchain": {
+    "sdkVersion": "6.0.8",
+    "sdkCommit": "e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59",
+    "buildRevision": "9d70dbe8860ccdd3595f6e6065d94bfb543ae955",
+    "archiveVersionText": "6.0.8-git",
+    "emscriptenRevision": "aeb67926e7de656da38bc807d83050af93578758",
+    "llvmRevision": "4bfd08c2d769736841ae4f5705d76fa6daa39027",
+    "binaryenRevision": "89a81ef9b72ef1c677be6be89178d19598e5760f",
+    "node": "24.19.0",
+    "python": "3.13.3",
+    "cmake": "4.4.3",
+    "ninja": "1.13.2",
+    "platform": "macOS arm64",
+    "installation": false,
+    "activation": false,
+    "compilation": false,
+    "licenseSummary": {
+      "emsdk": "MIT",
+      "emscripten": "MIT/NCSA plus bundled notices",
+      "llvm": "Apache-2.0 WITH LLVM-exception plus notices",
+      "binaryen": "Apache-2.0",
+      "ninja": "Apache-2.0",
+      "cmake": "BSD-3-Clause plus notices",
+      "node": "MIT plus bundled notices",
+      "python": "PSF-2.0 plus bundled notices"
+    },
+    "dependencySnapshot": "DEPS.tagged-release",
+    "rollingDepsRevisions": {
+      "llvmRevision": "c0125a7bf833b6cf0d5b4a085b63094e0893c85a",
+      "binaryenRevision": "8d546dc4aea1c3e81e77643f1ed0dea1a649d21d"
+    },
+    "provenanceCorrection": "../whispercpp-toolchain-provenance/profile.json"
+  },
+  "archives": [
+    {
+      "name": "ggml-tiny-q8_0.bin",
+      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny-q8_0.bin",
+      "bytes": 43537433,
+      "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+      "storageGeneration": null,
+      "publisherChecks": {}
+    },
+    {
+      "name": "whisper-371b5a7.tar.gz",
+      "url": "https://codeload.github.com/ggml-org/whisper.cpp/tar.gz/371b5a7561823ab2bb32142d2751e35e7534727b",
+      "bytes": 9136244,
+      "sha256": "89051d8fca516a3ad1f5c2f8f9d2fccb089afbaec338fca3f8731999babc6f81",
+      "storageGeneration": null,
+      "publisherChecks": {}
+    },
+    {
+      "name": "emsdk-e5bd3d0.tar.gz",
+      "url": "https://codeload.github.com/emscripten-core/emsdk/tar.gz/e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59",
+      "bytes": 175845,
+      "sha256": "e5f44ea2158626a0a30f16d49b8f7fbf9b2e4b2d332abc8888ccb001ecfff20a",
+      "storageGeneration": null,
+      "publisherChecks": {}
+    },
+    {
+      "name": "wasm-binaries-arm64.tar.xz",
+      "url": "https://storage.googleapis.com/webassembly/emscripten-releases-builds/mac/9d70dbe8860ccdd3595f6e6065d94bfb543ae955/wasm-binaries-arm64.tar.xz",
+      "bytes": 273726956,
+      "sha256": "63ec9acba14b67a925f7da9730395c84ce6ca1f5412ebcc4149b40fc43228385",
+      "storageGeneration": "1787248268124896",
+      "publisherChecks": {
+        "crc32c": "mYJ+5g=="
+      }
+    },
+    {
+      "name": "cmake-4.4.3-macos-universal.tar.gz",
+      "url": "https://github.com/Kitware/CMake/releases/download/v4.4.3/cmake-4.4.3-macos-universal.tar.gz",
+      "bytes": 89445170,
+      "sha256": "0c5d65251c14cc884bfa16bdbed3c263ce5bffe2e21c0d0d00962cb0610464fa",
+      "storageGeneration": null,
+      "publisherChecks": {}
+    },
+    {
+      "name": "ninja-1.13.2-mac.zip",
+      "url": "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-mac.zip",
+      "bytes": 314051,
+      "sha256": "c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b",
+      "storageGeneration": null,
+      "publisherChecks": {}
+    },
+    {
+      "name": "node-v24.19.0-darwin-arm64.tar.gz",
+      "url": "https://nodejs.org/dist/v24.19.0/node-v24.19.0-darwin-arm64.tar.gz",
+      "bytes": 52234372,
+      "sha256": "8294b7aa9b03997481c06babf1e8b270c859358f27da57a11509afe537ac381d",
+      "storageGeneration": null,
+      "publisherChecks": {}
+    },
+    {
+      "name": "python-3.13.3-0-macos-arm64.tar.gz",
+      "url": "https://storage.googleapis.com/webassembly/emscripten-releases-builds/deps/python-3.13.3-0-macos-arm64.tar.gz",
+      "bytes": 44280478,
+      "sha256": "2b0899d7ade9463b0c909ef23aeea27546a4f412637998d817a49718bc2bac19",
+      "storageGeneration": "1748456863463157",
+      "publisherChecks": {
+        "crc32c": "YcVNMg==",
+        "md5": "o60ywYsa/2uBcBPdvTVSkQ=="
+      }
+    }
+  ],
+  "sourceRecords": [
+    {
+      "name": "emsdk_manifest.json",
+      "bytes": 27734,
+      "sha256": "d274a3b87e436eaced2878b46ce021caa57ca587741306c0a907910084fdaf9d",
+      "url": "https://raw.githubusercontent.com/emscripten-core/emsdk/e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59/emsdk_manifest.json"
+    },
+    {
+      "name": "emscripten-releases-tags.json",
+      "bytes": 19673,
+      "sha256": "857e1d04255d4dfcf41a1b8e4ceb1d7c62c7e7ab3588601f26e6cc9d25ea2cb3",
+      "url": "https://raw.githubusercontent.com/emscripten-core/emsdk/e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59/emscripten-releases-tags.json"
+    },
+    {
+      "name": "emscripten-releases-DEPS.txt",
+      "bytes": 5052,
+      "sha256": "ba08503f86f879a295c32df48f2b84c6682709d6a1bf100245e2508221be4686",
+      "qualification": "Rolling snapshot retained as historical evidence; exact release uses DEPS.tagged-release."
+    },
+    {
+      "name": "cmake-release.json",
+      "bytes": 37030,
+      "sha256": "1312df1fc69db4dc220db6088a54ffa5b3f8e499902103eee24b19fe7894fb86",
+      "url": "https://api.github.com/repos/Kitware/CMake/releases/latest"
+    },
+    {
+      "name": "ninja-release.json",
+      "bytes": 10115,
+      "sha256": "fffb422f72e04222dc176ef82e8e32e9ad9e7c4ac7e968ed43d800cfe06d7fab",
+      "url": "https://api.github.com/repos/ninja-build/ninja/releases/latest"
+    },
+    {
+      "name": "node-SHASUMS256.txt",
+      "bytes": 2967,
+      "sha256": "be0629ee2bcd8e40bb856abdd3407f0762101b76bd60a36b8867f637733631c0",
+      "url": "https://nodejs.org/dist/v24.19.0/SHASUMS256.txt"
+    },
+    {
+      "name": "emsdk-LICENSE",
+      "bytes": 1326,
+      "sha256": "99d9a9616fbde3f5ee22a71d8645799a8522d48526130c5ba6dc27ad15ce01f1",
+      "url": "https://raw.githubusercontent.com/emscripten-core/emsdk/e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59/LICENSE"
+    },
+    {
+      "name": "binaryen-LICENSE",
+      "bytes": 11535,
+      "sha256": "64c0d02491e16eced74826440ecd2bcf7722d37fa586faf457b2494293afbffe",
+      "url": "https://raw.githubusercontent.com/WebAssembly/binaryen/89a81ef9b72ef1c677be6be89178d19598e5760f/LICENSE"
+    },
+    {
+      "name": "ninja-LICENSE",
+      "bytes": 11358,
+      "sha256": "eb7e9ab9690124c5c9f42bdc81383d886a3dede26345b6ed15bbad7caf81f7ea",
+      "url": "https://raw.githubusercontent.com/ninja-build/ninja/v1.13.2/COPYING"
+    },
+    {
+      "name": "model-card.md",
+      "bytes": 3196,
+      "sha256": "21fd967098804f33fc84e803fb0e5ab7666d71801f4027cf28a65e7af09c1758"
+    },
+    {
+      "name": "model-publisher-metadata.json",
+      "bytes": 12592,
+      "sha256": "c6b367aa87a4a61f025204abcb896999f8ddc85c03669620b0b53755bfe78fa9"
+    },
+    {
+      "name": "model-format.json",
+      "bytes": 29516,
+      "sha256": "66a751f0f21b3ebbf5132e99f83d1224b431c248f72084931ae198e75a9d1400"
+    },
+    {
+      "name": "whisper-LICENSE",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "name": "emscripten-AUTHORS",
+      "bytes": 29142,
+      "sha256": "018d4191aa649d5c82ba1b2f9117b9902648792c89d5f0d5564a689dc4198aaa"
+    },
+    {
+      "name": "archive-notices.zip",
+      "bytes": 361927,
+      "sha256": "b4ee98bb5239cea3f8c4f799999f4e03a3a1fb8a83d373c3dd1adb8289100d5a"
+    },
+    {
+      "name": "archive-notice-inventory.json",
+      "bytes": 105622,
+      "sha256": "2b4e11fbaf314cbde8d0ec1c25fc48b911e5d0cba1c425125ea89cd17c895e88"
+    },
+    {
+      "name": "source-archive-verification.json",
+      "bytes": 204,
+      "sha256": "a4b4d43125da0b17b90d6ad31d36cee2263f5e3af773412654be1d4988bcfafb"
+    },
+    {
+      "name": "emscripten-tools-settings.py",
+      "bytes": 21656,
+      "sha256": "9f2c5feab6a19831cda4d5be84baa1d6632651f8c7a2ba4d516941a8539aaa43",
+      "url": "https://raw.githubusercontent.com/emscripten-core/emscripten/aeb67926e7de656da38bc807d83050af93578758/tools/settings.py"
+    },
+    {
+      "name": "emscripten-src-settings_internal.js.txt",
+      "bytes": 10719,
+      "sha256": "ec90a484ea7436130b29045251c7bf827c52c74a1266ddd15142967079f9fef0",
+      "url": "https://raw.githubusercontent.com/emscripten-core/emscripten/aeb67926e7de656da38bc807d83050af93578758/src/settings_internal.js"
+    },
+    {
+      "name": "emscripten-emcc.py",
+      "bytes": 23833,
+      "sha256": "7dcde7c7df232c511e187a01a85e23c4c8e714e0b1f52f6541f9858919bce9bb",
+      "url": "https://raw.githubusercontent.com/emscripten-core/emscripten/aeb67926e7de656da38bc807d83050af93578758/emcc.py"
+    },
+    {
+      "name": "openai-whisper-commit.json",
+      "bytes": 9381,
+      "sha256": "beea4c198fd72f2abb2625b2823a36daa761c413e73b199e99fc4c7df1f516b6",
+      "url": "https://api.github.com/repos/openai/whisper/commits/main"
+    },
+    {
+      "name": "openai-whisper-LICENSE",
+      "bytes": 1063,
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d",
+      "url": "https://raw.githubusercontent.com/openai/whisper/86098128c0b4f24f0e2aa2994de830614b474227/LICENSE"
+    },
+    {
+      "name": "upstream-notices.zip",
+      "bytes": 67805,
+      "sha256": "60f01418ae33ab976f27be21456d82660943a554b013909e69249b8b6625f970"
+    },
+    {
+      "name": "emscripten-releases-tagged-DEPS.txt",
+      "bytes": 5547,
+      "sha256": "c432603d34cfb31d8e84be556ae5474ccaa0edbccff0059dbf25b19ba11d0744",
+      "url": "https://chromium.googlesource.com/emscripten-releases/+/9d70dbe8860ccdd3595f6e6065d94bfb543ae955/DEPS.tagged-release?format=TEXT",
+      "responseEncoding": "Gitiles base64 decoded to the recorded text bytes",
+      "receipt": "../whispercpp-toolchain-provenance/official-records.zip:tagged-release-deps.base64.receipt.json"
+    }
+  ],
+  "verification": {
+    "digestProvenance": "All SHA-256 values recomputed locally. Model LFS, CMake/Ninja release-asset and Node SHASUMS publisher SHA values match. GCS bundle/Python content checks match recorded CRC32C (and MD5 where supplied); no publisher SHA/signature is asserted for those or GitHub source tarballs.",
+    "builtToolVersionsExecuted": true,
+    "runtimeArtifact": null,
+    "noticeInventory": "archive-notice-inventory.json",
+    "linkedNoticeQualification": "Pending exact build/link review",
+    "noticeArchive": "archive-notices.zip (245 content-addressed text files; 442 archive notice/version entries)",
+    "additionalNoticeArchive": {
+      "name": "upstream-notices.zip",
+      "members": [
+        {
+          "name": "llvm-LICENSE.txt",
+          "bytes": 15141,
+          "sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee",
+          "url": "https://raw.githubusercontent.com/llvm/llvm-project/4bfd08c2d769736841ae4f5705d76fa6daa39027/LICENSE.TXT"
+        },
+        {
+          "name": "dlmalloc-source.c",
+          "bytes": 236570,
+          "sha256": "175ef7cab6d59b858471ad8ba16ee8a2f0536ddf666742b5e044b187171695d6"
+        }
+      ],
+      "reason": "Exact upstream source/license bytes, including whitespace, preserved in an inert archive."
+    },
+    "localVersionVerification": {
+      "status": "all-seven-tagged-versions-match",
+      "evidence": "../whispercpp-tool-versions/checkpoint.json",
+      "confirmed": [
+        "Python3.13.3",
+        "Node24.19.0",
+        "CMake4.4.3",
+        "Ninja1.13.2",
+        "LLVM24.0.0git / 4bfd08c2d769736841ae4f5705d76fa6daa39027",
+        "Binaryen132 (version_132-16-g89a81ef9b)",
+        "Emscripten6.0.8-git / aeb67926e7de656da38bc807d83050af93578758"
+      ],
+      "configurationAttempted": false,
+      "compilationAttempted": false
+    }
+  },
+  "limits": {
+    "initialWasmBytes": 67108864,
+    "maximumWasmBytes": 536870912,
+    "incrementalChromiumRssBytes": 1073741824,
+    "residentSampleTargetMs": 100,
+    "residentMaximumActualGapMs": 250,
+    "modelAtomicCacheBytes": 100663296,
+    "twoModelCopiesBytes": 87074866,
+    "previous05PlusStagedBytes": 87147898,
+    "tokensPerFullCall": 448,
+    "windowSeconds": 30,
+    "windowStepSeconds": 25,
+    "maxWindows": 12,
+    "maxSourceSeconds": 300,
+    "maxWindowPcmCopiesBytes": 3840000,
+    "preparationScratchBytes": 2097152,
+    "windowDeadlineMs": 120000,
+    "idleCloseDeadlineMs": 100
+  }
+}

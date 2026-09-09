@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { defaultClipAnimation } from '../domain/clipAnimation'
 import {
@@ -14,7 +15,7 @@ import { useDocumentStore } from './documentStore'
 
 function document(locked = false): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'lens-doc',
     name: 'Lens',
     frameRate: { num: 30, den: 1 },

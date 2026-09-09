@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type {
   AdjustmentItem,
@@ -9,6 +10,7 @@ import type {
 } from './schema'
 import type { SourceBoundsCatalog } from './crossfadePlan'
 import { defaultTextProps } from './textOverlay'
+import { captionPaintFor, createCaptionTrack } from './captions'
 import { createPluginVideoEffectContributionSnapshot } from './pluginVideoEffectStagePlan'
 import { createColorAdjustEffect } from './effectStack'
 import {
@@ -105,7 +107,7 @@ function adjustment(
 
 function doc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'visual-plan',
     name: 'Visual plan',
     frameRate: { num: 30, den: 1 },
@@ -173,6 +175,31 @@ function pluginSnapshot() {
 }
 
 describe('video composition plan', () => {
+  test('resolves track and cue styles through the shared caption paint authority', () => {
+    const document = doc([])
+    const cue = { id: 'styled-cue', text: 'Styled', range: { startFrame: 0, durationFrames: 2 },
+      style: { version: 1, params: { color: '#00ff00ff', italic: true } } }
+    const captions = { ...createCaptionTrack('cc', 'Captions'), items: [cue],
+      style: { version: 1, params: { color: '#ff0000ff', bold: false, marginXPermille: 200 } } }
+    document.captionTracks = [captions]
+    const plan = createVideoCompositionPlanner(document, new Map()).planFrame(0)
+    expect(plan.items).toHaveLength(1)
+    expect(plan.items[0]).toMatchObject({ kind: 'caption', paint: { text: {
+      color: '#00ff00ff', italic: true, bold: false, boxWidthPx: Math.round(document.width * 0.6),
+    } } })
+    expect(videoCompositionRequests(plan)).toEqual([])
+  })
+
+  test('unavailable descriptors preserve legacy preview inputs and stored opaque intent', () => {
+    const document = doc([]), cue = { id: 'future-cue', text: 'Future', range: { startFrame: 0, durationFrames: 2 } }
+    const captions = { ...createCaptionTrack('cc', 'Captions'), items: [cue],
+      style: { version: 99, params: { color: '#ff0000ff', future: true } } }
+    document.captionTracks = [captions]
+    expect(createVideoCompositionPlanner(document, new Map()).planFrame(0).items[0])
+      .toMatchObject({ kind: 'caption', paint: captionPaintFor(document, captions, cue, 0, 1) })
+    expect(document.captionTracks[0]!.style).toEqual(captions.style)
+  })
+
   test('keeps semantic captions explicit, topmost, half-open, and media-free', () => {
     const document = doc([track('V1', [clip('video', 'asset', 0, 0)])])
     document.captionTracks = [{
@@ -591,6 +618,12 @@ describe('video composition plan', () => {
           { frame: 2, value: 1, easing: { type: 'linear' } },
         ],
       }],
+    }
+    const declaration = pluginSnapshot().declarations[0]
+    for (const owner of [from, to]) owner.animation!.effectTracks![0].parameterIdentity = {
+      version: 1, effectType: declaration.effectType, descriptorVersion: declaration.descriptorVersion,
+      contributionId: declaration.contributionId, contributionVersion: declaration.contributionVersion,
+      packageDigest: declaration.packageDigest,
     }
     const document = doc([track('V1', [from, to], [crossfade(from.id, to.id)])])
     const sources = catalog([['from-asset', exact()], ['to-asset', exact()]])

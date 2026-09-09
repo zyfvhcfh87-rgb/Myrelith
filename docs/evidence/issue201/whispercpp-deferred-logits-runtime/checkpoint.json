@@ -1,0 +1,234 @@
+{
+  "kind": "issue201-deferred-logits-runtime04",
+  "sourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp-deferred-logits-run/candidate.mjs",
+      "bytes": 3478,
+      "sha256": "49d0ffa899c92159098a5856fa9e2bd15eb5adb552e9e36dce5108288884ca93"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-deferred-logits-run/inspect-glue.mjs",
+      "bytes": 8318,
+      "sha256": "f6d615924105390b00093650cf7a58b832f334b45294523bbb24e9012c9b880d"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-deferred-logits-run/preflight.mjs",
+      "bytes": 4213,
+      "sha256": "9df09870cc8fad646768a83467672f0298bc0c1f85b9d5449a7ad173fcd2149b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-deferred-logits-run/run-lab.mjs",
+      "bytes": 41206,
+      "sha256": "6200a3a8dc71bcfb53bc70c2368a9c2f39a28e81cf624e0936aabc5684b0616f"
+    },
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_DEFERRED_LOGITS_RUNTIME.md",
+      "bytes": 1860,
+      "sha256": "6201ec414da33ccfff46fef30d8ade3a5f2fd56257cfd3458bb6e6f73d48026c"
+    }
+  ],
+  "referenceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/lab-client.mjs",
+      "bytes": 13987,
+      "sha256": "6557e298323ae411894bbb122c44297962b1b3684aa6e3b2ff51c74fe61d30d8"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/model-worker.mjs",
+      "bytes": 12908,
+      "sha256": "3ea881639185ffbb76859ac1934418134b56304e2bfb313d9f58f758e29c105c"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/run-lab.mjs",
+      "bytes": 41208,
+      "sha256": "df65d3a6eb695a28b2a9a493b363abd42a9493570b88d9f47c2cc630f01ccc4c"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/preflight.mjs",
+      "bytes": 4229,
+      "sha256": "857697544fef1159d9bef0e9728d225da74c7bb4c7f5daf656f3cb544a575edb"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-run/candidate.mjs",
+      "bytes": 3478,
+      "sha256": "9e5c04e79c59749ee9fd789883121f7a5ade238c2d1a78ec3b4804285321e12d"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic/observe-module.mjs",
+      "bytes": 3103,
+      "sha256": "f09df803982b932355225e1fb7854c16451bdd5a73a6532e2d6393ad526e6a68"
+    },
+    {
+      "path": "scripts/issue201/lab-contract.mjs",
+      "bytes": 4604,
+      "sha256": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/worker-protocol.mjs",
+      "bytes": 8077,
+      "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/model-format.mjs",
+      "bytes": 4193,
+      "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/resident-coverage.mjs",
+      "bytes": 2809,
+      "sha256": "96114f08b414309ae94b76777327257b75d96bfa6555da96ec189d3c4a1cd7bf"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/resident-monitor.mjs",
+      "bytes": 3519,
+      "sha256": "93a7d21b4a1624abbe69b0df7c78f2f2386e6554f4c2bd11025b1eb1fa6d7ebb"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-lab/host-limits.mjs",
+      "bytes": 875,
+      "sha256": "2e7f4dc9457ca9126d7fc1f1aa27bfd4b5bc1d7a1ce7c9468b941b1a0c17c91b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-review/inspect-binary.mjs",
+      "bytes": 6115,
+      "sha256": "5bba9c9457e9fdbb58558e11b77fff2d11fb33d5e089350529d67194405c2405"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-review/inspect-glue.mjs",
+      "bytes": 8318,
+      "sha256": "e900944457e000a97a1d303dc5d1107cac981c428b257fc5e61f00b71f37f372"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/CMakeLists.txt",
+      "bytes": 3550,
+      "sha256": "bc68e94197b6e819f8d5257a536b02bd0a5931c525005b994c2046fad80ba0a6"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/adapter.cpp",
+      "bytes": 6827,
+      "sha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/myrelith-token-budget.h",
+      "bytes": 403,
+      "sha256": "e0dc2d7ec04a52e47214de3536ca479f710b6957d422260eb5bc87b7bfe9ff9b"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.mjs.gz",
+      "bytes": 5556,
+      "sha256": "68f30b568d3724ccfe1184920c6f1e7157c8b503290a30d15b1994698ad0447d"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/runtime-notices.zip",
+      "bytes": 108332,
+      "sha256": "ad255711c323ac01457bbd1fe8cd72c5a6d1eda1be67446ae916bb604d37af17"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/runtime-notices.json",
+      "bytes": 2606,
+      "sha256": "148e16482ce2b1740051ab3c12a0d26a8af17acb969992af92844b1a1e3fb11c"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/notice-verification.json",
+      "bytes": 138,
+      "sha256": "768ab4e3792a4c6bf1b0e4343677de54c437234bcc31f859b0fefc523df1e2b1"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-reservation-build-source/checkpoint.json",
+      "bytes": 14381,
+      "sha256": "c852ca8d7223dde07d04eac21deafd1aeb23a6046c36c0c158145a5772379a38"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-diagnostic-runtime-source/checkpoint.json",
+      "bytes": 25679,
+      "sha256": "5351db3c709f200338a6cad122320dcfe1d5908494064de31c1eda6e1458186b"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-reservation-run/candidate.mjs",
+      "bytes": 3478,
+      "sha256": "ab7ffab43c752c5dde1cc629d15e57586080f3d59187d2f8d0bd936b9f631a55"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-reservation-run/inspect-glue.mjs",
+      "bytes": 8318,
+      "sha256": "6451b829ef1ab2e95df1a6a48a70d9f2b59f2e13b2a731da65df0faebb557b2c"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-reservation-run/preflight.mjs",
+      "bytes": 4205,
+      "sha256": "6176d76c7707c045e9c80d183e6ada664dfd7aa67a50ac8fa1becf79b2ec15a9"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-reservation-run/run-lab.mjs",
+      "bytes": 41202,
+      "sha256": "49c39226f763289eb61bd60c96f07d26011f7cad6380be9c39dd822fe7b56753"
+    },
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_RESERVATION_RUNTIME.md",
+      "bytes": 3145,
+      "sha256": "0a5970454d89219d55fd77a1065f6c745c9584986634e795b0925fe65574727a"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-deferred-logits-source/checkpoint.json",
+      "bytes": 13407,
+      "sha256": "c9d344c47d12d800ebc187806a777934f5b84ec3de5b75ff67a3a78c4675e905"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-deferred-logits-build.py",
+      "bytes": 1308,
+      "sha256": "9419e95e0b053c2e989c038a11842ac84cdcbe100371ab56d29153d9adce5cb3"
+    }
+  ],
+  "records": [
+    {
+      "path": "compile-link.json",
+      "bytes": 718,
+      "sha256": "4dddf9ea0744e63ca9d682c440f7887d86877452e9f07d90b7858a33e9a91996"
+    },
+    {
+      "path": "compile-link.txt.gz",
+      "bytes": 8266,
+      "sha256": "aed77ea4c4ce4da9d3d97d419624732812d8626719bc1bd8def3d08624f155ae"
+    },
+    {
+      "path": "configure.json",
+      "bytes": 1613,
+      "sha256": "4e7b7556b335bfe49bd96c33df91fb8ef211a27fbf5a33de2314aafe1c732f46"
+    },
+    {
+      "path": "configure.txt.gz",
+      "bytes": 1531,
+      "sha256": "9ec123169209c605e57b3c4712e15748d75d59e1fd9c551db8a7090e0aba9516"
+    },
+    {
+      "path": "generated-inspection.json",
+      "bytes": 1328,
+      "sha256": "e4ac2d23013b5f129e52fe6d253a2e7b0bf6a99a63ff82d8a0387adae81b858c"
+    },
+    {
+      "path": "independent-release.json",
+      "bytes": 179,
+      "sha256": "a7b0bf293f5c898b2a3701533c209b46cad60e8cc83ba2f6253a6b6116cc0459"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 6694,
+      "sha256": "94e3b8eed7588df6da0ea7e2fb9bdb2e6b56743ac6bd4aeed018602446a9895c"
+    },
+    {
+      "path": "myrelith-whisper.wasm.gz",
+      "bytes": 386521,
+      "sha256": "e4124c90ea2bb1cfdca52bb101ff976dc8c1fe2c6170632dd16eb8f16dee29fd"
+    },
+    {
+      "path": "result.json",
+      "bytes": 98,
+      "sha256": "5274b061df0b460665114fbd3628bc7ac5ea9d96a551db627795f2c8f8716211"
+    },
+    {
+      "path": "syntax-checks.json",
+      "bytes": 420,
+      "sha256": "3f0497a5b1dbb2a8c65e03fa1ef7b49f3329477662797072ddf7b85d30465f03"
+    }
+  ]
+}

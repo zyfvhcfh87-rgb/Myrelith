@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /**
  * Apply an accepted sequence-edit plan to a TimelineDoc.
  *
@@ -35,6 +36,7 @@ import {
 import type { Clip, MediaAsset, TimeRange, TimelineDoc, TrackId } from './schema'
 import { findClip } from './selectors'
 import {
+  reanchorProceduralAnimation,
   clipSourceTimeMap,
   defaultSourceTimeMap,
   sourceRangeForMap,
@@ -91,12 +93,13 @@ function splitStrictlyInside(
   doc: TimelineDoc,
   clipId: string,
   frame: number,
+  allocateTitleId?: () => string,
 ): TimelineDoc | null {
   const loc = locateClip(doc, clipId)
   if (!loc) return null
   const tl = loc.clip.timelineRange
   if (!rangeContainsFrame(tl, frame)) return doc
-  const next = splitClipAtFrame(doc, clipId, frame)
+  const next = splitClipAtFrame(doc, clipId, frame, allocateTitleId)
   return next === doc ? null : next
 }
 
@@ -116,6 +119,7 @@ function punchTrackRange(
   doc: TimelineDoc,
   trackId: TrackId,
   range: TimeRange,
+  allocateTitleId?: () => string,
 ): TimelineDoc | null {
   const start = range.startFrame
   const end = rangeEnd(range)
@@ -131,7 +135,7 @@ function punchTrackRange(
     .filter((item) => rangeContainsFrame(item.timelineRange, start))
     .map((item) => item.id)
   for (const clipId of startIds) {
-    const next = splitStrictlyInside(current, clipId, start)
+    const next = splitStrictlyInside(current, clipId, start, allocateTitleId)
     if (next === null) return null
     current = next
   }
@@ -150,7 +154,7 @@ function punchTrackRange(
     .filter((item) => rangeContainsFrame(item.timelineRange, end))
     .map((item) => item.id)
   for (const clipId of endIds) {
-    const next = splitStrictlyInside(current, clipId, end)
+    const next = splitStrictlyInside(current, clipId, end, allocateTitleId)
     if (next === null) return null
     current = next
   }
@@ -191,6 +195,7 @@ function splitUnlockedAt(
   doc: TimelineDoc,
   original: TimelineDoc,
   frame: number,
+  allocateTitleId?: () => string,
 ): TimelineDoc | null {
   let current = doc
   for (const track of original.tracks) {
@@ -210,7 +215,7 @@ function splitUnlockedAt(
       .filter((item) => rangeContainsFrame(item.timelineRange, frame))
       .map((item) => item.id)
     for (const clipId of ids) {
-      const next = splitStrictlyInside(current, clipId, frame)
+      const next = splitStrictlyInside(current, clipId, frame, allocateTitleId)
       if (next === null) return null
       current = next
     }
@@ -424,6 +429,7 @@ function applyInsert(
   doc: TimelineDoc,
   plan: SequenceInsertOverwritePlan,
   asset: MediaAsset,
+  allocateTitleId?: () => string,
 ): TimelineDoc {
   const original = doc
   const start = plan.timelineRange.startFrame
@@ -433,7 +439,7 @@ function applyInsert(
     return fail(original, 'a locked track would have to move')
   }
 
-  const split = splitUnlockedAt(doc, original, start)
+  const split = splitUnlockedAt(doc, original, start, allocateTitleId)
   if (split === null) return fail(original, 'could not split at the insert point')
 
   const shifted = shiftTracksFrom(split, start, duration, null)
@@ -449,11 +455,12 @@ function applyOverwrite(
   doc: TimelineDoc,
   plan: SequenceInsertOverwritePlan,
   asset: MediaAsset,
+  allocateTitleId?: () => string,
 ): TimelineDoc {
   const original = doc
   let current = doc
   for (const placement of plan.placements) {
-    const punched = punchTrackRange(current, placement.trackId, plan.timelineRange)
+    const punched = punchTrackRange(current, placement.trackId, plan.timelineRange, allocateTitleId)
     if (punched === null) return fail(original, 'could not overwrite the targeted range')
     current = punched
   }
@@ -487,6 +494,7 @@ function placeSource(
 function applyLiftExtract(
   doc: TimelineDoc,
   plan: SequenceLiftExtractPlan,
+  allocateTitleId?: () => string,
 ): TimelineDoc {
   const original = doc
   const groups = new Set<string>()
@@ -496,7 +504,7 @@ function applyLiftExtract(
 
   let current = doc
   for (const trackId of plan.trackIds) {
-    const punched = punchTrackRange(current, trackId, plan.timelineRange)
+    const punched = punchTrackRange(current, trackId, plan.timelineRange, allocateTitleId)
     if (punched === null) return fail(original, 'could not lift the targeted range')
     current = punched
   }
@@ -638,9 +646,9 @@ function rollPair(
   if (growing === null || growing < Math.abs(deltaFrames)) return null
 
   const leftStill = left.sourceMode === 'still'
-  const leftText = left.text !== undefined
+  const leftText = isProceduralTitleClip(left)
   const rightStill = right.sourceMode === 'still'
-  const rightText = right.text !== undefined
+  const rightText = isProceduralTitleClip(right)
 
   let leftMap
   let rightMap
@@ -691,7 +699,7 @@ function rollPair(
     },
     sourceRange: rightSource,
     sourceTimeMap: rightMap,
-    animation: rightAnimation,
+    animation: rightText ? reanchorProceduralAnimation(rightAnimation) : rightAnimation,
   })
   const previewTrack = { ...leftLoc.track, clips }
   const nextLeft = clips[leftLoc.clipIndex]!
@@ -799,17 +807,18 @@ export function applySequenceEdit(
   plan: SequenceEditAcceptedPlan,
   asset: MediaAsset | null,
   catalog: SourceBoundsCatalog = new Map(),
+  allocateTitleId?: () => string,
 ): TimelineDoc {
   switch (plan.kind) {
     case 'insert':
       if (!asset) return fail(doc, 'insert needs a source asset')
-      return applyInsert(doc, plan, asset)
+      return applyInsert(doc, plan, asset, allocateTitleId)
     case 'overwrite':
       if (!asset) return fail(doc, 'overwrite needs a source asset')
-      return applyOverwrite(doc, plan, asset)
+      return applyOverwrite(doc, plan, asset, allocateTitleId)
     case 'lift':
     case 'extract':
-      return applyLiftExtract(doc, plan)
+      return applyLiftExtract(doc, plan, allocateTitleId)
     case 'replace':
       if (!asset) return fail(doc, 'replace needs a source asset')
       return applyReplace(doc, plan, asset)

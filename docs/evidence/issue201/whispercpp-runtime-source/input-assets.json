@@ -1,0 +1,87 @@
+{
+  "status": "assets-statically-verified-before-checkpoint",
+  "receipts": [
+    {
+      "url": "/assets/myrelith-whisper.mjs",
+      "bytes": 22350,
+      "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7"
+    },
+    {
+      "url": "/assets/myrelith-whisper.wasm",
+      "bytes": 1198861,
+      "sha256": "9df26c6b690de120e6f1fb5ce17a25ebb2b016a73f0477b24376f558ee00ce72"
+    },
+    {
+      "url": "/assets/mediabunny.mjs",
+      "bytes": 624835,
+      "sha256": "a7e7e14265b787de0daf23d379a8b4afa4b36b74711d71a2f5e075bff6a671a6"
+    },
+    {
+      "url": "/model/ggml-tiny-q8_0.bin",
+      "bytes": 43537433,
+      "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca"
+    },
+    {
+      "url": "/fixtures/english.wav",
+      "bytes": 187404,
+      "sha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46"
+    },
+    {
+      "url": "/fixtures/french.wav",
+      "bytes": 30096,
+      "sha256": "84defdc828ef59cec10364354fbc284bc2cc683fdd4a5edd5863b7bb2c6123a8"
+    },
+    {
+      "url": "/fixtures/english-300.wav",
+      "bytes": 9600044,
+      "sha256": "a9860cf9ff8c6a5bbe1959abb5d94fcebd4de35fac70937b7ec2977d02c6d6d9"
+    },
+    {
+      "url": "/fixtures/silence.wav",
+      "bytes": 32044,
+      "sha256": "643f8a8dc8bd9c19225afffad2becfec5426180b3749cb208abdf1a6c8354efc"
+    },
+    {
+      "url": "/fixtures/corrupt.wav",
+      "bytes": 43,
+      "sha256": "87bf5c6e2799bb64bab80cbdb8b0f4d0707f05d7156cf7f7fa471b393dcabc1e"
+    },
+    {
+      "url": "/lab-client.mjs",
+      "bytes": 13987,
+      "sha256": "6557e298323ae411894bbb122c44297962b1b3684aa6e3b2ff51c74fe61d30d8"
+    },
+    {
+      "url": "/model-worker.mjs",
+      "bytes": 12676,
+      "sha256": "2cb7538d514927fcf58c8c92a9b43d34d770944794e59628fcaf02e87ee3fcfd"
+    },
+    {
+      "url": "/candidate.mjs",
+      "bytes": 3478,
+      "sha256": "bfa04969b2fe76230a843dd7450748326da482357d0dd9baa595db4ff9ab227f"
+    },
+    {
+      "url": "/lab-contract.mjs",
+      "bytes": 4604,
+      "sha256": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba"
+    },
+    {
+      "url": "/worker-protocol.mjs",
+      "bytes": 8077,
+      "sha256": "b38c3542b7a9ecf1180da9d8a910c9bd33de7178a2c2d960fc1f21e2d9c3105b"
+    },
+    {
+      "url": "/model-format.mjs",
+      "bytes": 4193,
+      "sha256": "b706c0a3030a45733b78a9f5767e49c0c871fa4f91c3088c503ac23d338cf426"
+    },
+    {
+      "url": "/manifest.json",
+      "bytes": 6324,
+      "sha256": "048a935b4bd798295a4493cf7b1a8e6afb8966883923f73b3040e0dbc84ebcd4"
+    }
+  ],
+  "factoryExecuted": false,
+  "wasmExecuted": false
+}

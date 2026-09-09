@@ -1,0 +1,22 @@
+START production launcher identity
+PASS production launcher identity
+START canonical mixed fixture and native selection
+PASS canonical mixed fixture and native selection
+START native key drag: exact movement, admitted preview, one release commit, undo/redo
+PASS native key drag: exact movement, admitted preview, one release commit, undo/redo
+START native Bézier handle 1: preview, one commit and exact undo
+PASS native Bézier handle 1: preview, one commit and exact undo
+START native Bézier handle 2: preview, one commit and exact undo
+PASS native Bézier handle 2: preview, one commit and exact undo
+START native key cancellation: escape
+PASS native key cancellation: escape
+START native key cancellation: capture
+PASS native key cancellation: capture
+START native key cancellation: close
+PASS native key cancellation: close
+START native key cancellation: mode
+STOP native key cancellation: mode: Cancellation left an animation preview
+
+true !== false
+
+Evidence: /private/tmp/issue199-continuation/2026-09-08T16-55-53.229Z-gestures

@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * workers/render.worker.test.ts — Phase 4.1b.
  *
@@ -363,6 +364,7 @@ interface CtxOp {
 interface FakeSurface {
   canvas: RenderCanvasLike
   raw: { width: number; height: number }
+  resizePixelCounts: number[]
 }
 
 /** A canvas whose 2D ctx logs ops; drawing a closed bitmap THROWS (real). */
@@ -440,25 +442,28 @@ function makeSurface(
     }
   }
   const raw = { width: 0, height: 0 }
+  const resizePixelCounts: number[] = []
   const canvas: RenderCanvasLike = {
     get width() {
       return raw.width
     },
     set width(v) {
       raw.width = v
+      resizePixelCounts.push(raw.width * raw.height)
     },
     get height() {
       return raw.height
     },
     set height(v) {
       raw.height = v
+      resizePixelCounts.push(raw.width * raw.height)
     },
     getContext: (contextId, options) => {
       log.push({ surface, name: 'getContext', args: [contextId, options] })
       return ctx
     },
   }
-  return { canvas, raw }
+  return { canvas, raw, resizePixelCounts }
 }
 
 interface Harness {
@@ -720,7 +725,7 @@ function makeTrack(id: string, clips: Clip[]): Track {
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 10, den: 1 },
@@ -1102,20 +1107,20 @@ function doneFor(h: Harness, requestId: number) {
   return replies[0] as Extract<FromRenderWorker, { type: 'compositeDone' }>
 }
 
-async function setupPluginStill(h: Harness): Promise<{
+async function setupPluginStill(h: Harness, stageCount = 1): Promise<{
   readonly doc: TimelineDoc
   readonly plan: VideoCompositionPlan
   readonly source: TrackedBitmap
 }> {
   const clip = {
     ...makeStillClip('plugin-still', 'IMAGE', 0, 10),
-    effects: [{
-      id: 'plugin-effect',
+    effects: Array.from({ length: stageCount }, (_, index) => ({
+      id: index === 0 ? 'plugin-effect' : `plugin-effect-${index}`,
       type: 'plugin:com.example.sparkle/sparkle',
       version: 1,
       enabled: true,
       params: { strength: 0.25 },
-    }],
+    })),
   }
   const doc = makeDoc([makeTrack('V1', [clip])])
   const source = makeStaticSource()
@@ -1145,6 +1150,72 @@ const twoTrackDoc = () =>
 /* ------------------------------------------------------------------ */
 
 describe('plugin effect bridge', () => {
+  test('keeps borrowed pixel surfaces at the old size until superseded frame cleanup, then resizes', async () => {
+    const h = makeHarness({ supportsCanvasPixels: true })
+    const { doc, plan } = await setupPluginStill(h)
+    const rendering = h.core.handleMessage({
+      type: 'renderFrame', generation: 1, requestId: 1, frame: 0, plan,
+      mode: 'seek', sources: [stillEntry('plugin-still', 'IMAGE')],
+    })
+    await microtasks()
+    const pending = pluginApplyFor(h, 1)
+    const oldDimensions = { ...h.visible.raw }
+    // dispatch runs synchronously up to its first await; the cancelled plugin's
+    // finally has not run at this observation point.
+    const updating = h.core.handleMessage({ type: 'setPresentationProfile', profile: resolvePresentationProfile(doc, {
+      qualityMode: 'quarter', reason: 'playing', viewport: null,
+    }) })
+    expect(h.visible.raw).toEqual(oldDimensions)
+    expect(h.createdSurfaces().every((surface) => surface.raw.width === oldDimensions.width && surface.raw.height === oldDimensions.height)).toBe(true)
+    await updating; await rendering; await microtasks()
+    expect(doneFor(h, 1).status).toBe('superseded')
+    expect(h.visible.raw).toEqual({ width: 80, height: 45 })
+    expect(h.createdSurfaces().every((surface) => surface.raw.width === 80 && surface.raw.height === 45)).toBe(true)
+    const late = new Uint8Array(pending.rgbaBytes.byteLength).fill(31)
+    await h.core.handleMessage({ type: 'pluginEffectApplied', protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: pending.generation, renderRequestId: pending.renderRequestId,
+      effectRequestId: pending.effectRequestId, rgbaBytes: late.buffer })
+    expect(late.every((byte) => byte === 0)).toBe(true)
+    expect(h.blits()).toHaveLength(0)
+  })
+
+  test('releases the prior output while the next stage is pending, then cleans a superseded late reply', async () => {
+    const h = makeHarness({ supportsCanvasPixels: true })
+    const { plan } = await setupPluginStill(h, 2)
+    const rendering = h.core.handleMessage({
+      type: 'renderFrame', generation: 1, requestId: 1, frame: 0, plan,
+      mode: 'seek', sources: [stillEntry('plugin-still', 'IMAGE')],
+    })
+    await microtasks()
+    const first = pluginApplyFor(h, 1)
+    const output = new Uint8Array(first.rgbaBytes.byteLength).fill(17)
+    await h.core.handleMessage({
+      type: 'pluginEffectApplied', protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: first.generation, renderRequestId: first.renderRequestId,
+      effectRequestId: first.effectRequestId, rgbaBytes: output.buffer,
+    })
+    await microtasks()
+    const second = h.posts.find((post) => post.type === 'pluginEffectApply'
+      && post.renderRequestId === 1 && post.effectRequestId !== first.effectRequestId)
+    if (!second || second.type !== 'pluginEffectApply') throw new Error('second plugin stage must be pending')
+    expect(output.every((byte) => byte === 0)).toBe(true)
+    expect([...new Uint8Array(second.rgbaBytes).slice(0, 4)]).toEqual([17, 17, 17, 17])
+    expect(h.posts.some((post) => post.type === 'compositeDone' && post.requestId === 1)).toBe(false)
+
+    // A document replacement supersedes the pending stage without opening a
+    // second render. The bridge still owns cleanup of unsolicited late replies.
+    await h.core.handleMessage(docMsg(makeDoc([])))
+    await rendering
+    expect(doneFor(h, 1).status).toBe('superseded')
+    const late = new Uint8Array(second.rgbaBytes.byteLength).fill(99)
+    await h.core.handleMessage({
+      type: 'pluginEffectApplied', protocolVersion: PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
+      generation: second.generation, renderRequestId: second.renderRequestId,
+      effectRequestId: second.effectRequestId, rgbaBytes: late.buffer,
+    })
+    expect(late.every((byte) => byte === 0)).toBe(true)
+  })
+
   test('transfers owned pixels to the host, applies exact output, then zeroes it', async () => {
     const h = makeHarness({ supportsCanvasPixels: true })
     const { plan } = await setupPluginStill(h)
@@ -1361,6 +1432,7 @@ describe('composite happy path', () => {
     const dispose = vi.fn()
     const createLensRemapBackend = vi.fn(() => ({
       maximumTextureSize: 8_192,
+      retainedBytes: () => 0,
       dispose,
     } as unknown as WebGl2LensRemapBackend))
     const h = makeHarness({ createLensRemapBackend })
@@ -1393,11 +1465,41 @@ describe('composite happy path', () => {
     expect(dispose).toHaveBeenCalledTimes(1)
   })
 
+  test('retained lens bytes reject a larger output before any canvas resize or creation', async () => {
+    const h = makeHarness({ createLensRemapBackend: () => ({
+      maximumTextureSize: 8192, retainedBytes: () => 3840 * 2160 * 8,
+      dispose: () => {},
+    } as unknown as WebGl2LensRemapBackend) })
+    const clip = makeClip('lens', 'A', 0, 10); clip.lensCorrection = { ...DEFAULT_MANUAL_LENS_CORRECTION }
+    await h.core.handleMessage(initMsg(h))
+    await h.core.handleMessage(docMsg(makeDoc([makeTrack('video', [clip])])))
+    const previous = { ...h.visible.raw }, count = h.createdSurfaces().length
+    const larger = makeDoc([makeTrack('video', [clip])]); larger.width = larger.height = 4096
+    await h.core.handleMessage(docMsg(larger))
+    expect(h.visible.raw).toEqual(previous); expect(h.createdSurfaces()).toHaveLength(count)
+    expect(h.posts.some((post) => post.type === 'error' && /256 MiB/.test(post.message))).toBe(true)
+    await h.core.handleMessage({ type: 'close' })
+  })
+
+  test('aspect-ratio swaps never create a width-new by height-old intermediate canvas', async () => {
+    const h = makeHarness()
+    await h.core.handleMessage(initMsg(h))
+    const portrait = makeDoc([]); portrait.width = 1024; portrait.height = 8192
+    await h.core.handleMessage(docMsg(portrait))
+    const landscape = { ...portrait, width: 8192, height: 1024 }
+    await h.core.handleMessage(docMsg(landscape))
+    expect(h.visible.raw).toEqual({ width: 8192, height: 1024 })
+    for (const surface of [h.visible, ...h.createdSurfaces()]) {
+      expect(Math.max(...surface.resizePixelCounts)).toBe(8192 * 1024)
+    }
+  })
+
   test('makes context loss terminal for one worker but allows a fresh worker retry', async () => {
     const disposeLost = vi.fn()
     const lostBackend = {
       maximumTextureSize: 8_192,
       dispose: disposeLost,
+      retainedBytes: () => 0,
       renderSource: vi.fn(() => {
         throw new LensRemapUnavailableError(
           'The WebGL2 lens-remap context was lost.',
@@ -1448,6 +1550,7 @@ describe('composite happy path', () => {
     const fresh = makeHarness({
       createLensRemapBackend: () => ({
         maximumTextureSize: 8_192,
+        retainedBytes: () => 0,
         dispose: freshDispose,
       } as unknown as WebGl2LensRemapBackend),
     })

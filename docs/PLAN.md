@@ -6,6 +6,18 @@ how the codebase actually evolved. This completed roadmap remains the MVP gate
 record; new post-MVP work needs a new user-approved plan. Companion context:
 [HANDOFF.md](HANDOFF.md).
 
+## Post-MVP milestone 9 integration (2026-09-09)
+
+The issue plans hold the selected post-MVP scope and staged evidence:
+[masks #198](ISSUE_198_PLAN.md), [animation #199](ISSUE_199_PLAN.md),
+[titles #200](ISSUE_200_PLAN.md), [captions/speech #201](ISSUE_201_PLAN.md),
+and [HDR research #202](ISSUE_202_PLAN.md). Masks, animation, titles, caption
+authoring and the HDR no-go research decision have local feature acceptance.
+Transcription still needs lifecycle qualification and app wiring; #201 remains
+open. The combined engineering/publication gate is orchestrator-owned. See
+[HANDOFF.md](HANDOFF.md#milestone-9-integration-2026-09-09) for current behavior
+and qualifications; the completed MVP record below is unchanged.
+
 ## Phase 3 gate — ✅ CLOSED (2026-07-06)
 
 - [x] Wire Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y) to documentStore undo/redo —

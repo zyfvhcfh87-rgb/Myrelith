@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import {
   planMediaAssetPlacement,
@@ -55,7 +56,7 @@ function track(
 
 function doc(tracks: Track[], id = 'doc-place'): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id,
     name: 'placement fixture',
     frameRate: { num: 30, den: 1 },

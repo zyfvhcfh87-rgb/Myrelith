@@ -26,6 +26,7 @@ export type TimelineSnapCandidateKind =
   | 'transition-end'
   | 'clip-start'
   | 'clip-end'
+  | 'keyframe'
 
 export interface TimelineSnapCandidate {
   readonly id: string
@@ -79,6 +80,7 @@ const KIND_PRIORITY: Readonly<Record<TimelineSnapCandidateKind, number>> = {
   'transition-end': 3,
   'clip-start': 4,
   'clip-end': 5,
+  keyframe: 6,
 }
 
 const MOVING_POINT_PRIORITY: Readonly<Record<TimelineSnapMovingPointKind, number>> = {
@@ -247,8 +249,39 @@ function compareRanked(left: RankedSnap, right: RankedSnap): number {
   return left.point.id < right.point.id ? -1 : 1
 }
 
+/** One best candidate per frame/kind bucket; exact deterministic ties are retained. */
+export interface TimelineSnapIndex { readonly buckets: ReadonlyMap<TrackKind | null, readonly TimelineSnapCandidate[]> }
+export function createTimelineSnapIndex(candidates: readonly TimelineSnapCandidate[]): TimelineSnapIndex {
+  const buckets = new Map<TrackKind | null, TimelineSnapCandidate[]>()
+  for (const candidate of candidates) if (Number.isSafeInteger(candidate.frame)) {
+    const bucket = buckets.get(candidate.trackKind) ?? []; bucket.push(candidate); buckets.set(candidate.trackKind, bucket)
+  }
+  for (const [kind, bucket] of buckets) {
+    bucket.sort((left, right) => left.frame - right.frame || KIND_PRIORITY[left.kind] - KIND_PRIORITY[right.kind]
+      || left.trackIndex - right.trackIndex || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+    buckets.set(kind, bucket.filter((candidate, index) => index === 0 || candidate.frame !== bucket[index - 1].frame))
+  }
+  return { buckets }
+}
+/** At most two neighbors in each of the three compatible kind buckets, independent of density. */
+export function timelineSnapNeighbors(index: TimelineSnapIndex, point: TimelineSnapMovingPoint, minimum = -Infinity, maximum = Infinity): readonly TimelineSnapCandidate[] {
+  const result: TimelineSnapCandidate[] = []
+  for (const [kind, bucket] of index.buckets) {
+    if (point.trackKind !== null && kind !== null && kind !== point.trackKind) continue
+    const target = Math.max(minimum, Math.min(maximum, point.frame))
+    let low = 0, high = bucket.length
+    while (low < high) { const middle = (low + high) >>> 1; if (bucket[middle].frame < target) low = middle + 1; else high = middle }
+    for (const position of [low - 1, low]) {
+      const candidate = bucket[position]
+      if (candidate && candidate.frame >= minimum && candidate.frame <= maximum) result.push(candidate)
+    }
+  }
+  return result
+}
+
 export interface ResolveTimelineSnapOptions {
   readonly candidates: readonly TimelineSnapCandidate[]
+  readonly candidateIndex?: TimelineSnapIndex
   /** Points after applying rawDeltaFrames, before snap correction. */
   readonly movingPoints: readonly TimelineSnapMovingPoint[]
   readonly rawDeltaFrames: number
@@ -261,6 +294,7 @@ export interface ResolveTimelineSnapOptions {
 /** Resolve one deterministic correction without mutating the supplied facts. */
 export function resolveTimelineSnap({
   candidates,
+  candidateIndex,
   movingPoints,
   rawDeltaFrames,
   minDeltaFrames = Number.NEGATIVE_INFINITY,
@@ -282,7 +316,10 @@ export function resolveTimelineSnap({
   let best: RankedSnap | null = null
   for (const point of movingPoints) {
     if (!Number.isSafeInteger(point.frame)) continue
-    for (const candidate of candidates) {
+    const boundA = point.frame + (minDeltaFrames - rawDeltaFrames) * point.deltaDirection
+    const boundB = point.frame + (maxDeltaFrames - rawDeltaFrames) * point.deltaDirection
+    const nearest = candidateIndex ? timelineSnapNeighbors(candidateIndex, point, Math.min(boundA, boundB), Math.max(boundA, boundB)) : candidates
+    for (const candidate of nearest) {
       if (!Number.isSafeInteger(candidate.frame) || !compatible(point, candidate)) {
         continue
       }

@@ -1,0 +1,10 @@
+START production launcher identity
+PASS production launcher identity
+START 100000-key fixture: cold entry, exact1024-key navigation and selected/all limits
+PASS 100000-key fixture: cold entry, exact1024-key navigation and selected/all limits
+START 100000 keys: warm filter/scroll/curve and native preview/commit bounds
+STOP 100000 keys: warm filter/scroll/curve and native preview/commit bounds: Native pointer capture was not acquired
+
+false !== true
+
+Evidence: /private/tmp/issue199-continuation/2026-09-08T18-58-03.738Z-large

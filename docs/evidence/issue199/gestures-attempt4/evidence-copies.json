@@ -1,0 +1,257 @@
+{
+  "rawDirectory": "/private/tmp/issue199-continuation/2026-09-08T18-30-49.647Z-gestures",
+  "copies": [
+    {
+      "name": "acceptance-summary.json",
+      "mode": "exact JSON",
+      "rawSha256": "ad2bb5491576ab5b5549710ec7c4924a8846ccc67bc59d990782ff2a5fe1aee5",
+      "copySha256": "ad2bb5491576ab5b5549710ec7c4924a8846ccc67bc59d990782ff2a5fe1aee5"
+    },
+    {
+      "name": "build.log",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "a21ed25e2d9c21270d93a367f2c7eb4023322ff82816479cc794b84fe5ba4073",
+      "copySha256": "772904c2a739ecec94ba65cfe7c1730347bf50c54b8e130dc38c0d5601e2b43a"
+    },
+    {
+      "name": "console.log",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "176b4139db5aa0f6550565545f4eb59eee64a40e9b9ae7a11dca4a97201ad512",
+      "copySha256": "176b4139db5aa0f6550565545f4eb59eee64a40e9b9ae7a11dca4a97201ad512"
+    },
+    {
+      "name": "independent-cleanup-source.json",
+      "mode": "exact JSON",
+      "rawSha256": "145bf26a9c77c684235cb6af98982ffd29e5bb617b3a1aa5299f73cbce4b8821",
+      "copySha256": "145bf26a9c77c684235cb6af98982ffd29e5bb617b3a1aa5299f73cbce4b8821"
+    },
+    {
+      "name": "prelaunch-source.json",
+      "mode": "exact JSON",
+      "rawSha256": "42eb78468b5da87827443ca033d437bc4e068edfade9a2b0f5f149f06db9d353",
+      "copySha256": "42eb78468b5da87827443ca033d437bc4e068edfade9a2b0f5f149f06db9d353"
+    },
+    {
+      "name": "result.json",
+      "mode": "exact JSON",
+      "rawSha256": "b3f2d94fbc0aa31f33c27c7502c1c6af15a745ed6c6b31076a6181ca35dfb3fd",
+      "copySha256": "b3f2d94fbc0aa31f33c27c7502c1c6af15a745ed6c6b31076a6181ca35dfb3fd"
+    },
+    {
+      "name": "server.log",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d",
+      "copySha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d"
+    },
+    {
+      "name": "step-01-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "391e96e976bb2729c502f64bb5e09dc362aab8be1361f10d9a8d6d3ec49301a2",
+      "copySha256": "747a4aca46360283a50cdf047cb3cd7877437042c233e323c5208eb29d4ed4de"
+    },
+    {
+      "name": "step-02-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "62d15736673a4ac383cab62cdd40ffa999612301b8820dc5ebec13eee85529f2",
+      "copySha256": "149895abaee9ebcd2ebd06890c7c633fda286bb6a1543158bfd7aaa91457632b"
+    },
+    {
+      "name": "step-03-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "fe46d7fe9941921e15930d48ae23de6f96fbd2b419c0f2b00a130621b39ad746",
+      "copySha256": "5b59f7f84b2b8d418316cd598f090c8a6c6d487c53f49aadadb47a8b8806777b"
+    },
+    {
+      "name": "step-04-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "7ec4020bb30b6ecf59da7e085c5437c3bfbc2ef443a1b946245bbfd0291a4658",
+      "copySha256": "25db789abf79ecc1631803065a478e72287c962b23c18ea843661608affc86f4"
+    },
+    {
+      "name": "step-05-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "7ec4020bb30b6ecf59da7e085c5437c3bfbc2ef443a1b946245bbfd0291a4658",
+      "copySha256": "25db789abf79ecc1631803065a478e72287c962b23c18ea843661608affc86f4"
+    },
+    {
+      "name": "step-06-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "a01026aaacc9f0bd01f83e2cfa5664c5a3ea7437c2a31bd98fd67eab16b23f79",
+      "copySha256": "2cdab4ca7b51e41af235bce7d5dc9f65bacb8733bec711901d5d50c557ec08ab"
+    },
+    {
+      "name": "step-07-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "a01026aaacc9f0bd01f83e2cfa5664c5a3ea7437c2a31bd98fd67eab16b23f79",
+      "copySha256": "2cdab4ca7b51e41af235bce7d5dc9f65bacb8733bec711901d5d50c557ec08ab"
+    },
+    {
+      "name": "step-08-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "52a740d1cdefb4d2012c2de6d163cfce52eb3bfc3d4437df2cb9700ac49c825c",
+      "copySha256": "c914d5e25a17bbb775d564d8adf6fc80dccb9da3e9a5f2aa2b1769aab872091b"
+    },
+    {
+      "name": "step-09-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "2dd53d9871a3e6ea0761b5db716d2b6e61f4a7704f111937df75f6abb40a8e81",
+      "copySha256": "3efb7fb9b8bc2da94614774dcce651613c9f5098287b4422c673eb79bd9c3f4d"
+    },
+    {
+      "name": "step-10-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "50c3612679f8e2498e5f472d78847206bdf916cadc5d62b6534224c87756b405",
+      "copySha256": "ceaae9720a3df7547d37b77d852824a12b80304964dd21ee72c6072dca02f0fc"
+    },
+    {
+      "name": "step-11-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "4f0e8f236b2e512e5a42242a69c9501e6db531ce18309b4db8692cb149652783",
+      "copySha256": "647b8e65dd94f9e0f8d89bf5eae9ddc2040b86240327843fded5d9232f1c1421"
+    },
+    {
+      "name": "step-12-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "a01026aaacc9f0bd01f83e2cfa5664c5a3ea7437c2a31bd98fd67eab16b23f79",
+      "copySha256": "2cdab4ca7b51e41af235bce7d5dc9f65bacb8733bec711901d5d50c557ec08ab"
+    },
+    {
+      "name": "step-13-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "d83b89c08990f3717039fce410f3122fbd607001145338956ca8b991729ba9de",
+      "copySha256": "5d12b4ab040db9436837c8d6c2fcbd0dfa3504f280914217999e7840e7c85693"
+    },
+    {
+      "name": "step-14-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "fdb91d902d8b99cbd99af953f56305d0bce6d6fd9b228ed586624722ca5817f9",
+      "copySha256": "a62bcdd0b75a9e3a2252fabe472cea9aac9d53911a15b64c27e53011fa3c8fe0"
+    },
+    {
+      "name": "step-15-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "9c046ac121a2c61ca7cc35ec0cf3e690729017ad577a40b8c7b24de285bf8721",
+      "copySha256": "f4d44af952cf0a13cd38230bc47b18bdfdd8526433c3d0c6fbdbd54ba239e1fe"
+    },
+    {
+      "name": "step-16-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "9c046ac121a2c61ca7cc35ec0cf3e690729017ad577a40b8c7b24de285bf8721",
+      "copySha256": "f4d44af952cf0a13cd38230bc47b18bdfdd8526433c3d0c6fbdbd54ba239e1fe"
+    },
+    {
+      "name": "step-17-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "85edb1cc720d51e82769482585d5a896381c18329e734b641fdbd9df1b897738",
+      "copySha256": "07e28d04635eeefe11486f1d5afba52644065eb4cc72ab6a63554b53fd163b38"
+    },
+    {
+      "name": "step-18-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "5ee91b9ea693135ff8877bc853b453fc4bcba91eae43c920b0697f457f277265",
+      "copySha256": "c150819e56ecc742077d4272eacf44fa21586972bc4d8fa6232acc04f80d307b"
+    },
+    {
+      "name": "step-19-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "4861717ec185aff7e5d0f7a96676e84d2397f031ef9bd151e5da94db9c132346",
+      "copySha256": "dc932f2e54f14f9cfa412f1acaf03908652076296eeebe619c6248f0e7db41c7"
+    },
+    {
+      "name": "step-20-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "1a04b1d3a4c6e132ef06b47cac0fcf7f309bb8d4c72119082e2deba771a6cc22",
+      "copySha256": "d0ffcacb70aa6cffee50eff9ed3a2c5099d714b95d5d8a73ea48612156e07b8c"
+    },
+    {
+      "name": "step-21-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "9c046ac121a2c61ca7cc35ec0cf3e690729017ad577a40b8c7b24de285bf8721",
+      "copySha256": "f4d44af952cf0a13cd38230bc47b18bdfdd8526433c3d0c6fbdbd54ba239e1fe"
+    },
+    {
+      "name": "step-22-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "13ea5ed75f3a540caaa1c77828d5e3e0c428981c24a3308e93a45fca2c7fd549",
+      "copySha256": "7d4b7deeae3b75d4b7392f365375e70fd7219326a9ea8f19fc264c1ebdbc6501"
+    },
+    {
+      "name": "step-23-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "fdb91d902d8b99cbd99af953f56305d0bce6d6fd9b228ed586624722ca5817f9",
+      "copySha256": "a62bcdd0b75a9e3a2252fabe472cea9aac9d53911a15b64c27e53011fa3c8fe0"
+    },
+    {
+      "name": "step-24-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "9c046ac121a2c61ca7cc35ec0cf3e690729017ad577a40b8c7b24de285bf8721",
+      "copySha256": "f4d44af952cf0a13cd38230bc47b18bdfdd8526433c3d0c6fbdbd54ba239e1fe"
+    },
+    {
+      "name": "step-25-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "9c046ac121a2c61ca7cc35ec0cf3e690729017ad577a40b8c7b24de285bf8721",
+      "copySha256": "f4d44af952cf0a13cd38230bc47b18bdfdd8526433c3d0c6fbdbd54ba239e1fe"
+    },
+    {
+      "name": "step-26-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "85edb1cc720d51e82769482585d5a896381c18329e734b641fdbd9df1b897738",
+      "copySha256": "07e28d04635eeefe11486f1d5afba52644065eb4cc72ab6a63554b53fd163b38"
+    },
+    {
+      "name": "step-27-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "5ee91b9ea693135ff8877bc853b453fc4bcba91eae43c920b0697f457f277265",
+      "copySha256": "c150819e56ecc742077d4272eacf44fa21586972bc4d8fa6232acc04f80d307b"
+    },
+    {
+      "name": "step-28-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "4861717ec185aff7e5d0f7a96676e84d2397f031ef9bd151e5da94db9c132346",
+      "copySha256": "dc932f2e54f14f9cfa412f1acaf03908652076296eeebe619c6248f0e7db41c7"
+    },
+    {
+      "name": "step-29-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "1a04b1d3a4c6e132ef06b47cac0fcf7f309bb8d4c72119082e2deba771a6cc22",
+      "copySha256": "d0ffcacb70aa6cffee50eff9ed3a2c5099d714b95d5d8a73ea48612156e07b8c"
+    },
+    {
+      "name": "step-30-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "9c046ac121a2c61ca7cc35ec0cf3e690729017ad577a40b8c7b24de285bf8721",
+      "copySha256": "f4d44af952cf0a13cd38230bc47b18bdfdd8526433c3d0c6fbdbd54ba239e1fe"
+    },
+    {
+      "name": "step-31-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "13ea5ed75f3a540caaa1c77828d5e3e0c428981c24a3308e93a45fca2c7fd549",
+      "copySha256": "7d4b7deeae3b75d4b7392f365375e70fd7219326a9ea8f19fc264c1ebdbc6501"
+    },
+    {
+      "name": "step-32-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "fdb91d902d8b99cbd99af953f56305d0bce6d6fd9b228ed586624722ca5817f9",
+      "copySha256": "a62bcdd0b75a9e3a2252fabe472cea9aac9d53911a15b64c27e53011fa3c8fe0"
+    },
+    {
+      "name": "step-33-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "456d8a7209442e6a433cbfc030610dbea5c5a9a09d3ef4f49f1996ab1f5ad122",
+      "copySha256": "bb72cf9b825d711ab00c4a5ce8bf7d629e8095daec6e24e1ae6c2b866b31fe9e"
+    },
+    {
+      "name": "step-34-dom.txt",
+      "mode": "normalized text; raw preserved",
+      "rawSha256": "5f41d6c928f7942e2ff05f342bda65dbd882b74c886eba59dcb307df10f4a926",
+      "copySha256": "85bd614105543dbf555ff42561f8352785d84382ef5181ac016b0274808e492f"
+    },
+    {
+      "name": "artifacts.json",
+      "mode": "exact JSON",
+      "rawSha256": "174539896933799481cc35bb150cb9d55e46f562aed7fc0bccf6a9107a831d5b",
+      "copySha256": "174539896933799481cc35bb150cb9d55e46f562aed7fc0bccf6a9107a831d5b"
+    }
+  ]
+}

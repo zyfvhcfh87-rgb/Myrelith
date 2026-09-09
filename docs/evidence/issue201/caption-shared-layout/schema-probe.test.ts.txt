@@ -1,0 +1,16 @@
+import { expect, test } from 'vitest'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { diagnosticFixtures } from '../../tests/diagnostics/issue200/fixtures'
+test('read-only diagnostic proves schema23 pins versus current schema24 fixtures', () => {
+  const pins = JSON.parse(readFileSync('docs/evidence/issue200/canvas-diagnostic-fixture-pins.json', 'utf8'))
+  const fixtures = structuredClone(diagnosticFixtures())
+  for (const fixture of fixtures) for (const project of [fixture.legacy, fixture.expanded]) {
+    for (const sequence of project.sequences) {
+      expect(sequence.schemaVersion).toBe(24)
+      sequence.schemaVersion = 23
+    }
+  }
+  const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
+  expect(fixtures.map(({ id, legacy, expanded }) => ({ id, legacy: hash(legacy), expanded: hash(expanded) }))).toEqual(pins.fixtures)
+})

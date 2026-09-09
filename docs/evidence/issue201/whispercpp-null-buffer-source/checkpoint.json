@@ -1,0 +1,115 @@
+{
+  "parentHead": "9651c8f9f8ae04133a314e573bfc69f47ff417cc",
+  "status": "source-call-path-and-unapplied-guard-proposal",
+  "sourceFiles": [
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_NULL_BUFFER_SOURCE.md",
+      "bytes": 5779,
+      "sha256": "147f6a0528c20923031b2808918c9f4966c1657fbf75bbaa5700f6a61de08556"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-diagnostic-evidence/verify-stack.mjs",
+      "bytes": 3828,
+      "sha256": "9627ad699b92ee2680cfbaaf4ed77733cd8a0b85b6ef59983ce031723c6a7f58"
+    }
+  ],
+  "referenceFiles": [
+    {
+      "path": "docs/evidence/issue201/whispercpp-runtime-run-02/checkpoint.json",
+      "bytes": 3734,
+      "sha256": "b9da0ec837d0889c1eeeb56c31074518a74d8b65e1305ca879980ad9e46e85a5"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-runtime-run-02/runtime-results-02.json",
+      "bytes": 86344,
+      "sha256": "085c76884e2a3c1374740d353e0d18b94cc4b4740f8e448cb372163d325efc0a"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.wasm.gz",
+      "bytes": 386503,
+      "sha256": "5d54071f2d88478c3ba721f92b8220d00974ef4652f288d091fa1c297b750b78"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-build-preparation/extraction-inventory.json.gz",
+      "bytes": 1864139,
+      "sha256": "ba24ca7b38f5f82b909da0214bcf7983e2f693e9f1db9e63ba2967270a6f2d10"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-review/inspect-binary.mjs",
+      "bytes": 6115,
+      "sha256": "5bba9c9457e9fdbb58558e11b77fff2d11fb33d5e089350529d67194405c2405"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/CMakeLists.txt",
+      "bytes": 3550,
+      "sha256": "bc68e94197b6e819f8d5257a536b02bd0a5931c525005b994c2046fad80ba0a6"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/adapter.cpp",
+      "bytes": 6827,
+      "sha256": "d03c34e02979b922172180a91fae9ae2039326121f5a9d8ebb49b56dc8fe7e22"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/patch-identities.json",
+      "bytes": 1172,
+      "sha256": "74a2fb69113d229b172d073cebe6b37087bcf49999945bd3be28783922952a7b"
+    }
+  ],
+  "records": [
+    {
+      "path": "disassembler-receipt.json",
+      "bytes": 485,
+      "sha256": "ed086ca0cb98effa247a277687d916756b48ce0e3e378b0e53f03c7da76895c5"
+    },
+    {
+      "path": "disposable-patch-application.json",
+      "bytes": 900,
+      "sha256": "168c8815dc20b1361b942a2dc5d0591c2a22abdaeabd6c0e15e27e8ad287de45"
+    },
+    {
+      "path": "function-198.wat.gz",
+      "bytes": 17925,
+      "sha256": "a8f9c32405011e469cb8197f482529e0c1f8fbeda1479f32b46037d92d422636"
+    },
+    {
+      "path": "function-219.wat.gz",
+      "bytes": 435,
+      "sha256": "b33cdd52b7801bc529df40369060469a97259caf75cec789b478894184b1c64f"
+    },
+    {
+      "path": "function-540.wat.gz",
+      "bytes": 1593,
+      "sha256": "def70f21af977c83f8d8fb1d1c99bdcf259bca1db08f2a348c18d6e5717b3a20"
+    },
+    {
+      "path": "proposed-allocation-failure-diagnostics.patch",
+      "bytes": 879,
+      "sha256": "42b15ec421d3c8bd6a6d3f3f080431d6d09e918ed5da711efeeeff0e02c2538c"
+    },
+    {
+      "path": "proposed-reservation-guard.patch",
+      "bytes": 682,
+      "sha256": "33e55a5b057d01a04210efe0ab5418b7e1b5495a492564b9f3ec6c3ea1d80f13"
+    },
+    {
+      "path": "source-excerpts.json",
+      "bytes": 14186,
+      "sha256": "ca485aa9fd59cc5d38299c055cb556d621f141fa748363c71f5c2d6405ba340a"
+    },
+    {
+      "path": "stack-byte-verification.json",
+      "bytes": 1352,
+      "sha256": "be7fb971d78788285b97085fcc7f59e6e3b24cdc9b65212f6ef9dff662935e65"
+    }
+  ],
+  "capturedCallBytesVerified": true,
+  "exactSourceExcerptsVerified": true,
+  "disposablePatchApplicationVerified": true,
+  "actualReservationResultObserved": false,
+  "failedAllocationSizeObserved": false,
+  "heapExhaustionProven": false,
+  "compilerExecuted": false,
+  "wasmExecuted": false,
+  "sharedHeavySlotHeld": false,
+  "runtimeQualified": false
+}

@@ -1,5 +1,24 @@
 /** Pure bounded line wrapping with injected text measurement. */
 
+import type { TextProps } from './schema'
+
+export const MAX_RENDERED_TEXT_LINES = 512
+
+/** Exact Canvas font used for both drawing and caption layout advisories. */
+export function textCanvasFont(text: Pick<TextProps, 'italic' | 'bold' | 'fontSizePx' | 'fontFamily'>): string {
+  return `${text.italic ? 'italic' : 'normal'} ${text.bold ? '700' : '400'} ${text.fontSizePx}px ${text.fontFamily}`
+}
+
+/** Shared painter capacity, including its historical one-line minimum. */
+export function textLayoutMetrics(text: Pick<TextProps, 'fontSizePx' | 'boxWidthPx' | 'boxHeightPx' | 'paddingPx'>) {
+  const lineHeight = Math.ceil(text.fontSizePx * 1.2)
+  const innerWidth = text.boxWidthPx - text.paddingPx * 2
+  const innerHeight = text.boxHeightPx - text.paddingPx * 2
+  const nominalCapacity = Math.floor(innerHeight / lineHeight)
+  const maxLines = Math.max(1, Math.min(MAX_RENDERED_TEXT_LINES, nominalCapacity))
+  return { lineHeight, innerWidth, innerHeight, nominalCapacity, maxLines }
+}
+
 export type MeasureTextWidth = (text: string) => number
 
 function fittingPrefixLength(

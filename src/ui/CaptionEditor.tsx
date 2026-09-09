@@ -3,10 +3,21 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ChangeEvent,
   type KeyboardEvent,
 } from 'react'
-import { captionFileController } from '../app/captionFileController'
+import type { CaptionDownloadFormat } from '../app/captionFileController'
+import { CaptionReviewController } from '../app/captionReviewController'
+import { CaptionImportController } from '../app/captionImportController'
+import { CaptionExportController } from '../app/captionExportController'
+import { inspectSavedCaptionAppearance } from '../app/captionAppearance'
+import { captionReadingSpeed } from '../domain/captionBatch'
+import CaptionReviewPanel from './CaptionReviewPanel'
+import CaptionBatchTools from './CaptionBatchTools'
+import CaptionStyleTools from './CaptionStyleTools'
+import CaptionImportPanel from './CaptionImportPanel'
+import CaptionExportPanel from './CaptionExportPanel'
 import { CAPTION_STYLE_PRESETS, CAPTION_TRACK_ROLES, createCaptionTrack } from '../domain/captions'
 import type { CaptionItem, CaptionItemId, CaptionTrackId } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
@@ -36,6 +47,17 @@ function formatCue(item: CaptionItem): string {
 export default function CaptionEditor({ onClose }: CaptionEditorProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const doc = useDocumentStore((state) => state.doc)
+  const documentScope = useDocumentStore(state => `${state.projectGeneration}:${state.activeSequenceId}`)
+  const controller = useMemo(() => new CaptionReviewController(), [])
+  const review = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot)
+  const importer = useMemo(() => new CaptionImportController(), [])
+  const imported = useSyncExternalStore(importer.subscribe, importer.getSnapshot, importer.getSnapshot)
+  const exporter = useMemo(() => new CaptionExportController(), [])
+  const exported = useSyncExternalStore(exporter.subscribe, exporter.getSnapshot, exporter.getSnapshot)
+  const reviewing = review.label !== null || imported.phase !== 'idle' || exported.phase !== 'idle'
+  const returnFocus = useRef<HTMLElement | null>(null)
+  const wasReviewing = useRef(false)
+  const selectionAnchor = useRef<string | null>(null)
   const playhead = useTransportStore((state) => state.playheadFrame)
   const setPlayhead = useTransportStore((state) => state.setPlayheadFrame)
   const [trackId, setTrackId] = useState<CaptionTrackId | null>(doc.captionTracks?.[0]?.id ?? null)
@@ -45,13 +67,48 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
   const [draftText, setDraftText] = useState('')
   const [draftStart, setDraftStart] = useState('0')
   const [draftEnd, setDraftEnd] = useState('1')
-  const [shiftFrames, setShiftFrames] = useState('1')
-  const [busy, setBusy] = useState(false)
+  const [selection, setSelection] = useState<{ trackId: string | null; ids: string[] }>({ trackId: doc.captionTracks?.[0]?.id ?? null, ids: doc.captionTracks?.[0]?.items[0] ? [doc.captionTracks[0].items[0].id] : [] })
+  const [readingAdvisory, setReadingAdvisory] = useState('17')
   const [status, setStatus] = useState('Caption editor ready.')
+  const [appearance, setAppearance] = useState<readonly string[]>([])
   const tracks = useMemo(() => doc.captionTracks ?? [], [doc.captionTracks])
   const track = tracks.find((candidate) => candidate.id === trackId) ?? null
   const selectedIndex = track?.items.findIndex((item) => item.id === itemId) ?? -1
   const item = selectedIndex >= 0 ? track?.items[selectedIndex] ?? null : null
+  const currentIds = useMemo(() => new Set(track?.items.map(cue => cue.id) ?? []), [track])
+  const selectedIds = selection.trackId === track?.id ? selection.ids.filter(cueId => currentIds.has(cueId)) : []
+  const selectedSet = new Set(selectedIds)
+  const reading = item && Number(readingAdvisory) > 0 && Number.isFinite(Number(readingAdvisory))
+    ? captionReadingSpeed(item, doc.frameRate, Number(readingAdvisory)) : null
+
+  useEffect(() => { setAppearance([]) }, [doc, trackId, itemId])
+
+  useEffect(() => {
+    const first = useDocumentStore.getState().doc.captionTracks?.[0]
+    setTrackId(first?.id ?? null); setItemId(first?.items[0]?.id ?? null)
+    setSelection({ trackId: first?.id ?? null, ids: first?.items[0] ? [first.items[0].id] : [] })
+    selectionAnchor.current = first?.items[0]?.id ?? null
+  }, [documentScope])
+  useEffect(() => {
+    if (wasReviewing.current && !reviewing) returnFocus.current?.focus()
+    wasReviewing.current = reviewing
+  }, [reviewing])
+  const closeEditor = (): void => { controller.cancel(); importer.cancel(); exporter.cancel(); onClose() }
+  const beginReview = (action: () => boolean): void => {
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    try { setStatus(action() ? 'Review ready. Nothing has been applied.' : 'No captions would change.') }
+    catch (error) { setStatus(errorMessage(error)) }
+  }
+  const cancelReview = (): void => { controller.cancel(); setStatus('Caption review cancelled.') }
+  const cancelImport = (): void => { importer.cancel(); setStatus('Caption import cancelled.') }
+  const cancelExport = (): void => { exporter.cancel(); setStatus('Caption download cancelled.') }
+  const exportFile = (format: CaptionDownloadFormat, button: HTMLButtonElement): void => {
+    if (!track) return
+    returnFocus.current = button
+    controller.cancel(); importer.cancel()
+    exporter.begin(track.id, format)
+  }
+
 
   useEffect(() => {
     dialogRef.current?.focus()
@@ -62,12 +119,16 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
     const nextTrack = tracks[0] ?? null
     setTrackId(nextTrack?.id ?? null)
     setItemId(nextTrack?.items[0]?.id ?? null)
+    setSelection({ trackId: nextTrack?.id ?? null, ids: nextTrack?.items[0] ? [nextTrack.items[0].id] : [] })
+    selectionAnchor.current = nextTrack?.items[0]?.id ?? null
   }, [trackId, tracks])
 
   useEffect(() => {
     if (!track) return
     if (itemId && track.items.some((candidate) => candidate.id === itemId)) return
     setItemId(track.items[0]?.id ?? null)
+    setSelection({ trackId: track.id, ids: track.items[0] ? [track.items[0].id] : [] })
+    selectionAnchor.current = track.items[0]?.id ?? null
   }, [itemId, track])
 
   useEffect(() => {
@@ -106,34 +167,42 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
     }
   }
 
-  const selectItem = (next: CaptionItem | null): void => {
-    setItemId(next?.id ?? null)
-    if (next) setPlayhead(next.range.startFrame)
+  const selectItem = (next: CaptionItem | null, mode: 'single' | 'extend' | 'toggle' | 'focus' = 'single'): void => {
+    controller.cancel()
+    if (!track || !next) { setItemId(null); setSelection({ trackId: track?.id ?? null, ids: [] }); return }
+    if (mode === 'extend') {
+      const anchor = track.items.findIndex(cue => cue.id === (selectionAnchor.current ?? itemId))
+      const index = track.items.indexOf(next)
+      const from = anchor < 0 ? index : anchor
+      setSelection({ trackId: track.id, ids: track.items.slice(Math.min(from, index), Math.max(from, index) + 1).map(cue => cue.id) })
+    } else if (mode === 'toggle') {
+      const nextIds = new Set(selectedIds)
+      if (nextIds.has(next.id)) nextIds.delete(next.id); else nextIds.add(next.id)
+      setSelection({ trackId: track.id, ids: [...nextIds] }); selectionAnchor.current = next.id
+    } else if (mode === 'single') {
+      setSelection({ trackId: track.id, ids: [next.id] }); selectionAnchor.current = next.id
+    }
+    setItemId(next.id); setPlayhead(next.range.startFrame)
   }
 
-  const moveSelection = (direction: -1 | 1 | 'first' | 'last'): void => {
+  const moveSelection = (direction: -1 | 1 | 'first' | 'last', mode: 'single' | 'extend' | 'focus' = 'single'): void => {
     if (!track || track.items.length === 0) return
-    const nextIndex = direction === 'first'
-      ? 0
-      : direction === 'last'
-        ? track.items.length - 1
-        : Math.max(0, Math.min(track.items.length - 1, selectedIndex + direction))
-    selectItem(track.items[nextIndex] ?? null)
+    const nextIndex = direction === 'first' ? 0 : direction === 'last' ? track.items.length - 1
+      : Math.max(0, Math.min(track.items.length - 1, selectedIndex + direction))
+    selectItem(track.items[nextIndex] ?? null, mode)
   }
-
   const onCueListKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    const direction = event.key === 'ArrowUp'
-      ? -1
-      : event.key === 'ArrowDown'
-        ? 1
-        : event.key === 'Home'
-          ? 'first'
-          : event.key === 'End'
-            ? 'last'
-            : null
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+      event.preventDefault(); controller.cancel()
+      if (track) setSelection({ trackId: track.id, ids: track.items.map(cue => cue.id) })
+      return
+    }
+    if (event.key === ' ') { event.preventDefault(); selectItem(item, 'toggle'); return }
+    const direction = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1
+      : event.key === 'Home' ? 'first' : event.key === 'End' ? 'last' : null
     if (direction === null) return
     event.preventDefault()
-    moveSelection(direction)
+    moveSelection(direction, event.shiftKey ? 'extend' : event.ctrlKey || event.metaKey ? 'focus' : 'single')
   }
 
   const saveCue = (): void => {
@@ -192,41 +261,27 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
       useDocumentStore.getState().addCaptionTrack(next)
       setTrackId(nextId)
       setItemId(null)
+      setSelection({ trackId: nextId, ids: [] })
+      selectionAnchor.current = null
     })
   }
 
-  const importFile = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+  const importFile = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
     const lower = file.name.toLowerCase()
-    const format = lower.endsWith('.vtt') ? 'vtt' : lower.endsWith('.srt') ? 'srt' : null
+    const format = lower.endsWith('.vtt') ? 'vtt' : lower.endsWith('.srt') ? 'srt' : lower.endsWith('.ass') ? 'ass' : null
     if (!format) {
-      setStatus('Choose an .srt or .vtt caption file.')
+      setStatus('Choose an .srt, .vtt or .ass caption file.')
       return
     }
-    setBusy(true)
-    try {
-      if (track) {
-        const count = await captionFileController.importIntoTrack(file, format, track.id)
-        setItemId(useDocumentStore.getState().doc.captionTracks
-          ?.find((candidate) => candidate.id === track.id)?.items[0]?.id ?? null)
-        setStatus(`Imported ${count} captions into ${track.name}.`)
-      } else {
-        const importedTrackId = await captionFileController.importAsTrack(file, format, {
-          name: file.name.replace(/\.(?:srt|vtt)$/iu, ''),
-          language: 'und',
-          role: 'captions',
-          stylePreset: 'classic',
-        })
-        setTrackId(importedTrackId)
-        setStatus('Imported captions into a new track.')
-      }
-    } catch (error) {
-      setStatus(errorMessage(error))
-    } finally {
-      setBusy(false)
-    }
+    returnFocus.current = event.currentTarget
+    controller.cancel(); exporter.cancel()
+    void importer.begin(file, format, track?.id ?? null, {
+      name: file.name.replace(/\.(?:srt|vtt|ass)$/iu, '').slice(0, 128) || 'Imported captions',
+      language: 'und', role: 'captions', stylePreset: 'classic',
+    }).catch(error => setStatus(errorMessage(error)))
   }
 
   const onDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -234,15 +289,18 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
     event.stopPropagation()
     if (event.key === 'Escape') {
       event.preventDefault()
-      onClose()
+      if (exported.phase !== 'idle') cancelExport()
+      else if (imported.phase !== 'idle') cancelImport()
+      else if (review.label !== null) cancelReview(); else closeEditor()
       return
     }
     if (event.key !== 'Tab') return
-    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
+    const focusScope = reviewing ? dialogRef.current?.querySelector('[data-caption-review]') : dialogRef.current
+    const focusable = Array.from(focusScope?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
     if (focusable.length === 0) return
     const first = focusable[0]!
     const last = focusable[focusable.length - 1]!
-    if (event.shiftKey && document.activeElement === first) {
+    if (event.shiftKey && (document.activeElement === first || ['caption-review-heading', 'caption-import-heading', 'caption-export-heading'].includes(document.activeElement?.id ?? ''))) {
       event.preventDefault()
       last.focus()
     } else if (!event.shiftKey && document.activeElement === last) {
@@ -253,31 +311,35 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
 
   return (
     <div className="caption-editor-backdrop" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose()
+      if (event.target === event.currentTarget) closeEditor()
     }}>
       <div
         ref={dialogRef}
         className="caption-editor"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="caption-editor-title"
+        aria-labelledby={exported.phase !== 'idle' ? 'caption-export-heading' : review.label !== null || imported.review ? 'caption-review-heading' : imported.phase !== 'idle' ? 'caption-import-heading' : 'caption-editor-title'}
         tabIndex={-1}
         onKeyDown={onDialogKeyDown}
       >
+        <div inert={reviewing}>
         <header className="caption-editor-header">
           <div>
             <p className="caption-editor-kicker">Semantic captions</p>
             <h2 id="caption-editor-title">Caption editor</h2>
           </div>
-          <button type="button" aria-label="Close caption editor" onClick={onClose}>×</button>
+          <button type="button" aria-label="Close caption editor" onClick={closeEditor}>×</button>
         </header>
 
         <div className="caption-track-bar">
           <label>
             Track
             <select value={trackId ?? ''} onChange={(event) => {
-              setTrackId(event.target.value || null)
-              setItemId(null)
+              controller.cancel()
+              const next = tracks.find(candidate => candidate.id === event.target.value)
+              setTrackId(next?.id ?? null); setItemId(next?.items[0]?.id ?? null)
+              setSelection({ trackId: next?.id ?? null, ids: next?.items[0] ? [next.items[0].id] : [] })
+              selectionAnchor.current = next?.items[0]?.id ?? null
             }}>
               {tracks.length === 0 && <option value="">No caption tracks</option>}
               {tracks.map((candidate) => (
@@ -287,28 +349,15 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
           </label>
           <button type="button" onClick={addTrack}>Add track</button>
           <label className="caption-import-button">
-            Import SRT/VTT
+            Import SRT/VTT/ASS
             <input
               type="file"
-              accept=".srt,.vtt,text/vtt,application/x-subrip"
-              disabled={busy}
-              onChange={(event) => void importFile(event)}
+              accept=".srt,.vtt,.ass,text/vtt,application/x-subrip"
+              onChange={importFile}
             />
           </label>
-          <button
-            type="button"
-            disabled={!track || track.items.length === 0}
-            onClick={() => track && run('SRT downloaded.', () => {
-              captionFileController.exportTrack(track.id, 'srt')
-            })}
-          >Export SRT</button>
-          <button
-            type="button"
-            disabled={!track || track.items.length === 0}
-            onClick={() => track && run('WebVTT downloaded.', () => {
-              captionFileController.exportTrack(track.id, 'vtt')
-            })}
-          >Export VTT</button>
+          {(['srt', 'vtt', 'ass'] as const).map(format => <button key={format} type="button"
+            disabled={!track?.items.length} onClick={event => exportFile(format, event.currentTarget)}>Export {format.toUpperCase()}</button>)}
         </div>
 
         {track && (
@@ -386,6 +435,8 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
               className="caption-cue-list"
               role="listbox"
               aria-label="Caption cues"
+              aria-multiselectable="true"
+              aria-describedby="caption-selection-help"
               aria-activedescendant={itemId ? `caption-option-${itemId}` : undefined}
               tabIndex={0}
               onKeyDown={onCueListKeyDown}
@@ -397,13 +448,19 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
                   key={candidate.id}
                   type="button"
                   role="option"
-                  aria-selected={candidate.id === itemId}
-                  onClick={() => selectItem(candidate)}
+                  aria-selected={selectedSet.has(candidate.id)}
+                  data-active={candidate.id === itemId || undefined}
+                  tabIndex={-1}
+                  onClick={event => {
+                    selectItem(candidate, event.shiftKey ? 'extend' : event.ctrlKey || event.metaKey ? 'toggle' : 'single')
+                    event.currentTarget.parentElement?.focus()
+                  }}
                 >
                   {formatCue(candidate)}
                 </button>
               ))}
             </div>
+            <p id="caption-selection-help">{selectedIds.length} selected. Shift + arrows extends the selection; Space toggles a cue; Ctrl/⌘ + A selects all.</p>
             <div className="caption-row-actions">
               <button type="button" onClick={addCue} disabled={!track}>Add at playhead</button>
               <button type="button" onClick={() => moveSelection(-1)} disabled={selectedIndex <= 0}>Previous</button>
@@ -415,7 +472,7 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
             <h3 id="caption-edit-heading">Edit cue</h3>
             <label>
               Text
-              <textarea rows={5} value={draftText} disabled={!item} onChange={(event) => setDraftText(event.target.value)} />
+              <textarea spellCheck={false} rows={5} value={draftText} disabled={!item} onChange={(event) => setDraftText(event.target.value)} />
             </label>
             <div className="caption-timing-grid">
               <label>
@@ -434,7 +491,9 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
                 const rightId = id('caption_item')
                 run('Caption split at the playhead.', () => {
                   useDocumentStore.getState().splitCaptionItem(track.id, item.id, playhead, rightId)
-                  setItemId(rightId)
+                  const right = useDocumentStore.getState().doc.captionTracks?.find(candidate => candidate.id === track.id)
+                    ?.items.find(candidate => candidate.id === rightId)
+                  selectItem(right ?? null)
                 })
               }}>Split at playhead</button>
               <button type="button" disabled={!track || selectedIndex < 0 || selectedIndex >= track.items.length - 1} onClick={() => {
@@ -447,32 +506,39 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
               }}>Delete cue</button>
             </div>
 
-            <fieldset className="caption-shift-controls">
-              <legend>Batch timing</legend>
-              <label>
-                Shift frames
-                <input type="number" step="1" value={shiftFrames} onChange={(event) => setShiftFrames(event.target.value)} />
-              </label>
-              <button type="button" disabled={!track || track.items.length === 0} onClick={() => {
-                if (!track) return
-                run('Shifted every caption in the track.', () => useDocumentStore.getState().shiftCaptionItems(
-                  track.id,
-                  null,
-                  Number(shiftFrames),
-                ))
-              }}>Shift all</button>
+            <div className="caption-reading-advisory">
+              <label>Reading speed advisory (characters/second)<input type="number" min="1" step="1" value={readingAdvisory} onChange={event => setReadingAdvisory(event.target.value)} /></label>
+              {reading && <p>Saved cue: {reading.characters} characters · {reading.charactersPerSecond.toFixed(1)} characters/second{reading.aboveAdvisory ? ' · Above advisory' : ''}</p>}
+              <p>Counts Unicode characters and spaces, excluding line breaks. This is an advisory, not a guarantee of readability. Local spellcheck and translation are unavailable without reviewed language packs.</p>
               <button type="button" disabled={!track || !item} onClick={() => {
-                if (!track || !item) return
-                run('Shifted the selected caption and everything after it.', () => useDocumentStore.getState().shiftCaptionItems(
-                  track.id,
-                  item.id,
-                  Number(shiftFrames),
-                ))
-              }}>Shift from selected</button>
-            </fieldset>
+                if (track && item) setAppearance(inspectSavedCaptionAppearance(track.id, item.id))
+              }}>Check saved cue appearance</button>
+              {appearance.length > 0 && <ul aria-label="Caption appearance advisories">{appearance.map((message, index) => <li key={index}>{message}</li>)}</ul>}
+            </div>
+            {track && <>
+              <CaptionBatchTools key={`batch-${track.id}`} trackId={track.id} total={track.items.length} selectedIds={selectedIds} activeId={itemId} controller={controller} onReview={beginReview} />
+              <CaptionStyleTools key={`style-${track.id}`} track={track} selectedIds={selectedIds} controller={controller} onReview={beginReview} />
+            </>}
           </section>
         </div>
 
+        </div>
+        {review.label !== null && <CaptionReviewPanel review={review} onCancel={cancelReview} onApply={accepted => {
+          const error = controller.apply(review.revision, accepted)
+          setStatus(error ?? 'Caption edit applied. Undo restores the previous captions.')
+        }} />}
+        {imported.phase !== 'idle' && <CaptionImportPanel key={imported.revision} snapshot={imported} onCancel={cancelImport}
+          onFonts={fonts => importer.chooseFonts(imported.revision, fonts)} onApply={accepted => {
+            const result = importer.apply(imported.revision, accepted)
+            if (result.error) { setStatus(result.error); return }
+            const next = useDocumentStore.getState().doc.captionTracks?.find(candidate => candidate.id === result.trackId)
+            setTrackId(next?.id ?? null); setItemId(next?.items[0]?.id ?? null)
+            setSelection({ trackId: next?.id ?? null, ids: next?.items[0] ? [next.items[0].id] : [] })
+            selectionAnchor.current = next?.items[0]?.id ?? null
+            setStatus('Caption import applied. Undo restores the previous captions.')
+          }} />}
+        {exported.phase !== 'idle' && <CaptionExportPanel key={exported.revision} snapshot={exported} onCancel={cancelExport}
+          onDownload={accepted => setStatus(exporter.download(exported.revision, accepted) ?? 'Caption file downloaded. The project is unchanged.')} />}
         <footer className="caption-editor-footer">
           <p role="status" aria-live="polite" aria-atomic="true">{status}</p>
           <span>Frame {playhead} · half-open ranges · plain text only</span>

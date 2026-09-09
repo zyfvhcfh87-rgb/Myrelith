@@ -1,0 +1,53 @@
+
+> myrelith@0.2.0-alpha.1 build
+> tsc -b && vite build
+
+vite v8.1.2 building client environment for production...
+
+transforming...✓ 5058 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/rolldown-runtime-BHe-jwch.js                  0.95 kB
+dist/index.html                                           1.34 kB │ gzip:   0.57 kB
+dist/assets/video-scopes.worker-qT4VxaOS.js               2.84 kB
+dist/assets/color-lut-import.worker-cpGuStVq.js           5.41 kB
+dist/assets/mediabunny-prores-npsfSQgX.js               206.10 kB
+dist/assets/mediabunny-prores-CUDWMC8E.js               206.11 kB
+dist/assets/mediabunny-prores-CqsZsYY4.js               206.11 kB
+dist/assets/multicam-monitor.worker-CgdQdvN3.js         306.39 kB
+dist/assets/audio-alignment.worker-CE13GrYs.js          364.83 kB
+dist/assets/motion-analysis.worker-CB6JgBPu.js          379.43 kB
+dist/assets/render.worker-C0tpBBKI.js                   512.99 kB
+dist/assets/mediabunny-ac3-D6TI5vb2.js                1,144.16 kB
+dist/assets/mediabunny-ac3-Bab0yg6L.js                1,144.18 kB
+dist/assets/mediabunny-ac3-QsdFtuRy.js                1,144.18 kB
+dist/assets/AnimationWorkspace-C9J0DSAV.css               4.71 kB │ gzip:   1.47 kB
+dist/assets/index-DsADjVaB.css                           36.31 kB │ gzip:   7.93 kB
+dist/assets/EditorShell-BUwids_o.css                    142.20 kB │ gzip:  27.40 kB
+dist/assets/editorUi-nnIhpHk6.js                          0.06 kB │ gzip:   0.07 kB
+dist/assets/motionTrackingSelectionStore-C1xy-bdS.js      0.47 kB │ gzip:   0.21 kB
+dist/assets/PluginDialogFrame-DuBdIX5R.js                 2.09 kB │ gzip:   0.88 kB
+dist/assets/AdjustmentDialog-Kr2MdN9g.js                  3.70 kB │ gzip:   1.49 kB
+dist/assets/TextOverlayDialog-B5koJUeb.js                 3.75 kB │ gzip:   1.51 kB
+dist/assets/pluginPreparedExportOwner-D9Z1Umeu.js         6.44 kB │ gzip:   2.23 kB
+dist/assets/DynamicZoomEditor-DakxEVKY.js                 6.61 kB │ gzip:   2.44 kB
+dist/assets/exportCapabilitiesController-C_VBC0Ar.js      7.01 kB │ gzip:   2.59 kB
+dist/assets/export-mediabunny-profile-DCuuT8U0.js        12.81 kB │ gzip:   4.36 kB
+dist/assets/StabilizationEditor-BcJ5Y3W0.js              16.18 kB │ gzip:   5.58 kB
+dist/assets/motionAnalysisRuntime--1_FTPee.js            17.53 kB │ gzip:   5.47 kB
+dist/assets/CaptionEditor-Dal5TDKG.js                    18.22 kB │ gzip:   5.97 kB
+dist/assets/MotionTrackingEditor-BYB98XWW.js             20.13 kB │ gzip:   6.59 kB
+dist/assets/exportController-BVo8dvri.js                 21.83 kB │ gzip:   7.18 kB
+dist/assets/PluginAppRoot-Dwsz5yaZ.js                    24.18 kB │ gzip:   6.36 kB
+dist/assets/AnimationWorkspace-C6gwQodt.js               30.46 kB │ gzip:  10.35 kB
+dist/assets/export-mediabunny-Cs_dq8ym.js                30.90 kB │ gzip:  10.10 kB
+dist/assets/ExportDialog-DHA3o59W.js                     36.91 kB │ gzip:  10.74 kB
+dist/assets/animationWorkspaceController-CWddC-NO.js     37.67 kB │ gzip:  12.21 kB
+dist/assets/pluginAppController-Bw9x4EAS.js             177.20 kB │ gzip:  49.11 kB
+dist/assets/mediabunny-prores-CBeCbzll.js               205.86 kB │ gzip:  49.07 kB
+dist/assets/documentStore-C23yVu4y.js                   413.89 kB │ gzip: 116.02 kB
+dist/assets/EditorShell-Bi9g3kPh.js                     551.80 kB │ gzip: 145.05 kB
+dist/assets/mediabunny-ac3-GSNDpR-f.js                1,144.14 kB │ gzip: 303.58 kB
+dist/assets/index-lXtty10R.js                         1,232.16 kB │ gzip: 335.23 kB
+
+✓ built in 314ms

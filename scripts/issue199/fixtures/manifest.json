@@ -1,0 +1,22 @@
+{
+  "productSource": "87d8032f25ef469449d59741fba56d1b76eda6aa",
+  "format": "canonical portable Myrelith; source assets intentionally offline; no media output",
+  "generatorSha256": "1f6a4b43bacf20c8e896b29c23c31ee94c6202c7b46e8f118ff83551f4e1084c",
+  "files": {
+    "mixed.myrelith": {
+      "bytes": 13379,
+      "characters": 13366,
+      "sha256": "e510cb67197ed771049dea65cfccf02820d4550841f6b32dde9ac6c0f4618ac0"
+    },
+    "dense.myrelith": {
+      "bytes": 7892352,
+      "characters": 7892351,
+      "sha256": "26814d074c6e94230b1e3004c863d32490bd84cd266123c27720f228b851c574"
+    },
+    "many-lanes.myrelith": {
+      "bytes": 1070249,
+      "characters": 1070248,
+      "sha256": "2461ff539f8db3515c5845dbdbe1d3427fbe792d8a852906c6504f74221fda4c"
+    }
+  }
+}

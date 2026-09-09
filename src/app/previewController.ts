@@ -1,5 +1,7 @@
+import { projectPreviewTitleNotices } from './previewTitleStatus'
 import type { PortableColorLut } from '../domain/colorLutCatalog'
-import { colorGradingAdditionalBytes, documentGradingEffects } from '../domain/colorGradingBudget'
+import { documentPixelWorkBudget } from '../domain/videoPixelWorkBudget'
+import { peakPixelStackWork } from '../domain/pixelWorkBudget'
 import { currentColorGradingContext } from './colorLutController'
 /**
  * app/previewController.ts — Composition root for the preview pipeline.
@@ -30,7 +32,6 @@ import { currentColorGradingContext } from './colorLutController'
  * dev-mode double-mount; nothing is torn down on effect cleanup. dispose()
  * exists for tests and real teardown.
  */
-import { hasVideoBusEffects, videoBusAdditionalBytes } from '../domain/videoBusStage'
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import {
@@ -303,7 +304,7 @@ interface ControllerState {
   maxSourcePixels: number
   maxVideoRequests: number
   maxOutputPixels: number
-  maxVideoBusBytes: number
+  maxPixelWorkBytes: number
   canvas: HTMLCanvasElement | null
   bridge: BridgeLike | null
   deps: PreviewDeps | null
@@ -334,7 +335,7 @@ const state: ControllerState = {
   maxSourcePixels: 0,
   maxVideoRequests: 0,
   maxOutputPixels: 0,
-  maxVideoBusBytes: 0,
+  maxPixelWorkBytes: 0,
   canvas: null,
   bridge: null,
   deps: null,
@@ -569,7 +570,7 @@ function currentPreviewDocument(): TimelineDoc {
   const transport = useTransportStore.getState()
   return documentWithClipVisualPreview(
     documentWithTextOverlayPreview(
-      transport.colorGradingPreview?.sequenceId === useDocumentStore.getState().activeSequenceId ? transport.colorGradingPreview.document : useDocumentStore.getState().doc,
+      transport.effectDocumentPreview?.sequenceId === useDocumentStore.getState().activeSequenceId ? transport.effectDocumentPreview.document : useDocumentStore.getState().doc,
       transport.textOverlayPreview,
     ),
     transport.clipVisualPreview,
@@ -626,13 +627,23 @@ function rebuildPreviewEffectStatusIndex(doc: TimelineDoc): void {
   publishPreviewEffectStatuses()
 }
 
-function reserveVideoBusWork(doc: TimelineDoc): void {
-  const bytes = Math.max(hasVideoBusEffects(doc) ? videoBusAdditionalBytes(doc.width, doc.height) : 0, colorGradingAdditionalBytes(documentGradingEffects(doc), doc.width, doc.height))
+function previewRenderFailureMessage(message: string): string {
+  return message.replace(/^renderFrame failed:\s*(?:[A-Za-z]\w*Error:\s*)?/, '')
+}
+
+function reservePixelWork(doc: TimelineDoc): void {
+  const geometry = { surfaceWidth: doc.width, surfaceHeight: doc.height, projectWidth: doc.width, projectHeight: doc.height }
+  // Include all stored sequences conservatively; the active render document
+  // also carries temporary edits and flattened referenced child owners.
+  const documents = [doc, ...useDocumentStore.getState().project.sequences.filter((sequence) => sequence.id !== doc.id)]
+  const work = peakPixelStackWork(documents.map((sequence) => documentPixelWorkBudget(sequence, geometry, currentColorGradingContext())))
+  if (work.reason) { usePreviewStatusStore.getState().setRenderError(work.reason); return }
+  const bytes = work.peakAdditionalBytes
   if (!bytes) return
-  state.maxVideoBusBytes = Math.max(state.maxVideoBusBytes, bytes)
+  state.maxPixelWorkBytes = Math.max(state.maxPixelWorkBytes, bytes)
   state.resourceLease?.update({ kind: 'program', decoderSlots: state.maxVideoRequests * 2 + 2,
-    surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4 + state.maxVideoBusBytes,
-    // Reserving bus bytes during initialization does not make Program ready.
+    surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4 + state.maxPixelWorkBytes,
+    // Reserving pixel work during initialization does not make Program ready.
     monitorCompatible: state.maxOutputPixels > 0 })
 }
 
@@ -641,7 +652,7 @@ function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {
   const doc = currentPreviewDocument()
   const renderDoc = currentPreviewRenderDocument(doc)
   state.visualPlanner = createCurrentVisualPlanner(deps, doc)
-  reserveVideoBusWork(renderDoc)
+  reservePixelWork(renderDoc)
   bridge.setColorLuts?.(useDocumentStore.getState().project.colorLuts, useDocumentStore.getState().projectGeneration)
   bridge.setDoc(renderDoc)
   rebuildPreviewEffectStatusIndex(renderDoc)
@@ -682,6 +693,7 @@ function scheduleRender(deps: PreviewDeps): void {
     const seen = new Set<AssetId>()
     const visualPlan = state.visualPlanner?.planFrame(transport.playheadFrame)
     if (!visualPlan) return
+    previewStatus.setTitleNotices(projectPreviewTitleNotices(visualPlan))
     const requests = videoCompositionRequests(visualPlan)
     // Separate clips can open distinct lanes even when they share one asset.
     state.maxVideoRequests = Math.max(state.maxVideoRequests, requests.length)
@@ -697,7 +709,7 @@ function scheduleRender(deps: PreviewDeps): void {
       // Two retained samples, conversion/transfer headroom and the two reusable
       // lens surfaces per source lane, plus the four compositor surfaces.
       surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4
-        + state.maxVideoBusBytes,
+        + state.maxPixelWorkBytes,
       monitorCompatible: true,
     })
     effectStatuses = projectPlannedPreviewEffectStatuses(
@@ -762,22 +774,19 @@ function scheduleRender(deps: PreviewDeps): void {
             // Diagnostics must never disturb presentation or app behavior.
           })
         }
-        if (
-          state.renderGeneration === generation
-          && state.bridge === bridge
-          && result.status === 'error'
-        ) {
-          console.warn(
-            '[previewController] render failed:',
-            result.message ?? 'unknown render error',
-          )
+        if (state.renderGeneration !== generation || state.bridge !== bridge
+          || state.presentationGeneration !== presentationGeneration) return
+        if (result.status === 'error') {
+          usePreviewStatusStore.getState().setRenderError(previewRenderFailureMessage(result.message ?? 'The renderer could not draw this frame.'))
+          console.warn('[previewController] render failed:', result.message ?? 'unknown render error')
+        } else if (result.status === 'drawn') {
+          usePreviewStatusStore.getState().setRenderError(null)
         }
       }, (cause) => {
-        if (state.renderGeneration !== generation || state.bridge !== bridge) return
-        console.warn(
-          '[previewController] render failed:',
-          cause instanceof Error ? cause.message : cause,
-        )
+        if (state.renderGeneration !== generation || state.bridge !== bridge
+          || state.presentationGeneration !== presentationGeneration) return
+        usePreviewStatusStore.getState().setRenderError(previewRenderFailureMessage(cause instanceof Error ? cause.message : String(cause)))
+        console.warn('[previewController] render failed:', cause instanceof Error ? cause.message : cause)
       })
   })
   state.rafHandle = handle
@@ -955,7 +964,7 @@ function documentAssetIds(doc: TimelineDoc): Set<AssetId> {
       // Text clips render procedurally and never sample their backing asset.
       // Legacy projects may validly carry image-backed text clips, so treating
       // every clip id as a still-source reference would decode unused pixels.
-      if (clip.text === undefined) ids.add(clip.assetId)
+      if (clip.text === undefined && clip.title === undefined) ids.add(clip.assetId)
     }
   }
   return ids
@@ -1119,7 +1128,7 @@ export function initPreview(
   const initialRenderDoc = currentPreviewRenderDocument(initialDoc)
   state.visualPlanner = createCurrentVisualPlanner(deps, initialDoc, initialBounds)
   state.effectStatusIndex = createPreviewEffectStatusIndex(initialRenderDoc)
-  reserveVideoBusWork(initialRenderDoc)
+  reservePixelWork(initialRenderDoc)
   bridge.setColorLuts?.(useDocumentStore.getState().project.colorLuts, useDocumentStore.getState().projectGeneration)
   bridge.setDoc(initialRenderDoc)
   publishPreviewEffectStatuses(null)
@@ -1143,7 +1152,7 @@ export function initPreview(
       if (
         s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
-        || s.colorGradingPreview !== prev.colorGradingPreview
+        || s.effectDocumentPreview !== prev.effectDocumentPreview
       ) {
         syncPreviewDocument(bridge, deps)
       }
@@ -1157,7 +1166,7 @@ export function initPreview(
         || modeForTransport(s) !== modeForTransport(prev)
         || s.textOverlayPreview !== prev.textOverlayPreview
         || s.clipVisualPreview !== prev.clipVisualPreview
-        || s.colorGradingPreview !== prev.colorGradingPreview
+        || s.effectDocumentPreview !== prev.effectDocumentPreview
       ) scheduleRender(deps)
     }),
     useMediaStore.subscribe(() => {
@@ -1190,7 +1199,7 @@ async function disposePreviewState(clearPluginBinding: boolean): Promise<void> {
   mediaResourceAdmission.interrupt('program-closed')
   const resourceLease = state.resourceLease
   state.resourceLease = null
-  state.maxVideoBusBytes = state.maxOutputPixels = state.maxSourcePixels = state.maxVideoRequests = 0
+  state.maxPixelWorkBytes = state.maxOutputPixels = state.maxSourcePixels = state.maxVideoRequests = 0
   cancelScheduledRender()
   state.renderGeneration++
   state.presentationGeneration++

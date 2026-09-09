@@ -1,0 +1,25 @@
+.title-inspector { padding: 12px; border-top: 1px solid var(--border, #353943); font-size: 12px; }
+/* Native focus scrolling must expose labels above fields and outlines below checkboxes. */
+.area-inspector:has(.title-inspector) { scroll-padding-block: 2rem 0.5rem; }
+.title-inspector h3, .title-dialog h3 { margin: 8px 0; }
+.title-inspector p, .title-dialog p { line-height: 1.45; overflow-wrap: anywhere; }
+.title-inspector fieldset { border: 0; padding: 0; min-width: 0; display: grid; gap: 10px; }
+.title-element-list, .title-template-list { list-style: none; padding: 0; display: grid; gap: 6px; }
+.title-element-list li, .title-template-list li { display: flex; align-items: center; gap: 6px; padding: 5px; background: var(--surface, #22252c); }
+.title-element-list label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.title-element-list small { display: block; opacity: .7; margin-left: 20px; }
+.title-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.title-field { display: grid; gap: 5px; min-width: 0; }
+.title-field input, .title-field select, .title-field textarea, .title-field-grid input { width: 100%; min-width: 0; box-sizing: border-box; }
+.title-field textarea { min-height: 90px; resize: vertical; }
+.title-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.title-dialog { box-sizing: border-box; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 22px; color: var(--text, #e7eaf0); background: var(--panel, #191c22); border: 1px solid #4b5565; border-radius: 12px; }
+.title-dialog::backdrop { background: #0009; }
+.title-dialog > * + * { margin-top: 12px; }
+.title-template-review { padding: 10px; border: 1px solid #4b5565; border-radius: 6px; }
+.title-canvas-controls { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.title-canvas-element { position: absolute; pointer-events: auto; background: transparent; border: 1px solid #92b8ff; touch-action: none; }
+.title-canvas-element:focus-visible { outline: 2px solid white; }
+.title-canvas-resize { position: absolute; right: -5px; bottom: -5px; width: 10px; height: 10px; background: #fff; border: 1px solid #222; pointer-events: auto; touch-action: none; }
+.title-safe-guide { position: absolute; border: 1px dashed #e6d69eaa; box-sizing: border-box; pointer-events: none; }
+.title-canvas-error { position: absolute; bottom: 10px; left: 10px; max-width: calc(100% - 20px); background: #171b24; color: #fff; padding: 6px; pointer-events: auto; }

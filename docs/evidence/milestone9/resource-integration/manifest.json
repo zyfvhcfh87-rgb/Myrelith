@@ -1,0 +1,45 @@
+{
+  "source": "d9759917d202c39b1faa0df91ea90adad3603218",
+  "integrationParent": "60a8bea6247a0a1f26e6807e700c16b43a62fcd4",
+  "logs": [
+    {
+      "path": "focused.log",
+      "rawBytes": 2898,
+      "rawSha256": "012ac6f4ecce26f45dee98270b4a8c69ea0262299ca59b60b167ff3a29302816",
+      "readableBytes": 2897,
+      "readableSha256": "f42389601322712b92af0c65286e2e9853e818efa2b99efa15636a0fc85be8a7"
+    },
+    {
+      "path": "additional-seams.log",
+      "rawBytes": 2324,
+      "rawSha256": "36b254aeab0b2e79b019bcb560a873dd54dd2f59743b95e29a512f18bc730f40",
+      "readableBytes": 2323,
+      "readableSha256": "c750bc2c6ceb3beaf1ac7d688d9bf805706a72c8fac9e0f37d228ece58bbec8d"
+    },
+    {
+      "path": "build.log",
+      "rawBytes": 4627,
+      "rawSha256": "23361c2cc46ff52e073fb3fd80792fe1ee4789fe49675efcb9eabe4fe998316b",
+      "readableBytes": 4621,
+      "readableSha256": "7c5b83988449c5e49fd125d6d404a1408ddc23e6ba003be5548c63b5dd46f62c"
+    },
+    {
+      "path": "lint.log",
+      "rawBytes": 41,
+      "rawSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "readableBytes": 39,
+      "readableSha256": "c69d64bb2173ebe42cc6fa332d8185c77f18c853a6f2b16dd7a8adb7ba833fbc"
+    },
+    {
+      "path": "diff.log",
+      "rawBytes": 0,
+      "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "readableBytes": 0,
+      "readableSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "archive": {
+    "bytes": 3367,
+    "sha256": "ef073a8b644978b93407bae344e4a7b8fb9174060770784fa57e3ad089fe3c9a"
+  }
+}

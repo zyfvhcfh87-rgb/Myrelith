@@ -1,0 +1,259 @@
+{
+  "head": "be8d2592384b75225be64e80779cbe0ebb1ee753",
+  "status": "failed",
+  "passedRuntimeCheckpoints": 5,
+  "steps": [
+    {
+      "name": "bounded encoded fixture, canonical retime/split and undo",
+      "status": "passed"
+    },
+    {
+      "name": "native shared title Set key, numeric value, copy and paste",
+      "status": "passed"
+    },
+    {
+      "name": "muted native playback uses silent live audio",
+      "status": "passed"
+    },
+    {
+      "name": "portable reopen and exact media relink",
+      "status": "passed"
+    },
+    {
+      "name": "Animation workspace 1440/720 layout and focus",
+      "status": "passed"
+    }
+  ],
+  "firstFailure": "Missing-font refusal step receives Plugin-aware export requires a prepared one-shot attempt before the intended font preflight.",
+  "startedAt": "2026-09-08T21:18:48.739Z",
+  "driverFinishedAt": "2026-09-08T21:18:54.219Z",
+  "supervisorFinishedAt": "2026-09-08T21:18:57.113Z",
+  "driverSeconds": 5.48,
+  "consolePageProblems": [],
+  "sessionEvidence": {
+    "events": 26,
+    "exactStandaloneResultEquality": true,
+    "errors": [],
+    "successfulRecoveryProjectIds": [
+      "doc_eeae6430-79aa-44d1-8643-499e915ec4af",
+      "g4"
+    ],
+    "recoveryFailureInDom": false,
+    "qualification": "Only the observed window; final persistence settle not reached."
+  },
+  "portable": {
+    "initial": {
+      "bytes": 9608,
+      "sha256": "02f54a3e1eefe47a16be6083f23d9dd2de6f442ab5a93e2232884e2acd7cd9e0"
+    },
+    "edited": {
+      "bytes": 12424,
+      "sha256": "f0c300b52ad8556ea94fb8bebb837163c9ba67f3a4c3e7014e4d70de7bf776c2"
+    },
+    "exactSequences": true,
+    "retainedUnknownEffect": true
+  },
+  "layout": [
+    {
+      "width": 1440,
+      "documentWidth": 1440
+    },
+    {
+      "width": 720,
+      "documentWidth": 720
+    }
+  ],
+  "sourceAudio": {
+    "silentWavBytes": 192044,
+    "allPayloadBytesZero": true,
+    "channels": 2,
+    "sampleRate": 48000,
+    "oracleWavBytes": 192044,
+    "qualification": "Generated input files only; no decoded-output PCM observation."
+  },
+  "sourceHashesVerified": 941,
+  "sourceClean": true,
+  "copies": [
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/result.json",
+      "copy": "result.json",
+      "mode": "exact bytes",
+      "rawSha256": "5f12a2849db2c14cca221af3759970d5fc190402d8c658a72eae067e289a7506",
+      "copySha256": "5f12a2849db2c14cca221af3759970d5fc190402d8c658a72eae067e289a7506"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/supervisor.json",
+      "copy": "supervisor.json",
+      "mode": "exact bytes",
+      "rawSha256": "c85e9dc8e893a73a5d1eab85c7c283b26f43a5585dc69281f3efc6a39b0eed53",
+      "copySha256": "c85e9dc8e893a73a5d1eab85c7c283b26f43a5585dc69281f3efc6a39b0eed53"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/artifacts.json",
+      "copy": "artifacts.json",
+      "mode": "exact bytes",
+      "rawSha256": "bab0ed9b1b692bcb6b95c3de4a323ef8fff42a8e1dadc23fb398b5bc9ab7f48c",
+      "copySha256": "bab0ed9b1b692bcb6b95c3de4a323ef8fff42a8e1dadc23fb398b5bc9ab7f48c"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/session-events.json",
+      "copy": "session-events.json",
+      "mode": "exact bytes",
+      "rawSha256": "6feeda646e3ad1953df18d82a2b0c33c867d23144cde7550087129b90df37c65",
+      "copySha256": "6feeda646e3ad1953df18d82a2b0c33c867d23144cde7550087129b90df37c65"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/initial-mixed.myrelith",
+      "copy": "initial-mixed.myrelith",
+      "mode": "exact bytes",
+      "rawSha256": "02f54a3e1eefe47a16be6083f23d9dd2de6f442ab5a93e2232884e2acd7cd9e0",
+      "copySha256": "02f54a3e1eefe47a16be6083f23d9dd2de6f442ab5a93e2232884e2acd7cd9e0"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/mixed.myrelith",
+      "copy": "mixed.myrelith",
+      "mode": "exact bytes",
+      "rawSha256": "f0c300b52ad8556ea94fb8bebb837163c9ba67f3a4c3e7014e4d70de7bf776c2",
+      "copySha256": "f0c300b52ad8556ea94fb8bebb837163c9ba67f3a4c3e7014e4d70de7bf776c2"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/step-01-dom.txt",
+      "copy": "step-01-dom.txt",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "3a53d40ee9cee97adf1cff51a50ac5d5cf5f143739efb5d410489842d67fcb9d",
+      "copySha256": "0acef6d2aa76bf48bfeb5634eb72d3fc8184de81680e5ba0fccdc630dcd04a8e"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/step-02-dom.txt",
+      "copy": "step-02-dom.txt",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "781e4a23145aeee5999455b904a3e804ceec1dce5fbbdd6ab5ede12cc73407a3",
+      "copySha256": "362d7ee9e95bafa142954a2e5437559e6e24d72feba2b8108824794a5a38295b"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/step-03-dom.txt",
+      "copy": "step-03-dom.txt",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "4662eb48f5d54d56d959043880af63697d578a9ffd2e56703aa9292a2f0b7c75",
+      "copySha256": "5f2669dd5da6a96f86e2115d1528e73b67bf979ef4fa5c3d85791446e8831b2c"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/step-04-dom.txt",
+      "copy": "step-04-dom.txt",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "6175f37f13cab7306a0655554f2fb93bfc492ce95f89b16c861ce38dd9bf85aa",
+      "copySha256": "e0a6df6acc2faf56d3c29dd8991437d72eb395b80dc2720dbf91cbbe8aa5a701"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/step-05-dom.txt",
+      "copy": "step-05-dom.txt",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "6175f37f13cab7306a0655554f2fb93bfc492ce95f89b16c861ce38dd9bf85aa",
+      "copySha256": "e0a6df6acc2faf56d3c29dd8991437d72eb395b80dc2720dbf91cbbe8aa5a701"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/failure-dom.txt",
+      "copy": "failure-dom.txt",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "f836edf52d0e485b34f52b16dca9e5ffcbaa4b5395cba4d0f3a371ad8e15e1e0",
+      "copySha256": "6175b1d61c25a004043234d687fdf1e4cb8b7f7567151f32532f94dc376c898e"
+    },
+    {
+      "source": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z/server.log",
+      "copy": "server.log",
+      "mode": "normalized text; exact raw retained",
+      "rawSha256": "41b31e0a9f7bb5ff2cae731478cf3f049cea8ba093901fa238257c28c9165539",
+      "copySha256": "f8fdc8d54e4696c83df2b66803434a6e2edbf5e9c526b3cc5b00e7fbfb6c974f"
+    },
+    {
+      "source": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-attempt3-prelaunch.json",
+      "copy": "prelaunch.json",
+      "mode": "exact bytes",
+      "rawSha256": "b8e5138b5154ae53b4b4dcb7fe55d31fcb88114f9fa5fdc80adce053ffc1a791",
+      "copySha256": "b8e5138b5154ae53b4b4dcb7fe55d31fcb88114f9fa5fdc80adce053ffc1a791"
+    },
+    {
+      "source": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-attempt3-live-owned.json",
+      "copy": "live-observer.json",
+      "mode": "exact bytes",
+      "rawSha256": "782f0d9b3c75b29d46e9dca74400ae250b9232cf0f820327f216b9de23dc82dd",
+      "copySha256": "782f0d9b3c75b29d46e9dca74400ae250b9232cf0f820327f216b9de23dc82dd"
+    },
+    {
+      "source": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-attempt3-independent-cleanup.json",
+      "copy": "independent-cleanup.json",
+      "mode": "exact bytes",
+      "rawSha256": "b78f3ff101f1570c9004a4bdd09046ee8e0e6262812513670b3694cb94380ec8",
+      "copySha256": "b78f3ff101f1570c9004a4bdd09046ee8e0e6262812513670b3694cb94380ec8"
+    }
+  ],
+  "trace": {
+    "integrity": "passed",
+    "entries": 204,
+    "visualReview": "Worker viewed step-05.png after return to Timeline; failure/other screenshots retained."
+  },
+  "cleanup": {
+    "driverReleasedAt": "2026-09-08T21:18:54.177Z",
+    "supervisorFinishedAt": "2026-09-08T21:18:57.113Z",
+    "independentAt": "2026-09-08T21:20:06.663Z",
+    "pidPresence": [
+      {
+        "pid": 42521,
+        "present": false
+      },
+      {
+        "pid": 42541,
+        "present": false
+      },
+      {
+        "pid": 42573,
+        "present": false
+      },
+      {
+        "pid": 42574,
+        "present": false
+      },
+      {
+        "pid": 42579,
+        "present": false
+      },
+      {
+        "pid": 42580,
+        "present": false
+      },
+      {
+        "pid": 42581,
+        "present": false
+      },
+      {
+        "pid": 42582,
+        "present": false
+      },
+      {
+        "pid": 42614,
+        "present": false
+      },
+      {
+        "pid": 42615,
+        "present": false
+      }
+    ],
+    "port5199": false,
+    "fallbackSignals": [],
+    "sleepWakeTransitions": 0,
+    "supervisorIdentityQualification": {
+      "pid": 42521,
+      "liveIdentityCaptured": false,
+      "qualification": "Independent observer ran after completion; parent PID recorded by supervisor, absence verified now."
+    }
+  },
+  "notReached": [
+    "intended missing-font strict preflight",
+    "current Program reference captures",
+    "mixed encoded export bytes",
+    "decoded pixels/PCM",
+    "final application admission assertion",
+    "final passive persistence settle"
+  ],
+  "correctionOrRetry": "none; frozen source and protocol unchanged"
+}

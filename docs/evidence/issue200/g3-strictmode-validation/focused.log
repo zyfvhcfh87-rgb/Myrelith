@@ -1,0 +1,38 @@
+
+> myrelith@0.2.0-alpha.1 test
+> node scripts/run-vitest.mjs --run src/ui/TitleAuthoring.test.tsx src/app/titleEditingController.test.ts src/ui/TitleOverlayControls.test.tsx src/app/titleTemplateController.test.ts src/app/titlePreviewRetention.test.ts src/test/architecture.test.ts --maxWorkers=2
+
+
+ RUN  v4.1.9 /Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue200
+
+
+ Test Files  6 passed (6)
+      Tests  61 passed (61)
+   Start at  20:57:59
+   Duration  2.40s (transform 643ms, setup 133ms, import 1.78s, tests 763ms, environment 1.26s)
+
+✔ cold samples each use and close a fresh BrowserContext (0.664416ms)
+✔ source identity rejects end-of-run drift (0.171875ms)
+✔ dirty fingerprint streams a tracked diff larger than one MiB (234.02725ms)
+✔ dirty fingerprint streams multiple untracked regular files larger than one MiB (143.523042ms)
+✔ untracked symlinks, directories, and special files have explicit deterministic identities (0.3425ms)
+✔ Chromium GPU metadata preserves renderer, driver, feature, and acceleration provenance (0.787125ms)
+✔ Chromium GPU metadata reports explicit unavailable reasons when CDP is unsupported (0.127625ms)
+✔ Chromium process memory sums a complete CDP renderer and GPU process table (0.2665ms)
+✔ Windows host sampling embeds only validated numeric PIDs and returns private bytes (0.136708ms)
+✔ Chromium process memory is unavailable instead of partial without renderer and GPU coverage (0.105875ms)
+✔ benchmark build runs the repository TypeScript gate before Vite (0.286583ms)
+✔ successful benchmark build and preview preserve dist and remove the temporary output (1.82475ms)
+✔ failed benchmark build preserves dist and removes the partial temporary output (1.268ms)
+✔ TypeScript gate uses the repository compiler in build mode (0.145042ms)
+✔ runner rejects durations beyond the continuously encoded source plan (0.155958ms)
+✔ Issue #44 evidence pins the current fixture and algorithm provenance (0.192917ms)
+✔ final browser evidence includes problems raised during screenshot, settling, and result formatting (0.133541ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 574.43425

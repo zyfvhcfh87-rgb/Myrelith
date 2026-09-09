@@ -1,0 +1,36 @@
+START production launcher identity
+PASS production launcher identity
+START canonical mixed fixture and native selection
+PASS canonical mixed fixture and native selection
+START native key drag: exact movement, admitted preview, one release commit, undo/redo
+PASS native key drag: exact movement, admitted preview, one release commit, undo/redo
+START native Bézier handle 1: preview, one commit and exact undo
+PASS native Bézier handle 1: preview, one commit and exact undo
+START native Bézier handle 2: preview, one commit and exact undo
+PASS native Bézier handle 2: preview, one commit and exact undo
+START native key cancellation: escape
+PASS native key cancellation: escape
+START native key cancellation: capture
+PASS native key cancellation: capture
+START native key cancellation: close
+PASS native key cancellation: close
+START native key cancellation: mode
+PASS native key cancellation: mode
+START native key cancellation: selection
+PASS native key cancellation: selection
+START native key cancellation: viewport
+PASS native key cancellation: viewport
+START native key cancellation: playback
+STOP native key cancellation: playback: Console/page problems fail this segment
++ actual - expected
+
++ [
++   {
++     step: 'native key cancellation: playback',
++     text: '[transportController] audio clip "ordinary-audio" source open failed: Playback media asset "audio-asset" is missing from the media pool',
++     type: 'warning'
++   }
++ ]
+- []
+
+Evidence: /private/tmp/issue199-continuation/2026-09-08T17-37-13.437Z-gestures

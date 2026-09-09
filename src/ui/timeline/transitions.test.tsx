@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../../domain/projectFile'
 /**
  * Timeline transition authoring (Phase 5.1e-3).
  *
@@ -133,7 +134,7 @@ function makeTrack(
 function makeDoc(options: { seeded?: boolean; lockedSeeded?: boolean } = {}): TimelineDoc {
   const { seeded = false, lockedSeeded = false } = options
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'transition-ui-doc',
     name: 'Transition UI fixture',
     frameRate: { num: 30, den: 1 },
@@ -172,7 +173,7 @@ function makeDoc(options: { seeded?: boolean; lockedSeeded?: boolean } = {}): Ti
  * D15 [33,48) (overlap), while D4 [38,42) merely touches and is valid. */
 function makeNeighboringTransitionDoc(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'transition-neighbor-doc',
     name: 'Neighboring transition fixture',
     frameRate: { num: 30, den: 1 },

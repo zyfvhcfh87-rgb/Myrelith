@@ -1,0 +1,83 @@
+{
+  "directory": "/private/tmp/issue199-continuation/2026-09-08T19-26-49.451Z-large",
+  "harnessHead": "4fd79339aa6913ae34e0bdbcffd767aa1fbe8243",
+  "files": {
+    "acceptance-summary.json": {
+      "bytes": 6507,
+      "sha256": "aaaa34c29a11435c3f34f8f32a006fd921c6df52ea8452d814fe8d2d8e60b8d3"
+    },
+    "build.log": {
+      "bytes": 3939,
+      "sha256": "f212c2743a77b409a5101d5a3d89de1413cd978fa911c8b799a64bfe21b5e9bf"
+    },
+    "console.log": {
+      "bytes": 652,
+      "sha256": "d172f69b98658c89a41a62d8fae5672f9e8a3d3672a3f5425cc4b367fa67331c"
+    },
+    "independent-cleanup-source.json": {
+      "bytes": 7559,
+      "sha256": "eb5787eb37a79a8812b57efb81b42d61eed9f3852e178eeec3bd2511230a763a"
+    },
+    "many-lanes-far-owner.png": {
+      "bytes": 157417,
+      "sha256": "47a24a6ca88bc2887c546f6e7675ec64b83ef9f0911325b5aec73909a6762140"
+    },
+    "prelaunch-source.json": {
+      "bytes": 542,
+      "sha256": "d660f3e8b1076724df12a5e53afeb175ddc2f0ea39958fe0a8910b0a0457bf20"
+    },
+    "result.json": {
+      "bytes": 138966,
+      "sha256": "1437127a1904e686ea8c27ab2eb2154112cb95367c9c51e70e0c0e1223c30a29"
+    },
+    "server.log": {
+      "bytes": 39,
+      "sha256": "d969c458042231c76882f464fae7ba2e79cbfdcb0e6b8627007005f59b2ea09d"
+    },
+    "step-01-dom.txt": {
+      "bytes": 1050,
+      "sha256": "391e96e976bb2729c502f64bb5e09dc362aab8be1361f10d9a8d6d3ec49301a2"
+    },
+    "step-01.png": {
+      "bytes": 501548,
+      "sha256": "6370dac88b46180eca85b9b541903a2edb3257cdbb9dc2bbdc3a999675a05c62"
+    },
+    "step-02-dom.txt": {
+      "bytes": 5385,
+      "sha256": "655b9124d5434492384ae4e521ff5a978d6e8236179fd3500e34958900860813"
+    },
+    "step-02.png": {
+      "bytes": 233708,
+      "sha256": "58dfd87e44674b6c67cc8609b689f97842c7bb91ab2242e973cc6bf9535873c1"
+    },
+    "step-03-dom.txt": {
+      "bytes": 3560,
+      "sha256": "fb37ff0acb9a127f95a8775fbfe41e4111968f84ba7bb49a888eea75537c6251"
+    },
+    "step-03.png": {
+      "bytes": 154028,
+      "sha256": "6443268b6a4d485e7a8b8878524563daae99cae37bbce3c3f1934e4f41a0ade3"
+    },
+    "step-04-dom.txt": {
+      "bytes": 3226,
+      "sha256": "c092587551cdf15ba14bb157450bcfd935053c27198b272fc4cbcc3e441f4afe"
+    },
+    "step-04.png": {
+      "bytes": 157429,
+      "sha256": "7d97ed0aeb681db6b9b9fab0ffdec1d016bea57f4936c8a8f454be9d4c25946b"
+    },
+    "trace-integrity.log": {
+      "bytes": 21396,
+      "sha256": "f925cd221018aa0f49f33633c88a0c30021ae5f1ae8c44a14180ec83b832ef92"
+    },
+    "trace.zip": {
+      "bytes": 11844190,
+      "sha256": "4527eeafb72f84bf4f4416675edc6056d035418992ca0990e82ee2077fe61d5e"
+    },
+    "wrapper-identities.json": {
+      "bytes": 84,
+      "sha256": "1d40b7b70af6b66f109fa26f443d08feb517b379e3d44bf0bb8bbb313258b3cc"
+    }
+  },
+  "qualification": "All top-level files only; private profile retained without recursive hash claim."
+}

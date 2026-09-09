@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 /**
  * domain/selectors.test.ts — Phase 3.2.
  */
@@ -57,7 +58,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -584,7 +585,7 @@ describe('videoCompositionPlanAtFrame', () => {
             opacity: item.request.opacity,
             weight: null,
           }]
-        : item.kind === 'text'
+        : (item.kind === 'text' || item.kind === 'title')
           ? [{
               id: item.clip.id,
               sourceFrame: 0,

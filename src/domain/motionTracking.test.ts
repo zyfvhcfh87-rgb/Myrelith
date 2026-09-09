@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import { defaultClipAnimation, evaluateAnimationTrack } from './clipAnimation'
 import { defaultClipVisualSettings } from './clipInspector'
@@ -41,7 +42,7 @@ function clip(id: string, startFrame: number, durationFrames: number): Clip {
 
 function doc(source = clip('source', 10, 10), target = clip('target', 8, 20)): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'tracking-doc',
     name: 'Tracking',
     frameRate: { num: 30, den: 1 },

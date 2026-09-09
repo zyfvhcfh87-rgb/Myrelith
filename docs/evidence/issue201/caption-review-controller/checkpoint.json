@@ -1,0 +1,133 @@
+{
+  "parentHead": "0a2260212b7846fcc7f3cdcf13cd57573fee11fa",
+  "status": "caption-review-source-checkpoint",
+  "sourceFiles": [
+    {
+      "path": "src/domain/captionStyle.ts",
+      "bytes": 5129,
+      "sha256": "8d4d1258392ed022795c0f76cba0e27084b3a1b7ed6089acd4a238c07be39a32"
+    },
+    {
+      "path": "src/domain/captionBatch.ts",
+      "bytes": 12657,
+      "sha256": "06b96bf034f881a10997a7c4aebff778beab637e9b7cbbfa95ab8e47bfe1d2b4"
+    },
+    {
+      "path": "src/app/captionEditingController.ts",
+      "bytes": 14232,
+      "sha256": "e470c317cd516c52ae258c99252655e14114c02af4ed738f9e833384aa22b9bd"
+    },
+    {
+      "path": "src/app/captionStyleReview.test.ts",
+      "bytes": 9068,
+      "sha256": "cb3bef3a81a9582e3ef56b5692e2a4e85dd2ab4afa1ffa08e96fee99f81cf556"
+    },
+    {
+      "path": "src/app/captionReviewController.ts",
+      "bytes": 8651,
+      "sha256": "d9848e27ee1efcf040d1b0cc0db9fa03a05ba1fd368c1cfe51265e5a6b547afa"
+    },
+    {
+      "path": "src/app/captionReviewController.test.ts",
+      "bytes": 11848,
+      "sha256": "7e79f3bf5459a2511179a2498c921c692617e651a2703a38cefcdec498221e08"
+    },
+    {
+      "path": "src/app/captionStylePresentation.ts",
+      "bytes": 2103,
+      "sha256": "dad4b2a48c0d7d7b517ecd2086cbfa1479031918ac8554815b24de21f70343b0"
+    },
+    {
+      "path": "docs/evidence/issue201/CAPTION_REVIEW_CONTROLLER.md",
+      "bytes": 3913,
+      "sha256": "b19ec4387d57365028d14c8c0f529bab4159a2aa69f4cd88d1110b42281b4bc2"
+    }
+  ],
+  "referenceFiles": [
+    {
+      "path": "src/app/portableProjectEdit.ts",
+      "bytes": 1468,
+      "sha256": "54a7590b6b8cfd2f7540afe622e844756d9029308f190c9e451bd46bc987d991"
+    },
+    {
+      "path": "src/app/captionAdmission.test.ts",
+      "bytes": 11845,
+      "sha256": "bcc30f1b9a8d5ce7e46c053bb51fdda4408c7881a03ce89012effbbcfb7a61b0"
+    },
+    {
+      "path": "src/app/captionReentrancy.test.ts",
+      "bytes": 7627,
+      "sha256": "9c73d8db03731e449c3022761ea36f37c60f1a40a5d2d8dc344afe5fcc91f24c"
+    },
+    {
+      "path": "src/domain/captionIntent.ts",
+      "bytes": 4305,
+      "sha256": "1a23e7513d42a2697e53948b443366eca1379741e11b1946793e38095734adeb"
+    },
+    {
+      "path": "src/domain/captionIntentBudget.ts",
+      "bytes": 2692,
+      "sha256": "f9fcf6b59cbffb2349f9377aa460b021e5af16e945a2231c87a33a6dfb733934"
+    },
+    {
+      "path": "src/domain/captionStyle.test.ts",
+      "bytes": 6694,
+      "sha256": "0269d15eb86fff63443e77465336485de5717385738d0a38689827bb4c66a9ad"
+    },
+    {
+      "path": "src/domain/captionBatch.test.ts",
+      "bytes": 11682,
+      "sha256": "93558d46e734b0a7be7219d719501cef3c99484f41883ae7cdbf287264df7d27"
+    },
+    {
+      "path": "src/test/captionIntentFixtures.ts",
+      "bytes": 4069,
+      "sha256": "4fb73bdc4b2ad21a7faa91fbf6affc9d20b84a68adfdaf6680df305f954964fe"
+    },
+    {
+      "path": "ARCHITECTURE.md",
+      "bytes": 101894,
+      "sha256": "abb787e1b227294e20ab6359a9bb5e0e4278e4eaf4d5cb1595f4793d859ce364"
+    }
+  ],
+  "records": [
+    {
+      "path": "lint.txt",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "tests-final.txt",
+      "bytes": 2305,
+      "sha256": "049bc86cb4825bf2bf5a81121a04fef2726ed8d3cd7f3775237e395fcfc5e1ce"
+    },
+    {
+      "path": "tests-first-preview-failure.txt",
+      "bytes": 1564,
+      "sha256": "8266d30f420f80dd7135d33d843e5c25a1008bf981ee7c1d466f6b7b56373427"
+    },
+    {
+      "path": "tests-initial-owner.txt",
+      "bytes": 266,
+      "sha256": "cd917c389df35437209d2bc722809e8224989f69ec72787b627046c7e9b867c6"
+    },
+    {
+      "path": "tests-preview-fixed.txt",
+      "bytes": 2201,
+      "sha256": "b728891153257479c26e0d9cd954423a68876b536cb22082281c5c112c638cf4"
+    },
+    {
+      "path": "typecheck.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "focusedTestsPassed": 124,
+  "runnerChecksPassed": 17,
+  "typecheckPassed": true,
+  "lintPassed": true,
+  "productionBuildRun": false,
+  "browserAcceptance": false,
+  "uiWired": false,
+  "sharedHeavySlotHeld": false
+}

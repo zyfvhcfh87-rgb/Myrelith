@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "testedSha": "b7a097707ca1c5bfadc8ba047e9596daf320fcc2",
+  "archive": "first-paint-b7a0977-evidence.tar.gz",
+  "bytes": 7323397,
+  "sha256": "e78abc7bc3f9105aae4c1042b4e5f15c27dfde00fbf6ecde911fd23df9ba9452",
+  "members": 178,
+  "hashedMembers": 177,
+  "allMemberHashesVerified": true,
+  "result": "Accepted scoped first-paint diagnostic; early uninitialized buffer followed by exact automatic rendering in this run; no historical cause or performance claim.",
+  "originalArchive": "issue200-first-paint-b7a0977-01-evidence.tar.gz"
+}

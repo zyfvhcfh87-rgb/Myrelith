@@ -1,3 +1,4 @@
+import { animationRetentionError } from './projectAnimationRetention'
 import { addColorGradingEffect, colorGradingOwner, editColorGradingParams } from '../domain/colorGradingParameterEdit'
 import type { ColorGradingTarget } from '../domain/colorGradingEdits'
 import type { EffectParamValue } from '../domain/schema'
@@ -16,17 +17,21 @@ let active: ColorGradingEditSession | null = null
 /** A gesture pins project, selection, playhead and transport lifetime. */
 export function beginColorGradingEdit(target: ColorGradingTarget, effectId: string): ColorGradingEditSession {
   active?.cancel()
+  if (active !== null) throw new Error('Another grading edit started during cleanup. Finish that edit first.')
   const state = useDocumentStore.getState(), transport = useTransportStore.getState()
+  if (transport.isPlaying || transport.isScrubbing) throw new Error('Pause playback before editing grading.')
   const owner = colorGradingOwner(state.project, target)
   if (owner.locked) throw new Error('This video track is locked.')
   const reset = getTransportResetRevision(), frame = transport.playheadFrame
-  const current = () => {
+  const contextCurrent = () => {
     const next = useDocumentStore.getState(), cursor = useTransportStore.getState()
-    return active === session && next.project === state.project && next.projectGeneration === state.projectGeneration
+    return next.project === state.project && next.projectGeneration === state.projectGeneration
       && next.activeSequenceId === target.sequenceId && frame === cursor.playheadFrame && reset === getTransportResetRevision()
+      && !cursor.isPlaying && !cursor.isScrubbing && transport.selectedClipId === cursor.selectedClipId
       && transport.selectedAdjustmentId === cursor.selectedAdjustmentId && transport.selectedClipIds.length === cursor.selectedClipIds.length
       && transport.selectedClipIds.every((id, index) => id === cursor.selectedClipIds[index])
   }
+  const current = () => active === session && contextCurrent()
   let unsubscribeDocument = () => {}, unsubscribeTransport = () => {}
   function cancel() {
     unsubscribeDocument(); unsubscribeTransport()
@@ -40,8 +45,11 @@ export function beginColorGradingEdit(target: ColorGradingTarget, effectId: stri
       const next = editColorGradingParams(state.project, target, effectId, frame, patch)
       if (commit) {
         cancel()
-        return useDocumentStore.getState().commitColorLutEdit(state.project, state.projectGeneration, next)
+        if (active !== null || !contextCurrent()) return 'The project, selection or playhead changed. Start the grading edit again.'
+        return useDocumentStore.getState().commitProjectEdit(state.project, state.projectGeneration, next)
       }
+      const retention = animationRetentionError(useDocumentStore.getState(), next)
+      if (retention) return retention
       useTransportStore.getState().setColorGradingPreview({ sequenceId: target.sequenceId, effectId,
         params: patch, document: next.sequences.find((sequence) => sequence.id === target.sequenceId)! })
       return null
@@ -61,6 +69,6 @@ export function commitColorGradingParams(target: ColorGradingTarget, effectId: s
 
 export function addGradingEffect(target: ColorGradingTarget, type: string): string | null {
   const state = useDocumentStore.getState()
-  try { return state.commitColorLutEdit(state.project, state.projectGeneration, addColorGradingEffect(state.project, target, type, () => crypto.randomUUID())) }
+  try { return state.commitProjectEdit(state.project, state.projectGeneration, addColorGradingEffect(state.project, target, type, () => crypto.randomUUID())) }
   catch (cause) { return cause instanceof Error ? cause.message : 'Could not add grading.' }
 }

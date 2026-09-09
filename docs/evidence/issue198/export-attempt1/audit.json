@@ -1,0 +1,187 @@
+{
+  "verifiedAt": "2026-09-08T19:49:21.888800+00:00",
+  "testedSource": {
+    "commit": "8129d4ef0f3fc4df9a204c291f1d52f1ee700c3d",
+    "dirty": false,
+    "fingerprint": "sha256:65af35c4adf067ffc607425f7778be87aba9af3ba1dd4599bb99750c7d7e91db"
+  },
+  "outcome": "failed-incomplete",
+  "reason": "Frame127 maximum RGB delta19 exceeds frozen12; mean0.06854926215 remains below2.",
+  "directory": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-8129d4e-export-attempt1",
+  "manifest": {
+    "entries": 331,
+    "rawJsonRecords": 329,
+    "bytes": 44696,
+    "sha256": "c0afb06b49ad88b68dcb64076805bee754062f8538d4d4656539026f8e74bace",
+    "totalFileBytes": 3637094
+  },
+  "counts": {
+    "run-start": 1,
+    "browser-provenance": 1,
+    "process-start": 1,
+    "native-memory-sample": 11,
+    "binary-complete": 2,
+    "export-fixture": 1,
+    "export-attempt-start": 1,
+    "export-progress": 301,
+    "export-attempt-settled": 1,
+    "export-output-metadata": 1,
+    "export-decoded-parity": 2,
+    "export-attempt-failed": 1,
+    "export-attempt-released": 1,
+    "run-failed": 1,
+    "process-before-close": 1,
+    "run-teardown": 1,
+    "evidence-closed": 1
+  },
+  "binaryFiles": [
+    {
+      "kind": "binary-complete",
+      "name": "source.mp4",
+      "bytes": 1069647,
+      "sha256": "55a7094a0d645e5ec67c7d266890d9c6c8500a125f3454408bdd467ef8ed6264",
+      "sequence": 7,
+      "receivedAt": "2026-09-08T19:44:48.818Z"
+    },
+    {
+      "kind": "binary-complete",
+      "name": "export-complete-0.mp4",
+      "bytes": 2103209,
+      "sha256": "f31104bd0a9d26d8ae1285bd15798b625281f8222268c79a34d006481eba0f2c",
+      "sequence": 319,
+      "receivedAt": "2026-09-08T19:44:55.085Z"
+    }
+  ],
+  "metadata": {
+    "browserTimeMs": 10188.29999999702,
+    "kind": "export-output-metadata",
+    "width": 1280,
+    "height": 720,
+    "duration": 10,
+    "audio": false,
+    "bytes": 2103209,
+    "index": 0,
+    "mode": "complete",
+    "source": "browser",
+    "sequence": 320,
+    "receivedAt": "2026-09-08T19:44:55.092Z"
+  },
+  "decodedParity": [
+    {
+      "browserTimeMs": 10212.5,
+      "kind": "export-decoded-parity",
+      "frame": 0,
+      "comparedChannels": 2764800,
+      "maximumChannelDelta": 12,
+      "meanChannelDelta": 0.2008376736111111,
+      "maximumAllowed": 12,
+      "meanAllowed": 2,
+      "index": 0,
+      "mode": "complete",
+      "source": "browser",
+      "sequence": 321,
+      "receivedAt": "2026-09-08T19:44:55.116Z"
+    },
+    {
+      "browserTimeMs": 10241.29999999702,
+      "kind": "export-decoded-parity",
+      "frame": 127,
+      "comparedChannels": 2764800,
+      "maximumChannelDelta": 19,
+      "meanChannelDelta": 0.06854926215277778,
+      "maximumAllowed": 12,
+      "meanAllowed": 2,
+      "index": 0,
+      "mode": "complete",
+      "source": "browser",
+      "sequence": 322,
+      "receivedAt": "2026-09-08T19:44:55.146Z"
+    }
+  ],
+  "settled": {
+    "browserTimeMs": 7338.9000000059605,
+    "kind": "export-attempt-settled",
+    "index": 0,
+    "mode": "complete",
+    "cancellationAt": null,
+    "timedOut": false,
+    "milliseconds": 3319.2999999970198,
+    "owners": {
+      "mediaOpened": 1,
+      "mediaClosed": 1,
+      "leasesOpened": 300,
+      "leasesClosed": 300,
+      "liveLeases": 0,
+      "peakLeases": 1,
+      "sourceRequests": 300,
+      "sinksOpened": 1,
+      "sinksFinalized": 1,
+      "sinksCancelled": 0,
+      "liveSinks": 0,
+      "framesAdded": 300,
+      "composites": 300,
+      "activeComposites": 0,
+      "readbacks": 300,
+      "liveReadbackBytes": 0,
+      "peakReadbackBytes": 3686400,
+      "actualSurfaceBytesPeak": 11059200,
+      "modeledPixelWorkBytesPeak": 8294400,
+      "actualSurfaceBytes": 12,
+      "surfaceExtents": [
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        },
+        {
+          "width": 1,
+          "height": 1
+        }
+      ],
+      "grading": {
+        "bytes": 0,
+        "peakBytes": 0,
+        "entries": 0,
+        "pendingTasks": 0,
+        "active": false,
+        "ports": 0
+      },
+      "decoderInternals": {
+        "status": "unavailable",
+        "reason": "Production media-source API exposes lease/close boundaries, not decoder/native allocation counters."
+      }
+    },
+    "admission": {
+      "essentialOwners": 1,
+      "decoderSlots": 4,
+      "surfaceBytes": 45158400,
+      "monitorOwners": 0,
+      "blockers": [],
+      "programReady": true
+    },
+    "hasOutput": true,
+    "source": "browser",
+    "sequence": 315,
+    "receivedAt": "2026-09-08T19:44:52.243Z"
+  },
+  "runStartedAt": "2026-09-08T19:44:44.767Z",
+  "runEndedAt": "2026-09-08T19:44:55.265Z",
+  "nativeMemory": {
+    "samples": 11,
+    "unavailable": 0,
+    "baselineRssBytes": 472481792,
+    "sampledPeakRssBytes": 1449541632,
+    "finalObservedRssBytes": 1372487680,
+    "exactPeakProven": false
+  },
+  "notExecuted": [
+    "decoded output parity frames255 and299",
+    "first cancellation and retry",
+    "cycles1 and2",
+    "other exports or retries"
+  ],
+  "diagnosticLimit": "Existing parity records contain no decoded sample timestamps, maximum-error coordinates or pre-encode pixel evidence; root cause remains unresolved."
+}

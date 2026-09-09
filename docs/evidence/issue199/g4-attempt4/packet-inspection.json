@@ -1,0 +1,129 @@
+{
+  "source": "Saved encoded bytes; metadata-only inspection with installed Mediabunny 1.50.9; no decoding or native retry",
+  "packets": [
+    {
+      "timestamp": 0,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.033,
+      "duration": 0.034
+    },
+    {
+      "timestamp": 0.067,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.1,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.133,
+      "duration": 0.034
+    },
+    {
+      "timestamp": 0.167,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.2,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.233,
+      "duration": 0.034
+    },
+    {
+      "timestamp": 0.267,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.3,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.333,
+      "duration": 0.034
+    },
+    {
+      "timestamp": 0.367,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.4,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.433,
+      "duration": 0.034
+    },
+    {
+      "timestamp": 0.467,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.5,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.533,
+      "duration": 0.034
+    },
+    {
+      "timestamp": 0.567,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.6,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.633,
+      "duration": 0.034
+    },
+    {
+      "timestamp": 0.667,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.7,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.733,
+      "duration": 0.034
+    },
+    {
+      "timestamp": 0.767,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.8,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.833,
+      "duration": 0.034
+    },
+    {
+      "timestamp": 0.867,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.9,
+      "duration": 0.033
+    },
+    {
+      "timestamp": 0.933,
+      "duration": 0.034
+    },
+    {
+      "timestamp": 0.967,
+      "duration": 0.03333333300000001
+    }
+  ],
+  "trackDuration": 1,
+  "packetCount": 30,
+  "packetExtent": 1.000333333,
+  "maxFrameTimestampError": 0.00033333333333340764
+}

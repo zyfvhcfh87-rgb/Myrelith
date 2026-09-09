@@ -1,0 +1,157 @@
+{
+  "kind": "issue201-whispercpp-diagnostic-laboratory-v1",
+  "qualification": "Source-only attempt02 diagnostic proposal; no retry has executed.",
+  "runtime": {
+    "engine": "whisper.cpp",
+    "version": "1.9.3-dev",
+    "sourceRevision": "371b5a7561823ab2bb32142d2751e35e7534727b",
+    "generatedCheckpoint": "6d5e8d75757c10b7c9caf1b907747b76201769fb",
+    "device": "wasm",
+    "dtype": "q8_0",
+    "threads": 1,
+    "initialHeapBytes": 67108864,
+    "maximumHeapBytes": 536870912,
+    "stackBytes": 5242880,
+    "wholeCallTokenBudget": 448,
+    "windowDeadlineMs": 120000,
+    "artifacts": [
+      {
+        "name": "myrelith-whisper.mjs",
+        "bytes": 22350,
+        "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7",
+        "packedPath": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.mjs.gz"
+      },
+      {
+        "name": "myrelith-whisper.wasm",
+        "bytes": 1198488,
+        "sha256": "6f4f665168d8845c22b2e95930e939afde49f5922ca557e2ed0060a143846459",
+        "packedPath": "docs/evidence/issue201/whispercpp-short-output-runtime/myrelith-whisper.wasm.gz"
+      },
+      {
+        "name": "mediabunny.mjs",
+        "bytes": 624835,
+        "sha256": "a7e7e14265b787de0daf23d379a8b4afa4b36b74711d71a2f5e075bff6a671a6",
+        "localPath": ".tmp/issue201-speech-lab/assets/mediabunny.mjs"
+      }
+    ],
+    "diagnostics": {
+      "kind": "bounded-initialization-context-v1",
+      "bytes": 3103,
+      "sha256": "f09df803982b932355225e1fb7854c16451bdd5a73a6532e2d6393ad526e6a68",
+      "sourcePath": "scripts/issue201/whispercpp-diagnostic/observe-module.mjs",
+      "maximumRecords": 64,
+      "maximumCharacters": 32768,
+      "maximumCharactersPerRecord": 2048
+    }
+  },
+  "model": {
+    "kind": "local-composite-v1",
+    "id": "ggerganov/whisper.cpp",
+    "configurationRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+    "totalBytes": 43537433,
+    "files": [
+      {
+        "path": "ggml-tiny-q8_0.bin",
+        "sourceRepository": "ggerganov/whisper.cpp",
+        "sourceRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+        "upstreamPath": "ggml-tiny-q8_0.bin",
+        "localPath": ".tmp/issue201-whispercpp-preparation/ggml-tiny-q8_0.bin",
+        "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny-q8_0.bin",
+        "bytes": 43537433,
+        "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca"
+      }
+    ],
+    "licenseProvenance": {
+      "noticeEvidence": "docs/evidence/issue201/whispercpp-generated/runtime-notices.zip",
+      "scope": "Pinned multilingual tiny q8_0 GGML weights; exact quantizer provenance remains unknown as recorded in accepted preparation. No numerical parity claim."
+    },
+    "bundleId": "sha256:6f4ab890b02876493211844b95d622da99199d8abb56ec54f6e37ca425091370"
+  },
+  "fixtures": [
+    {
+      "name": "english",
+      "dataset": "hf-internal-testing/librispeech_asr_dummy",
+      "revision": "5be91486e11a2d616f4ec5db8d3fd248585ac07a",
+      "config": "clean",
+      "split": "validation",
+      "row": 0,
+      "originalId": "1272-128104-0000",
+      "sourceUrl": "https://datasets-server.huggingface.co/assets/hf-internal-testing/librispeech_asr_dummy/--/5be91486e11a2d616f4ec5db8d3fd248585ac07a/--/clean/validation/0/audio/audio.wav",
+      "metadataUrl": "https://datasets-server.huggingface.co/first-rows?dataset=hf-internal-testing%2Flibrispeech_asr_dummy&config=clean&split=validation",
+      "license": "CC-BY-4.0",
+      "licenseUrl": "https://www.openslr.org/12",
+      "transcript": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL",
+      "bytes": 187404,
+      "sha256": "799f78ed4beb4de7ceae3a809262d4ce242394342ccd1d58cef7d49dbc2def46",
+      "codec": 1,
+      "channels": 1,
+      "rate": 16000,
+      "bits": 16,
+      "frames": 93680,
+      "durationSeconds": 5.855
+    },
+    {
+      "name": "french",
+      "dataset": "PolyAI/minds14",
+      "revision": "40ce77cb32a384e4d50a568e1ec39ac804019d33",
+      "config": "fr-FR",
+      "split": "train",
+      "row": 0,
+      "originalId": "fr-FR~ADDRESS/response_4.wav",
+      "sourceUrl": "https://datasets-server.huggingface.co/assets/PolyAI/minds14/--/40ce77cb32a384e4d50a568e1ec39ac804019d33/--/fr-FR/train/0/audio/audio.wav",
+      "metadataUrl": "https://datasets-server.huggingface.co/first-rows?dataset=PolyAI%2Fminds14&config=fr-FR&split=train",
+      "license": "CC-BY-4.0",
+      "licenseUrl": "https://huggingface.co/datasets/PolyAI/minds14",
+      "transcript": "je souhaite changer mon adresse",
+      "bytes": 30096,
+      "sha256": "84defdc828ef59cec10364354fbc284bc2cc683fdd4a5edd5863b7bb2c6123a8",
+      "codec": 7,
+      "channels": 1,
+      "rate": 8000,
+      "bits": 8,
+      "frames": 30037,
+      "durationSeconds": 3.754625
+    }
+  ],
+  "derivatives": [
+    {
+      "name": "english-300.wav",
+      "bytes": 9600044,
+      "sha256": "a9860cf9ff8c6a5bbe1959abb5d94fcebd4de35fac70937b7ec2977d02c6d6d9",
+      "description": "300 seconds repeating the pinned English recording with 0.5 seconds digital silence between repeats; the final repeat may be cut at the exact limit. Workload stress, not a natural long-form quality fixture."
+    },
+    {
+      "name": "silence.wav",
+      "bytes": 32044,
+      "sha256": "643f8a8dc8bd9c19225afffad2becfec5426180b3749cb208abdf1a6c8354efc",
+      "description": "Exactly one second of digital silence; no audible tone."
+    },
+    {
+      "name": "corrupt.wav",
+      "bytes": 43,
+      "sha256": "87bf5c6e2799bb64bab80cbdb8b0f4d0707f05d7156cf7f7fa471b393dcabc1e",
+      "description": "Deliberately malformed data for decoder rejection."
+    }
+  ],
+  "thresholds": {
+    "maxWindowSeconds": 30,
+    "maxJobSeconds": 300,
+    "maxNewTokens": 448,
+    "maxWindowWallMs": 120000,
+    "terminationFallbackMs": 100,
+    "maxIncrementalResidentBytes": 1073741824,
+    "maxPcmBytes": 3840000,
+    "maxPreparationScratchBytes": 2097152,
+    "modelCacheByteLimit": 100663296,
+    "englishMaximumWordErrorRate": 0.2,
+    "frenchMaximumWordErrorRate": 0.4,
+    "timestampPolicy": "Finite positive ordered segment intervals within source coverage; missing endpoints stay visible and prohibit automatic cue apply.",
+    "silencePolicy": "All-zero PCM yields empty output without calling inference; this is not a general VAD claim.",
+    "repeatPolicy": "Complete 300-second bounded-window workload plus repeated jobs; report residual process memory, do not equate GC timing to live-owner leaks."
+  },
+  "sampling": {
+    "intervalMs": 100,
+    "maximumGapMs": 250,
+    "beforeAfterProcessInventoryRequired": true
+  }
+}

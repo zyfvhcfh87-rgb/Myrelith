@@ -407,7 +407,8 @@ function validateColorAdjustParams(
   return null
 }
 
-function validateMaskParams(
+/** Validate mask controls only; a prepared path owner validates Bezier geometry separately. */
+export function maskNonPathParamsValidationError(
   params: Readonly<Record<string, EffectParamValue>>,
 ): string | null {
   if (params.shape !== 'rectangle' && params.shape !== 'ellipse' && params.shape !== 'bezier') {
@@ -421,8 +422,12 @@ function validateMaskParams(
   }
   if (!requiredBoolean(params.invert)) return 'invert must be a boolean'
   if (!requiredString(params.path)) return 'path must be a string'
-  if (params.shape === 'bezier') return maskBezierPathValidationError(params.path)
   return null
+}
+
+function validateMaskParams(params: Readonly<Record<string, EffectParamValue>>): string | null {
+  return maskNonPathParamsValidationError(params)
+    ?? (params.shape === 'bezier' ? maskBezierPathValidationError(params.path as string) : null)
 }
 
 function validateChromaKeyParams(

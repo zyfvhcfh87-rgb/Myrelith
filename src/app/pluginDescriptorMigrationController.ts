@@ -133,7 +133,7 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 }
 
 function hasEffectAnimation(clip: Clip, effectId: EffectId): boolean {
-  return effectAnimationTracks(clipAnimation(clip)).some(
+  return [...effectAnimationTracks(clipAnimation(clip)), ...(clip.animation?.effectPathTracks ?? [])].some(
     (track) => track.effectId === effectId,
   )
 }

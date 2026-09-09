@@ -1,0 +1,31 @@
+{
+  "checkedAt": "2026-09-08T21:37:15.109702+00:00",
+  "out": "/private/tmp/issue199-g4/2026-09-08T21-36-36.768Z",
+  "pids": [
+    50531,
+    50533,
+    50565,
+    50566,
+    50571,
+    50572,
+    50573,
+    50574,
+    50580,
+    50581
+  ],
+  "psExit": 1,
+  "remaining": "",
+  "psError": "",
+  "port5199ConnectErrno": 61,
+  "driverCleanup": {
+    "contextClosed": true,
+    "remaining": [],
+    "port5199": false,
+    "at": "2026-09-08T21:36:44.453Z"
+  },
+  "supervisorCleanup": {
+    "finalRemaining": [],
+    "port5199": false,
+    "finishedAt": "2026-09-08T21:36:47.402Z"
+  }
+}

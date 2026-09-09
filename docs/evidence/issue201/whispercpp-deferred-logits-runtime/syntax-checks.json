@@ -1,0 +1,18 @@
+[
+  {
+    "path": "scripts/issue201/whispercpp-deferred-logits-run/candidate.mjs",
+    "exitCode": 0
+  },
+  {
+    "path": "scripts/issue201/whispercpp-deferred-logits-run/inspect-glue.mjs",
+    "exitCode": 0
+  },
+  {
+    "path": "scripts/issue201/whispercpp-deferred-logits-run/preflight.mjs",
+    "exitCode": 0
+  },
+  {
+    "path": "scripts/issue201/whispercpp-deferred-logits-run/run-lab.mjs",
+    "exitCode": 0
+  }
+]

@@ -1,0 +1,98 @@
+{
+  "directory": "/private/tmp/issue199-g4/2026-09-08T21-18-48.562Z",
+  "files": {
+    "artifacts.json": {
+      "bytes": 273,
+      "sha256": "bab0ed9b1b692bcb6b95c3de4a323ef8fff42a8e1dadc23fb398b5bc9ab7f48c"
+    },
+    "failure-dom.txt": {
+      "bytes": 3187,
+      "sha256": "f836edf52d0e485b34f52b16dca9e5ffcbaa4b5395cba4d0f3a371ad8e15e1e0"
+    },
+    "failure.png": {
+      "bytes": 132713,
+      "sha256": "d102ebd0c053e7c317031b302f14a3c2ced87be86bf42dfef488dcd8f7765b14"
+    },
+    "g4-oracle.wav": {
+      "bytes": 192044,
+      "sha256": "1d27d38e6cdb857c68318ee89cdcf1406ccdf313ee34b951e6b0c7eef5eaa86a"
+    },
+    "g4-silence.wav": {
+      "bytes": 192044,
+      "sha256": "ede1f6dd33abfce7bb3a45ba79b0ab5f8baae692709dd32214a41da9af55ab13"
+    },
+    "g4-source.webm": {
+      "bytes": 7600,
+      "sha256": "9179d6632426afc4e9ae85d45da4e28352da7f750a4ea197a4f8f7f7dce8408d"
+    },
+    "initial-mixed.myrelith": {
+      "bytes": 9608,
+      "sha256": "02f54a3e1eefe47a16be6083f23d9dd2de6f442ab5a93e2232884e2acd7cd9e0"
+    },
+    "mixed.myrelith": {
+      "bytes": 12424,
+      "sha256": "f0c300b52ad8556ea94fb8bebb837163c9ba67f3a4c3e7014e4d70de7bf776c2"
+    },
+    "result.json": {
+      "bytes": 223643,
+      "sha256": "5f12a2849db2c14cca221af3759970d5fc190402d8c658a72eae067e289a7506"
+    },
+    "server.log": {
+      "bytes": 71,
+      "sha256": "41b31e0a9f7bb5ff2cae731478cf3f049cea8ba093901fa238257c28c9165539"
+    },
+    "session-events.json": {
+      "bytes": 8654,
+      "sha256": "6feeda646e3ad1953df18d82a2b0c33c867d23144cde7550087129b90df37c65"
+    },
+    "step-01-dom.txt": {
+      "bytes": 4879,
+      "sha256": "3a53d40ee9cee97adf1cff51a50ac5d5cf5f143739efb5d410489842d67fcb9d"
+    },
+    "step-01.png": {
+      "bytes": 132860,
+      "sha256": "630839a6546587289251a1d66dbb50916d20eb06fa34c998b382a1e838d66b71"
+    },
+    "step-02-dom.txt": {
+      "bytes": 4901,
+      "sha256": "781e4a23145aeee5999455b904a3e804ceec1dce5fbbdd6ab5ede12cc73407a3"
+    },
+    "step-02.png": {
+      "bytes": 135625,
+      "sha256": "628698bf48638f3b94747075da5db2df3f3ecdaf7ec209b04b36f8f6ddec4759"
+    },
+    "step-03-dom.txt": {
+      "bytes": 4965,
+      "sha256": "4662eb48f5d54d56d959043880af63697d578a9ffd2e56703aa9292a2f0b7c75"
+    },
+    "step-03.png": {
+      "bytes": 137957,
+      "sha256": "8503b0fc8b34d10d03c35a22506be9427af72319dc2f08837389f883c5858144"
+    },
+    "step-04-dom.txt": {
+      "bytes": 3206,
+      "sha256": "6175f37f13cab7306a0655554f2fb93bfc492ce95f89b16c861ce38dd9bf85aa"
+    },
+    "step-04.png": {
+      "bytes": 132752,
+      "sha256": "a61be28250402d792c4d3fb4a3e57a348179f0a39de764170654c3bbb0d8ee27"
+    },
+    "step-05-dom.txt": {
+      "bytes": 3206,
+      "sha256": "6175f37f13cab7306a0655554f2fb93bfc492ce95f89b16c861ce38dd9bf85aa"
+    },
+    "step-05.png": {
+      "bytes": 133269,
+      "sha256": "24263698a190fcfcc76b3a158cb670102f82102b3634298009a694cb97c86711"
+    },
+    "supervisor.json": {
+      "bytes": 622,
+      "sha256": "c85e9dc8e893a73a5d1eab85c7c283b26f43a5585dc69281f3efc6a39b0eed53"
+    },
+    "trace.zip": {
+      "bytes": 7097086,
+      "sha256": "0e56a2cda577fcaf3b51c5192195d18dcd8108fe9c86d6c2b08b3d9d754c53f4"
+    }
+  },
+  "profile": "Private Chromium profile retained as evidence; top-level manifest excludes the directory."
+}

@@ -1,0 +1,90 @@
+{
+  "parentHead": "3a3d126abf7b3edbcce5cc5d9ed8dcea17390337",
+  "status": "caption-painter-source-checkpoint",
+  "sourceFiles": [
+    {
+      "path": "src/domain/captionPaint.ts",
+      "bytes": 5200,
+      "sha256": "929fc84978c7519b817629fa167064c8a7c91329eadbf7f4b4776a7e25cb42e3"
+    },
+    {
+      "path": "src/domain/captionPaint.test.ts",
+      "bytes": 6753,
+      "sha256": "d84ba107bd6b54d6ca0e34b67cf57a6df499580708a2f2b7b7d8b5a044f74533"
+    },
+    {
+      "path": "src/domain/captionExport.ts",
+      "bytes": 4914,
+      "sha256": "8c12964dd5be71e398fd2a9177f3f92b0b34715967814868f5397653c15cdcb1"
+    },
+    {
+      "path": "src/domain/captionExport.test.ts",
+      "bytes": 9095,
+      "sha256": "de464b04cffdb34ea56bc185a4dbe1ccd0fc4d383eaa8ef485f1fddd97d90fd1"
+    },
+    {
+      "path": "src/domain/videoCompositionPlan.ts",
+      "bytes": 13778,
+      "sha256": "40eba58ffbf826cbdf6d86c687c6fed43a41cd8920885e60f5f629a8a35af465"
+    },
+    {
+      "path": "src/domain/videoCompositionPlan.test.ts",
+      "bytes": 22204,
+      "sha256": "ca651faaf8f4076f5c28a86d551835d259826bdc989885e4c11fe7c6780854e4"
+    },
+    {
+      "path": "src/app/exportController.ts",
+      "bytes": 31604,
+      "sha256": "974b5f792282f7aeb0233ad5420e4ab2d7b1176f396ecf16c21726a7abaaa202"
+    },
+    {
+      "path": "src/app/exportController.test.ts",
+      "bytes": 65560,
+      "sha256": "d4a802eb309e307dbb486640b73d68a680520686f66d64719b79cd73e436028c"
+    },
+    {
+      "path": "docs/evidence/issue201/CAPTION_PAINT_RESOLUTION.md",
+      "bytes": 2802,
+      "sha256": "1b16113ccff2ec6854128f231ee80545b840680d0be71e98e01887fa35b10102"
+    }
+  ],
+  "records": [
+    {
+      "path": "first-painter-fixture-failure.txt",
+      "bytes": 1398,
+      "sha256": "876fa09bc653a7aafea34922dcedb712a6668a3c0f0578187bb04d162760e9da"
+    },
+    {
+      "path": "first-typecheck-failure.txt",
+      "bytes": 3315,
+      "sha256": "c835984e484156bd778c511e43fc704608c9e5fd9ed1c01ba912ae783d72e33d"
+    },
+    {
+      "path": "first-wiring-test-failure.txt",
+      "bytes": 1566,
+      "sha256": "c01302c0ef4f8d09d33635894cc33997fe0625b6966976f9d602eae8e12448ae"
+    },
+    {
+      "path": "focused-tests.txt",
+      "bytes": 269,
+      "sha256": "f7d3be2c3392a5de09a4aee840b030d2b9ff6f97c0658a3a3f1947d7e4043020"
+    },
+    {
+      "path": "lint.txt",
+      "bytes": 41,
+      "sha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "production-build.txt",
+      "bytes": 3853,
+      "sha256": "9c0bb29031083f6b15e976632aeeaf5b6c40af725ca56f46590e3b1bb75df9fb"
+    }
+  ],
+  "focusedFiles": 8,
+  "focusedTestsPassed": 176,
+  "productionBuildPassed": true,
+  "lintPassed": true,
+  "browserPixelsQualified": false,
+  "uiWorkflowQualified": false,
+  "speechRuntimeExecuted": false
+}

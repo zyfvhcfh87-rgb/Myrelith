@@ -1,0 +1,17 @@
+{
+  "directory": "/private/tmp/issue199-gate3-browser/2026-09-08T13-35-52.700Z",
+  "files": {
+    "build.log": {
+      "bytes": 3579,
+      "sha256": "d4baa235dd2f5a3fd205aec28985932e9bb1bb8715426c89a746ce7fded52fe2"
+    },
+    "result.json": {
+      "bytes": 33547,
+      "sha256": "d5fd000ac0fea9afa324dde60d77d1d886ba180f9c48332e36f14bf0e5a05160"
+    },
+    "server.log": {
+      "bytes": 401,
+      "sha256": "959284310946afd13f234d15b81c6da2fed355d2b17c8729272079cec7f206f0"
+    }
+  }
+}

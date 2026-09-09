@@ -1,0 +1,64 @@
+{
+  "evidenceVersion": 1,
+  "baseline": "ce91074c276ca6892a74addb7dd673b9a19c7eeb",
+  "productionSourceTree": "5da2bb78f3d4aa7afa494fef2d487fa0cc0bca39",
+  "qualification": "Baseline validation is real. Future compatibility and expanded-title encodings are size projections only; no new schema parser or UI was exercised.",
+  "fixture": {
+    "sequences": 2,
+    "textClipsPerSequence": 300,
+    "dormantSequence": true,
+    "content": "bounded ASCII padding in real text payloads",
+    "maxCharactersPerText": 20000
+  },
+  "rows": [
+    {
+      "targetCharacters": 9999614,
+      "baselineParseSerializeEqual": true,
+      "equalLengthLegacyContentAndColorEditSave": true,
+      "compatibilityProjectionCharacters": 9999614,
+      "proposedSingleUpgradeCharacters": 10000000,
+      "proposedSingleUpgradeGrowth": 386,
+      "proposedForcedAllUpgradeCharacters": 10232114,
+      "proposedForcedAllUpgradeGrowth": 232500,
+      "proposedUpgradeWithinCharacterBudget": true
+    },
+    {
+      "targetCharacters": 9999615,
+      "baselineParseSerializeEqual": true,
+      "equalLengthLegacyContentAndColorEditSave": true,
+      "compatibilityProjectionCharacters": 9999615,
+      "proposedSingleUpgradeCharacters": 10000001,
+      "proposedSingleUpgradeGrowth": 386,
+      "proposedForcedAllUpgradeCharacters": 10232115,
+      "proposedForcedAllUpgradeGrowth": 232500,
+      "proposedUpgradeWithinCharacterBudget": false
+    },
+    {
+      "targetCharacters": 9999999,
+      "baselineParseSerializeEqual": true,
+      "equalLengthLegacyContentAndColorEditSave": true,
+      "compatibilityProjectionCharacters": 9999999,
+      "proposedSingleUpgradeCharacters": 10000385,
+      "proposedSingleUpgradeGrowth": 386,
+      "proposedForcedAllUpgradeCharacters": 10232499,
+      "proposedForcedAllUpgradeGrowth": 232500,
+      "proposedUpgradeWithinCharacterBudget": false
+    },
+    {
+      "targetCharacters": 10000000,
+      "baselineParseSerializeEqual": true,
+      "equalLengthLegacyContentAndColorEditSave": true,
+      "compatibilityProjectionCharacters": 10000000,
+      "proposedSingleUpgradeCharacters": 10000386,
+      "proposedSingleUpgradeGrowth": 386,
+      "proposedForcedAllUpgradeCharacters": 10232500,
+      "proposedForcedAllUpgradeGrowth": 232500,
+      "proposedUpgradeWithinCharacterBudget": false
+    }
+  ],
+  "oneOverLimit": {
+    "characters": 10000001,
+    "baselineParseRejects": true,
+    "baselineSerializeRejects": true
+  }
+}

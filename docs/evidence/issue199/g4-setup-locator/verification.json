@@ -1,0 +1,38 @@
+{
+  "baselineSource": "15eee5e1d3525f727ea90aa5f88db96476828555",
+  "preservedFailureEvidence": "f845e1a3a533bcae5842b44b3e10aaf72c8b3a58",
+  "baselineManifest": "docs/evidence/issue199/g4-preparation/source-hashes.json",
+  "sourceFiles": 939,
+  "unchanged": 938,
+  "changes": [
+    {
+      "path": "scripts/issue199/g4/execute.mjs",
+      "before": "d089f06c1e7f58a4aee3681bee6cccd08c018a4514157379cb2737a981991735",
+      "after": "1d80ff8ddfef990693fb29dfe161b844c156b3ea203883fe140cadf442a61afb"
+    }
+  ],
+  "copies": [
+    {
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-setup-locator-inspection.json",
+      "copy": "inspection.json",
+      "rawSha256": "4e6e106c685fc62103a48b6f3407638ecede58c6705c928dd03d07dc80306259",
+      "copySha256": "4e6e106c685fc62103a48b6f3407638ecede58c6705c928dd03d07dc80306259",
+      "mode": "exact bytes"
+    },
+    {
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-locator-source-check.log",
+      "copy": "source-check.log",
+      "rawSha256": "3f5baec450ae001e3f657c3ee56b69d6b8e11b9417fec9f6b6a787d8441d4806",
+      "copySha256": "3f5baec450ae001e3f657c3ee56b69d6b8e11b9417fec9f6b6a787d8441d4806",
+      "mode": "exact bytes"
+    }
+  ],
+  "checks": {
+    "node --check scripts/issue199/g4/execute.mjs": "passed",
+    "node scripts/issue199/g4/run.mjs --check": "passed;939trackedfiles; executesBrowser false",
+    "git diff --check": "passed",
+    "remaining setup selectors": "inspected ProjectLaunch, Toolbar, preset720values and retained trace/DOM"
+  },
+  "scope": "One locator expression only; native action,720value,fixture,product,CSS,protocol,limits,watchdog and all acceptance assertions unchanged.",
+  "nativeRerun": "not run; parent source review and a new explicit grant required"
+}

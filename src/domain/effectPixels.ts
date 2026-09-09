@@ -8,7 +8,8 @@ import type {
   ChromaKeyParams,
   MaskParams,
 } from './effectStack'
-import { parseMaskBezierPath, type MaskPoint } from './maskPath'
+import type { MaskPoint } from './maskPath'
+import { maskPixelWork, minimumSurfaceIndex, maximumSurfaceIndex, type MaskSurfaceBounds, type MaskPixelWork } from './maskPixelWork'
 
 export interface PixelEffectGeometry {
   readonly surfaceWidth: number
@@ -19,6 +20,8 @@ export interface PixelEffectGeometry {
 
 /** Optional deterministic work evidence for performance regressions. */
 export interface PixelEffectWorkMetrics {
+  /** Co-live typed-array scratch, including masks retained during spatial work. */
+  ownedScratchBytesPeak?: number
   spatialScratchBytesPeak?: number
   spatialPixelVisits?: number
   maskScanlineEdgeTests: number
@@ -33,14 +36,6 @@ interface PixelEffectScratch {
   polygonDistances: Float32Array
 }
 
-interface SurfaceBounds {
-  readonly minimumX: number
-  readonly maximumX: number
-  readonly minimumY: number
-  readonly maximumY: number
-  readonly width: number
-  readonly height: number
-}
 
 interface EllipseMaskGeometry {
   readonly centerX: number
@@ -90,51 +85,6 @@ function applyChromaKey(rgba: Uint8ClampedArray, params: ChromaKeyParams): void 
   }
 }
 
-function cubicPoint(
-  start: MaskPoint,
-  control1: MaskPoint,
-  control2: MaskPoint,
-  end: MaskPoint,
-  amount: number,
-): MaskPoint {
-  const inverse = 1 - amount
-  return {
-    x: inverse ** 3 * start.x
-      + 3 * inverse * inverse * amount * control1.x
-      + 3 * inverse * amount * amount * control2.x
-      + amount ** 3 * end.x,
-    y: inverse ** 3 * start.y
-      + 3 * inverse * inverse * amount * control1.y
-      + 3 * inverse * amount * amount * control2.y
-      + amount ** 3 * end.y,
-  }
-}
-
-function flattenedBezier(params: MaskParams, geometry: PixelEffectGeometry): MaskPoint[] {
-  const path = parseMaskBezierPath(params.path)
-  if (!path) return []
-  const points: MaskPoint[] = []
-  const projectPoint = (point: MaskPoint): MaskPoint => ({
-    x: (params.x + point.x * params.width) * geometry.projectWidth,
-    y: (params.y + point.y * params.height) * geometry.projectHeight,
-  })
-  let start = path.start
-  points.push(projectPoint(start))
-  for (const segment of path.segments) {
-    for (let step = 1; step <= 8; step++) {
-      points.push(projectPoint(cubicPoint(
-        start,
-        segment.control1,
-        segment.control2,
-        segment.end,
-        step / 8,
-      )))
-    }
-    start = segment.end
-  }
-  return points
-}
-
 function distanceToSegment(
   x: number,
   y: number,
@@ -152,6 +102,9 @@ function distanceToSegment(
 
 function ensureInsideScratch(scratch: PixelEffectScratch, length: number): Uint8Array {
   if (scratch.polygonInside.length < length) {
+    // Previous contents are disposable. Drop ownership before growing so the
+    // allocation peak does not include both old and replacement inside arrays.
+    scratch.polygonInside = new Uint8Array(0)
     scratch.polygonInside = new Uint8Array(length)
   }
   const region = scratch.polygonInside.subarray(0, length)
@@ -165,6 +118,7 @@ function ensureDistanceScratch(
   maximum: number,
 ): Float32Array {
   if (scratch.polygonDistances.length < length) {
+    scratch.polygonDistances = new Float32Array(0)
     scratch.polygonDistances = new Float32Array(length)
   }
   const region = scratch.polygonDistances.subarray(0, length)
@@ -175,7 +129,7 @@ function ensureDistanceScratch(
 function rasterizePolygonInside(
   points: readonly MaskPoint[],
   geometry: PixelEffectGeometry,
-  bounds: SurfaceBounds,
+  bounds: MaskSurfaceBounds,
   inside: Uint8Array,
   metrics?: PixelEffectWorkMetrics,
 ): void {
@@ -211,75 +165,10 @@ function rasterizePolygonInside(
   }
 }
 
-function minimumSurfaceIndex(
-  projectCoordinate: number,
-  projectExtent: number,
-  surfaceExtent: number,
-): number {
-  return Math.max(0, Math.ceil(projectCoordinate * surfaceExtent / projectExtent - 0.5))
-}
-
-function maximumSurfaceIndex(
-  projectCoordinate: number,
-  projectExtent: number,
-  surfaceExtent: number,
-): number {
-  return Math.min(
-    surfaceExtent - 1,
-    Math.floor(projectCoordinate * surfaceExtent / projectExtent - 0.5),
-  )
-}
-
-function polygonSurfaceBounds(
-  points: readonly MaskPoint[],
-  geometry: PixelEffectGeometry,
-): SurfaceBounds | null {
-  if (points.length < 3) return null
-  let projectMinimumX = Number.POSITIVE_INFINITY
-  let projectMaximumX = Number.NEGATIVE_INFINITY
-  let projectMinimumY = Number.POSITIVE_INFINITY
-  let projectMaximumY = Number.NEGATIVE_INFINITY
-  for (const point of points) {
-    projectMinimumX = Math.min(projectMinimumX, point.x)
-    projectMaximumX = Math.max(projectMaximumX, point.x)
-    projectMinimumY = Math.min(projectMinimumY, point.y)
-    projectMaximumY = Math.max(projectMaximumY, point.y)
-  }
-  const minimumX = minimumSurfaceIndex(
-    projectMinimumX,
-    geometry.projectWidth,
-    geometry.surfaceWidth,
-  )
-  const maximumX = maximumSurfaceIndex(
-    projectMaximumX,
-    geometry.projectWidth,
-    geometry.surfaceWidth,
-  )
-  const minimumY = minimumSurfaceIndex(
-    projectMinimumY,
-    geometry.projectHeight,
-    geometry.surfaceHeight,
-  )
-  const maximumY = maximumSurfaceIndex(
-    projectMaximumY,
-    geometry.projectHeight,
-    geometry.surfaceHeight,
-  )
-  if (minimumX > maximumX || minimumY > maximumY) return null
-  return {
-    minimumX,
-    maximumX,
-    minimumY,
-    maximumY,
-    width: maximumX - minimumX + 1,
-    height: maximumY - minimumY + 1,
-  }
-}
-
 function rasterizePolygonEdgeDistances(
   points: readonly MaskPoint[],
   geometry: PixelEffectGeometry,
-  bounds: SurfaceBounds,
+  bounds: MaskSurfaceBounds,
   featherPixels: number,
   inside: Uint8Array,
   distances: Float32Array,
@@ -458,14 +347,12 @@ function applyBezierMask(
   rgba: Uint8ClampedArray,
   params: MaskParams,
   geometry: PixelEffectGeometry,
-  points: readonly MaskPoint[],
-  featherPixels: number,
+  work: MaskPixelWork,
   scratch: PixelEffectScratch,
   metrics?: PixelEffectWorkMetrics,
 ): void {
   const pixelCount = geometry.surfaceWidth * geometry.surfaceHeight
-  const bounds = polygonSurfaceBounds(points, geometry)
-  const scratchPixels = bounds === null ? 0 : bounds.width * bounds.height
+  const { points, bounds, insidePixels: scratchPixels, featherPixels } = work
   const inside = ensureInsideScratch(scratch, scratchPixels)
   if (metrics) {
     metrics.maskInsideScratchPixelsPeak = Math.max(
@@ -520,9 +407,6 @@ function applyMask(
   scratch: PixelEffectScratch,
   metrics?: PixelEffectWorkMetrics,
 ): void {
-  const bezierPoints = params.shape === 'bezier'
-    ? flattenedBezier(params, geometry)
-    : []
   const featherPixels = params.feather
     * Math.min(geometry.projectWidth, geometry.projectHeight)
   if (params.shape === 'bezier') {
@@ -530,8 +414,7 @@ function applyMask(
       rgba,
       params,
       geometry,
-      bezierPoints,
-      featherPixels,
+      maskPixelWork(params, geometry),
       scratch,
       metrics,
     )
@@ -604,6 +487,7 @@ export function applyOrderedPixelEffectsToRgba(
     polygonDistances: new Float32Array(0),
   }
   for (const effect of effects) {
+    let spatialScratch = 0
     if (isColorGradingPixel(effect)) {
       throw new Error('Color grading requires the bounded asynchronous grading owner.')
     } else if (effect.kind === 'color-adjust') {
@@ -613,9 +497,17 @@ export function applyOrderedPixelEffectsToRgba(
     } else if (effect.kind === 'mask') {
       applyMask(rgba, effect.params, geometry, scratch, metrics)
     } else {
-      const work = metrics ? { scratchBytesPeak: metrics.spatialScratchBytesPeak ?? 0, pixelVisits: metrics.spatialPixelVisits ?? 0 } : undefined
+      const work = metrics ? { scratchBytesPeak: 0, pixelVisits: 0 } : undefined
       applySpatialEffect(rgba, effect, geometry, work)
-      if (metrics && work) { metrics.spatialScratchBytesPeak = work.scratchBytesPeak; metrics.spatialPixelVisits = work.pixelVisits }
+      if (metrics && work) {
+        spatialScratch = work.scratchBytesPeak
+        metrics.spatialScratchBytesPeak = Math.max(metrics.spatialScratchBytesPeak ?? 0, work.scratchBytesPeak)
+        metrics.spatialPixelVisits = (metrics.spatialPixelVisits ?? 0) + work.pixelVisits
+      }
+    }
+    if (metrics) {
+      metrics.ownedScratchBytesPeak = Math.max(metrics.ownedScratchBytesPeak ?? 0,
+        scratch.polygonInside.byteLength + scratch.polygonDistances.byteLength + spatialScratch)
     }
   }
 }

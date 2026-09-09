@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { describe, expect, test, vi } from 'vitest'
 import type { Clip, TimelineDoc, Track } from '../domain/schema'
 import { scanTimelineLoudness } from './loudnessScan'
@@ -33,7 +34,7 @@ function makeDoc(durationFrames = 1): TimelineDoc {
     locked: false,
   }
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'loudness',
     name: 'Loudness',
     frameRate: { num: 1, den: 1 },

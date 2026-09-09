@@ -1,0 +1,3332 @@
+{
+  "kind": "issue201-speech-lab-result-v1",
+  "recordedAt": "2026-09-08T13:31:54.946Z",
+  "source": {
+    "commit": "500a4834de99db221c1be47f60b01db4f52af58b",
+    "manifestSha256": "c68800d6b46bcecd9bbdfe7ed8abc853bcb8cf194bbe98dc3fd39518f37c8804",
+    "composition": {
+      "preservedCandidate04Sha256": "4aebb4adbd8c0a00615065f4dd3c0d1da5259e2daf5a37f71489e0c5732470e7",
+      "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+      "modelBytes": 43610465,
+      "candidate04PlusStagedBytes": 87232592,
+      "compositePlusStagedBytes": 87220930,
+      "cacheByteLimit": 100663296,
+      "unchangedRuntimeAndNotices": 11,
+      "unchangedFixtures": 5,
+      "retainedCurrentComponents": 6,
+      "originalEncoderPreserved": true,
+      "nativeExecution": false
+    },
+    "model": {
+      "kind": "local-composite-v1",
+      "id": "Xenova/whisper-tiny",
+      "configurationRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+      "totalBytes": 43610465,
+      "files": [
+        {
+          "path": "config.json",
+          "sourceRepository": "Xenova/whisper-tiny",
+          "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+          "upstreamPath": "config.json",
+          "localPath": ".tmp/issue201-package-probe/model/config.json",
+          "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/config.json",
+          "bytes": 2248,
+          "sha256": "2b2e4e519084e0ea028b19b153f95202735a971870d6844aa26e559edd292e94"
+        },
+        {
+          "path": "generation_config.json",
+          "sourceRepository": "Xenova/whisper-tiny",
+          "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+          "upstreamPath": "generation_config.json",
+          "localPath": ".tmp/issue201-package-probe/model/generation_config.json",
+          "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/generation_config.json",
+          "bytes": 3716,
+          "sha256": "68ac791fcb4999461a313472125042934656240ba1cba7d1c2627fcbb19ac24c"
+        },
+        {
+          "path": "preprocessor_config.json",
+          "sourceRepository": "Xenova/whisper-tiny",
+          "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+          "upstreamPath": "preprocessor_config.json",
+          "localPath": ".tmp/issue201-package-probe/model/preprocessor_config.json",
+          "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/preprocessor_config.json",
+          "bytes": 339,
+          "sha256": "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d"
+        },
+        {
+          "path": "tokenizer.json",
+          "sourceRepository": "Xenova/whisper-tiny",
+          "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+          "upstreamPath": "tokenizer.json",
+          "localPath": ".tmp/issue201-package-probe/model/tokenizer.json",
+          "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/tokenizer.json",
+          "bytes": 2480466,
+          "sha256": "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "sourceRepository": "Xenova/whisper-tiny",
+          "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+          "upstreamPath": "tokenizer_config.json",
+          "localPath": ".tmp/issue201-package-probe/model/tokenizer_config.json",
+          "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/tokenizer_config.json",
+          "bytes": 282683,
+          "sha256": "2a4c4281cf9f51ac6ccc406fdc711a087afe6530f671fa7b80953edc498275ce"
+        },
+        {
+          "path": "onnx/encoder_model_quantized.onnx",
+          "sourceRepository": "Xenova/whisper-tiny",
+          "sourceRevision": "ce70c25689c3694faf5ec8206517cd53f0cfb03f",
+          "upstreamPath": "onnx/encoder_model_quantized.onnx",
+          "localPath": ".tmp/issue201-model-alternatives/encoder-2023-07.onnx",
+          "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/ce70c25689c3694faf5ec8206517cd53f0cfb03f/onnx/encoder_model_quantized.onnx",
+          "bytes": 10113248,
+          "sha256": "ca9d7bb2836193704b7e2435e3bbadbed985ac3a79ab7406b244b8865ab1a5c0"
+        },
+        {
+          "path": "onnx/decoder_model_merged_quantized.onnx",
+          "sourceRepository": "Xenova/whisper-tiny",
+          "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+          "upstreamPath": "onnx/decoder_model_merged_quantized.onnx",
+          "localPath": ".tmp/issue201-package-probe/model/onnx/decoder_model_merged_quantized.onnx",
+          "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/onnx/decoder_model_merged_quantized.onnx",
+          "bytes": 30727765,
+          "sha256": "6c0c125986b007d2e3734bec84c18bda0152071b90b87fadac6d7764499927a0"
+        }
+      ],
+      "licenseProvenance": {
+        "originalModel": "openai/whisper-tiny",
+        "originalRevision": "ed50ab0ea2fc43b928969fd70d5fe21eefdd350f",
+        "originalDeclaredLicense": "apache-2.0",
+        "historicalConverterDeclaredLicense": null,
+        "currentConverterDeclaredLicense": "apache-2.0",
+        "scope": "Historical Xenova card has no license field. Original OpenAI card predates the export; current Xenova declaration is recorded separately. No exporter source revision or numerical equivalence is claimed.",
+        "notices": [
+          {
+            "name": "model-ce70c256-README.md",
+            "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/ce70c25689c3694faf5ec8206517cd53f0cfb03f/README.md",
+            "bytes": 501,
+            "sha256": "a48ee7058760c24866e78dbed2f5fc06c1d476680c5dd5c337e22cb254c5eb5e"
+          },
+          {
+            "name": "model-5332fcc3-README.md",
+            "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/README.md",
+            "bytes": 1160,
+            "sha256": "cdd395427d195f122aee69c00e34183f2fadd8bc217aef35ca7c43395b96d29d"
+          },
+          {
+            "name": "model-openai-2023-05-README.md",
+            "url": "https://huggingface.co/openai/whisper-tiny/resolve/ed50ab0ea2fc43b928969fd70d5fe21eefdd350f/README.md",
+            "bytes": 19787,
+            "sha256": "57a3bbbbf1e79369e4d1ced790812a1723b43a256c1b43fc70cc2f3339ae9881"
+          },
+          {
+            "name": "model-Apache-2.0.txt",
+            "source": "Unmodified Apache-2.0 license text, identical to the pinned transformers-LICENSE.txt; not a model-specific copyright claim.",
+            "bytes": 11358,
+            "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+          }
+        ]
+      },
+      "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509"
+    },
+    "files": {
+      "prepare-speech-lab.mjs": "a4bb87f6a66d41d237d313cb31401d7a4109101ba8a1c6026690c0901a86b6be",
+      "run-speech-lab.mjs": "3e630ef0c0e2a6e77420fa1d622a25fa81940a945a021e4ed8037c8601ea781e",
+      "lab-client.mjs": "9677d056f1ac30308d0459c8d68d28c25b212ccc57f5f878af9fa9bbdb8f4e2d",
+      "model-worker.mjs": "46bc2c2fae2a6cc22bf1ba51735cd48dba6f33dae9f45b1e06e2055920ee8466",
+      "lab-contract.mjs": "0d3620158311121515d2c475ec71ccd7d5a6648b1e19ac6f8f904db780b534ba",
+      "encoder-fetch-policy.mjs": "6f95abbfe706068f0d1188e907c7c8138c4be6dc931d907280d3db9aacfd6365",
+      "composite-model.mjs": "b719b688616d46bef993a105b4f2fd9f40fe43deadd7374c87a221cec53dc2d6",
+      "composite-preflight.mjs": "ebe12e3a541fb8a104939854783747bb64bb09e6f469a728b33ca2c7ac26ad8e",
+      "prepare-encoder-composite.mjs": "923091b42b381de9fe6986881bc4268d148acba1019913ef58c58cd634adc70e"
+    }
+  },
+  "qualification": "Isolated laboratory only; production editor integration and broader audio/browser/language configurations are not qualified.",
+  "runtime": {
+    "browserVersion": {
+      "protocolVersion": "1.3",
+      "product": "HeadlessChrome/151.0.7922.34",
+      "revision": "@782af9cb30a53f54487e5d2e44738645a8ec457c",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+      "jsVersion": "15.1.206.8"
+    },
+    "platform": "darwin",
+    "architecture": "arm64",
+    "nodeVersion": "v26.8.1",
+    "threads": 1,
+    "device": "wasm",
+    "sessionOptions": {
+      "graphOptimizationLevel": "all",
+      "extra": {
+        "session": {
+          "disable_quant_qdq": "1"
+        }
+      }
+    },
+    "encoderFetchPolicy": {
+      "sessionKey": "model",
+      "inputNames": [
+        "input_features"
+      ],
+      "expectedOutputNames": [
+        "last_hidden_state"
+      ],
+      "fetchNames": [
+        "last_hidden_state"
+      ]
+    },
+    "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+    "configurationRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1"
+  },
+  "acceptance": {
+    "automatedStatus": "failed-incomplete",
+    "expectedCases": 23,
+    "completedCases": 9,
+    "missing": [
+      "transcribe-english-9",
+      "transcribe-french-10",
+      "transcribe-silence-11",
+      "one-second-speech-window",
+      "corrupt-audio-rejection",
+      "cancel-model-load",
+      "cancel-prepare",
+      "cancel-infer",
+      "project-replacement",
+      "300-second-bounded-workload",
+      "offline-loaded-app-and-fresh-worker",
+      "offline-page-reload",
+      "offline-persistent-browser-reopen",
+      "remove-model-and-offline-no-model"
+    ],
+    "failed": [
+      "transcribe-english-8"
+    ],
+    "unexpected": [],
+    "duplicateNames": false,
+    "qualification": "Automatic laboratory checks only; no production/model enablement verdict."
+  },
+  "results": [
+    {
+      "name": "no-model-and-lazy-runtime",
+      "passed": true,
+      "elapsedMs": 31,
+      "data": {
+        "generation": 1,
+        "phase": "idle",
+        "workerOwners": 0,
+        "acquisitionOwners": 0,
+        "lastCleanup": null,
+        "events": []
+      },
+      "serverRequests": []
+    },
+    {
+      "name": "cancel-acquisition",
+      "passed": true,
+      "elapsedMs": 106,
+      "data": {
+        "state": {
+          "generation": 1,
+          "phase": "idle",
+          "workerOwners": 0,
+          "acquisitionOwners": 0,
+          "lastCleanup": null,
+          "events": [
+            {
+              "at": 54.599999994039536,
+              "type": "acquisition-file",
+              "file": "config.json"
+            }
+          ]
+        },
+        "completion": {
+          "error": "acquisition-test"
+        },
+        "cache": {
+          "model": {
+            "error": "No local speech model is installed"
+          },
+          "estimate": {
+            "quota": 10737418240,
+            "usage": 0,
+            "usageDetails": {}
+          },
+          "cacheNames": [
+            "myrelith-issue201-lab-registry"
+          ]
+        }
+      },
+      "serverRequests": []
+    },
+    {
+      "name": "verified-model-install",
+      "passed": true,
+      "elapsedMs": 66,
+      "data": {
+        "bytes": 43610465,
+        "name": "myrelith-issue201-lab-model-11762c42-c927-46c9-a682-7bc43f934354"
+      },
+      "serverRequests": [
+        {
+          "url": "/model/config.json",
+          "encodedBytes": 2248,
+          "decodedBytes": 2248,
+          "gzip": false
+        },
+        {
+          "url": "/model/generation_config.json",
+          "encodedBytes": 3716,
+          "decodedBytes": 3716,
+          "gzip": false
+        },
+        {
+          "url": "/model/preprocessor_config.json",
+          "encodedBytes": 339,
+          "decodedBytes": 339,
+          "gzip": false
+        },
+        {
+          "url": "/model/tokenizer.json",
+          "encodedBytes": 2480466,
+          "decodedBytes": 2480466,
+          "gzip": false
+        },
+        {
+          "url": "/model/tokenizer_config.json",
+          "encodedBytes": 282683,
+          "decodedBytes": 282683,
+          "gzip": false
+        },
+        {
+          "url": "/model/onnx/encoder_model_quantized.onnx",
+          "encodedBytes": 10113248,
+          "decodedBytes": 10113248,
+          "gzip": false
+        },
+        {
+          "url": "/model/onnx/decoder_model_merged_quantized.onnx",
+          "encodedBytes": 30727765,
+          "decodedBytes": 30727765,
+          "gzip": false
+        }
+      ]
+    },
+    {
+      "name": "cancel-cache-write-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 340,
+      "data": {
+        "before": {
+          "model": {
+            "name": "myrelith-issue201-lab-model-11762c42-c927-46c9-a682-7bc43f934354",
+            "identity": "dc4dc4fe5dd8a939130ebc3e7a63beee2010d5330ebe5497d80e549b509416f2",
+            "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+            "configurationRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+            "bytes": 43610465
+          },
+          "estimate": {
+            "quota": 10781036544,
+            "usage": 43618304,
+            "usageDetails": {
+              "caches": 43618304
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-lab-registry",
+            "myrelith-issue201-lab-model-11762c42-c927-46c9-a682-7bc43f934354"
+          ]
+        },
+        "state": {
+          "generation": 1,
+          "phase": "idle",
+          "workerOwners": 0,
+          "acquisitionOwners": 0,
+          "lastCleanup": null,
+          "events": [
+            {
+              "at": 259.09999999403954,
+              "type": "acquisition-file",
+              "file": "config.json"
+            },
+            {
+              "at": 259.8999999910593,
+              "type": "cache-write",
+              "file": "config.json"
+            }
+          ]
+        },
+        "completion": {
+          "error": "cache-race"
+        },
+        "after": {
+          "model": {
+            "name": "myrelith-issue201-lab-model-11762c42-c927-46c9-a682-7bc43f934354",
+            "identity": "dc4dc4fe5dd8a939130ebc3e7a63beee2010d5330ebe5497d80e549b509416f2",
+            "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+            "configurationRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+            "bytes": 43610465
+          },
+          "estimate": {
+            "quota": 10781039872,
+            "usage": 43621632,
+            "usageDetails": {
+              "caches": 43621632
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-lab-registry",
+            "myrelith-issue201-lab-model-11762c42-c927-46c9-a682-7bc43f934354"
+          ]
+        }
+      },
+      "serverRequests": [
+        {
+          "url": "/model/config.json",
+          "encodedBytes": 2248,
+          "decodedBytes": 2248,
+          "gzip": false
+        }
+      ]
+    },
+    {
+      "name": "cancel-cache-commit-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 409,
+      "data": {
+        "before": {
+          "model": {
+            "name": "myrelith-issue201-lab-model-11762c42-c927-46c9-a682-7bc43f934354",
+            "identity": "dc4dc4fe5dd8a939130ebc3e7a63beee2010d5330ebe5497d80e549b509416f2",
+            "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+            "configurationRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+            "bytes": 43610465
+          },
+          "estimate": {
+            "quota": 10781039872,
+            "usage": 43621632,
+            "usageDetails": {
+              "caches": 43621632
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-lab-registry",
+            "myrelith-issue201-lab-model-11762c42-c927-46c9-a682-7bc43f934354"
+          ]
+        },
+        "state": {
+          "generation": 1,
+          "phase": "idle",
+          "workerOwners": 0,
+          "acquisitionOwners": 0,
+          "lastCleanup": null,
+          "events": [
+            {
+              "at": 603.5999999940395,
+              "type": "acquisition-file",
+              "file": "config.json"
+            },
+            {
+              "at": 604.5,
+              "type": "cache-write",
+              "file": "config.json"
+            },
+            {
+              "at": 605,
+              "type": "acquisition-file",
+              "file": "generation_config.json"
+            },
+            {
+              "at": 605.7000000029802,
+              "type": "cache-write",
+              "file": "generation_config.json"
+            },
+            {
+              "at": 606.0999999940395,
+              "type": "acquisition-file",
+              "file": "preprocessor_config.json"
+            },
+            {
+              "at": 606.7000000029802,
+              "type": "cache-write",
+              "file": "preprocessor_config.json"
+            },
+            {
+              "at": 607.0999999940395,
+              "type": "acquisition-file",
+              "file": "tokenizer.json"
+            },
+            {
+              "at": 610.5,
+              "type": "cache-write",
+              "file": "tokenizer.json"
+            },
+            {
+              "at": 611.7000000029802,
+              "type": "acquisition-file",
+              "file": "tokenizer_config.json"
+            },
+            {
+              "at": 612.7000000029802,
+              "type": "cache-write",
+              "file": "tokenizer_config.json"
+            },
+            {
+              "at": 613.0999999940395,
+              "type": "acquisition-file",
+              "file": "onnx/encoder_model_quantized.onnx"
+            },
+            {
+              "at": 624.8999999910593,
+              "type": "cache-write",
+              "file": "onnx/encoder_model_quantized.onnx"
+            },
+            {
+              "at": 628.5,
+              "type": "acquisition-file",
+              "file": "onnx/decoder_model_merged_quantized.onnx"
+            },
+            {
+              "at": 653.2999999970198,
+              "type": "cache-write",
+              "file": "onnx/decoder_model_merged_quantized.onnx"
+            },
+            {
+              "at": 661.8999999910593,
+              "type": "cache-commit"
+            }
+          ]
+        },
+        "completion": {
+          "error": "Cancelled model publication rolled back"
+        },
+        "after": {
+          "model": {
+            "name": "myrelith-issue201-lab-model-11762c42-c927-46c9-a682-7bc43f934354",
+            "identity": "dc4dc4fe5dd8a939130ebc3e7a63beee2010d5330ebe5497d80e549b509416f2",
+            "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+            "configurationRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+            "bytes": 43610465
+          },
+          "estimate": {
+            "quota": 10824654080,
+            "usage": 87235840,
+            "usageDetails": {
+              "caches": 87235840
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-lab-registry",
+            "myrelith-issue201-lab-model-11762c42-c927-46c9-a682-7bc43f934354"
+          ]
+        }
+      },
+      "serverRequests": [
+        {
+          "url": "/model/config.json",
+          "encodedBytes": 2248,
+          "decodedBytes": 2248,
+          "gzip": false
+        },
+        {
+          "url": "/model/generation_config.json",
+          "encodedBytes": 3716,
+          "decodedBytes": 3716,
+          "gzip": false
+        },
+        {
+          "url": "/model/preprocessor_config.json",
+          "encodedBytes": 339,
+          "decodedBytes": 339,
+          "gzip": false
+        },
+        {
+          "url": "/model/tokenizer.json",
+          "encodedBytes": 2480466,
+          "decodedBytes": 2480466,
+          "gzip": false
+        },
+        {
+          "url": "/model/tokenizer_config.json",
+          "encodedBytes": 282683,
+          "decodedBytes": 282683,
+          "gzip": false
+        },
+        {
+          "url": "/model/onnx/encoder_model_quantized.onnx",
+          "encodedBytes": 10113248,
+          "decodedBytes": 10113248,
+          "gzip": false
+        },
+        {
+          "url": "/model/onnx/decoder_model_merged_quantized.onnx",
+          "encodedBytes": 30727765,
+          "decodedBytes": 30727765,
+          "gzip": false
+        }
+      ]
+    },
+    {
+      "name": "corrupt-cache-rejected-before-inference",
+      "passed": true,
+      "elapsedMs": 36,
+      "data": {
+        "error": "Model cache digest mismatch",
+        "state": {
+          "generation": 1,
+          "phase": "idle",
+          "workerOwners": 0,
+          "acquisitionOwners": 0,
+          "lastCleanup": null,
+          "events": []
+        }
+      },
+      "serverRequests": []
+    },
+    {
+      "name": "selected-local-files-install",
+      "passed": true,
+      "elapsedMs": 88,
+      "data": {
+        "bytes": 43610465,
+        "name": "myrelith-issue201-lab-model-9cbb6dad-0fd0-4053-bbac-97dfa17a3435"
+      },
+      "serverRequests": []
+    },
+    {
+      "name": "capacity-rejection-preserves-model",
+      "passed": true,
+      "elapsedMs": 65,
+      "data": {
+        "error": "Model cache capacity is insufficient",
+        "before": {
+          "model": {
+            "name": "myrelith-issue201-lab-model-9cbb6dad-0fd0-4053-bbac-97dfa17a3435",
+            "identity": "dc4dc4fe5dd8a939130ebc3e7a63beee2010d5330ebe5497d80e549b509416f2",
+            "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+            "configurationRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+            "bytes": 43610465
+          },
+          "estimate": {
+            "quota": 10868271616,
+            "usage": 130853376,
+            "usageDetails": {
+              "caches": 130853376
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-lab-registry",
+            "myrelith-issue201-lab-model-9cbb6dad-0fd0-4053-bbac-97dfa17a3435"
+          ]
+        },
+        "after": {
+          "model": {
+            "name": "myrelith-issue201-lab-model-9cbb6dad-0fd0-4053-bbac-97dfa17a3435",
+            "identity": "dc4dc4fe5dd8a939130ebc3e7a63beee2010d5330ebe5497d80e549b509416f2",
+            "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+            "configurationRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+            "bytes": 43610465
+          },
+          "estimate": {
+            "quota": 10781036544,
+            "usage": 43618304,
+            "usageDetails": {
+              "caches": 43618304
+            }
+          },
+          "cacheNames": [
+            "myrelith-issue201-lab-registry",
+            "myrelith-issue201-lab-model-9cbb6dad-0fd0-4053-bbac-97dfa17a3435"
+          ]
+        }
+      },
+      "serverRequests": []
+    },
+    {
+      "name": "transcribe-english-8",
+      "passed": false,
+      "elapsedMs": 636,
+      "error": "page.evaluate: Error: Worker terminated: resident-ceiling\n    at closeWorker (http://127.0.0.1:5201/lab-client.mjs:129:22)\n    at Object.cancel (http://127.0.0.1:5201/lab-client.mjs:164:9)\n    at eval (eval at evaluate (:311:30), <anonymous>:1:23)\n    at UtilityScript.evaluate (<anonymous>:313:16)\n    at UtilityScript.<anonymous> (<anonymous>:1:44)",
+      "failedState": {
+        "generation": 1,
+        "phase": "idle",
+        "workerOwners": 0,
+        "acquisitionOwners": 0,
+        "lastCleanup": {
+          "mode": "terminated-active",
+          "reason": "resident-ceiling",
+          "elapsedMs": 0.20000000298023224,
+          "cooperativeZero": false
+        },
+        "events": [
+          {
+            "at": 1206.5999999940395,
+            "type": "phase",
+            "phase": "runtime-import"
+          },
+          {
+            "at": 1218,
+            "type": "phase",
+            "phase": "model-load"
+          },
+          {
+            "at": 1218.3999999910593,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/config.json",
+            "file": "config.json"
+          },
+          {
+            "at": 1219,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/tokenizer_config.json",
+            "file": "tokenizer_config.json"
+          },
+          {
+            "at": 1219.3999999910593,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/preprocessor_config.json",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1219.5,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/config.json",
+            "file": "config.json"
+          },
+          {
+            "at": 1219.5,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/onnx/encoder_model_quantized.onnx",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1219.5,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/onnx/decoder_model_merged_quantized.onnx",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1219.5,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/generation_config.json",
+            "file": "generation_config.json"
+          },
+          {
+            "at": 1219.5,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/tokenizer.json",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1219.7999999970198,
+            "type": "progress",
+            "status": "initiate",
+            "file": "config.json"
+          },
+          {
+            "at": 1219.7999999970198,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/config.json",
+            "file": "config.json"
+          },
+          {
+            "at": 1219.8999999910593,
+            "type": "progress",
+            "status": "download",
+            "file": "config.json"
+          },
+          {
+            "at": 1220.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1220.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "config.json"
+          },
+          {
+            "at": 1220.0999999940395,
+            "type": "progress",
+            "status": "done",
+            "file": "config.json"
+          },
+          {
+            "at": 1220.2000000029802,
+            "type": "progress",
+            "status": "initiate",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1220.2000000029802,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/preprocessor_config.json",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1220.2000000029802,
+            "type": "progress",
+            "status": "initiate",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1220.2000000029802,
+            "type": "progress",
+            "status": "initiate",
+            "file": "tokenizer_config.json"
+          },
+          {
+            "at": 1220.2999999970198,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/tokenizer.json",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1220.2999999970198,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/tokenizer_config.json",
+            "file": "tokenizer_config.json"
+          },
+          {
+            "at": 1220.5,
+            "type": "progress",
+            "status": "initiate",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1220.5,
+            "type": "progress",
+            "status": "initiate",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1220.5,
+            "type": "progress",
+            "status": "initiate",
+            "file": "generation_config.json"
+          },
+          {
+            "at": 1220.5,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/onnx/encoder_model_quantized.onnx",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1220.5,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/onnx/decoder_model_merged_quantized.onnx",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1220.5,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/generation_config.json",
+            "file": "generation_config.json"
+          },
+          {
+            "at": 1220.5,
+            "type": "progress",
+            "status": "download",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1220.5,
+            "type": "progress",
+            "status": "download",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1220.7000000029802,
+            "type": "progress",
+            "status": "download",
+            "file": "tokenizer_config.json"
+          },
+          {
+            "at": 1220.7000000029802,
+            "type": "progress",
+            "status": "download",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1220.7000000029802,
+            "type": "progress",
+            "status": "download",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1220.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1220.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1220.7000000029802,
+            "type": "progress",
+            "status": "download",
+            "file": "generation_config.json"
+          },
+          {
+            "at": 1220.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1220.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1221.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1221.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1221.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1221.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1221.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1221.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1221.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1221.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1221.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1221.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1221.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1221.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "tokenizer_config.json"
+          },
+          {
+            "at": 1221.2999999970198,
+            "type": "progress",
+            "status": "done",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1221.3999999910593,
+            "type": "progress",
+            "status": "initiate",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1221.3999999910593,
+            "type": "model-read",
+            "key": "/models/Xenova/whisper-tiny/preprocessor_config.json",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1221.3999999910593,
+            "type": "progress",
+            "status": "initiate",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1221.3999999910593,
+            "type": "progress",
+            "status": "initiate",
+            "file": "tokenizer_config.json"
+          },
+          {
+            "at": 1221.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1221.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1221.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1221.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.3999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.3999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.5,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.5,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1222.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1222.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1223,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1223,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1223,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1223,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1223.3999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1223.3999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1223.5,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1223.5,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1223.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1223.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1223.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1223.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1223.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1223.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1223.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1223.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1223.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1223.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1223.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1223.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.2000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.2000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.2000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.2000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.3999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.3999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.3999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.3999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.3999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.3999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.5,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.5,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1224.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1224.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.2000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.2000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.3999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.3999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.5,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.5,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.5,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.5,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1225.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1225.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.2000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.2000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.2000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.2000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.5,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.5,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.5,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.5,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1226.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1226.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.0999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.0999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.2999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.2999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.3999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.3999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.5,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.5,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.5,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.5,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.5,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.5,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.5999999940395,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.5999999940395,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1227.8999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1227.8999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1228,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1228,
+            "type": "progress",
+            "status": "progress",
+            "file": "generation_config.json"
+          },
+          {
+            "at": 1228,
+            "type": "progress",
+            "status": "done",
+            "file": "tokenizer_config.json"
+          },
+          {
+            "at": 1228.7000000029802,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1228.7000000029802,
+            "type": "progress",
+            "status": "progress",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1228.7999999970198,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1228.7999999970198,
+            "type": "progress",
+            "status": "progress",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1228.8999999910593,
+            "type": "progress",
+            "status": "download",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1229.0999999940395,
+            "type": "progress",
+            "status": "done",
+            "file": "tokenizer.json"
+          },
+          {
+            "at": 1286.2000000029802,
+            "type": "progress",
+            "status": "done",
+            "file": "onnx/encoder_model_quantized.onnx"
+          },
+          {
+            "at": 1287.2999999970198,
+            "type": "progress",
+            "status": "done",
+            "file": "onnx/decoder_model_merged_quantized.onnx"
+          },
+          {
+            "at": 1287.2999999970198,
+            "type": "progress",
+            "status": "done",
+            "file": "generation_config.json"
+          },
+          {
+            "at": 1287.3999999910593,
+            "type": "progress",
+            "status": "progress_total",
+            "file": null
+          },
+          {
+            "at": 1287.3999999910593,
+            "type": "progress",
+            "status": "progress",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1287.5,
+            "type": "progress",
+            "status": "done",
+            "file": "preprocessor_config.json"
+          },
+          {
+            "at": 1290.3999999910593,
+            "type": "fetch",
+            "url": "http://127.0.0.1:5201/assets/ort-wasm-simd-threaded.wasm"
+          },
+          {
+            "at": 1578.2999999970198,
+            "type": "progress",
+            "status": "ready",
+            "file": null
+          },
+          {
+            "at": 1578.3999999910593,
+            "type": "ready",
+            "loadMs": 360.29999999701977,
+            "ledger": {
+              "modelOwners": 1,
+              "inputOwners": 0,
+              "sampleOwners": 0,
+              "acquiredSamples": 0,
+              "closedSamples": 0,
+              "pcmBytes": 0,
+              "maxPcmBytes": 0,
+              "windows": 0
+            },
+            "version": "4.2.0",
+            "sessionOptions": {
+              "graphOptimizationLevel": "all",
+              "extra": {
+                "session": {
+                  "disable_quant_qdq": "1"
+                }
+              }
+            },
+            "encoderFetchPolicy": {
+              "sessionKey": "model",
+              "inputNames": [
+                "input_features"
+              ],
+              "expectedOutputNames": [
+                "last_hidden_state"
+              ],
+              "fetchNames": [
+                "last_hidden_state"
+              ]
+            },
+            "modelIdentity": "dc4dc4fe5dd8a939130ebc3e7a63beee2010d5330ebe5497d80e549b509416f2",
+            "bundleId": "sha256:f480eedc77e25c9f851469714c50af263417fb2122ab48e329888a83464f3509",
+            "configurationRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+            "files": [
+              {
+                "path": "config.json",
+                "sourceRepository": "Xenova/whisper-tiny",
+                "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+                "upstreamPath": "config.json",
+                "localPath": ".tmp/issue201-package-probe/model/config.json",
+                "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/config.json",
+                "bytes": 2248,
+                "sha256": "2b2e4e519084e0ea028b19b153f95202735a971870d6844aa26e559edd292e94"
+              },
+              {
+                "path": "generation_config.json",
+                "sourceRepository": "Xenova/whisper-tiny",
+                "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+                "upstreamPath": "generation_config.json",
+                "localPath": ".tmp/issue201-package-probe/model/generation_config.json",
+                "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/generation_config.json",
+                "bytes": 3716,
+                "sha256": "68ac791fcb4999461a313472125042934656240ba1cba7d1c2627fcbb19ac24c"
+              },
+              {
+                "path": "preprocessor_config.json",
+                "sourceRepository": "Xenova/whisper-tiny",
+                "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+                "upstreamPath": "preprocessor_config.json",
+                "localPath": ".tmp/issue201-package-probe/model/preprocessor_config.json",
+                "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/preprocessor_config.json",
+                "bytes": 339,
+                "sha256": "a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d"
+              },
+              {
+                "path": "tokenizer.json",
+                "sourceRepository": "Xenova/whisper-tiny",
+                "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+                "upstreamPath": "tokenizer.json",
+                "localPath": ".tmp/issue201-package-probe/model/tokenizer.json",
+                "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/tokenizer.json",
+                "bytes": 2480466,
+                "sha256": "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566"
+              },
+              {
+                "path": "tokenizer_config.json",
+                "sourceRepository": "Xenova/whisper-tiny",
+                "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+                "upstreamPath": "tokenizer_config.json",
+                "localPath": ".tmp/issue201-package-probe/model/tokenizer_config.json",
+                "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/tokenizer_config.json",
+                "bytes": 282683,
+                "sha256": "2a4c4281cf9f51ac6ccc406fdc711a087afe6530f671fa7b80953edc498275ce"
+              },
+              {
+                "path": "onnx/encoder_model_quantized.onnx",
+                "sourceRepository": "Xenova/whisper-tiny",
+                "sourceRevision": "ce70c25689c3694faf5ec8206517cd53f0cfb03f",
+                "upstreamPath": "onnx/encoder_model_quantized.onnx",
+                "localPath": ".tmp/issue201-model-alternatives/encoder-2023-07.onnx",
+                "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/ce70c25689c3694faf5ec8206517cd53f0cfb03f/onnx/encoder_model_quantized.onnx",
+                "bytes": 10113248,
+                "sha256": "ca9d7bb2836193704b7e2435e3bbadbed985ac3a79ab7406b244b8865ab1a5c0"
+              },
+              {
+                "path": "onnx/decoder_model_merged_quantized.onnx",
+                "sourceRepository": "Xenova/whisper-tiny",
+                "sourceRevision": "5332fcc35e32a33b86612b9a57a89be7906102b1",
+                "upstreamPath": "onnx/decoder_model_merged_quantized.onnx",
+                "localPath": ".tmp/issue201-package-probe/model/onnx/decoder_model_merged_quantized.onnx",
+                "url": "https://huggingface.co/Xenova/whisper-tiny/resolve/5332fcc35e32a33b86612b9a57a89be7906102b1/onnx/decoder_model_merged_quantized.onnx",
+                "bytes": 30727765,
+                "sha256": "6c0c125986b007d2e3734bec84c18bda0152071b90b87fadac6d7764499927a0"
+              }
+            ]
+          },
+          {
+            "at": 1580.7999999970198,
+            "type": "phase",
+            "phase": "decode-setup"
+          },
+          {
+            "at": 1582.3999999910593,
+            "type": "phase",
+            "phase": "prepare",
+            "start": 0,
+            "end": 5.855
+          },
+          {
+            "at": 1584.7999999970198,
+            "type": "phase",
+            "phase": "infer",
+            "start": 0,
+            "end": 5.855,
+            "ledger": {
+              "modelOwners": 1,
+              "inputOwners": 1,
+              "sampleOwners": 0,
+              "acquiredSamples": 46,
+              "closedSamples": 46,
+              "pcmBytes": 374720,
+              "maxPcmBytes": 374720,
+              "windows": 0
+            }
+          },
+          {
+            "at": 1654.7000000029802,
+            "type": "encoder-fetch-start",
+            "index": 1,
+            "requested": [
+              "last_hidden_state"
+            ],
+            "omitted": []
+          },
+          {
+            "at": 1785.0999999940395,
+            "type": "cleanup",
+            "mode": "terminated-active",
+            "reason": "resident-ceiling",
+            "elapsedMs": 0.20000000298023224,
+            "cooperativeZero": false
+          }
+        ]
+      },
+      "serverRequests": [
+        {
+          "url": "/fixtures/english.wav",
+          "encodedBytes": 156546,
+          "decodedBytes": 187404,
+          "gzip": true
+        },
+        {
+          "url": "/model-worker.mjs",
+          "encodedBytes": 4005,
+          "decodedBytes": 11369,
+          "gzip": true
+        },
+        {
+          "url": "/assets/mediabunny.mjs",
+          "encodedBytes": 159759,
+          "decodedBytes": 624835,
+          "gzip": true
+        },
+        {
+          "url": "/lab-contract.mjs",
+          "encodedBytes": 1836,
+          "decodedBytes": 4604,
+          "gzip": true
+        },
+        {
+          "url": "/encoder-fetch-policy.mjs",
+          "encodedBytes": 922,
+          "decodedBytes": 2321,
+          "gzip": true
+        },
+        {
+          "url": "/assets/transformers.local.mjs",
+          "encodedBytes": 120673,
+          "decodedBytes": 431648,
+          "gzip": true
+        },
+        {
+          "url": "/assets/ort.wasm.min.mjs",
+          "encodedBytes": 16185,
+          "decodedBytes": 50069,
+          "gzip": true
+        },
+        {
+          "url": "/assets/ort-wasm-simd-threaded.mjs",
+          "encodedBytes": 9090,
+          "decodedBytes": 24180,
+          "gzip": true
+        },
+        {
+          "url": "/assets/ort-wasm-simd-threaded.wasm",
+          "encodedBytes": 3321755,
+          "decodedBytes": 12942611,
+          "gzip": true
+        }
+      ]
+    }
+  ],
+  "problems": [
+    {
+      "type": "resident-ceiling",
+      "at": 1788874314906,
+      "baseline": 272433152,
+      "sample": 1379778560,
+      "incremental": 1107345408,
+      "action": "cancel job then close browser; no further cases",
+      "browserClosedAt": 1788874314946
+    },
+    {
+      "type": "final-cleanup-unverified",
+      "status": "unavailable",
+      "reason": "Browser already closed; no cooperative cache-cleanup claim"
+    }
+  ],
+  "stopReason": {
+    "type": "resident-ceiling",
+    "at": 1788874314906,
+    "baseline": 272433152,
+    "sample": 1379778560,
+    "incremental": 1107345408,
+    "action": "cancel job then close browser; no further cases",
+    "browserClosedAt": 1788874314946
+  },
+  "finalCleanup": {
+    "status": "unavailable",
+    "reason": "Browser already closed; no cooperative cache-cleanup claim"
+  },
+  "memoryAssessment": null,
+  "memory": [
+    {
+      "at": 1788874313143,
+      "label": "idle-baseline",
+      "complete": true,
+      "bytes": 272433152,
+      "processes": [
+        {
+          "id": 62273,
+          "type": "browser"
+        },
+        {
+          "id": 62276,
+          "type": "renderer"
+        },
+        {
+          "id": 62274,
+          "type": "GPU"
+        },
+        {
+          "id": 62275,
+          "type": "network.mojom.NetworkService"
+        }
+      ],
+      "rss": [
+        [
+          62273,
+          85792
+        ],
+        [
+          62274,
+          47168
+        ],
+        [
+          62275,
+          44944
+        ],
+        [
+          62276,
+          88144
+        ]
+      ]
+    },
+    {
+      "at": 1788874313395,
+      "label": "periodic",
+      "complete": true,
+      "bytes": 552157184,
+      "processes": [
+        {
+          "id": 62273,
+          "type": "browser"
+        },
+        {
+          "id": 62276,
+          "type": "renderer"
+        },
+        {
+          "id": 62274,
+          "type": "GPU"
+        },
+        {
+          "id": 62275,
+          "type": "network.mojom.NetworkService"
+        }
+      ],
+      "rss": [
+        [
+          62273,
+          132864
+        ],
+        [
+          62274,
+          56176
+        ],
+        [
+          62275,
+          44960
+        ],
+        [
+          62276,
+          305216
+        ]
+      ]
+    },
+    {
+      "at": 1788874313651,
+      "label": "periodic",
+      "complete": true,
+      "bytes": 559366144,
+      "processes": [
+        {
+          "id": 62273,
+          "type": "browser"
+        },
+        {
+          "id": 62276,
+          "type": "renderer"
+        },
+        {
+          "id": 62274,
+          "type": "GPU"
+        },
+        {
+          "id": 62275,
+          "type": "network.mojom.NetworkService"
+        }
+      ],
+      "rss": [
+        [
+          62273,
+          134960
+        ],
+        [
+          62274,
+          56176
+        ],
+        [
+          62275,
+          44960
+        ],
+        [
+          62276,
+          310160
+        ]
+      ]
+    },
+    {
+      "at": 1788874313900,
+      "label": "periodic",
+      "complete": true,
+      "bytes": 794951680,
+      "processes": [
+        {
+          "id": 62273,
+          "type": "browser"
+        },
+        {
+          "id": 62276,
+          "type": "renderer"
+        },
+        {
+          "id": 62274,
+          "type": "GPU"
+        },
+        {
+          "id": 62275,
+          "type": "network.mojom.NetworkService"
+        }
+      ],
+      "rss": [
+        [
+          62273,
+          175984
+        ],
+        [
+          62274,
+          56176
+        ],
+        [
+          62275,
+          44960
+        ],
+        [
+          62276,
+          499200
+        ]
+      ]
+    },
+    {
+      "at": 1788874314150,
+      "label": "periodic",
+      "complete": true,
+      "bytes": 657309696,
+      "processes": [
+        {
+          "id": 62273,
+          "type": "browser"
+        },
+        {
+          "id": 62276,
+          "type": "renderer"
+        },
+        {
+          "id": 62274,
+          "type": "GPU"
+        },
+        {
+          "id": 62275,
+          "type": "network.mojom.NetworkService"
+        }
+      ],
+      "rss": [
+        [
+          62273,
+          123376
+        ],
+        [
+          62274,
+          56176
+        ],
+        [
+          62275,
+          45184
+        ],
+        [
+          62276,
+          417168
+        ]
+      ]
+    },
+    {
+      "at": 1788874314402,
+      "label": "periodic",
+      "complete": true,
+      "bytes": 734363648,
+      "processes": [
+        {
+          "id": 62273,
+          "type": "browser"
+        },
+        {
+          "id": 62276,
+          "type": "renderer"
+        },
+        {
+          "id": 62274,
+          "type": "GPU"
+        },
+        {
+          "id": 62275,
+          "type": "network.mojom.NetworkService"
+        }
+      ],
+      "rss": [
+        [
+          62273,
+          92384
+        ],
+        [
+          62274,
+          56176
+        ],
+        [
+          62275,
+          45888
+        ],
+        [
+          62276,
+          522704
+        ]
+      ]
+    },
+    {
+      "at": 1788874314654,
+      "label": "periodic",
+      "complete": true,
+      "bytes": 1245921280,
+      "processes": [
+        {
+          "id": 62273,
+          "type": "browser"
+        },
+        {
+          "id": 62276,
+          "type": "renderer"
+        },
+        {
+          "id": 62274,
+          "type": "GPU"
+        },
+        {
+          "id": 62275,
+          "type": "network.mojom.NetworkService"
+        }
+      ],
+      "rss": [
+        [
+          62273,
+          92544
+        ],
+        [
+          62274,
+          56176
+        ],
+        [
+          62275,
+          46352
+        ],
+        [
+          62276,
+          1021648
+        ]
+      ]
+    },
+    {
+      "at": 1788874314906,
+      "label": "periodic",
+      "complete": true,
+      "bytes": 1379778560,
+      "processes": [
+        {
+          "id": 62273,
+          "type": "browser"
+        },
+        {
+          "id": 62276,
+          "type": "renderer"
+        },
+        {
+          "id": 62274,
+          "type": "GPU"
+        },
+        {
+          "id": 62275,
+          "type": "network.mojom.NetworkService"
+        }
+      ],
+      "rss": [
+        [
+          62273,
+          92544
+        ],
+        [
+          62274,
+          56176
+        ],
+        [
+          62275,
+          46352
+        ],
+        [
+          62276,
+          1152368
+        ]
+      ]
+    }
+  ],
+  "network": [
+    {
+      "url": "http://127.0.0.1:5201/",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/lab-client.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/composite-model.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/manifest.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/config.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/generation_config.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/preprocessor_config.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/tokenizer.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/tokenizer_config.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/onnx/encoder_model_quantized.onnx",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/onnx/decoder_model_merged_quantized.onnx",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/config.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/config.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/generation_config.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/preprocessor_config.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/tokenizer.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/tokenizer_config.json",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/onnx/encoder_model_quantized.onnx",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model/onnx/decoder_model_merged_quantized.onnx",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/fixtures/english.wav",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/model-worker.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/assets/mediabunny.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/lab-contract.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/composite-model.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/encoder-fetch-policy.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/assets/transformers.local.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/assets/ort.wasm.min.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/assets/ort-wasm-simd-threaded.mjs",
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5201/assets/ort-wasm-simd-threaded.wasm",
+      "method": "GET"
+    }
+  ],
+  "serverRequests": [
+    {
+      "url": "/",
+      "encodedBytes": 211,
+      "decodedBytes": 211,
+      "gzip": false
+    },
+    {
+      "url": "/lab-client.mjs",
+      "encodedBytes": 4047,
+      "decodedBytes": 13386,
+      "gzip": true
+    },
+    {
+      "url": "/composite-model.mjs",
+      "encodedBytes": 2378,
+      "decodedBytes": 7749,
+      "gzip": true
+    },
+    {
+      "url": "/manifest.json",
+      "encodedBytes": 18578,
+      "decodedBytes": 18578,
+      "gzip": false
+    },
+    {
+      "url": "/model/config.json",
+      "encodedBytes": 2248,
+      "decodedBytes": 2248,
+      "gzip": false
+    },
+    {
+      "url": "/model/generation_config.json",
+      "encodedBytes": 3716,
+      "decodedBytes": 3716,
+      "gzip": false
+    },
+    {
+      "url": "/model/preprocessor_config.json",
+      "encodedBytes": 339,
+      "decodedBytes": 339,
+      "gzip": false
+    },
+    {
+      "url": "/model/tokenizer.json",
+      "encodedBytes": 2480466,
+      "decodedBytes": 2480466,
+      "gzip": false
+    },
+    {
+      "url": "/model/tokenizer_config.json",
+      "encodedBytes": 282683,
+      "decodedBytes": 282683,
+      "gzip": false
+    },
+    {
+      "url": "/model/onnx/encoder_model_quantized.onnx",
+      "encodedBytes": 10113248,
+      "decodedBytes": 10113248,
+      "gzip": false
+    },
+    {
+      "url": "/model/onnx/decoder_model_merged_quantized.onnx",
+      "encodedBytes": 30727765,
+      "decodedBytes": 30727765,
+      "gzip": false
+    },
+    {
+      "url": "/model/config.json",
+      "encodedBytes": 2248,
+      "decodedBytes": 2248,
+      "gzip": false
+    },
+    {
+      "url": "/model/config.json",
+      "encodedBytes": 2248,
+      "decodedBytes": 2248,
+      "gzip": false
+    },
+    {
+      "url": "/model/generation_config.json",
+      "encodedBytes": 3716,
+      "decodedBytes": 3716,
+      "gzip": false
+    },
+    {
+      "url": "/model/preprocessor_config.json",
+      "encodedBytes": 339,
+      "decodedBytes": 339,
+      "gzip": false
+    },
+    {
+      "url": "/model/tokenizer.json",
+      "encodedBytes": 2480466,
+      "decodedBytes": 2480466,
+      "gzip": false
+    },
+    {
+      "url": "/model/tokenizer_config.json",
+      "encodedBytes": 282683,
+      "decodedBytes": 282683,
+      "gzip": false
+    },
+    {
+      "url": "/model/onnx/encoder_model_quantized.onnx",
+      "encodedBytes": 10113248,
+      "decodedBytes": 10113248,
+      "gzip": false
+    },
+    {
+      "url": "/model/onnx/decoder_model_merged_quantized.onnx",
+      "encodedBytes": 30727765,
+      "decodedBytes": 30727765,
+      "gzip": false
+    },
+    {
+      "url": "/fixtures/english.wav",
+      "encodedBytes": 156546,
+      "decodedBytes": 187404,
+      "gzip": true
+    },
+    {
+      "url": "/model-worker.mjs",
+      "encodedBytes": 4005,
+      "decodedBytes": 11369,
+      "gzip": true
+    },
+    {
+      "url": "/assets/mediabunny.mjs",
+      "encodedBytes": 159759,
+      "decodedBytes": 624835,
+      "gzip": true
+    },
+    {
+      "url": "/lab-contract.mjs",
+      "encodedBytes": 1836,
+      "decodedBytes": 4604,
+      "gzip": true
+    },
+    {
+      "url": "/encoder-fetch-policy.mjs",
+      "encodedBytes": 922,
+      "decodedBytes": 2321,
+      "gzip": true
+    },
+    {
+      "url": "/assets/transformers.local.mjs",
+      "encodedBytes": 120673,
+      "decodedBytes": 431648,
+      "gzip": true
+    },
+    {
+      "url": "/assets/ort.wasm.min.mjs",
+      "encodedBytes": 16185,
+      "decodedBytes": 50069,
+      "gzip": true
+    },
+    {
+      "url": "/assets/ort-wasm-simd-threaded.mjs",
+      "encodedBytes": 9090,
+      "decodedBytes": 24180,
+      "gzip": true
+    },
+    {
+      "url": "/assets/ort-wasm-simd-threaded.wasm",
+      "encodedBytes": 3321755,
+      "decodedBytes": 12942611,
+      "gzip": true
+    }
+  ]
+}

@@ -1,0 +1,211 @@
+{
+  "harnessHead": "4f825bd8eaeb3a0b83e6f0f2f6092872581afc5b",
+  "productSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec",
+  "largeFixtureSources": {
+    "generationProductSource": "b33b7531027979b8886f5db979d57cd96b96175d",
+    "executingProductSource": "75b89ef6b70460a03ea99ca44d888b5ec06373ec"
+  },
+  "status": "failed",
+  "startedAt": "2026-09-08T18:58:03.738Z",
+  "finishedAt": "2026-09-08T18:58:17.022Z",
+  "durationMs": 13284,
+  "steps": [
+    {
+      "name": "production launcher identity",
+      "status": "passed",
+      "elapsedMs": 496.33241700000053
+    },
+    {
+      "name": "100000-key fixture: cold entry, exact1024-key navigation and selected/all limits",
+      "status": "passed",
+      "elapsedMs": 2870.0939579999995
+    },
+    {
+      "name": "100000 keys: warm filter/scroll/curve and native preview/commit bounds",
+      "status": "failed",
+      "elapsedMs": 956.9322919999995,
+      "error": "AssertionError [ERR_ASSERTION]: Native pointer capture was not acquired\n\nfalse !== true\n\n    at Object.startPointer (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/continuation/observations.mjs:132:12)\n    at async file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/continuation/observations.mjs:555:99\n    at async Object.measured (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/continuation/observations.mjs:78:54)\n    at async file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/continuation/observations.mjs:555:5\n    at async step (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/run-animation-continuation.mjs:93:20)\n    at async runAnimationLargeDocuments (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/continuation/observations.mjs:533:3)\n    at async file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/run-animation-continuation.mjs:132:28"
+    }
+  ],
+  "problems": [],
+  "failure": {
+    "step": "100000 keys: warm filter/scroll/curve and native preview/commit bounds",
+    "error": "AssertionError [ERR_ASSERTION]: Native pointer capture was not acquired\n\nfalse !== true\n\n    at Object.startPointer (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/continuation/observations.mjs:132:12)\n    at async file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/continuation/observations.mjs:555:99\n    at async Object.measured (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/continuation/observations.mjs:78:54)\n    at async file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/continuation/observations.mjs:555:5\n    at async step (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/run-animation-continuation.mjs:93:20)\n    at async runAnimationLargeDocuments (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/continuation/observations.mjs:533:3)\n    at async file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/scripts/issue199/run-animation-continuation.mjs:132:28",
+    "state": {
+      "past": 0,
+      "future": 0,
+      "selectionCount": 1024,
+      "focus": {
+        "frame": 1022,
+        "lane": {
+          "owner": {
+            "kind": "clip",
+            "id": "dense-clip"
+          },
+          "kind": "scalar",
+          "property": "opacity",
+          "propertyVersion": 1
+        }
+      },
+      "zoom": 0.919921875,
+      "origin": 0,
+      "preview": true,
+      "effectOwner": "animation-gesture",
+      "nativePointer": {
+        "id": 1,
+        "gesture": 1,
+        "trusted": true,
+        "connected": false,
+        "captured": false,
+        "target": {
+          "tag": "g",
+          "label": "Opacity, local frame 1022, 2 keys in this bucket, 2 selected; use arrow keys for exact selection"
+        }
+      },
+      "nativePointerEvents": [
+        {
+          "sequence": 1,
+          "type": "gotpointercapture",
+          "id": 1,
+          "gesture": 1,
+          "trusted": true,
+          "sameTarget": true,
+          "buttons": 1,
+          "x": 735.16015625,
+          "y": 649,
+          "target": {
+            "tag": "g",
+            "label": "Opacity, local frame 1022, 2 keys in this bucket, 2 selected; use arrow keys for exact selection"
+          }
+        },
+        {
+          "sequence": 2,
+          "type": "pointermove",
+          "id": 1,
+          "gesture": 1,
+          "trusted": true,
+          "sameTarget": true,
+          "buttons": 1,
+          "x": 737.4599609375,
+          "y": 649,
+          "target": {
+            "tag": "g",
+            "label": "Opacity, local frame 1022, 2 keys in this bucket, 2 selected; use arrow keys for exact selection"
+          }
+        },
+        {
+          "sequence": 3,
+          "type": "pointermove",
+          "id": 1,
+          "gesture": 1,
+          "trusted": true,
+          "sameTarget": true,
+          "buttons": 1,
+          "x": 739.759765625,
+          "y": 649,
+          "target": {
+            "tag": "g",
+            "label": "Opacity, local frame 1022, 2 keys in this bucket, 2 selected; use arrow keys for exact selection"
+          }
+        },
+        {
+          "sequence": 4,
+          "type": "lostpointercapture",
+          "id": 1,
+          "gesture": 1,
+          "trusted": true,
+          "sameTarget": false,
+          "buttons": 1,
+          "x": 739.759765625,
+          "y": 649,
+          "target": {
+            "label": null
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "pointermove",
+          "id": 1,
+          "gesture": 1,
+          "trusted": true,
+          "sameTarget": false,
+          "buttons": 1,
+          "x": 742.0595703125,
+          "y": 649,
+          "target": {
+            "tag": "rect",
+            "label": null
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "pointermove",
+          "id": 1,
+          "gesture": 1,
+          "trusted": true,
+          "sameTarget": false,
+          "buttons": 1,
+          "x": 744.359375,
+          "y": 649,
+          "target": {
+            "tag": "svg",
+            "label": "Opacity key positions"
+          }
+        }
+      ],
+      "fullProjectInRawResult": true
+    }
+  },
+  "timings": [
+    {
+      "name": "100000 keys portable open",
+      "milliseconds": 943.2207079999998,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "100000 keys first dock/index/render wall time",
+      "milliseconds": 867.8725419999992,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "warm changed filter lane-9",
+      "milliseconds": 54.77037499999824,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "warm changed filter lane-8",
+      "milliseconds": 64.00608300000022,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "warm changed filter lane-7",
+      "milliseconds": 72.62312500000007,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    },
+    {
+      "name": "warm native vertical wheel",
+      "milliseconds": 51.93866700000035,
+      "qualification": "Raw wall time including native automation and settling; no threshold, pure-index time or heap claim."
+    }
+  ],
+  "observedBoundsBeforeFailedPreview": {
+    "observations": 10,
+    "maxRows": 14,
+    "maxGlyphsIncludingGhosts": 504,
+    "maxCurveSamples": 255,
+    "horizontalOverflow": false
+  },
+  "cleanup": {
+    "contextClosed": true,
+    "signals": [],
+    "remainingOwned": [],
+    "port5199Listening": false,
+    "released": true,
+    "checkedAt": "2026-09-08T18:58:16.984Z",
+    "serverExitCode": 143
+  },
+  "imagesInspected": [
+    "failure.png"
+  ],
+  "qualification": "First100000-key checkpoint passed; later warm assertions/timings occurred inside a failed checkpoint and do not qualify its dense preview/release or many-lanes. Capture initially acquired, then original node disconnected/lost capture; no cause classification yet."
+}

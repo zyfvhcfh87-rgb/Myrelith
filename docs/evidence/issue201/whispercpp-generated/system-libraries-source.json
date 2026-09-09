@@ -1,0 +1,12 @@
+{
+  "archive": "wasm-binaries-arm64.tar.xz",
+  "archiveSha256": "63ec9acba14b67a925f7da9730395c84ce6ca1f5412ebcc4149b40fc43228385",
+  "member": {
+    "path": "install/emscripten/tools/system_libs.py",
+    "kind": "file",
+    "bytes": 91547,
+    "mode": 420,
+    "sha256": "e2f4433744326e5ebaeeda694fe89712c865b02fb2d26e6ab64f1f9d884a04a7"
+  },
+  "scope": "Source data only; library definitions reviewed, not imported/executed"
+}

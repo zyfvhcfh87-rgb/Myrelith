@@ -1,3 +1,4 @@
+import { isProceduralTitleClip } from './textOverlay'
 /**
  * Pure dynamic-zoom/reframe preset planning.
  *
@@ -219,7 +220,7 @@ export function dynamicZoomAvailabilityReason(
   clip: Clip,
   source: DynamicZoomSourceDimensions | null,
 ): string | null {
-  if (clip.text !== undefined) {
+  if (isProceduralTitleClip(clip)) {
     return 'Dynamic zoom is not available for text overlays; text animation is outside the current keyframe property set.'
   }
   if (clip.timelineRange.durationFrames < MIN_DYNAMIC_ZOOM_DURATION_FRAMES) {
@@ -457,7 +458,7 @@ export function dynamicZoomKeyframeBudgetReason(
 }
 
 export function isDynamicZoomFramingProperty(
-  property: ClipAnimationProperty,
+  property: string,
 ): boolean {
   return DYNAMIC_ZOOM_FRAMING_PROPERTIES.includes(
     property as (typeof DYNAMIC_ZOOM_FRAMING_PROPERTIES)[number],

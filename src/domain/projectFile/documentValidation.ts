@@ -1,46 +1,18 @@
+import { captionProjectIntentError } from '../captionIntentBudget'
+import { projectCropAnimationError } from '../projectCropAnimation'
+import { projectTitleAnimationError } from '../animationProjectBudget'
+import { projectTitleOwnershipError } from '../titleOwnership'
+import { validatePortableAnimation } from './animationValidation'
 import { colorLutCatalogError } from '../colorLutCatalog'
-import type { AdjustmentAnimationKeyframe, AdjustmentItem, CaptionItem, CaptionTrack, Clip, MasterAudioSettings, MulticamDefinition, MulticamInstance, SequenceInstance, TimelineDoc, TimelineMarker, Track } from '../schema';
+import type { AdjustmentItem, CaptionItem, CaptionTrack, Clip, MasterAudioSettings, MulticamDefinition, MulticamInstance, SequenceInstance, TimelineDoc, TimelineMarker, Track } from '../schema';
 import { adjustmentAnimationValidationError, adjustmentItemValidationError } from '../adjustmentItems';
-import { MAX_ANIMATED_FINITE_MAGNITUDE, MAX_KEYFRAME_FRAME, MAX_KEYFRAMES_PER_TRACK } from '../clipAnimation';
 import { CAPTION_LIMITS, CAPTION_STYLE_PRESETS, CAPTION_TRACK_ROLES, captionDocumentValidationError, captionTrackValidationError, compareCaptionItems } from '../captions';
 import { compareTimelineMarkers, MAX_TIMELINE_MARKER_FRAME, MAX_TIMELINE_MARKER_ID_CHARACTERS, MAX_TIMELINE_MARKER_LABEL_CHARACTERS, MAX_TIMELINE_MARKER_NOTE_CHARACTERS, TIMELINE_MARKER_COLORS } from '../timelineMarkers';
 import { renderSurfaceBudget } from '../renderSurfaceBudget';
 import { CURRENT_PROJECT_FORMAT_VERSION, CURRENT_TIMELINE_SCHEMA_VERSION, PROJECT_FILE_FORMAT, PROJECT_FILE_LIMITS, type PortableAssetDescriptor, type ProjectFile } from './projectTypes';
 import { booleanValue, boundedArray, exactKeys, fail, finiteNumber, record, safeInteger, stringValue, validateFrameRate } from './validationPrimitives';
 import { validateAsset, validateMediaCollections } from './assetValidation';
-import { validateAnimationEasing, validateAudioEffectStack, validateClip, validateEffect, validateRange, type ValidationContext } from './clipValidation';
-
-function validateAdjustmentKeyframes(
-  value: unknown,
-  path: string,
-  context: ValidationContext,
-): AdjustmentAnimationKeyframe[] {
-  boundedArray(value, path, MAX_KEYFRAMES_PER_TRACK)
-  if (value.length === 0) fail(path, 'must not be empty')
-  context.keyframeCount += value.length
-  if (context.keyframeCount > PROJECT_FILE_LIMITS.maxTotalKeyframes) {
-    fail('$.sequences', `exceeds ${PROJECT_FILE_LIMITS.maxTotalKeyframes} keyframes in total`)
-  }
-  let previousFrame: number | null = null
-  for (let index = 0; index < value.length; index++) {
-    const keyframePath = `${path}[${index}]`
-    const keyframe = record(value[index], keyframePath)
-    exactKeys(keyframe, ['frame', 'value', 'easing'], [], keyframePath)
-    safeInteger(keyframe.frame, `${keyframePath}.frame`, -MAX_KEYFRAME_FRAME, MAX_KEYFRAME_FRAME)
-    if (previousFrame !== null && keyframe.frame <= previousFrame) {
-      fail(`${keyframePath}.frame`, 'must be strictly increasing and unique')
-    }
-    finiteNumber(
-      keyframe.value,
-      `${keyframePath}.value`,
-      -MAX_ANIMATED_FINITE_MAGNITUDE,
-      MAX_ANIMATED_FINITE_MAGNITUDE,
-    )
-    validateAnimationEasing(keyframe.easing, `${keyframePath}.easing`)
-    previousFrame = Number(keyframe.frame)
-  }
-  return value as AdjustmentAnimationKeyframe[]
-}
+import { validateAudioEffectStack, validateClip, validateEffect, validateRange, type ValidationContext } from './clipValidation';
 
 function validateAdjustment(
   value: unknown,
@@ -65,29 +37,7 @@ function validateAdjustment(
   booleanValue(item.enabled, `${path}.enabled`)
   finiteNumber(item.opacity, `${path}.opacity`, 0, 1)
 
-  const animation = record(item.animation, `${path}.animation`)
-  exactKeys(animation, ['tracks', 'effectTracks'], [], `${path}.animation`)
-  boundedArray(animation.tracks, `${path}.animation.tracks`, 1)
-  for (let index = 0; index < animation.tracks.length; index++) {
-    const trackPath = `${path}.animation.tracks[${index}]`
-    const track = record(animation.tracks[index], trackPath)
-    exactKeys(track, ['property', 'keyframes'], [], trackPath)
-    if (track.property !== 'opacity') fail(`${trackPath}.property`, 'expected opacity')
-    validateAdjustmentKeyframes(track.keyframes, `${trackPath}.keyframes`, context)
-  }
-  boundedArray(animation.effectTracks, `${path}.animation.effectTracks`, 1_280)
-  const targets = new Set<string>()
-  for (let index = 0; index < animation.effectTracks.length; index++) {
-    const trackPath = `${path}.animation.effectTracks[${index}]`
-    const track = record(animation.effectTracks[index], trackPath)
-    exactKeys(track, ['effectId', 'parameter', 'keyframes'], [], trackPath)
-    stringValue(track.effectId, `${trackPath}.effectId`, PROJECT_FILE_LIMITS.maxIdCharacters)
-    stringValue(track.parameter, `${trackPath}.parameter`, PROJECT_FILE_LIMITS.maxNameCharacters)
-    const target = `${track.effectId}\u0000${track.parameter}`
-    if (targets.has(target)) fail(trackPath, 'duplicate adjustment effect animation target')
-    targets.add(target)
-    validateAdjustmentKeyframes(track.keyframes, `${trackPath}.keyframes`, context)
-  }
+  validatePortableAnimation(item.animation, `${path}.animation`, context, 'forbidden')
 
   boundedArray(item.effects, `${path}.effects`, PROJECT_FILE_LIMITS.maxEffectsPerClip)
   context.effectCount += item.effects.length
@@ -302,7 +252,7 @@ function validateCaptionItem(
   previous: CaptionItem | null,
 ): CaptionItem {
   const item = record(value, path)
-  exactKeys(item, ['id', 'range', 'text'], [], path)
+  exactKeys(item, ['id', 'range', 'text'], ['style', 'origin'], path)
   stringValue(item.id, `${path}.id`, CAPTION_LIMITS.maxIdCharacters)
   if (itemIds.has(item.id)) fail(`${path}.id`, 'duplicate caption item id')
   itemIds.add(item.id)
@@ -328,7 +278,7 @@ function validateCaptionTrack(
   exactKeys(
     track,
     ['id', 'name', 'language', 'role', 'stylePreset', 'hidden', 'items'],
-    [],
+    ['style', 'origin'],
     path,
   )
   stringValue(track.id, `${path}.id`, CAPTION_LIMITS.maxIdCharacters)
@@ -400,7 +350,7 @@ function validateTransition(
   if (to.id !== transition.toClipId || from.id === to.id) {
     fail(path, 'transition endpoints must be ordered adjacent clips')
   }
-  if (from.text !== undefined || to.text !== undefined) {
+  if (from.text !== undefined || from.title !== undefined || to.text !== undefined || to.title !== undefined) {
     fail(path, 'text clips cannot be transition endpoints')
   }
   const cutFrame = from.timelineRange.startFrame + from.timelineRange.durationFrames
@@ -750,6 +700,8 @@ export function validateProjectFile(value: unknown): ProjectFile {
     textCharacterCount: 0,
     transitionCount: 0,
     keyframeCount: 0,
+    pathKeyframeCount: 0,
+    pathValueCharacters: 0,
     speedPointCount: 0,
   }
   const ids: ProjectWideTimelineIds = {
@@ -855,5 +807,12 @@ export function validateProjectFile(value: unknown): ProjectFile {
       cause instanceof Error ? cause.message : 'invalid nested sequence graph',
     )
   }
+  const cropError = projectCropAnimationError(project as unknown as ProjectFile)
+  if (cropError) fail('$.sequences', cropError)
+  const titleError = projectTitleOwnershipError(project as unknown as ProjectFile)
+    ?? projectTitleAnimationError(project as unknown as ProjectFile)
+  if (titleError) fail('$.sequences', titleError)
+  const captionError = captionProjectIntentError(project as unknown as ProjectFile)
+  if (captionError) fail('$.sequences', captionError)
   return project as unknown as ProjectFile
 }

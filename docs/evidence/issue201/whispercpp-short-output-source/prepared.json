@@ -1,0 +1,51 @@
+{
+  "status": "source-prepared-uncompiled",
+  "sourceFiles": 1882,
+  "patches": [
+    {
+      "path": "ggml/src/ggml-backend.cpp",
+      "beforeBytes": 96019,
+      "beforeSha256": "507577061d22e673a4f002bb215c65aa9c63b88a4e6d1586f52c74ca0b98fa07",
+      "afterBytes": 96141,
+      "afterSha256": "ba799b8d2ef1045a4b9fc0df1f1114989578159977e76908de42c88c0ad42603",
+      "patchPath": "docs/evidence/issue201/whispercpp-null-buffer-source/proposed-reservation-guard.patch"
+    },
+    {
+      "path": "ggml/src/ggml-alloc.c",
+      "beforeBytes": 47819,
+      "beforeSha256": "881083e2f5d0126738ffe5b246d60cacf7db7b524f1ea471f116697c3211026a",
+      "afterBytes": 48060,
+      "afterSha256": "ef30215c5021f2754823383d28d860d2c874b2102ef0e74d0117b06ca4427464",
+      "patchPath": "docs/evidence/issue201/whispercpp-null-buffer-source/proposed-allocation-failure-diagnostics.patch"
+    },
+    {
+      "path": "src/whisper.cpp",
+      "patchPath": "docs/evidence/issue201/whispercpp-deferred-logits-source/defer-output-logits.patch",
+      "beforeBytes": 339145,
+      "beforeSha256": "85617366fdfce12ea3d56ebb36d1267d2e70618b0151b17e6d84f4736ba9c2ad",
+      "afterBytes": 339149,
+      "afterSha256": "f5e8c9d6f812002db32c5527d0792277837fb1d0499255f3a22ef0433b877341",
+      "initialFloatElements": 23235520,
+      "initialPayloadBytes": 92942080
+    }
+  ],
+  "recipe": [
+    {
+      "path": "CMakeLists.txt",
+      "bytes": 3550,
+      "sha256": "bc68e94197b6e819f8d5257a536b02bd0a5931c525005b994c2046fad80ba0a6"
+    },
+    {
+      "path": "adapter.cpp",
+      "bytes": 6877,
+      "sha256": "c28d947f5fce14809fce0b9a8b9d01de25b53eac9bcc9189b56d24de6dca9da8"
+    },
+    {
+      "path": "myrelith-token-budget.h",
+      "bytes": 403,
+      "sha256": "e0dc2d7ec04a52e47214de3536ca479f710b6957d422260eb5bc87b7bfe9ff9b"
+    }
+  ],
+  "compilerExecuted": false,
+  "wasmExecuted": false
+}

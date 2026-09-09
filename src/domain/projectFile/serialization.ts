@@ -1,4 +1,6 @@
+import { copyCaptionIntent } from '../captionIntent'
 import { immutableColorLuts } from '../colorLutCatalog'
+import { copyTitleDefinition } from '../titleOwnership'
 import type { Effect, TimelineDoc } from '../schema';
 import { masterAudioSettings, trackBalance, trackVolume } from '../audioMixer';
 import { compareTimelineMarkers } from '../timelineMarkers';
@@ -114,6 +116,7 @@ function portableTimelineSnapshot(document: TimelineDoc): TimelineDoc {
             params: cloneEffectParams(effect.params),
           })),
           ...(clip.text === undefined ? {} : { text: { ...clip.text } }),
+          ...(clip.title === undefined ? {} : { title: copyTitleDefinition(clip.title) }),
           ...(clip.linkGroupId === undefined ? {} : { linkGroupId: clip.linkGroupId }),
         })),
         sequenceInstances: (track.sequenceInstances ?? []).map((instance) => ({
@@ -187,11 +190,15 @@ function portableTimelineSnapshot(document: TimelineDoc): TimelineDoc {
         language: track.language,
         role: track.role,
         stylePreset: track.stylePreset,
+        ...(track.style === undefined ? {} : { style: copyCaptionIntent(track.style) }),
+        ...(track.origin === undefined ? {} : { origin: copyCaptionIntent(track.origin) }),
         hidden: track.hidden,
         items: track.items.map((item) => ({
           id: item.id,
           range: { ...item.range },
           text: item.text,
+          ...(item.style === undefined ? {} : { style: copyCaptionIntent(item.style) }),
+          ...(item.origin === undefined ? {} : { origin: copyCaptionIntent(item.origin) }),
         })),
       })),
       masterAudio: (() => {

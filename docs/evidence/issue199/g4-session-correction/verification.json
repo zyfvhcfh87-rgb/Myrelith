@@ -1,0 +1,91 @@
+{
+  "failureEvidence": "b36241d0d2887e56eb3e094934ee165785bdb253",
+  "sourceFiles": 941,
+  "unchangedExistingPaths": 936,
+  "changedExistingPaths": 3,
+  "addedPaths": 2,
+  "changes": [
+    {
+      "path": "scripts/issue199/g4/PROTOCOL.md",
+      "before": "bf7f492aa17054b099f8a43afc8442f2c83b84a4d59bc48efa7e3c285dd0af37",
+      "after": "3061be66e12f133f128338c6bd1dc2c725a752e49c174c95ec177f60e412c15f"
+    },
+    {
+      "path": "scripts/issue199/g4/execute.mjs",
+      "before": "1d80ff8ddfef990693fb29dfe161b844c156b3ea203883fe140cadf442a61afb",
+      "after": "147328dd4c900d45b4953f2191f0d1c2686360c6cc6a144a11db30d0c891e50b"
+    },
+    {
+      "path": "scripts/issue199/g4/scenario.ts",
+      "before": "a937a1a375576c94e16d32746dbff4a093f0b4cb4226f9cf093fe8cbbbfc6ace",
+      "after": "e0fd80317fe79039057c5ca76d921d4b2a347b5c37fdd9eddb6bc294b5a1697d"
+    },
+    {
+      "path": "scripts/issue199/g4/sessionObservation.ts",
+      "before": null,
+      "after": "56045648c23b44f69fb24177d65cde8aa164c4fe58f9e58a2e38603df1c82468"
+    },
+    {
+      "path": "src/test/issue199G4Session.test.ts",
+      "before": null,
+      "after": "39391b75c42df32e5f8471196c00a4ce60bb45affef050a7fbd79cba590938a2"
+    }
+  ],
+  "logs": [
+    {
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-session-focused-final.log",
+      "copy": "focused.log",
+      "rawSha256": "41299bc3f2da0747a7a2f370e8f77eb34494fda4350e9335d081947d47fca2e8",
+      "copySha256": "e1194c118a64645172ceada01ae59d2ef6b5576013f6fc3194fe19aed658bbc9",
+      "mode": "normalized text; untouched raw retained"
+    },
+    {
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-session-production-typecheck-final.log",
+      "copy": "production-typecheck.log",
+      "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "copySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": "normalized text; untouched raw retained"
+    },
+    {
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-session-protocol-typecheck-final.log",
+      "copy": "protocol-typecheck.log",
+      "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "copySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": "normalized text; untouched raw retained"
+    },
+    {
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-session-lint-final.log",
+      "copy": "lint.log",
+      "rawSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "copySha256": "c69d64bb2173ebe42cc6fa332d8185c77f18c853a6f2b16dd7a8adb7ba833fbc",
+      "mode": "normalized text; untouched raw retained"
+    },
+    {
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-session-source-check-final.log",
+      "copy": "source-check.log",
+      "rawSha256": "3f5baec450ae001e3f657c3ee56b69d6b8e11b9417fec9f6b6a787d8441d4806",
+      "copySha256": "3f5baec450ae001e3f657c3ee56b69d6b8e11b9417fec9f6b6a787d8441d4806",
+      "mode": "normalized text; untouched raw retained"
+    },
+    {
+      "raw": "/private/tmp/milestone9-animation-g4-second-parent-release.json",
+      "copy": "parent-release.json",
+      "rawSha256": "09748fe9b4cded7ee23fb80ba0b12003b68b1e14e26e8226af6259444063b059",
+      "copySha256": "09748fe9b4cded7ee23fb80ba0b12003b68b1e14e26e8226af6259444063b059",
+      "mode": "exact bytes"
+    }
+  ],
+  "checks": {
+    "focusedTests": 9,
+    "focusedFiles": 2,
+    "canonicalRunnerTests": 17,
+    "productionTypecheck": "passed",
+    "protocolTypecheck": "passed",
+    "lint": "passed; no warnings",
+    "nodeSyntax": "passed",
+    "inertSourceInventory": "939tracked at precommit; two new paths included in941preparation manifest",
+    "productionBuild": "not run; unchanged product",
+    "nativeRetry": "not run; source review and shared-slot grant required"
+  },
+  "qualification": "Tests use real project controller/persistence/storage logic with map storage and runtime/permission dependencies stubbed. They are not browser or encoded-output acceptance. No product source, fixture payload or encoded output predicate changed."
+}

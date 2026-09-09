@@ -1,0 +1,509 @@
+{
+  "sha256": "3a0f4cd160d338721fc19067392dd72f0f32c12ce3c208b77e357f7990877174",
+  "size": 204174,
+  "duration": 1,
+  "videoDuration": 1,
+  "width": 1280,
+  "height": 720,
+  "videoCodec": "vp9",
+  "audioCodec": "opus",
+  "videoPackets": {
+    "packetCount": 30,
+    "averagePacketRate": 29.99000334221593,
+    "averageBitrate": 1423301.566618894
+  },
+  "frames": [
+    {
+      "frame": 0,
+      "timestamp": 0,
+      "duration": 0.033,
+      "rawGlyph": {
+        "count": 0,
+        "x": null,
+        "y": null
+      },
+      "decodedGlyph": {
+        "count": 0,
+        "x": null,
+        "y": null
+      },
+      "rgbMeanError": 0.6775925925925926,
+      "rgbP95Error": 2
+    },
+    {
+      "frame": 7,
+      "timestamp": 0.233,
+      "duration": 0.034,
+      "rawGlyph": {
+        "count": 113,
+        "x": 1274.9469026548672,
+        "y": 321.83185840707966
+      },
+      "decodedGlyph": {
+        "count": 112,
+        "x": 1274.9910714285713,
+        "y": 321.8482142857143
+      },
+      "rgbMeanError": 1.0416898148148148,
+      "rgbP95Error": 1
+    },
+    {
+      "frame": 14,
+      "timestamp": 0.467,
+      "duration": 0.033,
+      "rawGlyph": {
+        "count": 0,
+        "x": null,
+        "y": null
+      },
+      "decodedGlyph": {
+        "count": 0,
+        "x": null,
+        "y": null
+      },
+      "rgbMeanError": 0.7088425925925926,
+      "rgbP95Error": 1
+    },
+    {
+      "frame": 15,
+      "timestamp": 0.5,
+      "duration": 0.033,
+      "rawGlyph": {
+        "count": 0,
+        "x": null,
+        "y": null
+      },
+      "decodedGlyph": {
+        "count": 0,
+        "x": null,
+        "y": null
+      },
+      "rgbMeanError": 0.9082638888888889,
+      "rgbP95Error": 1
+    },
+    {
+      "frame": 22,
+      "timestamp": 0.733,
+      "duration": 0.034,
+      "rawGlyph": {
+        "count": 2640,
+        "x": 61.638636363636365,
+        "y": 320.9045454545454
+      },
+      "decodedGlyph": {
+        "count": 2636,
+        "x": 61.55766312594841,
+        "y": 320.90667678300457
+      },
+      "rgbMeanError": 0.6065277777777778,
+      "rgbP95Error": 2
+    },
+    {
+      "frame": 29,
+      "timestamp": 0.967,
+      "duration": 0.033,
+      "rawGlyph": {
+        "count": 0,
+        "x": null,
+        "y": null
+      },
+      "decodedGlyph": {
+        "count": 0,
+        "x": null,
+        "y": null
+      },
+      "rgbMeanError": 0.8856944444444445,
+      "rgbP95Error": 1
+    }
+  ],
+  "pcm": {
+    "through": 48000,
+    "coverage": {
+      "coveredSamples": 48000,
+      "overlaps": 0,
+      "ranges": [
+        {
+          "timestamp": -0.0065,
+          "start": -312,
+          "end": 336,
+          "overlap": 0,
+          "padding": 312
+        },
+        {
+          "timestamp": 0.007,
+          "start": 336,
+          "end": 1296,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.027,
+          "start": 1296,
+          "end": 2256,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.047,
+          "start": 2256,
+          "end": 3216,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.067,
+          "start": 3216,
+          "end": 4176,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.087,
+          "start": 4176,
+          "end": 5136,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.107,
+          "start": 5136,
+          "end": 6096,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.127,
+          "start": 6096,
+          "end": 7056,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.147,
+          "start": 7056,
+          "end": 8016,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.167,
+          "start": 8016,
+          "end": 8976,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.187,
+          "start": 8976,
+          "end": 9936,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.207,
+          "start": 9936,
+          "end": 10896,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.227,
+          "start": 10896,
+          "end": 11856,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.247,
+          "start": 11856,
+          "end": 12816,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.267,
+          "start": 12816,
+          "end": 13776,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.287,
+          "start": 13776,
+          "end": 14736,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.307,
+          "start": 14736,
+          "end": 15696,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.327,
+          "start": 15696,
+          "end": 16656,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.347,
+          "start": 16656,
+          "end": 17616,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.367,
+          "start": 17616,
+          "end": 18576,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.387,
+          "start": 18576,
+          "end": 19536,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.407,
+          "start": 19536,
+          "end": 20496,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.427,
+          "start": 20496,
+          "end": 21456,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.447,
+          "start": 21456,
+          "end": 22416,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.467,
+          "start": 22416,
+          "end": 23376,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.487,
+          "start": 23376,
+          "end": 24336,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.507,
+          "start": 24336,
+          "end": 25296,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.527,
+          "start": 25296,
+          "end": 26256,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.547,
+          "start": 26256,
+          "end": 27216,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.567,
+          "start": 27216,
+          "end": 28176,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.587,
+          "start": 28176,
+          "end": 29136,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.607,
+          "start": 29136,
+          "end": 30096,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.627,
+          "start": 30096,
+          "end": 31056,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.647,
+          "start": 31056,
+          "end": 32016,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.667,
+          "start": 32016,
+          "end": 32976,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.687,
+          "start": 32976,
+          "end": 33936,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.707,
+          "start": 33936,
+          "end": 34896,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.727,
+          "start": 34896,
+          "end": 35856,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.747,
+          "start": 35856,
+          "end": 36816,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.767,
+          "start": 36816,
+          "end": 37776,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.787,
+          "start": 37776,
+          "end": 38736,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.807,
+          "start": 38736,
+          "end": 39696,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.827,
+          "start": 39696,
+          "end": 40656,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.847,
+          "start": 40656,
+          "end": 41616,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.867,
+          "start": 41616,
+          "end": 42576,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.887,
+          "start": 42576,
+          "end": 43536,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.907,
+          "start": 43536,
+          "end": 44496,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.927,
+          "start": 44496,
+          "end": 45456,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.947,
+          "start": 45456,
+          "end": 46416,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.967,
+          "start": 46416,
+          "end": 47376,
+          "overlap": 0,
+          "padding": 0
+        },
+        {
+          "timestamp": 0.987,
+          "start": 47376,
+          "end": 48336,
+          "overlap": 0,
+          "padding": 336
+        }
+      ]
+    },
+    "early": [
+      0.022076782568929885,
+      3.891471483483388e-14
+    ],
+    "late": [
+      0.0000050738176515271274,
+      0.06631790486783859
+    ]
+  },
+  "admission": {
+    "essentialOwners": 1,
+    "decoderSlots": 4,
+    "surfaceBytes": 41472000,
+    "monitorOwners": 0,
+    "blockers": [],
+    "programReady": true
+  },
+  "afterAdmission": {
+    "essentialOwners": 1,
+    "decoderSlots": 4,
+    "surfaceBytes": 41472000,
+    "monitorOwners": 0,
+    "blockers": [],
+    "programReady": true
+  }
+}

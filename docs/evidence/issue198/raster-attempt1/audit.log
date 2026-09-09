@@ -1,0 +1,129 @@
+{
+  "verifiedAt": "2026-09-08T19:38:35.467836+00:00",
+  "source": {
+    "commit": "52a64ba78c72e0e3a077c63c8d9b0c3c33e11245",
+    "dirty": false,
+    "fingerprint": "sha256:d5e77beca78d053f784bf331297c595cf730e88be3d86703aae1f1ff71c8953f"
+  },
+  "directory": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-52a64ba-raster-attempt1",
+  "outcome": "passed-scoped-raster-segment",
+  "manifest": {
+    "sha256": "7269effa6878ab748d3e17c6cb0f75ccbf5a0c896b9ca9e6e5dab7ec937eb7fb",
+    "bytes": 343701,
+    "entries": 2559,
+    "verifiedFileBytes": 11764177
+  },
+  "counts": {
+    "run-start": 1,
+    "browser-provenance": 1,
+    "process-start": 1,
+    "native-memory-sample": 210,
+    "cell-dispatched": 180,
+    "cell-start": 180,
+    "raster-trial": 1080,
+    "raster-parity": 540,
+    "cell-complete": 180,
+    "cell-released": 180,
+    "held-selection-dispatched": 1,
+    "held-selection": 1,
+    "segment-complete": 1,
+    "process-before-close": 1,
+    "run-teardown": 1,
+    "evidence-closed": 1
+  },
+  "canonicalSelections": 46080,
+  "rgbaBytesCompared": 8128512000,
+  "startedAt": "2026-09-08T19:31:04.856Z",
+  "endedAt": "2026-09-08T19:34:34.218Z",
+  "durationSeconds": 209.362,
+  "byResolution": [
+    {
+      "width": 1280,
+      "height": 720,
+      "cells": 60,
+      "calls": 360,
+      "slowestMs": 296.79999999701977,
+      "slowestCell": {
+        "width": 1280,
+        "height": 720,
+        "shape": 8,
+        "feather": 1,
+        "invert": false,
+        "offCanvas": false
+      },
+      "slowestHeld": false,
+      "slowestFrame": 0
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "cells": 60,
+      "calls": 360,
+      "slowestMs": 674,
+      "slowestCell": {
+        "width": 1920,
+        "height": 1080,
+        "shape": 8,
+        "feather": 1,
+        "invert": false,
+        "offCanvas": false
+      },
+      "slowestHeld": false,
+      "slowestFrame": 0
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "cells": 60,
+      "calls": 360,
+      "slowestMs": 2765.5,
+      "slowestCell": {
+        "width": 3840,
+        "height": 2160,
+        "shape": 8,
+        "feather": 1,
+        "invert": true,
+        "offCanvas": false
+      },
+      "slowestHeld": false,
+      "slowestFrame": 0
+    }
+  ],
+  "heldSelection": {
+    "browserTimeMs": 209062.90000000596,
+    "kind": "held-selection",
+    "calls": 5000,
+    "warmups": 1000,
+    "p50": 0,
+    "p95": 0.10000000894069672,
+    "checksum": 1876852,
+    "source": "browser",
+    "sequence": 2553,
+    "receivedAt": "2026-09-08T19:34:34.064Z"
+  },
+  "maxActualMaskScratchBytes": 41472000,
+  "maxHarnessInputBytes": 66355200,
+  "nativeMemory": {
+    "sampleCount": 210,
+    "unavailableCount": 0,
+    "baselineRssBytes": 288718848,
+    "sampledPeakRssBytes": 617037824,
+    "sampledPeakSequence": 2251,
+    "finalRssBytes": 474890240,
+    "exactAllocationPeakProven": false
+  },
+  "provenance": {
+    "chromium": "151.0.7922.34",
+    "gpuMode": "software",
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+    "crossOriginIsolated": false,
+    "timerMinimumMs": 0.09999999403953552
+  },
+  "limits": [
+    "Raster and canonical held resolver only; no production export or renderer-admission native exercise.",
+    "Three samples per variant: p95 equals maximum, not stable tail latency.",
+    "Timer granularity about 0.1 ms; zero-valued resolver samples are quantized, not free operations.",
+    "Summed sampled process RSS is not exact allocation peak, a native leak result or the 256 MiB logical render allowance.",
+    "Software headless Chromium provenance does not establish hardware playback performance."
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "tests": {
+    "rawBytes": 2430,
+    "rawSha256": "8af560789aeca704d30e582d0009d7d5130b635e2aba050594f9432037cc56bc",
+    "readableBytes": 2429,
+    "readableSha256": "7712b09eebe6b0b95a48eccfb4d7deb4e1d1cd978488ca0da51724e0dd781e57"
+  },
+  "seams": {
+    "rawBytes": 1839,
+    "rawSha256": "e577e64fd815e536fe594351a502096e0e78dd293c0d83ccab6040b91bd10552",
+    "readableBytes": 1837,
+    "readableSha256": "e03bcd6adb6d2a5c90930b1ea1a8e67429b2aabe4c378f9ff7dd98da2b7dbdeb"
+  },
+  "seam-correction": {
+    "rawBytes": 2062,
+    "rawSha256": "d7298dfad688b0e435a165250121264e621d44ee3e2ac324bcef7f0e055407aa",
+    "readableBytes": 2061,
+    "readableSha256": "ef97c37a35771fd2e5b5b898f07839c2476ad7666a118b265e34aebb8ae845b1"
+  },
+  "build": {
+    "rawBytes": 4627,
+    "rawSha256": "f0c13e2ba8c589d1c6398d434c3f89bcdcb0a3d27b9590673ba737b31f1d2e26",
+    "readableBytes": 4625,
+    "readableSha256": "943c82ea776efa004ceb456aa5de6749d5047212bd6eb43d82778cca4a47ccc0"
+  },
+  "lint": {
+    "rawBytes": 41,
+    "rawSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+    "readableBytes": 39,
+    "readableSha256": "c69d64bb2173ebe42cc6fa332d8185c77f18c853a6f2b16dd7a8adb7ba833fbc"
+  },
+  "archive": {
+    "bytes": 3920,
+    "sha256": "b7fe27320cc61f630db44fa930f218e407d96dfcb91dfe03f5958984f7dcba6a"
+  }
+}

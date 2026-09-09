@@ -1,0 +1,326 @@
+Myrelith
+Animation mixed encoded G4
+Unsaved changes
+Recovery copy updated
+S splits at playhead · Del ripple-deletes
+Commands
+Ctrl/⌘+K
+Projects
+Save
+Save As
+Captions
+Plugins
+Export
+Workspace
+Edit
+Inspect
+Media
+Custom
+Media
+Inspector
+Timeline
+Focus Inspector
+Sequence
+Animation mixed encoded G4 · Root
+Root: Animation mixed encoded G4
+New
+Create compound
+Back to parent
+Duplicate
+Rename
+Make root
+Delete
+Media
+Import
+
+Import stores a browser-only file permission and its label. Myrelith never copies or uploads the file.
+
+SEARCH
+TYPE
+All types
+Video
+Audio
+Still images
+STATUS
+All statuses
+Ready media
+Offline media
+Checking media
+Limited media
+Unsupported media
+Media errors
+2 of 2
+THUMBNAIL SIZE
+Small
+Medium
+Large
+SORT
+Project order
+Name
+Kind
+Duration
+Last modified
+Size
+Proxies
+0 · 0 B
+Stills
+s
+Future imports only
+COLLECTIONS
+All media
+2
+
+Relink finished · 1 of 1 checked · 1 connected · 0 skipped
+
+g4-silence.wav
+48 kHz · 00:00:01:00
+CONNECTEDDetails and actions
+g4-source.webm
+1280×720 · 00:00:02:00
+CONNECTEDDetails and actions
+Use arrow keys, Home, End, Page Up, and Page Down to move the Media Pool selection. Tab moves into that row's relink, collection, proxy, and remove actions.
+Selected g4-silence.wav
+2 items
+SCOPES
+QUALITY
+Auto
+Full
+Half
+Quarter
+Arrow keys adjust the focused control. Hold Shift for larger steps. Drag to preview; releasing commits one edit.
+H
+V
+Use arrow keys to move one pixel. Hold Shift to move ten pixels. Use the resize handle arrow keys to change the text box.
+Title font noticeMOVE / Text: Using the explicit serif fallback for G4 Missing Named Font; appearance depends on this platform.
+Multicam
+New multicam
+Track and master video effects
+Inspector
+g4-source.webm
+Video clip
+Transform
+Crop
+Effects
+Animation
+Link selected audio and video clips
+Select one more clip with Ctrl/Cmd-click, or focus it and press Ctrl/Cmd+Enter.
+Timing
+Reset
+Speed at playhead
+0% (Freeze)
+25%
+50%
+75%
+100%
+125%
+150%
+175%
+200%
+225%
+250%
+275%
+300%
+325%
+350%
+375%
+400%
+Clip frame 1. Add a later positive speed boundary before choosing 0% (Freeze).
+Whole clip speed
+25%
+50%
+75%
+100%
+125%
+150%
+175%
+200%
+225%
+250%
+275%
+300%
+325%
+350%
+375%
+400%
+Timeline 15 frames · source 30 frames.
+Audio plays time-stretched at 200%. Quality is limited at this speed.
+Add boundary at playhead
+Clear ramp
+
+Choose a speed at the playhead or add a boundary to start a timed section. The current whole-clip speed becomes frame 0.
+
+Playhead: clip frame 1. A 0% freeze must be bounded by a later positive point.
+
+Copy attributes
+Paste attributes…
+Reset attributes…
+VIDEO · G4-SOURCE.WEBM
+Transform
+Reset
+Position X
+Position Y
+Scale X
+Scale Y
+Lock scale ratio
+Rotation °
+Anchor X (%)
+Anchor Y (%)
+Flip horizontally
+Flip vertically
+Compositing
+Reset
+Blend mode
+Normal
+Multiply
+Screen
+Overlay
+Darken
+Lighten
+Difference
+Exclusion
+Normal is applied after transform, crop, and opacity.
+Opacity
+Reset
+Opacity
+Clip audio effects
+Add EQ
+Add compressor
+Add limiter
+Add noise gate
+Voice preset
+Music preset
+Podcast preset
+Audio effects run in authored order at this mix stage. Live playback and export share the same processors; bypass, reorder, reset, and unknown descriptors are preserved.
+No audio effects on this stack.
+V1 audio effects
+Add EQ
+Add compressor
+Add limiter
+Add noise gate
+Voice preset
+Music preset
+Podcast preset
+Audio effects run in authored order at this mix stage. Live playback and export share the same processors; bypass, reorder, reset, and unknown descriptors are preserved.
+No audio effects on this stack.
+Master audio effects
+Add EQ
+Add compressor
+Add limiter
+Add noise gate
+Voice preset
+Music preset
+Podcast preset
+Audio effects run in authored order at this mix stage. Live playback and export share the same processors; bypass, reorder, reset, and unknown descriptors are preserved.
+No audio effects on this stack.
+Loudness
+Measure
+Measurement range
+Full timeline
+Timeline In/Out
+Measurement is derived from the mixed program. It never writes gain. Incomplete coverage cannot claim a complete reading.
+Selected range: 0–30 (end exclusive).
+Normalize master to -16 LUFS
+T+
+Insert
+Overwrite
+Lift
+Extract
+Replace
+Playback is paused
+L
+R
+M
+0
+A1
+L
+R
+S
+M
+A2
+L
+R
+S
+M
+A3
+L
+R
+S
+M
+A4
+L
+R
+S
+M
+Master
+L
+R
+M
+V4
+Video
+0 clips
+T
+V3
+Video
+0 clips
+T
+V2
+Video
+0 clips
+T
+V1
+Video
+2 clips
+T
+Title
+Video
+1 clip
+T
+A1
+Audio
+1 clip
+T
+S
+M
+A2
+Audio
+0 clips
+T
+S
+M
+A3
+Audio
+0 clips
+T
+S
+M
+A4
+Audio
+0 clips
+T
+S
+M
++ Video
++ Audio
+Arrow keys move one frame, Shift+arrow moves ten, Page Up and Page Down move one second, Home and End jump to the bounds, Escape restores the playhead from when this ruler received focus, and Alt bypasses snapping.
+00:00:00:00
+00:00:05:00
+00:00:10:00
+00:00:15:00
+00:00:20:00
+00:00:25:00
+00:00:30:00
+00:00:35:00
+00:00:40:00
+00:00:45:00
+00:00:50:00
+00:00:55:00
+00:01:00:00
+00:01:05:00
+00:01:10:00
+00:01:15:00
+00:01:20:00
+g4-source.webm
+g4-source.webm
++
+MOVE
+g4-silence.wav

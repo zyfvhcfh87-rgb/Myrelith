@@ -1,0 +1,231 @@
+{
+  "release": {
+    "checkedAt": "2026-09-08T22:25:20.677897+00:00",
+    "pids": [
+      63642,
+      63671,
+      63672,
+      63673,
+      63674
+    ],
+    "remaining": [],
+    "port5201ConnectResult": 61,
+    "profileAbsent": true,
+    "ownedAwakeHelper": null
+  },
+  "acceptance": {
+    "automatedStatus": "failed-incomplete",
+    "expectedCases": 23,
+    "completedCases": 19,
+    "missing": [
+      "offline-loaded-app-and-fresh-worker",
+      "offline-page-reload",
+      "offline-persistent-browser-reopen",
+      "remove-model-and-offline-no-model"
+    ],
+    "failed": [
+      "300-second-bounded-workload"
+    ],
+    "unexpected": [],
+    "duplicateNames": false,
+    "qualification": "Automatic laboratory checks only; no production/model enablement verdict."
+  },
+  "memory": {
+    "baseline": 272498688,
+    "peak": 1405517824,
+    "delta": 1133019136,
+    "samples": 135,
+    "maxGap": 109,
+    "maximumActiveEpochGapMs": 109,
+    "failures": [
+      {
+        "reason": "resident-ceiling",
+        "at": 1788906277344,
+        "epoch": 1
+      },
+      {
+        "reason": "shutdown-sampling-gap",
+        "at": 1788906277404,
+        "epoch": 1
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "no-model-and-lazy-runtime",
+      "passed": true,
+      "elapsedMs": 36,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-acquisition",
+      "passed": true,
+      "elapsedMs": 110,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "verified-model-install",
+      "passed": true,
+      "elapsedMs": 66,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-cache-write-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 384,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-cache-commit-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 418,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "corrupt-cache-rejected-before-inference",
+      "passed": true,
+      "elapsedMs": 124,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "selected-local-files-install",
+      "passed": true,
+      "elapsedMs": 88,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "capacity-rejection-preserves-model",
+      "passed": true,
+      "elapsedMs": 68,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "transcribe-english-8",
+      "passed": true,
+      "elapsedMs": 2764,
+      "wordErrorRate": 0.058823529411764705,
+      "error": null
+    },
+    {
+      "name": "transcribe-english-9",
+      "passed": true,
+      "elapsedMs": 2746,
+      "wordErrorRate": 0.058823529411764705,
+      "error": null
+    },
+    {
+      "name": "transcribe-french-10",
+      "passed": true,
+      "elapsedMs": 2697,
+      "wordErrorRate": 0.4,
+      "error": null
+    },
+    {
+      "name": "transcribe-silence-11",
+      "passed": true,
+      "elapsedMs": 123,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "one-second-speech-window",
+      "passed": true,
+      "elapsedMs": 2620,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "corrupt-audio-rejection",
+      "passed": true,
+      "elapsedMs": 114,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-model-load",
+      "passed": true,
+      "elapsedMs": 99,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-prepare",
+      "passed": true,
+      "elapsedMs": 148,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-infer",
+      "passed": true,
+      "elapsedMs": 158,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "project-replacement",
+      "passed": true,
+      "elapsedMs": 161,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "300-second-bounded-workload",
+      "passed": false,
+      "elapsedMs": 52,
+      "wordErrorRate": null,
+      "error": "Laboratory stopped: resident-qualification"
+    }
+  ],
+  "stopReason": {
+    "type": "resident-qualification",
+    "reason": "resident-ceiling",
+    "at": 1788906277344,
+    "epoch": 1,
+    "coverage": {
+      "samples": 135,
+      "baseline": 272498688,
+      "peak": 1405517824,
+      "maxGap": 109,
+      "failures": [
+        "resident-ceiling"
+      ],
+      "qualified": false
+    }
+  },
+  "problems": [
+    {
+      "type": "resident-qualification",
+      "reason": "resident-ceiling"
+    },
+    {
+      "type": "case-failure",
+      "case": "300-second-bounded-workload",
+      "message": "Laboratory stopped: resident-qualification"
+    },
+    {
+      "type": "browser-cleanup",
+      "reason": "shutdown-sampling-gap"
+    },
+    {
+      "type": "runner-stopped",
+      "message": "Laboratory stopped after 300-second-bounded-workload"
+    },
+    {
+      "type": "final-cleanup-unverified",
+      "status": "unavailable",
+      "reason": "Browser closed after failure; no cooperative model/cache cleanup claim"
+    },
+    {
+      "type": "resident-coverage-unqualified"
+    }
+  ]
+}

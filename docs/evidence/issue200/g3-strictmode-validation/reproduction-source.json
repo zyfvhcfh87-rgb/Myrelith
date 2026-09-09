@@ -1,0 +1,10 @@
+{
+  "beforeHead": "cd24868fbc68a00d77c6d24a4e40196266135a2a",
+  "beforeMotionSha256": "5606095bf4aa9b39d1510d50cd844a33f850b9cefb52ca9e1bb36f9e6a927237",
+  "afterMotionSha256": "2cb6059c31f62dd9718a4bf0f5069fce3682607ccd83d24496df9a6319ab9622",
+  "sameRedGreenTestSha256": "2c5b5c139c6bfdb5ab530818fa44d153032879bbc3b3e7cdc77a36e9c79e97d5",
+  "red": "6failed/1passed/7skipped",
+  "green": "7passed/7skipped",
+  "parentUnmodified": "2passed",
+  "focused": "6files/61passed+17runner"
+}

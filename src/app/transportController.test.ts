@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * app/transportController.test.ts — Phase 4.0.5.
  *
@@ -150,7 +151,7 @@ function makeCrossfadeAudibleDoc(): TimelineDoc {
   }]
   return {
     ...makeDoc(),
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     tracks: [
       videoTrack,
       makeTrack('A-from', [audioFrom], 'audio'),
@@ -292,7 +293,7 @@ function deferred<T>() {
 /** One 120-frame clip at 30fps → duration 120, last frame 119. */
 function makeDoc(durationFrames = 120): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-transport',
     name: 'transport fixture',
     frameRate: { num: 30, den: 1 },

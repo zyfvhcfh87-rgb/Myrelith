@@ -1,3 +1,4 @@
+import { titleEffectAnimationParameterSpec } from '../titleEffectAnimation'
 import type { ClipId, Effect, EffectId, EffectParamValue, TimelineDoc } from '../schema';
 import { clipAnimation, documentAnimationKeyframeGrowthAllowed, effectAnimationTrack, effectAnimationTracks, LINEAR_ANIMATION_EASING, removeEffectAnimationTracks, upsertEffectAnimationKeyframe } from '../clipAnimation';
 import { effectParamsValidationError, effectAnimationParameterSpec, effectRegistration, cloneEffectDescriptor } from '../effectStack';
@@ -135,7 +136,8 @@ export function updateEffectParamsAtFrame(
   const staticPatch: Record<string, EffectParamValue> = {}
   for (const [parameter, value] of Object.entries(patch)) {
     if (effectAnimationTrack(currentAnimation, effectId, parameter)) {
-      const spec = effectAnimationParameterSpec(effect, parameter)
+      const spec = loc.clip.title === undefined ? effectAnimationParameterSpec(effect, parameter)
+        : titleEffectAnimationParameterSpec(loc.clip, effect, parameter)
       if (
         !spec
         || typeof value !== 'number'

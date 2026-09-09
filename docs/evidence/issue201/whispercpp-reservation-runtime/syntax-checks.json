@@ -1,0 +1,26 @@
+[
+  {
+    "path": "scripts/issue201/whispercpp-reservation-run/candidate.mjs",
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "scripts/issue201/whispercpp-reservation-run/inspect-glue.mjs",
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "scripts/issue201/whispercpp-reservation-run/preflight.mjs",
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "path": "scripts/issue201/whispercpp-reservation-run/run-lab.mjs",
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]

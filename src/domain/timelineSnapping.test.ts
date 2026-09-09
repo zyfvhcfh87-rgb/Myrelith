@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from './schema'
 import {
@@ -54,7 +55,7 @@ function doc(): TimelineDoc {
   const from = clip('from', 100, 20)
   const to = clip('to', 120, 20)
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'snap-doc',
     name: 'snap doc',
     frameRate: { num: 30, den: 1 },

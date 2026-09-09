@@ -1,0 +1,19 @@
+Starting no-model-and-lazy-runtime
+PASS no-model-and-lazy-runtime
+Starting cancel-acquisition
+PASS cancel-acquisition
+Starting verified-model-install
+PASS verified-model-install
+Starting cancel-cache-write-restores-committed-model
+PASS cancel-cache-write-restores-committed-model
+Starting cancel-cache-commit-restores-committed-model
+PASS cancel-cache-commit-restores-committed-model
+Starting corrupt-cache-rejected-before-inference
+PASS corrupt-cache-rejected-before-inference
+Starting selected-local-files-install
+PASS selected-local-files-install
+Starting capacity-rejection-preserves-model
+PASS capacity-rejection-preserves-model
+Starting transcribe-english-8
+FAIL transcribe-english-8
+{"output":"/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-lab/runtime-results-02.json","acceptance":{"automatedStatus":"failed-incomplete","expectedCases":23,"completedCases":9,"missing":["transcribe-english-9","transcribe-french-10","transcribe-silence-11","one-second-speech-window","corrupt-audio-rejection","cancel-model-load","cancel-prepare","cancel-infer","project-replacement","300-second-bounded-workload","offline-loaded-app-and-fresh-worker","offline-page-reload","offline-persistent-browser-reopen","remove-model-and-offline-no-model"],"failed":["transcribe-english-8"],"unexpected":[],"duplicateNames":false,"qualification":"Automatic laboratory checks only; no production/model enablement verdict."},"physicalRelease":{"status":"verified-absent","reason":"final-physical-verification","startedAt":1788901284849,"at":1788901284906,"elapsedMs":57,"remaining":[],"verifiedAbsent":true,"signals":[],"errors":[]},"serverRelease":{"status":"not-listening","listening":false,"elapsedMs":0,"errors":[]},"profileRemoval":{"status":"removed-owned-profile","path":"/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-lab/profile-02","files":88,"bytes":89670574,"scope":"Separate filesystem teardown, not an application Remove-model pass."},"passed":8,"failed":1}

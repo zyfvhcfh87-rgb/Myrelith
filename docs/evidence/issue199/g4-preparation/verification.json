@@ -1,0 +1,74 @@
+{
+  "productSource": "16ac2e6d498ca9a486148ccb936f729fc886050d",
+  "mergeBase": "dae89eda7d2926fee09700dc311c324f2e7d204f",
+  "sourceFiles": 939,
+  "logs": [
+    {
+      "copy": "product-typecheck.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/integrated-five-owner-typecheck-final.log",
+      "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "copySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": "normalized text; exact raw retained"
+    },
+    {
+      "copy": "protocol-typecheck.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-protocol-typecheck-freeze.log",
+      "rawSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "copySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "mode": "normalized text; exact raw retained"
+    },
+    {
+      "copy": "lint.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-lint-freeze.log",
+      "rawSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216",
+      "copySha256": "c69d64bb2173ebe42cc6fa332d8185c77f18c853a6f2b16dd7a8adb7ba833fbc",
+      "mode": "normalized text; exact raw retained"
+    },
+    {
+      "copy": "fixture-pcm.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-fixture-test-final.log",
+      "rawSha256": "7f71f2061d5cd45578b1b34d0f3556edacf2f565ae3c29e5f9de203061e07100",
+      "copySha256": "84345d71a2b18720166e5a8b004f842c9d8b213cece8ce9ad3f10ac4fc053ee6",
+      "mode": "normalized text; exact raw retained"
+    },
+    {
+      "copy": "inert-lifecycle-oracles.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-inert-freeze.log",
+      "rawSha256": "0b44900c42bc1091ebf8f47e7c8dedc7ba25c5fbca696b670de987e40e533fb1",
+      "copySha256": "0b44900c42bc1091ebf8f47e7c8dedc7ba25c5fbca696b670de987e40e533fb1",
+      "mode": "normalized text; exact raw retained"
+    },
+    {
+      "copy": "precommit-source-check.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-source-precommit-check.log",
+      "rawSha256": "b0dcb4b93e0ab1d47c1edb7e0967406f4fccf202529d0cb09386afa43e209302",
+      "copySha256": "b0dcb4b93e0ab1d47c1edb7e0967406f4fccf202529d0cb09386afa43e209302",
+      "mode": "normalized text; exact raw retained"
+    },
+    {
+      "copy": "lane-expectation.log",
+      "raw": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue199/.tmp/issue199/g4-lane-expectation.log",
+      "rawSha256": "bdd7a7ac55001942d804eca5e9db4788b04a4f78c674c99bd0699b39c270b615",
+      "copySha256": "12ed8b2932eb755491b07a878e17b5b6d9b3ea02dc2fb06a669b0b81a9aaf95f",
+      "mode": "normalized text; exact raw retained"
+    }
+  ],
+  "tests": {
+    "pureFixtureAndPcm": 4,
+    "canonicalRunner": 17,
+    "inertLifecycleAndOracles": 16,
+    "laneIndexCorrected": 6,
+    "laneIndexRunner": 17
+  },
+  "checks": {
+    "unchangedProductionTypecheck": "passed before final harness-only assertion",
+    "protocolTypecheck": "passed after final drain assertion",
+    "lint": "passed with no warnings",
+    "precommitSourceInventory": "927 tracked files; excludes untracked G4 preparation",
+    "productionBuild": "not run; deferred to parent integration build",
+    "browserExport": "not run; review and shared-slot grant required"
+  },
+  "finalDrain": "After awaited disposal, persist actual admission snapshot then require zero essentialOwners, monitorOwners, decoderSlots, surfaceBytes and no blockers. Earlier snapshots are diagnostic only.",
+  "qualification": "Source-module diagnostic preparation; no ordinary production-bundle, first-paint, performance or whole Gate4 claim.",
+  "parentRequestedTestCorrection": "Two-line animationLaneIndex test title/expected-reason update for missing effect. Parent reported extra five-suite run120pass/1stale-message failure; original nine focused suites147pass. This worker verified the corrected lane-index suite; no resolver or behavior change."
+}

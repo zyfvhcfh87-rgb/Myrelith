@@ -1,0 +1,16 @@
+{
+  "label": "tagged-ninja-version",
+  "command": [
+    "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/.tmp/issue201-whispercpp-build/ninja/ninja",
+    "--version"
+  ],
+  "timeoutSeconds": 30,
+  "startedAt": "2026-09-08T17:36:01Z",
+  "pid": 92017,
+  "processGroup": 92017,
+  "exitCode": 0,
+  "remainingGroupTerminated": false,
+  "elapsedSeconds": 0.003,
+  "logBytes": 7,
+  "logSha256": "810ab97f4b3fccb9adf1db7959945b479635931ccc4a0243c34a41b739eae25a"
+}

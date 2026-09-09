@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../../domain/projectFile'
 /**
  * ui/timeline/timeline.test.tsx — Phase 3.2.
  *
@@ -25,7 +26,7 @@ import { useScrubScheduler } from './useScrubScheduler'
 /** Empty 30fps doc, optionally with one clip to pin the doc duration. */
 function makeDoc(durationFrames = 0): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-ruler',
     name: 'ruler fixture',
     frameRate: { num: 30, den: 1 },

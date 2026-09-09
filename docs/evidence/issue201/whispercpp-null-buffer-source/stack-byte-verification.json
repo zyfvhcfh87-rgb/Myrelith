@@ -1,0 +1,50 @@
+{
+  "status": "static-captured-offsets-verified",
+  "wasmSha256": "9df26c6b690de120e6f1fb5ce17a25ebb2b016a73f0477b24376f558ee00ce72",
+  "importedFunctions": 59,
+  "definedFunctions": 1309,
+  "calls": [
+    {
+      "caller": 198,
+      "byteOffset": 54791,
+      "byteOffsetHex": "0xd607",
+      "target": 542,
+      "bytes": "109e04",
+      "body": {
+        "start": 43379,
+        "end": 54964
+      }
+    },
+    {
+      "caller": 198,
+      "byteOffset": 54803,
+      "byteOffsetHex": "0xd613",
+      "target": 540,
+      "bytes": "109c04",
+      "body": {
+        "start": 43379,
+        "end": 54964
+      }
+    },
+    {
+      "caller": 540,
+      "byteOffset": 291765,
+      "byteOffsetHex": "0x473b5",
+      "target": 219,
+      "bytes": "10db01",
+      "body": {
+        "start": 290498,
+        "end": 292140
+      }
+    }
+  ],
+  "optimizedModuleSymbolNamesAvailable": false,
+  "mappingQualification": "Source identities come from matching control flow, data accesses and assertion literals in saved disassembly, not a debug symbol table.",
+  "ignoredReserveReturnVisible": true,
+  "observedAllocationCall": "second scheduler call; first get-base call in graph allocator leaf loop",
+  "reserveReturnValueObserved": false,
+  "failedAllocationSizeObserved": false,
+  "heapExhaustionProven": false,
+  "wasmExecuted": false,
+  "compiled": false
+}

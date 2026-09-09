@@ -1,0 +1,59 @@
+{
+  "baseCommit": "32ae47a3b800a0b273dba7685fe45c766105e69c",
+  "qualification": "source-only inert routing regression; no new Vite/server/browser/decode/build run",
+  "files": {
+    "before-route-extraction.patch": {
+      "bytes": 2483,
+      "sha256": "1918dd93cbd37c91220e985db6d3ae684c9aad9012545d7eb225b32998acaad1"
+    },
+    "node-regression-logs.tar.gz": {
+      "bytes": 1045,
+      "sha256": "4d36c8cbd1577ab8a11cf46a8bf03e252e87b91f074aa14a6163be892f2496e1"
+    },
+    "parent-release.json": {
+      "bytes": 713,
+      "sha256": "7ea031ebb76099fe5ba521aab66d12160e094a58e5c471ef8d4a853b6eb497a8"
+    },
+    "results.md": {
+      "bytes": 3640,
+      "sha256": "b858510cf023fd69359748535562c6d054b85c25ab306b75c233a422c8245ed5"
+    }
+  },
+  "testedSource": {
+    "scripts/issue198/run-export-diagnostic.mjs": {
+      "bytes": 13071,
+      "sha256": "f2f5bd9dc5cdeaaa5f08cc8f8fd24ed23d8aa8a29bb98593917f736552f3c5ed"
+    },
+    "scripts/issue198/diagnosticDriver.test.mjs": {
+      "bytes": 5849,
+      "sha256": "aa133fdcebe70151522f7470e8c383e03a95c28754e0bbaa1683724448833c42"
+    },
+    "scripts/issue198/exportPixelDiagnostic.ts": {
+      "bytes": 13145,
+      "sha256": "9f8e986b78a82ad54098bf792b3f2a95c2d4ab66ab35fa25b7b91e6d9a527790"
+    },
+    "scripts/issue198/DIAGNOSTIC.md": {
+      "bytes": 10595,
+      "sha256": "6d026ead9711f689c0856b52e3148234619cd300dbbbe27d9f115844615f6790"
+    }
+  },
+  "beforeExtractedDriver": {
+    "bytes": 12888,
+    "sha256": "92b9d3e15417b39b4d94bf016b5ad9d5818b312ae75314267d343ad5d994711f"
+  },
+  "unchangedBeforeAfterTest": {
+    "bytes": 5849,
+    "sha256": "aa133fdcebe70151522f7470e8c383e03a95c28754e0bbaa1683724448833c42"
+  },
+  "rawRegressionLogs": {
+    "route-before.log": {
+      "bytes": 1988,
+      "sha256": "299b7e55bb0937a27c6b16ad0ca96588528a900d50fcaef364bc6cb50a678922"
+    },
+    "route-after.log": {
+      "bytes": 818,
+      "sha256": "3224c5b0775925e5c943a97a5bab5169f560db18188bb2a3dc0df386cf550af1"
+    }
+  },
+  "archiveMembersVerified": 2
+}

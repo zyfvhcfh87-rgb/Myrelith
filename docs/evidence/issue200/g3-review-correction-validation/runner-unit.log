@@ -1,0 +1,15 @@
+test_continuous_output_also_reaches_deadline (__main__.RunnerTests) ... ok
+test_eof_completes_and_keeps_raw_bytes (__main__.RunnerTests) ... ok
+test_held_open_silent_pipe_reaches_deadline_without_eof (__main__.RunnerTests) ... ok
+test_main_times_out_and_kills_without_stdout_eof_or_term_exit (__main__.RunnerTests) ... ok
+test_new_descendant_is_discovered_before_kill (__main__.RunnerTests) ... ok
+test_pid_reuse_requires_both_start_and_command_match (__main__.RunnerTests) ... ok
+test_reused_parent_does_not_admit_unrelated_descendants (__main__.RunnerTests) ... ok
+test_snapshot_failure_is_recorded_and_later_stages_continue (__main__.RunnerTests) ... ok
+test_survivors_and_signal_errors_cannot_be_reported_as_clean (__main__.RunnerTests) ... ok
+test_term_resistant_child_is_killed_after_bounded_grace (__main__.RunnerTests) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.003s
+
+OK

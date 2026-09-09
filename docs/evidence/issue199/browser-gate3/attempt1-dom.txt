@@ -1,0 +1,50 @@
+Plugin safety
+
+Start without loading third-party plugins. Built-in effects and saved plugin records stay available.
+
+Enter safe mode
+
+Installed plugins aren't checked here. Safe mode keeps every third-party package inactive.
+
+RESUME PROJECT
+Reconnect your work
+
+The project is checked before it opens. Missing sources can stay offline and be reconnected later.
+
+Open & remember another project file
+Reconnect directly in future sessions when browser permission is still available.
+Open once
+Do not save reusable browser permission for this file or folder.
+
+Remember access stores a browser-only file or folder permission and its label. Myrelith never copies or uploads the file. Use once keeps no reusable access after this session.
+
+mixed.myrelith
+Animation observable fixture
+VALIDATED
+Canvas
+Horizontal 16:9 · 1920 × 1080
+Frame rate
+30 fps
+Audio
+48 kHz
+Source media
+
+2 sources will open offline. You can reconnect them now or from the editor.
+
+Relink & remember
+Relink once
+
+Remember access stores a browser-only file or folder permission and its label. Myrelith never copies or uploads the file. Use once keeps no reusable access after this session.
+
+fixture.mp4
+Video
+OFFLINE · RELINK NEEDED
+silent-offline.wav
+Audio
+OFFLINE · RELINK NEEDED
+Back
+Open with 2 offline
+Private by design. Portable by default.
+Privacy
+Licenses
+GitHub

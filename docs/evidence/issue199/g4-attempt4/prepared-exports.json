@@ -1,0 +1,319 @@
+{
+  "rejectMissingFont": [
+    {
+      "phase": "prepared",
+      "status": "blocked",
+      "attempt": {
+        "documentGeneration": 0,
+        "settings": {
+          "container": "webm",
+          "videoCodec": "vp9",
+          "videoBitrate": 5000000,
+          "videoBitrateMode": "variable",
+          "keyFrameIntervalMicroseconds": 2000000,
+          "mimeType": "video/webm",
+          "fileExtension": "webm",
+          "destination": "download",
+          "audioCodec": "opus",
+          "audioChannelLayout": "stereo",
+          "audioBitrate": 192000,
+          "audioBitrateMode": "variable"
+        },
+        "catalogGeneration": 0,
+        "effects": [
+          {
+            "key": "1:0:2:g4-future",
+            "descriptorId": "g4-future",
+            "effectType": "plugin:missing/future",
+            "enabled": false,
+            "pluginId": null,
+            "pluginVersion": null,
+            "packageDigest": null,
+            "signerFingerprint": null,
+            "contributionId": null,
+            "contributionVersion": null,
+            "descriptorVersion": 99,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          },
+          {
+            "key": "1:1:2:fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "descriptorId": "fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "effectType": "plugin:missing/future",
+            "enabled": false,
+            "pluginId": null,
+            "pluginVersion": null,
+            "packageDigest": null,
+            "signerFingerprint": null,
+            "contributionId": null,
+            "contributionVersion": null,
+            "descriptorVersion": 99,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          }
+        ],
+        "blockers": [
+          {
+            "key": "1:0:2:g4-future",
+            "descriptorId": "g4-future",
+            "pluginId": null,
+            "contributionId": null,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          },
+          {
+            "key": "1:1:2:fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "descriptorId": "fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "pluginId": null,
+            "contributionId": null,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          }
+        ]
+      },
+      "tokenPresent": true
+    },
+    {
+      "phase": "reviewed",
+      "status": "ready",
+      "attempt": {
+        "documentGeneration": 0,
+        "settings": {
+          "container": "webm",
+          "videoCodec": "vp9",
+          "videoBitrate": 5000000,
+          "videoBitrateMode": "variable",
+          "keyFrameIntervalMicroseconds": 2000000,
+          "mimeType": "video/webm",
+          "fileExtension": "webm",
+          "destination": "download",
+          "audioCodec": "opus",
+          "audioChannelLayout": "stereo",
+          "audioBitrate": 192000,
+          "audioBitrateMode": "variable"
+        },
+        "catalogGeneration": 0,
+        "effects": [
+          {
+            "key": "1:0:2:g4-future",
+            "descriptorId": "g4-future",
+            "effectType": "plugin:missing/future",
+            "enabled": false,
+            "pluginId": null,
+            "pluginVersion": null,
+            "packageDigest": null,
+            "signerFingerprint": null,
+            "contributionId": null,
+            "contributionVersion": null,
+            "descriptorVersion": 99,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          },
+          {
+            "key": "1:1:2:fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "descriptorId": "fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "effectType": "plugin:missing/future",
+            "enabled": false,
+            "pluginId": null,
+            "pluginVersion": null,
+            "packageDigest": null,
+            "signerFingerprint": null,
+            "contributionId": null,
+            "contributionVersion": null,
+            "descriptorVersion": 99,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          }
+        ],
+        "blockers": [
+          {
+            "key": "1:0:2:g4-future",
+            "descriptorId": "g4-future",
+            "pluginId": null,
+            "contributionId": null,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          },
+          {
+            "key": "1:1:2:fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "descriptorId": "fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "pluginId": null,
+            "contributionId": null,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          }
+        ]
+      },
+      "tokenPresent": true
+    },
+    {
+      "phase": "started"
+    },
+    {
+      "phase": "failed",
+      "stage": "start",
+      "error": "G4PreparedExportFailure: Error: Title cannot be exported: MOVE: Text: Requested font is not a supported generic family; choose an explicit fallback."
+    },
+    {
+      "phase": "closed"
+    }
+  ],
+  "exportEncoded": [
+    {
+      "phase": "prepared",
+      "status": "blocked",
+      "attempt": {
+        "documentGeneration": 0,
+        "settings": {
+          "container": "webm",
+          "videoCodec": "vp9",
+          "videoBitrate": 5000000,
+          "videoBitrateMode": "variable",
+          "keyFrameIntervalMicroseconds": 2000000,
+          "mimeType": "video/webm",
+          "fileExtension": "webm",
+          "destination": "download",
+          "audioCodec": "opus",
+          "audioChannelLayout": "stereo",
+          "audioBitrate": 192000,
+          "audioBitrateMode": "variable"
+        },
+        "catalogGeneration": 0,
+        "effects": [
+          {
+            "key": "1:0:2:g4-future",
+            "descriptorId": "g4-future",
+            "effectType": "plugin:missing/future",
+            "enabled": false,
+            "pluginId": null,
+            "pluginVersion": null,
+            "packageDigest": null,
+            "signerFingerprint": null,
+            "contributionId": null,
+            "contributionVersion": null,
+            "descriptorVersion": 99,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          },
+          {
+            "key": "1:1:2:fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "descriptorId": "fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "effectType": "plugin:missing/future",
+            "enabled": false,
+            "pluginId": null,
+            "pluginVersion": null,
+            "packageDigest": null,
+            "signerFingerprint": null,
+            "contributionId": null,
+            "contributionVersion": null,
+            "descriptorVersion": 99,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          }
+        ],
+        "blockers": [
+          {
+            "key": "1:0:2:g4-future",
+            "descriptorId": "g4-future",
+            "pluginId": null,
+            "contributionId": null,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          },
+          {
+            "key": "1:1:2:fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "descriptorId": "fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "pluginId": null,
+            "contributionId": null,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          }
+        ]
+      },
+      "tokenPresent": true
+    },
+    {
+      "phase": "reviewed",
+      "status": "ready",
+      "attempt": {
+        "documentGeneration": 0,
+        "settings": {
+          "container": "webm",
+          "videoCodec": "vp9",
+          "videoBitrate": 5000000,
+          "videoBitrateMode": "variable",
+          "keyFrameIntervalMicroseconds": 2000000,
+          "mimeType": "video/webm",
+          "fileExtension": "webm",
+          "destination": "download",
+          "audioCodec": "opus",
+          "audioChannelLayout": "stereo",
+          "audioBitrate": 192000,
+          "audioBitrateMode": "variable"
+        },
+        "catalogGeneration": 0,
+        "effects": [
+          {
+            "key": "1:0:2:g4-future",
+            "descriptorId": "g4-future",
+            "effectType": "plugin:missing/future",
+            "enabled": false,
+            "pluginId": null,
+            "pluginVersion": null,
+            "packageDigest": null,
+            "signerFingerprint": null,
+            "contributionId": null,
+            "contributionVersion": null,
+            "descriptorVersion": 99,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          },
+          {
+            "key": "1:1:2:fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "descriptorId": "fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "effectType": "plugin:missing/future",
+            "enabled": false,
+            "pluginId": null,
+            "pluginVersion": null,
+            "packageDigest": null,
+            "signerFingerprint": null,
+            "contributionId": null,
+            "contributionVersion": null,
+            "descriptorVersion": 99,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          }
+        ],
+        "blockers": [
+          {
+            "key": "1:0:2:g4-future",
+            "descriptorId": "g4-future",
+            "pluginId": null,
+            "contributionId": null,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          },
+          {
+            "key": "1:1:2:fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "descriptorId": "fx_d06be3cb-45bb-425f-8f93-f584d4e9fe41",
+            "pluginId": null,
+            "contributionId": null,
+            "status": "invalid",
+            "reason": "The plugin effect type is malformed; its data is preserved."
+          }
+        ]
+      },
+      "tokenPresent": true
+    },
+    {
+      "phase": "started"
+    },
+    {
+      "phase": "completed",
+      "destination": "download"
+    },
+    {
+      "phase": "closed"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "parentHead": "2a7f333",
+  "status": "proposed-retry-source-only",
+  "sourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp/private-build.py",
+      "bytes": 18043,
+      "sha256": "4a58a09a560daf3ec47e58639ee1b58f50caa84695289cafcbe3fb20e89ae110"
+    },
+    {
+      "path": "scripts/issue201/whispercpp/private-build-retry.test.py",
+      "bytes": 5648,
+      "sha256": "d41a4134f06c2620cacb505ca23f6375d890c939920e148349f3fa7bd1db9d8d"
+    },
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_LINK_RETRY.md",
+      "bytes": 2253,
+      "sha256": "1c7a0bdb396d9b8dfa62d22740b72ffac41710f8e0386caf76769437f2429fba"
+    }
+  ],
+  "records": [
+    {
+      "path": "input-verification.json",
+      "bytes": 651,
+      "sha256": "1cf7f94b396b4995000c383568350e243f9142b88cd8d98e983ff2cfbea26dad"
+    },
+    {
+      "path": "retry-control-tests.txt",
+      "bytes": 594,
+      "sha256": "676bb17f34a2f535b373c35f8d6619f179222801576c31ebd55d196272070bc2"
+    },
+    {
+      "path": "source-vm-tests.txt",
+      "bytes": 6313,
+      "sha256": "a43015efafb6527fcf92824b39d654d60a4429039b8edd0525061bad3ff453d6"
+    }
+  ],
+  "retryControlTestsPassed": 6,
+  "sourceVmTestsPassed": 60,
+  "privateRecipeRestaged": false,
+  "retryInvoked": false,
+  "wasmExecuted": false
+}

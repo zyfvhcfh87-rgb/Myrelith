@@ -1,0 +1,11 @@
+--- a/src/whisper.cpp
++++ b/src/whisper.cpp
+@@ -3466,7 +3466,7 @@
+     }
+ #endif
+ 
+-    state->logits.reserve(ctx->vocab.n_vocab * ctx->model.hparams.n_text_ctx);
++    // Allocate output logits for the actual decode batch, at logits_out.resize().
+ 
+     state->batch = whisper_batch_init(ctx->model.hparams.n_text_ctx, WHISPER_MAX_DECODERS);
+ 

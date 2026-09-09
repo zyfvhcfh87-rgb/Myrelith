@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 /**
  * Three-point duration rule, targeting, and sequence-edit apply.
  *
@@ -84,7 +85,7 @@ function makeTrack(
 
 function makeDoc(tracks?: Track[]): TimelineDoc {
   return deepFreeze({
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-three-point',
     name: 'three-point fixture',
     frameRate: { num: 30, den: 1 },

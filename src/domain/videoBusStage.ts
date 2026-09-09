@@ -3,7 +3,10 @@ import type { ColorGradingContext } from './colorGradingEffects'
 import type { EffectDescriptor, TimelineDoc } from './schema'
 import { effectDescriptorBoundsError, EFFECT_STACK_LIMITS } from './effectBounds'
 import { cloneEffectDescriptor, effectParamsValidationError, effectRegistration, resolvePostCompositeEffectStack } from './effectStack'
-import { renderSurfaceBudget, MAX_RENDER_AGGREGATE_SURFACE_BYTES } from './renderSurfaceBudget'
+import { renderWorkSurfaceBudget } from './renderSurfaceBudget'
+import { peakPixelStackWork, pixelStackWorkBudget } from './pixelWorkBudget'
+import { spatialEffectScratchBytes } from './spatialEffectPixels'
+import { SPATIAL_EFFECT_PARAMETERS, type SpatialEffectKind, type SpatialPixelEffect } from './spatialEffectDefinitions'
 
 export function videoBusStacks(doc: TimelineDoc): readonly (readonly EffectDescriptor[])[] {
   return [doc.masterVideoEffects ?? [], ...doc.tracks.map((track) => track.videoEffects ?? [])]
@@ -38,21 +41,22 @@ export function resolveVideoBusEffects(effects: readonly EffectDescriptor[], pix
   }) }
 }
 /** Upper bound over all admitted spatial parameters, independently of stack length. */
+const MAXIMUM_SPATIAL_STAGES: readonly SpatialPixelEffect[] = (Object.keys(SPATIAL_EFFECT_PARAMETERS) as SpatialEffectKind[])
+  .map((kind) => ({ kind, params: Object.freeze({ color: '#000000',
+    ...Object.fromEntries(Object.entries(SPATIAL_EFFECT_PARAMETERS[kind]).map(([key, spec]) => [key, spec.max])) }) }))
 export function videoBusScratchBytes(width: number, height: number, projectWidth = width, projectHeight = height): number {
-  const rx = Math.min(width - 1, Math.round(32 * width / projectWidth))
-  const ry = Math.min(height - 1, Math.round(32 * height / projectHeight))
-  const outline = width * (6 * ry + 19) + 4 * (rx + 1)
-  const shadow = width * (Math.min(height, 2 * Math.round(32 * height / projectHeight) + Math.round(64 * height / projectHeight) + 2) + 8)
-  return Math.max(Math.max(width, height) * 4, width * 12, outline, shadow)
+  const geometry = { surfaceWidth: width, surfaceHeight: height, projectWidth, projectHeight }
+  return Math.max(...MAXIMUM_SPATIAL_STAGES.map((stage) => spatialEffectScratchBytes(stage, geometry)))
 }
 export function videoBusAdditionalBytes(width: number, height: number, projectWidth = width, projectHeight = height): number {
-  return width * height * 4 + videoBusScratchBytes(width, height, projectWidth, projectHeight)
+  const geometry = { surfaceWidth: width, surfaceHeight: height, projectWidth, projectHeight }
+  const budget = peakPixelStackWork(MAXIMUM_SPATIAL_STAGES.map((stage) => pixelStackWorkBudget([stage], geometry, 'shared-scratch')))
+  return budget.reason ? Number.POSITIVE_INFINITY : budget.peakAdditionalBytes
 }
 export function videoBusRenderBudgetError(width: number, height: number, projectWidth = width, projectHeight = height): string | null {
-  const base = renderSurfaceBudget(width, height)
-  if (!base.allowed) return base.reason
-  const total = base.aggregateBytes + videoBusAdditionalBytes(width, height, projectWidth, projectHeight)
-  return !Number.isSafeInteger(total) || total > MAX_RENDER_AGGREGATE_SURFACE_BYTES ? 'Video-bus readback and scratch exceed the render memory limit at this resolution.' : null
+  return renderWorkSurfaceBudget(width, height, {
+    additionalOwnedBytes: videoBusAdditionalBytes(width, height, projectWidth, projectHeight),
+  }).reason
 }
 
 export function snapshotVideoBusStack(effects: readonly EffectDescriptor[] | undefined): readonly EffectDescriptor[] {

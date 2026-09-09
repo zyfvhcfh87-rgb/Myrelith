@@ -1,0 +1,57 @@
+{
+  "artifacts": [
+    {
+      "name": "myrelith-whisper.mjs",
+      "bytes": 22350,
+      "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7"
+    },
+    {
+      "name": "myrelith-whisper.wasm",
+      "bytes": 1198475,
+      "sha256": "2fbfa40076f5807d3a23af65c92adf93cfcdc16dec959711b2c4258ca387548a"
+    }
+  ],
+  "memories": [
+    {
+      "flags": 1,
+      "initial": 1024,
+      "maximum": 8192
+    }
+  ],
+  "globals": [
+    {
+      "type": "i32",
+      "mutable": 1,
+      "initial": 5923456
+    },
+    {
+      "type": "i32",
+      "mutable": 1,
+      "initial": 0
+    }
+  ],
+  "tables": [
+    {
+      "type": "funcref",
+      "flags": 1,
+      "initial": 1162,
+      "maximum": 1162
+    }
+  ],
+  "imports": 59,
+  "exports": 22,
+  "definedFunctions": 1309,
+  "factoryExecuted": false,
+  "wasmExecuted": false,
+  "previousAddressAssertion": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n  {\n+   initial: 5923456,\n-   initial: 5923408,\n    mutable: 1,\n    type: 'i32'\n  }\n",
+  "speechExports": 11,
+  "stack": {
+    "globalIndex": 0,
+    "initialPointer": 5923456,
+    "getExport": "wa",
+    "restoreExport": "va",
+    "completeHelperBodiesInspected": true,
+    "runtimeStackBoundsTested": false
+  },
+  "status": "static-inspection-passed"
+}

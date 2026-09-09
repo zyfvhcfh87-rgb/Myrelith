@@ -1,3 +1,9 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
+import { createPluginVideoEffectContributionSnapshot, resolveVideoEffectStagePlan } from '../domain/pluginVideoEffectStagePlan'
+import { applyVideoEffectStagePlanToRgba } from './videoEffectStageExecution'
+import { ColorGradingCancelledError, type ColorGradingFrame } from './colorGradingRuntime'
+import { expandedTitleProject } from '../test/titleOwnerFixtures'
+import { createVideoCompositionPlanner } from '../domain/videoCompositionPlan'
 /**
  * pipeline/export.test.ts — video-only CFR export orchestration.
  *
@@ -97,7 +103,7 @@ function makeDoc(
         ]
 
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc',
     name: 'doc',
     frameRate,
@@ -106,6 +112,26 @@ function makeDoc(
     audioSampleRate: 48_000,
     tracks,
   }
+}
+
+const PLUGIN_CONTEXT = {
+  timelineFrame: 0, frameRate: { num: 30, den: 1 },
+  surfaceWidth: 1, surfaceHeight: 1, projectWidth: 1, projectHeight: 1,
+}
+
+function exportPluginPlan() {
+  const clip = makeClip(1)
+  clip.effects = [{ id: 'plugin-effect', type: 'plugin:com.example.fixture/fixture', version: 1, enabled: true, params: {} }]
+  const snapshot = createPluginVideoEffectContributionSnapshot(7, [{
+    signerFingerprint: `sha256:${'1'.repeat(64)}`, packageDigest: `sha256:${'2'.repeat(64)}`,
+    pluginId: 'com.example.fixture', pluginVersion: '1.0.0', kind: 'video-effect',
+    contributionVersion: 1, contributionId: 'fixture', contributionName: 'Fixture',
+    descriptorVersion: 1, entrypoint: 'myrelith_fixture', parameters: [],
+    availability: 'ready', detail: 'Ready.',
+  }])
+  const plan = resolveVideoEffectStagePlan(clip, 0, snapshot)
+  if (!plan?.requiresOrderedPixelPath) throw new Error('fixture must resolve a real ready plugin plan')
+  return plan
 }
 
 function deferredVoid(): { promise: Promise<void>; resolve: () => void } {
@@ -121,6 +147,7 @@ interface HarnessOptions {
     frame: number,
     source: FrameSource,
     videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
+    grading: ColorGradingFrame,
   ) => Promise<CompositeResult>
   getFrame?: (
     assetId: string,
@@ -183,6 +210,7 @@ function makeHarness(options: HarnessOptions = {}) {
       _presentation?: PresentationProfile,
       _lensRemapProvider?: unknown,
       videoEffectStageExecutor?: VideoEffectStageExecutor | null,
+      grading?: ColorGradingFrame,
     ): Promise<CompositeResult> => {
       events.push('composite:' + plan.frame)
       return (
@@ -190,6 +218,7 @@ function makeHarness(options: HarnessOptions = {}) {
           plan.frame,
           _source,
           videoEffectStageExecutor,
+          grading!,
         )) ?? {
           drawn: ['clip-a'],
           missing: [],
@@ -349,6 +378,21 @@ describe('createDirectFileExportResult', () => {
 })
 
 describe('exportTimeline CFR scheduling', () => {
+  test('unavailable title intent in an injected lease fails before composition or encoding and closes every owner', async () => {
+    const doc = expandedTitleProject().sequences[0]
+    doc.tracks[0].clips[0].title = { version: 99 }
+    const h = makeHarness()
+    h.openFrame.mockImplementationOnce(async (frame) => ({ plan: createVideoCompositionPlanner(doc, new Map()).planFrame(frame),
+      getFrame: async () => null, close: () => h.leaseClose(frame),
+    }))
+    await expect(drain(exportTimeline(doc, SETTINGS, h.media, h.deps))).rejects.toThrow(/Title cannot be exported/)
+    expect(h.composite).not.toHaveBeenCalled()
+    expect(h.addFrame).not.toHaveBeenCalled()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.leaseClose).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+    expect(h.cancel).toHaveBeenCalledOnce()
+  })
   test('renders every document frame in order and returns the finalized result', async () => {
     const doc = makeDoc(3)
     const h = makeHarness()
@@ -398,63 +442,102 @@ describe('exportTimeline CFR scheduling', () => {
     ])
   })
 
-  test('forwards the attempt executor and clears every returned plugin buffer after composite', async () => {
-    const outputs = [
-      Uint8Array.of(4, 3, 2, 255),
-      Uint8Array.of(8, 7, 6, 255),
-    ]
+  test('runs canonical stages and releases each plugin output before the next stack or frame', async () => {
+    const outputs = Array.from({ length: 4 }, (_, index) => Uint8Array.of(index + 4, 3, 2, 255))
     let outputIndex = 0
-    const request = {} as Parameters<VideoEffectStageExecutor['applyPluginEffect']>[0]
     const executor = Object.freeze({
-      applyPluginEffect: vi.fn(async () => ({
-        status: 'applied' as const,
-        rgba: outputs[outputIndex++],
-      })),
+      applyPluginEffect: vi.fn(async () => {
+        for (const prior of outputs.slice(0, outputIndex)) expect([...prior]).toEqual([0, 0, 0, 0])
+        return { status: 'applied' as const, rgba: outputs[outputIndex++]! }
+      }),
     })
     const h = makeHarness({
-      composite: async (_frame, _source, receivedExecutor) => {
-        if (!receivedExecutor) throw new Error('expected plugin executor')
-        const result = await receivedExecutor.applyPluginEffect(request)
-        expect(result).toMatchObject({ status: 'applied' })
-        if (result.status !== 'applied') throw new Error('expected applied output')
-        expect(result.rgba[3]).toBe(255)
+      composite: async (frame, _source, receivedExecutor, grading) => {
+        expect(receivedExecutor).toBe(executor)
+        // Two separate authored stacks share this still-running frame composite.
+        for (let stack = 0; stack < 2; stack++) {
+          const rgba = Uint8ClampedArray.of(20, 30, 40, 255)
+          await applyVideoEffectStagePlanToRgba(rgba, exportPluginPlan(), receivedExecutor,
+            { ...PLUGIN_CONTEXT, timelineFrame: frame }, grading)
+          expect([...rgba]).toEqual([outputIndex + 3, 3, 2, 255])
+          expect([...outputs[outputIndex - 1]!]).toEqual([0, 0, 0, 0])
+        }
         return { drawn: [], missing: [] }
       },
     })
     h.deps.videoEffectStageExecutor = executor
-
     await drain(exportTimeline(makeDoc(2), SETTINGS, h.media, h.deps))
-
     expect(h.composite).toHaveBeenCalledTimes(2)
-    expect(executor.applyPluginEffect).toHaveBeenCalledTimes(2)
-    expect(executor.applyPluginEffect).toHaveBeenNthCalledWith(1, request)
-    expect(outputs.map((output) => [...output])).toEqual([
-      [0, 0, 0, 0],
-      [0, 0, 0, 0],
-    ])
+    expect(executor.applyPluginEffect).toHaveBeenCalledTimes(4)
+    expect(executor.applyPluginEffect).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      timelineFrame: 0, width: 1, height: 1, stride: 4,
+    }))
+    expect(outputs.map((output) => [...output])).toEqual(Array(4).fill([0, 0, 0, 0]))
   })
 
-  test('treats a ready plugin execution failure as fatal and cancels the sink', async () => {
+  test('treats a ready canonical plugin failure as fatal and closes the lease before cancelling the sink', async () => {
     const primary = new Error('ready plugin failed')
-    const request = {} as Parameters<VideoEffectStageExecutor['applyPluginEffect']>[0]
-    const executor = Object.freeze({
-      applyPluginEffect: vi.fn(async () => {
-        throw primary
-      }),
-    })
+    const executor = Object.freeze({ applyPluginEffect: vi.fn(async () => { throw primary }) })
     const h = makeHarness({
-      composite: async (_frame, _source, receivedExecutor) => {
-        if (!receivedExecutor) throw new Error('expected plugin executor')
-        await receivedExecutor.applyPluginEffect(request)
+      composite: async (_frame, _source, receivedExecutor, grading) => {
+        await applyVideoEffectStagePlanToRgba(Uint8ClampedArray.of(20, 30, 40, 255),
+          exportPluginPlan(), receivedExecutor, PLUGIN_CONTEXT, grading)
         throw new Error('unreachable after plugin failure')
       },
     })
     h.deps.videoEffectStageExecutor = executor
+    await expect(drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)))
+      .rejects.toMatchObject({ name: 'VideoEffectStageExecutionError', cause: primary })
+    expect(executor.applyPluginEffect).toHaveBeenCalledOnce()
+    expect(h.leaseClose).toHaveBeenCalledOnce()
+    expect(h.addFrame).not.toHaveBeenCalled()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
 
-    await expect(
-      drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps)),
-    ).rejects.toBe(primary)
-    expect(executor.applyPluginEffect).toHaveBeenCalledExactlyOnceWith(request)
+  test('wipes plugin output on cancellation after await before closing export resources', async () => {
+    const output = Uint8Array.of(9, 8, 7, 255), pixels = Uint8ClampedArray.of(20, 30, 40, 255)
+    let cancelled = false
+    const h = makeHarness({
+      composite: async (_frame, _source, executor, grading) => {
+        await applyVideoEffectStagePlanToRgba(pixels, exportPluginPlan(), executor, PLUGIN_CONTEXT, grading)
+        throw new Error('cancelled stage must not finish')
+      },
+      closeLease: async () => { expect([...output]).toEqual([0, 0, 0, 0]) },
+    })
+    h.deps.videoEffectStageExecutor = { applyPluginEffect: async () => {
+      cancelled = true; return { status: 'applied', rgba: output }
+    } }
+    const exporting = exportTimeline(makeDoc(1), SETTINGS, h.media, {
+      ...h.deps, checkColorGradingCurrent: () => { if (cancelled) throw new ColorGradingCancelledError() },
+    })
+    expect(await exporting.next()).toEqual({ done: false, value: 0 })
+    expect(await exporting.next()).toEqual({ done: true, value: undefined })
+    expect([...pixels]).toEqual([20, 30, 40, 255])
+    expect([...output]).toEqual([0, 0, 0, 0])
+    expect(h.leaseClose).toHaveBeenCalledOnce()
+    expect(h.addFrame).not.toHaveBeenCalled()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('a later composite and lease-close failure cannot retain earlier plugin output or replace the primary error', async () => {
+    const output = Uint8Array.of(9, 8, 7, 255), primary = new Error('later composite failed')
+    const h = makeHarness({
+      composite: async (_frame, _source, executor, grading) => {
+        await applyVideoEffectStagePlanToRgba(Uint8ClampedArray.of(20, 30, 40, 255),
+          exportPluginPlan(), executor, PLUGIN_CONTEXT, grading)
+        expect([...output]).toEqual([0, 0, 0, 0])
+        throw primary
+      },
+      closeLease: async () => { throw new Error('secondary lease-close failure') },
+    })
+    h.deps.videoEffectStageExecutor = { applyPluginEffect: async () => ({ status: 'applied', rgba: output }) }
+    await expect(drain(exportTimeline(makeDoc(1), SETTINGS, h.media, h.deps))).rejects.toBe(primary)
+    expect([...output]).toEqual([0, 0, 0, 0])
+    expect(h.leaseClose).toHaveBeenCalledOnce()
     expect(h.addFrame).not.toHaveBeenCalled()
     expect(h.finalize).not.toHaveBeenCalled()
     expect(h.cancel).toHaveBeenCalledOnce()

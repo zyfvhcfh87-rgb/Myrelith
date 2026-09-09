@@ -1,0 +1,120 @@
+(node:33898) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ actual client bounds a worker with no first reply and records forced cleanup without cooperative claims (28.526ms)
+✔ an old client error or deadline cannot terminate the replacement worker or publish late output (33.798791ms)
+✔ model and inference phase guards retain 120s and preparation retains 10s (18.123667ms)
+(node:33899) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ the real runner refuses an absent exclusive grant before server, browser or attempt writes (2.20425ms)
+✔ the real runner stops on its first failed case and retains raw process samples and owned cleanup (4.527708ms)
+✔ process churn stops before any acceptance case without discarding the incomplete raw observation (2.46975ms)
+✔ an already existing profile is not adopted or removed after mkdir rejects (1.604834ms)
+✔ the attempt marker prevents a second run after an earlier failure (3.052333ms)
+✔ actual runner reaches final evidence and bounded release when page-operation never settles (31.955833ms)
+✔ actual runner reaches final evidence and bounded release when setup-cdp never settles (3.323042ms)
+✔ actual runner reaches final evidence and bounded release when browser-close never settles (5.199542ms)
+✔ actual runner reaches final evidence and bounded release when server-close never settles (3.927125ms)
+✔ the actual guarded proxy preserves explicit 120s phase waits within the case deadline (1.384417ms)
+✔ an after-inventory timeout retains the actual before inventory and RSS rows in partial evidence (3.128084ms)
+✔ the overall host deadline interrupts a still-pending case before its own deadline (7.385333ms)
+✔ a stuck partial-evidence write prevents launch and emits bounded fallback evidence (3.981791ms)
+(node:33900) ExperimentalWarning: VM Modules is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ exact candidate identity includes both generated artifacts and all unchanged fixture/acceptance limits (1.647917ms)
+✔ continuous epochs retain all samples and distinguish verified browser absence from model work (0.295292ms)
+✔ late samples, process churn, missing RSS, ceilings and unverified shutdown remain failures (0.208042ms)
+✔ reopen cannot reset away the original resident baseline (0.07375ms)
+✔ original bounded native audio preparation is byte-identical in the separate worker (0.190792ms)
+✔ worker seam verifies glue before import and sends the exact WASM bytes to the existing core authority (7.2895ms)
+✔ worker rejects changed candidate metadata or changed glue before generated module import (6.150292ms)
+✔ worker seam keeps twelve bounded windows, charges the C PCM copy, and closes every fake native sample (334.929167ms)
+✔ a core work-budget failure discards completion and releases audio owners in finally (5.377417ms)
+✔ all original acceptance case bodies are unchanged except the reviewed browser reopen lifecycle (0.282792ms)
+✔ diagnostic metadata changes cache identity while exact native artifacts/model/limits remain unchanged (0.189333ms)
+✖ actual wired worker and frozen protocol publish diagnostics before factory-failure error with no repeated native calls (12.224959ms)
+✖ actual wired worker and frozen protocol publish diagnostics before alloc-failure error with no repeated native calls (8.826334ms)
+✖ actual wired worker and frozen protocol publish diagnostics before load-failure error with no repeated native calls (6.383375ms)
+✖ actual wired successful load preserves the ready result and invokes allocation/load exactly once (7.848708ms)
+✔ factory abort context and the original exception survive the actual protocol message-only reduction (20.3945ms)
+✔ actual protocol diagnostics identify an abort in _speech_model_alloc and retain the cleanup attempt (19.189542ms)
+✔ actual protocol diagnostics identify an abort in _speech_load and retain the cleanup attempt (18.91175ms)
+✔ successful control flow retains module identity, live heap views, arguments, return values and callback forwarding (0.6175ms)
+✔ diagnostics remain bounded, retain the latest fatal tail and never stringify arbitrary objects (0.2885ms)
+ℹ tests 36
+ℹ suites 0
+ℹ pass 32
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 431.362709
+
+✖ failing tests:
+
+test at scripts/issue201/whispercpp-diagnostic-run/source.test.mjs:238:3
+✖ actual wired worker and frozen protocol publish diagnostics before factory-failure error with no repeated native calls (12.224959ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+    assert.ok(detail.records.some(row => row.kind === 'stderr' && row.phase === stage && row.text.includes('inert native stderr')))
+
+      at TestContext.<anonymous> (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-diagnostic-run/source.test.mjs:244:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/issue201/whispercpp-diagnostic-run/source.test.mjs:238:3
+✖ actual wired worker and frozen protocol publish diagnostics before alloc-failure error with no repeated native calls (8.826334ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+    assert.ok(detail.records.some(row => row.kind === 'stderr' && row.phase === stage && row.text.includes('inert native stderr')))
+
+      at TestContext.<anonymous> (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-diagnostic-run/source.test.mjs:244:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/issue201/whispercpp-diagnostic-run/source.test.mjs:238:3
+✖ actual wired worker and frozen protocol publish diagnostics before load-failure error with no repeated native calls (6.383375ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+    assert.ok(detail.records.some(row => row.kind === 'stderr' && row.phase === stage && row.text.includes('inert native stderr')))
+
+      at TestContext.<anonymous> (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-diagnostic-run/source.test.mjs:244:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/issue201/whispercpp-diagnostic-run/source.test.mjs:253:1
+✖ actual wired successful load preserves the ready result and invokes allocation/load exactly once (7.848708ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+    assert.ok(diagnostic >= 0 && ready > diagnostic)
+
+      at TestContext.<anonymous> (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp-diagnostic-run/source.test.mjs:257:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

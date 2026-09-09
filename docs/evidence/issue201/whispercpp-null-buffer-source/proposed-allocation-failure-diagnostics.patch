@@ -1,0 +1,18 @@
+--- a/ggml/src/ggml-alloc.c
++++ b/ggml/src/ggml-alloc.c
+@@ -423,6 +423,7 @@
+ static struct vbuffer * ggml_vbuffer_alloc(ggml_backend_buffer_type_t buft, const struct ggml_dyn_tallocr * talloc, enum ggml_backend_buffer_usage usage) {
+     struct vbuffer * buf = (struct vbuffer *)calloc(1, sizeof(struct vbuffer));
+     if (buf == NULL) {
++        fprintf(stderr, "myrelith diagnostic: vbuffer metadata allocation failed bytes=%zu\n", sizeof(struct vbuffer));
+         return NULL;
+     }
+ 
+@@ -430,6 +431,7 @@
+         size_t chunk_size = talloc->chunks[n]->max_size;
+         buf->chunks[n] = ggml_backend_buft_alloc_buffer(buft, chunk_size);
+         if (buf->chunks[n] == NULL) {
++            fprintf(stderr, "myrelith diagnostic: backend chunk allocation failed chunk=%d bytes=%zu\n", n, chunk_size);
+             ggml_vbuffer_free(buf);
+             return NULL;
+         }

@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { describe, expect, test, vi } from 'vitest'
 import { DEFAULT_EXPORT_PROFILE } from '../domain/exportProfile'
 import type { TimelineDoc } from '../domain/schema'
@@ -59,7 +60,7 @@ function catalog(
 
 function document(): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'plugin-export-doc',
     name: 'Plugin export',
     frameRate: { num: 30, den: 1 },
@@ -240,7 +241,7 @@ function deferred<T>() {
 
 describe('plugin export attempt controller', () => {
   test('preflights reachable child plugin effects and carries the exact project target', async () => {
-    const child = { ...document(), schemaVersion: 21, id: 'child' }
+    const child = { ...document(), schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION, id: 'child' }
     const root: TimelineDoc = {
       ...child,
       id: 'root',

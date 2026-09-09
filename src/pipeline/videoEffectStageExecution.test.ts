@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
+import { ColorGradingCancelledError, ColorGradingRuntime, type ColorGradingFrame } from './colorGradingRuntime'
 import type { EffectDescriptor } from '../domain/schema'
 import type {
   BuiltInVideoEffectStage,
@@ -219,5 +220,129 @@ describe('ordered video effect stage execution', () => {
       CONTEXT,
     )
     expect([...rgba]).toEqual([20, 30, 40, 255])
+  })
+})
+
+describe('immediate plugin result ownership', () => {
+  test.each(['bypass', 'failure'] as const)('wipes a retained attached input copy on %s', async (outcome) => {
+    const pixels = Uint8ClampedArray.of(20, 30, 40, 255)
+    let retained: Uint8Array | undefined
+    const operation = applyVideoEffectStagePlanToRgba(pixels, plan([plugin()]), {
+      applyPluginEffect: async (request) => {
+        retained = request.rgba
+        if (outcome === 'failure') throw new Error('executor rejected input')
+        return { status: 'bypassed' }
+      },
+    }, CONTEXT)
+    if (outcome === 'failure') await expect(operation).rejects.toThrow(/execution failed/)
+    else await operation
+    expect([...(retained ?? [])]).toEqual([0, 0, 0, 0])
+    expect([...pixels]).toEqual([20, 30, 40, 255])
+  })
+
+  test('rejects a subarray backed by an unaccounted larger buffer and wipes only its returned view', async () => {
+    const pixels = Uint8ClampedArray.of(20, 30, 40, 255), backing = new Uint8Array(6).fill(9)
+    await expect(applyVideoEffectStagePlanToRgba(pixels, plan([plugin()]), {
+      applyPluginEffect: async () => ({ status: 'applied', rgba: backing.subarray(1, 5) }),
+    }, CONTEXT)).rejects.toThrow(/invalid RGBA byte length or ownership/)
+    expect([...backing]).toEqual([9, 0, 0, 0, 0, 9])
+    expect([...pixels]).toEqual([20, 30, 40, 255])
+  })
+
+  test('rejects an injected alias to caller pixels without clearing or publishing them', async () => {
+    const pixels = Uint8ClampedArray.of(20, 30, 40, 255)
+    await expect(applyVideoEffectStagePlanToRgba(pixels, plan([builtin('before', 1), plugin()]), {
+      applyPluginEffect: async () => ({ status: 'applied', rgba: new Uint8Array(pixels.buffer) }),
+    }, CONTEXT)).rejects.toThrow(/invalid RGBA byte length or ownership/)
+    expect([...pixels]).toEqual([20, 30, 40, 255])
+  })
+
+  test('rejects a detached result without replacing validation failure during cleanup', async () => {
+    const pixels = Uint8ClampedArray.of(20, 30, 40, 255), output = Uint8Array.of(9, 8, 7, 255)
+    structuredClone(output, { transfer: [output.buffer] })
+    await expect(applyVideoEffectStagePlanToRgba(pixels, plan([plugin()]), {
+      applyPluginEffect: async () => ({ status: 'applied', rgba: output }),
+    }, CONTEXT)).rejects.toThrow(/invalid RGBA byte length or ownership/)
+    expect([...pixels]).toEqual([20, 30, 40, 255])
+  })
+
+  test('copies then wipes each output before requesting the next plugin stage', async () => {
+    const original = [20, 30, 40, 255], pixels = new Uint8ClampedArray(original)
+    const outputs = [Uint8Array.of(3, 4, 5, 255), Uint8Array.of(7, 8, 9, 255)]
+    let index = 0
+    await applyVideoEffectStagePlanToRgba(pixels, plan([plugin('first'), plugin('second')]), {
+      applyPluginEffect: async (request) => {
+        expect([...pixels]).toEqual(original)
+        if (index === 1) {
+          expect([...outputs[0]!]).toEqual([0, 0, 0, 0])
+          expect([...request.rgba]).toEqual([3, 4, 5, 255])
+        }
+        return { status: 'applied', rgba: outputs[index++]! }
+      },
+    }, CONTEXT)
+    expect([...pixels]).toEqual([7, 8, 9, 255])
+    expect(outputs.map((output) => [...output])).toEqual([[0, 0, 0, 0], [0, 0, 0, 0]])
+  })
+
+  test('wipes a returned output when grading cancels between awaiting it and copying it', async () => {
+    const pixels = Uint8ClampedArray.of(20, 30, 40, 255), output = Uint8Array.of(7, 8, 9, 255)
+    const runtime = new ColorGradingRuntime(), cancellation = new ColorGradingCancelledError()
+    let cancelled = false
+    const grading: ColorGradingFrame = { runtime, context: runtime.context, policy: 'fail', check: () => { if (cancelled) throw cancellation } }
+    try {
+      await expect(applyVideoEffectStagePlanToRgba(pixels, plan([builtin('before', 1), plugin()]), {
+        applyPluginEffect: async () => { cancelled = true; return { status: 'applied', rgba: output } },
+      }, CONTEXT, grading)).rejects.toBe(cancellation)
+      expect([...output]).toEqual([0, 0, 0, 0])
+      expect([...pixels]).toEqual([20, 30, 40, 255])
+    } finally { runtime.dispose() }
+  })
+
+  test.each([3, 5])('wipes an invalid %i-byte result without publishing earlier stages', async (length) => {
+    const pixels = Uint8ClampedArray.of(20, 30, 40, 255), output = new Uint8Array(length).fill(9)
+    await expect(applyVideoEffectStagePlanToRgba(pixels, plan([builtin('before', 1), plugin()]), {
+      applyPluginEffect: async () => ({ status: 'applied', rgba: output }),
+    }, CONTEXT)).rejects.toThrow(/invalid RGBA byte length/)
+    expect([...output]).toEqual(Array(length).fill(0))
+    expect([...pixels]).toEqual([20, 30, 40, 255])
+  })
+
+  test('prior output is already wiped if a later plugin rejects, and original pixels stay unchanged', async () => {
+    const pixels = Uint8ClampedArray.of(20, 30, 40, 255), output = Uint8Array.of(7, 8, 9, 255)
+    let called = false
+    await expect(applyVideoEffectStagePlanToRgba(pixels, plan([plugin('first'), plugin('second')]), {
+      applyPluginEffect: async () => {
+        if (!called) { called = true; return { status: 'applied', rgba: output } }
+        expect([...output]).toEqual([0, 0, 0, 0])
+        throw new Error('later stage failed')
+      },
+    }, CONTEXT)).rejects.toThrow(/execution failed/)
+    expect([...pixels]).toEqual([20, 30, 40, 255])
+  })
+
+  test.each(['allow', 'fail'] as const)('detached input and bypass preserve original pixels under %s policy', async (bypassPolicy) => {
+    const pixels = Uint8ClampedArray.of(20, 30, 40, 255)
+    const result = applyVideoEffectStagePlanToRgba(pixels, plan([plugin()]), {
+      bypassPolicy,
+      applyPluginEffect: async (request) => {
+        structuredClone(request.rgba, { transfer: [request.rgba.buffer] })
+        expect(request.rgba.byteLength).toBe(0)
+        return { status: 'bypassed' }
+      },
+    }, CONTEXT)
+    if (bypassPolicy === 'fail') await expect(result).rejects.toThrow(/fail-closed/)
+    else await result
+    expect([...pixels]).toEqual([20, 30, 40, 255])
+  })
+
+  test('detached request input does not prevent copying and wiping fresh output', async () => {
+    const pixels = Uint8ClampedArray.of(20, 30, 40, 255), output = Uint8Array.of(7, 8, 9, 255)
+    await applyVideoEffectStagePlanToRgba(pixels, plan([plugin()]), {
+      applyPluginEffect: async (request) => {
+        structuredClone(request.rgba, { transfer: [request.rgba.buffer] })
+        return { status: 'applied', rgba: output }
+      },
+    }, CONTEXT)
+    expect([...pixels]).toEqual([7, 8, 9, 255]); expect([...output]).toEqual([0, 0, 0, 0])
   })
 })

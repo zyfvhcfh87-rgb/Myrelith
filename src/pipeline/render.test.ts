@@ -1,3 +1,6 @@
+import { expandedTitleProject, legacyTitleProject } from '../test/titleOwnerFixtures'
+import { readTitleDefinition } from '../domain/titleElements'
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * pipeline/render.test.ts — compositeFrame unit tests. Phase 4.1.
  *
@@ -14,7 +17,7 @@ import {
   type PresentationProfile,
 } from '../domain/presentationProfile'
 import { defaultTextProps } from '../domain/textOverlay'
-import { createColorAdjustEffect, createMaskEffect } from '../domain/effectStack'
+import { createColorAdjustEffect, createMaskEffect, resolveCanvasEffectStack } from '../domain/effectStack'
 import { videoCompositionPlanAtFrame } from '../domain/videoCompositionPlan'
 import {
   createPluginVideoEffectContributionSnapshot,
@@ -27,9 +30,13 @@ import type {
   RenderFrameSource,
   TransitionSurfaceProvider,
 } from './render'
-import { compositeFrame as compositeFrameCore } from './render'
+import { clearTextLayoutCaches, compositeFrame as compositeFrameCore } from './render'
+import { COLOR_CURVES_TYPE, DEFAULT_COLOR_CURVES } from '../domain/colorCurves'
 import type { LensRemapProvider } from './lensRemap'
 import { DEFAULT_MANUAL_LENS_CORRECTION } from '../domain/lensCorrection'
+import { MAX_RENDER_AGGREGATE_SURFACE_BYTES } from '../domain/renderSurfaceBudget'
+import { createDocumentLensRemapProvider, type WebGl2LensRemapBackend } from './lensRemapWebgl'
+import { ColorGradingRuntime } from './colorGradingRuntime'
 import {
   VideoEffectStageExecutionError,
   type VideoEffectStageExecutor,
@@ -82,7 +89,7 @@ function makeTrack(
 
 function makeDoc(tracks: Track[]): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc',
     name: 'doc',
     frameRate: { num: 30, den: 1 },
@@ -229,6 +236,9 @@ function makeCtx(opts: {
     clearRect: (x, y, w, h) => log.push({ name: 'clearRect', args: [x, y, w, h] }),
     fillRect: (x, y, w, h) => log.push({ name: 'fillRect', args: [x, y, w, h] }),
     beginPath: () => log.push({ name: 'beginPath', args: [] }),
+    ellipse: (...args) => log.push({ name: 'ellipse', args }),
+    fill: () => log.push({ name: 'fill', args: [] }),
+    stroke: () => log.push({ name: 'stroke', args: [] }),
     rect: (x, y, w, h) => log.push({ name: 'rect', args: [x, y, w, h] }),
     clip: () => log.push({ name: 'clip', args: [] }),
     measureText: (text) => ({ width: text.length * 20 }),
@@ -361,6 +371,161 @@ function deferred<T>() {
 /* ------------------------------------------------------------------ */
 /* Tests                                                                */
 /* ------------------------------------------------------------------ */
+
+describe('frame work admission before resources', () => {
+  test('a 4K mask plus retained lens fails before any provider, source, canvas or readback operation', async () => {
+    const mask = createMaskEffect('mask', 'bezier')
+    mask.params = { ...mask.params, x: 0, y: 0, width: 1, height: 1, feather: 0.05 }
+    const doc = makeDoc([makeTrack('video', 'video', [makeClip('mask', 0, 60, { effects: [mask] })])])
+    doc.width = 3840; doc.height = 2160
+    const backend = { retainedBytes: () => 3840 * 2160 * 8 } as WebGl2LensRemapBackend
+    const lens = createDocumentLensRemapProvider(doc, backend, 3840, 2160, false)!
+    const destination = makeCtx(), surfaces = makeTransitionSurfaceProvider(), source = makeSource()
+    await expect(compositeFrame(doc, 0, destination.ctx, source.source, surfaces.provider, undefined, lens)).rejects.toThrow(/256 MiB/)
+    expect(surfaces.gets()).toBe(0); expect(source.requests).toEqual([]); expect(destination.log).toEqual([])
+  })
+  test('the actual cache retained by a previous grading frame participates in a later plain-mask admission', async () => {
+    const runtime = new ColorGradingRuntime(async () => {})
+    const curve = { id: 'curve', type: COLOR_CURVES_TYPE, version: 1, enabled: true,
+      params: { ...DEFAULT_COLOR_CURVES, master: '[[0,0],[1,0.8]]', strength: 1 } }
+    await runtime.apply(Uint8ClampedArray.of(20, 30, 40, 255), resolveCanvasEffectStack([curve], true, true).pixelEffects,
+      { surfaceWidth: 1, surfaceHeight: 1, projectWidth: 1, projectHeight: 1 })
+    expect(runtime.ledger().bytes).toBeGreaterThan(0)
+    const mask = createMaskEffect('mask', 'bezier')
+    mask.params = { ...mask.params, x: 0, y: 0, width: 1, height: 1, feather: 0.05 }
+    const doc = makeDoc([makeTrack('video', 'video', [makeClip('mask', 0, 60, { effects: [mask] })])])
+    doc.width = 3840; doc.height = 2160
+    const backend = { retainedBytes: () => MAX_RENDER_AGGREGATE_SURFACE_BYTES - 3840 * 2160 * 25 } as WebGl2LensRemapBackend
+    const lens = createDocumentLensRemapProvider(doc, backend, 3840, 2160, false)!
+    const source = makeSource(), surfaces = makeTransitionSurfaceProvider(), destination = makeCtx()
+    const plan = videoCompositionPlanAtFrame(doc, 0, new Map([['asset-1', {
+      video: { status: 'exact', firstTimestampUs: 0, endTimestampUs: 10_000_000 }, audio: null,
+    }]]))
+    await expect(compositeFrameCore(doc, plan, destination.ctx, source.source, surfaces.provider, undefined, lens, undefined,
+      { runtime, context: runtime.context, check: () => {}, policy: 'bypass' })).rejects.toThrow(/256 MiB/)
+    expect(surfaces.gets()).toBe(0); expect(source.requests).toEqual([])
+    runtime.dispose()
+  })
+  test('a composite failure releases the real lens frame reservation before a retry', async () => {
+    const doc = makeDoc([makeTrack('video', 'video', [makeClip('plain', 0, 60)])])
+    const lens = createDocumentLensRemapProvider(doc, { retainedBytes: () => 0 } as WebGl2LensRemapBackend, 1920, 1080, false)!
+    const ctx = makeCtx(), source = makeSource()
+    vi.spyOn(ctx.ctx, 'fillRect').mockImplementationOnce(() => { throw new Error('canvas failure') })
+    await expect(compositeFrame(doc, 0, ctx.ctx, source.source, undefined, undefined, lens)).rejects.toThrow('canvas failure')
+    await compositeFrame(doc, 0, ctx.ctx, makeSource().source, undefined, undefined, lens)
+    expect(source.requests).toEqual(['asset-1@0'])
+  })
+})
+
+describe('expanded title composition ownership', () => {
+  test('layout reuse is bounded and invalidates on document or explicit render-owner replacement', async () => {
+    const doc = legacyTitleProject().sequences[0], destination = makeCtx(), surfaces = makeTransitionSurfaceProvider(), source = makeSource()
+    const measure = vi.spyOn(surfaces.leg.ctx, 'measureText')
+    await compositeFrame(doc, 0, destination.ctx, source.source, surfaces.provider)
+    const first = measure.mock.calls.length
+    expect(first).toBeGreaterThan(0)
+    await compositeFrame(doc, 0, destination.ctx, source.source, surfaces.provider)
+    expect(measure).toHaveBeenCalledTimes(first)
+    const replacement = structuredClone(doc)
+    await compositeFrame(replacement, 0, destination.ctx, source.source, surfaces.provider)
+    expect(measure).toHaveBeenCalledTimes(first * 2)
+    clearTextLayoutCaches([surfaces.leg.ctx, surfaces.group.ctx])
+    await compositeFrame(replacement, 0, destination.ctx, source.source, surfaces.provider)
+    expect(measure).toHaveBeenCalledTimes(first * 3)
+    const text = replacement.tracks[0].clips[0].text!, original = text.content
+    for (let index = 0; index < 65; index++) {
+      text.content = `${index} ${original}`
+      await compositeFrame(replacement, 0, destination.ctx, source.source, surfaces.provider)
+    }
+    const afterEviction = measure.mock.calls.length
+    text.content = original
+    await compositeFrame(replacement, 0, destination.ctx, source.source, surfaces.provider)
+    expect(measure.mock.calls.length).toBeGreaterThan(afterEviction)
+  })
+  test('over-budget expanded occurrences reject before scratch and media requests even when passed directly', async () => {
+    const doc = expandedTitleProject().sequences[0], plan = videoCompositionPlanAtFrame(doc, 0, new Map())
+    const destination = makeCtx(), surfaces = makeTransitionSurfaceProvider(), source = makeSource()
+    await expect(compositeFrameCore(doc, { frame: 0, items: Array(4097).fill(plan.items[0]) }, destination.ctx, source.source, surfaces.provider)).rejects.toThrow(/4,096/)
+    expect(source.requests).toEqual([])
+    expect(surfaces.gets()).toBe(0)
+    expect(destination.log).toEqual([])
+  })
+  test('the explicit one-element upgrade keeps the legacy Canvas call sequence', async () => {
+    const documents = [legacyTitleProject().sequences[0], expandedTitleProject().sequences[0]]
+    const recordings = []
+    for (const doc of documents) {
+      const destination = makeCtx({ supportsFilter: true }), surfaces = makeTransitionSurfaceProvider({ supportsFilter: true })
+      const source = makeSource()
+      const result = await compositeFrame(doc, 0, destination.ctx, source.source, surfaces.provider)
+      expect(source.requests).toEqual([])
+      expect(result).toEqual({ drawn: ['root-text'], missing: [] })
+      recordings.push({ leg: surfaces.leg.log, group: surfaces.group.log, destination: destination.log })
+    }
+    expect(recordings[1]).toEqual(recordings[0])
+    // Recording equality is structural proof only; real RGBA parity has its own browser gate.
+  })
+
+  test('element opacity finishes borrowing group before clip effects, clip opacity and track-bus processing', async () => {
+    const doc = expandedTitleProject().sequences[0], clip = doc.tracks[0].clips[0]
+    doc.width = doc.height = 8
+    const parsed = readTitleDefinition(clip.title)
+    if (parsed.status !== 'supported') throw new Error('Expected title fixture')
+    clip.title = { version: 1, elements: [
+      { ...parsed.title.elements[0], opacity: 0.5 },
+      { id: 'ellipse', version: 1, kind: 'ellipse', name: 'Shape', enabled: true, opacity: 1,
+        transform: clip.transform, visual: clip.visual!, shape: { boxWidthPx: 32, boxHeightPx: 24, fillColor: '#123456', outlineEnabled: true, outlineColor: '#ffffff', outlineWidthPx: 2 } },
+    ] }
+    clip.opacity = 0.25
+    const effect = createColorAdjustEffect('clip-filter'); effect.params.temperature = 0.5
+    clip.effects = [effect]
+    const bus = createColorAdjustEffect('track-filter'); bus.params.exposure = 0.25
+    doc.tracks[0].videoEffects = [bus]
+    const destination = makeCtx({ supportsPixels: true }), surfaces = makeTransitionSurfaceProvider({ supportsPixels: true })
+    const source = makeSource()
+    await compositeFrame(doc, 0, destination.ctx, source.source, surfaces.provider)
+    expect(source.requests).toEqual([])
+    expect(surfaces.group.ops('fillText').length).toBeGreaterThan(0)
+    expect(surfaces.leg.ops('ellipse')).toHaveLength(1)
+    expect(surfaces.leg.ops('drawImage').map((op) => op.args[0])).toEqual([surfaces.groupCanvas])
+    expect(surfaces.group.ops('drawImage').map((op) => op.args[0])).toEqual([surfaces.legCanvas])
+    expect(destination.ops('drawImage').map((op) => op.args[0])).toEqual([surfaces.groupCanvas])
+    expect(surfaces.leg.ops('getImageData')).toHaveLength(1)
+    expect(surfaces.group.ops('getImageData')).toHaveLength(1)
+    expect(surfaces.leg.ops('alpha').some((op) => op.args[0] === 0.5)).toBe(true)
+    expect(surfaces.group.ops('alpha').some((op) => op.args[0] === 0.25)).toBe(true)
+    expect(surfaces.leg.depth()).toBe(0)
+    expect(surfaces.group.depth()).toBe(0)
+  })
+
+  test('failed element paint restores both borrowed surfaces without publishing a partial title', async () => {
+    const doc = expandedTitleProject().sequences[0], clip = doc.tracks[0].clips[0]
+    const parsed = readTitleDefinition(clip.title)
+    if (parsed.status !== 'supported') throw new Error('Expected title fixture')
+    clip.title = { version: 1, elements: [{ ...parsed.title.elements[0], opacity: 0.5 }] }
+    const destination = makeCtx(), surfaces = makeTransitionSurfaceProvider(), source = makeSource()
+    const fill = surfaces.group.ctx.fillText
+    surfaces.group.ctx.fillText = () => { throw new Error('Title paint failed') }
+    await expect(compositeFrame(doc, 0, destination.ctx, source.source, surfaces.provider)).rejects.toThrow('Title paint failed')
+    expect(destination.ops('drawImage')).toHaveLength(0)
+    expect(surfaces.leg.ops('clearRect').length).toBeGreaterThan(1)
+    expect(surfaces.group.ops('clearRect').length).toBeGreaterThan(1)
+    expect(surfaces.leg.depth()).toBe(0)
+    expect(surfaces.group.depth()).toBe(0)
+    surfaces.group.ctx.fillText = fill
+    await expect(compositeFrame(doc, 0, destination.ctx, source.source, surfaces.provider)).resolves.toEqual({ drawn: ['root-text'], missing: [] })
+  })
+
+  test('an invalid title cannot request media, allocate scratch or enter layout', async () => {
+    const doc = expandedTitleProject().sequences[0]
+    doc.tracks[0].clips[0].title = { version: 1, elements: Array(17).fill({ version: 99 }) }
+    doc.tracks[0].clips[0].effects = [{ id: 'curves', type: COLOR_CURVES_TYPE, version: 1, enabled: true, params: { ...DEFAULT_COLOR_CURVES, master: '[[0,0],[0.5,0.8],[1,1]]' } }]
+    const destination = makeCtx(), surfaces = makeTransitionSurfaceProvider(), source = makeSource()
+    await compositeFrame(doc, 0, destination.ctx, source.source, surfaces.provider)
+    expect(source.requests).toEqual([])
+    expect(surfaces.gets()).toBe(0)
+    expect(destination.ops('fillText')).toHaveLength(0)
+  })
+})
 
 describe('compositeFrame — background & selection', () => {
   test('no effects never touches Canvas filter state', async () => {

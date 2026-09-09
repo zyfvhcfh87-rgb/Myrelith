@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { TimelineDoc, TimelineMarker } from './schema'
 import {
@@ -14,7 +15,7 @@ import { docDurationFrames, timelineDisplayDurationFrames } from './selectors'
 
 function doc(markers: TimelineMarker[] = []): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-markers',
     name: 'Markers',
     frameRate: { num: 30, den: 1 },

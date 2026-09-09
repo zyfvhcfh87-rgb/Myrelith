@@ -1,0 +1,40 @@
+✔ actual pinned argument parser reproduces the recorded final-link failure (0.258333ms)
+✔ every original setting is audited independently: only PTHREADS rejects (0.282833ms)
+✖ corrected recipe parses all values with no legacy, experimental or compatibility warnings (0.474084ms)
+✔ actual authority rejects internal, unknown, mistyped, malformed and conflicting inputs (0.096292ms)
+✔ thread-enabling arguments and shared memory are observable positive counterexamples (0.040875ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 4
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 674.552875
+
+✖ failing tests:
+
+test at scripts/issue201/whispercpp/settings-source-audit.test.mjs:34:1
+✖ corrected recipe parses all values with no legacy, experimental or compatibility warnings (0.474084ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + [
+  +   'worker'
+  + ]
+  - 'worker'
+
+      at TestContext.<anonymous> (file:///Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue201/scripts/issue201/whispercpp/settings-source-audit.test.mjs:40:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'worker' ],
+    expected: 'worker',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

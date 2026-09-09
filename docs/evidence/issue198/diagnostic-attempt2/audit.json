@@ -1,0 +1,915 @@
+{
+  "testedSha": "1ae6baedf4e9788836e566cd58541fc459d702ee",
+  "outcome": "diagnostic-observations-collected-export-still-failed",
+  "recordsVerified": 63,
+  "rawBytes": 770667,
+  "manifest": {
+    "bytes": 8491,
+    "sha256": "c88ca0d846069ed5f2c6c5875522c55bc6aa79d237e8399faf619ce9e746dc42"
+  },
+  "start": "2026-09-08T20:56:37.863Z",
+  "close": "2026-09-08T20:56:39.749Z",
+  "recordedDurationMs": 1886.0,
+  "browserCollectionMs": 1173.7999999970198,
+  "kindCounts": {
+    "diagnostic-run-start": 1,
+    "diagnostic-provenance": 1,
+    "diagnostic-process-start": 1,
+    "diagnostic-start": 1,
+    "decode-source-start": 2,
+    "decoded-frame": 24,
+    "ordinal-sparse-parity": 12,
+    "decode-source-released": 2,
+    "frame127-candidate": 6,
+    "production-composite-start": 1,
+    "production-frame127-selected": 1,
+    "production-composite-rendered": 1,
+    "production-composite-released": 1,
+    "production-input-vs-ordinal127": 1,
+    "production-unencoded-vs-matching-input-oracle": 1,
+    "saved-output-vs-production-unencoded": 1,
+    "diagnostic-observations-complete": 1,
+    "diagnostic-pixels-released": 1,
+    "diagnostic-run-observed": 1,
+    "diagnostic-process-before-close": 1,
+    "diagnostic-run-teardown": 1,
+    "evidence-closed": 1
+  },
+  "work": {
+    "ordinal": 600,
+    "sparse": 12,
+    "productionSource": 128,
+    "composite": 1,
+    "candidate": 6,
+    "publicSampleAndSourceRequests": 740,
+    "requestLimit": 740
+  },
+  "pixelOwner": {
+    "bytes": 0,
+    "peakBytes": 47923200,
+    "buffers": 0,
+    "allocations": 34,
+    "releases": 34,
+    "limitBytes": 67108864
+  },
+  "ordinalTimestampsVerified": 600,
+  "selectedVideoFramesVerified": 24,
+  "exactOrdinalSparseParities": 12,
+  "errorAggregatesVerified": 21,
+  "productionLeasesOpenedClosed": 128,
+  "productionComposites": 1,
+  "comparisons": [
+    {
+      "sequence": 44,
+      "kind": "frame127-candidate",
+      "sourceFrame": 126,
+      "pathIndex": 0,
+      "maximumDelta": 137,
+      "meanDelta": 11.746978081597222,
+      "above12": 445323,
+      "regions": {
+        "opaque": {
+          "channels": 1835088,
+          "totalAbsoluteDelta": 9341127,
+          "maximumDelta": 136,
+          "nonzero": 1829124,
+          "above12": 134751
+        },
+        "feather": {
+          "channels": 332196,
+          "totalAbsoluteDelta": 23136405,
+          "maximumDelta": 137,
+          "nonzero": 332088,
+          "above12": 310572
+        },
+        "outside": {
+          "channels": 597516,
+          "totalAbsoluteDelta": 513,
+          "maximumDelta": 3,
+          "nonzero": 462,
+          "above12": 0
+        }
+      }
+    },
+    {
+      "sequence": 45,
+      "kind": "frame127-candidate",
+      "sourceFrame": 126,
+      "pathIndex": 1,
+      "maximumDelta": 19,
+      "meanDelta": 0.7001725260416667,
+      "above12": 45,
+      "regions": {
+        "opaque": {
+          "channels": 1678848,
+          "totalAbsoluteDelta": 1677240,
+          "maximumDelta": 3,
+          "nonzero": 1675059,
+          "above12": 0
+        },
+        "feather": {
+          "channels": 318468,
+          "totalAbsoluteDelta": 250374,
+          "maximumDelta": 5,
+          "nonzero": 202071,
+          "above12": 0
+        },
+        "outside": {
+          "channels": 767484,
+          "totalAbsoluteDelta": 8223,
+          "maximumDelta": 19,
+          "nonzero": 5637,
+          "above12": 45
+        }
+      }
+    },
+    {
+      "sequence": 46,
+      "kind": "frame127-candidate",
+      "sourceFrame": 127,
+      "pathIndex": 0,
+      "maximumDelta": 138,
+      "meanDelta": 11.257943793402777,
+      "above12": 447174,
+      "regions": {
+        "opaque": {
+          "channels": 1835088,
+          "totalAbsoluteDelta": 7825473,
+          "maximumDelta": 137,
+          "nonzero": 161799,
+          "above12": 136602
+        },
+        "feather": {
+          "channels": 332196,
+          "totalAbsoluteDelta": 23299977,
+          "maximumDelta": 138,
+          "nonzero": 332088,
+          "above12": 310572
+        },
+        "outside": {
+          "channels": 597516,
+          "totalAbsoluteDelta": 513,
+          "maximumDelta": 3,
+          "nonzero": 462,
+          "above12": 0
+        }
+      }
+    },
+    {
+      "sequence": 47,
+      "kind": "frame127-candidate",
+      "sourceFrame": 127,
+      "pathIndex": 1,
+      "maximumDelta": 19,
+      "meanDelta": 0.06854926215277778,
+      "above12": 45,
+      "regions": {
+        "opaque": {
+          "channels": 1678848,
+          "totalAbsoluteDelta": 6504,
+          "maximumDelta": 2,
+          "nonzero": 6123,
+          "above12": 0
+        },
+        "feather": {
+          "channels": 318468,
+          "totalAbsoluteDelta": 174798,
+          "maximumDelta": 5,
+          "nonzero": 157005,
+          "above12": 0
+        },
+        "outside": {
+          "channels": 767484,
+          "totalAbsoluteDelta": 8223,
+          "maximumDelta": 19,
+          "nonzero": 5637,
+          "above12": 45
+        }
+      }
+    },
+    {
+      "sequence": 48,
+      "kind": "frame127-candidate",
+      "sourceFrame": 128,
+      "pathIndex": 0,
+      "maximumDelta": 92,
+      "meanDelta": 44.52925238715278,
+      "above12": 2094387,
+      "regions": {
+        "opaque": {
+          "channels": 1835088,
+          "totalAbsoluteDelta": 110146647,
+          "maximumDelta": 74,
+          "nonzero": 1833249,
+          "above12": 1794666
+        },
+        "feather": {
+          "channels": 332196,
+          "totalAbsoluteDelta": 12967317,
+          "maximumDelta": 92,
+          "nonzero": 332061,
+          "above12": 299721
+        },
+        "outside": {
+          "channels": 597516,
+          "totalAbsoluteDelta": 513,
+          "maximumDelta": 3,
+          "nonzero": 462,
+          "above12": 0
+        }
+      }
+    },
+    {
+      "sequence": 49,
+      "kind": "frame127-candidate",
+      "sourceFrame": 128,
+      "pathIndex": 1,
+      "maximumDelta": 66,
+      "meanDelta": 41.84708224826389,
+      "above12": 1931427,
+      "regions": {
+        "opaque": {
+          "channels": 1678848,
+          "totalAbsoluteDelta": 105765282,
+          "maximumDelta": 65,
+          "nonzero": 1678848,
+          "above12": 1678848
+        },
+        "feather": {
+          "channels": 318468,
+          "totalAbsoluteDelta": 9925308,
+          "maximumDelta": 66,
+          "nonzero": 314757,
+          "above12": 252534
+        },
+        "outside": {
+          "channels": 767484,
+          "totalAbsoluteDelta": 8223,
+          "maximumDelta": 19,
+          "nonzero": 5637,
+          "above12": 45
+        }
+      }
+    },
+    {
+      "sequence": 54,
+      "kind": "production-input-vs-ordinal127",
+      "sourceFrame": null,
+      "pathIndex": null,
+      "maximumDelta": 0,
+      "meanDelta": 0,
+      "above12": 0,
+      "regions": {
+        "opaque": {
+          "channels": 2764800,
+          "totalAbsoluteDelta": 0,
+          "maximumDelta": 0,
+          "nonzero": 0,
+          "above12": 0
+        },
+        "feather": {
+          "channels": 0,
+          "totalAbsoluteDelta": 0,
+          "maximumDelta": 0,
+          "nonzero": 0,
+          "above12": 0
+        },
+        "outside": {
+          "channels": 0,
+          "totalAbsoluteDelta": 0,
+          "maximumDelta": 0,
+          "nonzero": 0,
+          "above12": 0
+        }
+      }
+    },
+    {
+      "sequence": 55,
+      "kind": "production-unencoded-vs-matching-input-oracle",
+      "sourceFrame": null,
+      "pathIndex": null,
+      "maximumDelta": 0,
+      "meanDelta": 0,
+      "above12": 0,
+      "regions": {
+        "opaque": {
+          "channels": 1678848,
+          "totalAbsoluteDelta": 0,
+          "maximumDelta": 0,
+          "nonzero": 0,
+          "above12": 0
+        },
+        "feather": {
+          "channels": 318468,
+          "totalAbsoluteDelta": 0,
+          "maximumDelta": 0,
+          "nonzero": 0,
+          "above12": 0
+        },
+        "outside": {
+          "channels": 767484,
+          "totalAbsoluteDelta": 0,
+          "maximumDelta": 0,
+          "nonzero": 0,
+          "above12": 0
+        }
+      }
+    },
+    {
+      "sequence": 56,
+      "kind": "saved-output-vs-production-unencoded",
+      "sourceFrame": null,
+      "pathIndex": null,
+      "maximumDelta": 19,
+      "meanDelta": 0.06854926215277778,
+      "above12": 45,
+      "regions": {
+        "opaque": {
+          "channels": 1678848,
+          "totalAbsoluteDelta": 6504,
+          "maximumDelta": 2,
+          "nonzero": 6123,
+          "above12": 0
+        },
+        "feather": {
+          "channels": 318468,
+          "totalAbsoluteDelta": 174798,
+          "maximumDelta": 5,
+          "nonzero": 157005,
+          "above12": 0
+        },
+        "outside": {
+          "channels": 767484,
+          "totalAbsoluteDelta": 8223,
+          "maximumDelta": 19,
+          "nonzero": 5637,
+          "above12": 45
+        }
+      }
+    }
+  ],
+  "savedOutputAbove12Coordinates": [
+    {
+      "x": 95,
+      "y": 175,
+      "channel": 0,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 95,
+      "y": 175,
+      "channel": 1,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 95,
+      "y": 175,
+      "channel": 2,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 190,
+      "channel": 0,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 190,
+      "channel": 1,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 190,
+      "channel": 2,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 191,
+      "channel": 0,
+      "actual": 17,
+      "expected": 0,
+      "delta": 17,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 191,
+      "channel": 1,
+      "actual": 17,
+      "expected": 0,
+      "delta": 17,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 191,
+      "channel": 2,
+      "actual": 17,
+      "expected": 0,
+      "delta": 17,
+      "region": "outside"
+    },
+    {
+      "x": 1201,
+      "y": 191,
+      "channel": 0,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1201,
+      "y": 191,
+      "channel": 1,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1201,
+      "y": 191,
+      "channel": 2,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1248,
+      "y": 254,
+      "channel": 0,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1248,
+      "y": 254,
+      "channel": 1,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1248,
+      "y": 254,
+      "channel": 2,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1248,
+      "y": 255,
+      "channel": 0,
+      "actual": 16,
+      "expected": 0,
+      "delta": 16,
+      "region": "outside"
+    },
+    {
+      "x": 1248,
+      "y": 255,
+      "channel": 1,
+      "actual": 16,
+      "expected": 0,
+      "delta": 16,
+      "region": "outside"
+    },
+    {
+      "x": 1248,
+      "y": 255,
+      "channel": 2,
+      "actual": 16,
+      "expected": 0,
+      "delta": 16,
+      "region": "outside"
+    },
+    {
+      "x": 1249,
+      "y": 255,
+      "channel": 0,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 1249,
+      "y": 255,
+      "channel": 1,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 1249,
+      "y": 255,
+      "channel": 2,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 78,
+      "y": 528,
+      "channel": 0,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 78,
+      "y": 528,
+      "channel": 1,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 78,
+      "y": 528,
+      "channel": 2,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 79,
+      "y": 528,
+      "channel": 0,
+      "actual": 19,
+      "expected": 0,
+      "delta": 19,
+      "region": "outside"
+    },
+    {
+      "x": 79,
+      "y": 528,
+      "channel": 1,
+      "actual": 19,
+      "expected": 0,
+      "delta": 19,
+      "region": "outside"
+    },
+    {
+      "x": 79,
+      "y": 528,
+      "channel": 2,
+      "actual": 19,
+      "expected": 0,
+      "delta": 19,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 528,
+      "channel": 0,
+      "actual": 15,
+      "expected": 0,
+      "delta": 15,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 528,
+      "channel": 1,
+      "actual": 15,
+      "expected": 0,
+      "delta": 15,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 528,
+      "channel": 2,
+      "actual": 15,
+      "expected": 0,
+      "delta": 15,
+      "region": "outside"
+    },
+    {
+      "x": 1201,
+      "y": 528,
+      "channel": 0,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 1201,
+      "y": 528,
+      "channel": 1,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 1201,
+      "y": 528,
+      "channel": 2,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 79,
+      "y": 529,
+      "channel": 0,
+      "actual": 15,
+      "expected": 0,
+      "delta": 15,
+      "region": "outside"
+    },
+    {
+      "x": 79,
+      "y": 529,
+      "channel": 1,
+      "actual": 15,
+      "expected": 0,
+      "delta": 15,
+      "region": "outside"
+    },
+    {
+      "x": 79,
+      "y": 529,
+      "channel": 2,
+      "actual": 15,
+      "expected": 0,
+      "delta": 15,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 529,
+      "channel": 0,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 529,
+      "channel": 1,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 1200,
+      "y": 529,
+      "channel": 2,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 95,
+      "y": 544,
+      "channel": 0,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 95,
+      "y": 544,
+      "channel": 1,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 95,
+      "y": 544,
+      "channel": 2,
+      "actual": 13,
+      "expected": 0,
+      "delta": 13,
+      "region": "outside"
+    },
+    {
+      "x": 1184,
+      "y": 544,
+      "channel": 0,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1184,
+      "y": 544,
+      "channel": 1,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    },
+    {
+      "x": 1184,
+      "y": 544,
+      "channel": 2,
+      "actual": 14,
+      "expected": 0,
+      "delta": 14,
+      "region": "outside"
+    }
+  ],
+  "savedOutputMaximumCoordinates": [
+    {
+      "x": 79,
+      "y": 528,
+      "channel": 0,
+      "actual": 19,
+      "expected": 0,
+      "delta": 19,
+      "region": "outside"
+    },
+    {
+      "x": 79,
+      "y": 528,
+      "channel": 1,
+      "actual": 19,
+      "expected": 0,
+      "delta": 19,
+      "region": "outside"
+    },
+    {
+      "x": 79,
+      "y": 528,
+      "channel": 2,
+      "actual": 19,
+      "expected": 0,
+      "delta": 19,
+      "region": "outside"
+    }
+  ],
+  "sourceInputRgbaSha256": "ee795fbbe732cde78649e72b3cd9c100d16fe1f06a888ff046ff72e28301263f",
+  "unencodedRgbaSha256": "6b149e0d454670767e2f97e5a7697caa4e20b6420eeb9b3b2139981c9807207c",
+  "savedOutputRgbaSha256": "9a41242d19682a0e6e439d40e822cdf521d644f48b127655bbbe287e0adef61b",
+  "canvasPolicies": [
+    {
+      "requested": {
+        "colorSpace": "srgb"
+      },
+      "actual": {
+        "status": "available",
+        "value": {
+          "alpha": true,
+          "colorSpace": "srgb",
+          "colorType": "unorm8",
+          "desynchronized": false,
+          "toneMapping": {
+            "mode": "standard"
+          },
+          "willReadFrequently": false
+        }
+      }
+    },
+    {
+      "requested": {
+        "willReadFrequently": true
+      },
+      "actual": {
+        "status": "available",
+        "value": {
+          "alpha": true,
+          "colorSpace": "srgb",
+          "colorType": "unorm8",
+          "desynchronized": false,
+          "toneMapping": {
+            "mode": "standard"
+          },
+          "willReadFrequently": true
+        }
+      }
+    },
+    {
+      "requested": {
+        "colorSpace": "srgb",
+        "willReadFrequently": true
+      },
+      "actual": {
+        "status": "available",
+        "value": {
+          "alpha": true,
+          "colorSpace": "srgb",
+          "colorType": "unorm8",
+          "desynchronized": false,
+          "toneMapping": {
+            "mode": "standard"
+          },
+          "willReadFrequently": true
+        }
+      }
+    },
+    {
+      "requested": {
+        "colorSpace": "srgb",
+        "willReadFrequently": true
+      },
+      "actual": {
+        "status": "available",
+        "value": {
+          "alpha": true,
+          "colorSpace": "srgb",
+          "colorType": "unorm8",
+          "desynchronized": false,
+          "toneMapping": {
+            "mode": "standard"
+          },
+          "willReadFrequently": true
+        }
+      }
+    }
+  ],
+  "teardown": {
+    "cleanup": [
+      {
+        "name": "context",
+        "status": "closed"
+      },
+      {
+        "name": "browser",
+        "status": "closed"
+      },
+      {
+        "name": "browser-server",
+        "status": "closed"
+      },
+      {
+        "name": "vite",
+        "status": "closed"
+      }
+    ],
+    "runnerPid": 36406,
+    "capturedPids": [
+      36426,
+      36427,
+      36428,
+      36429,
+      36431,
+      36438,
+      36502
+    ],
+    "alivePids": [],
+    "portOpen": false,
+    "problems": [],
+    "servedMediaRequests": 2,
+    "parentMustVerifyRunnerAndPhysicalRelease": true,
+    "kind": "diagnostic-run-teardown",
+    "outcome": "observations-collected",
+    "error": null,
+    "evidence": {
+      "directory": "/Users/razvan-constantinbotezatu/Documents/Codex/Myrelith/.worktrees/issue198/.tmp/issue198-1ae6bae-diagnostic-attempt2",
+      "acknowledgedRecords": 61,
+      "fallbackReceipts": 0,
+      "closed": false,
+      "partial": false,
+      "error": null
+    },
+    "sequence": 61,
+    "receivedAt": "2026-09-08T20:56:39.744Z"
+  },
+  "qualification": "Audits saved observations only; no new decode/composite/encode. Exact RGB compositor parity at frame127 does not qualify the unfinished export lifecycle sequence or isolate encoder versus decoder."
+}

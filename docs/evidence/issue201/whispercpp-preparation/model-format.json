@@ -1,0 +1,1602 @@
+{
+  "bytes": 43537433,
+  "hparams": [
+    51865,
+    1500,
+    384,
+    6,
+    4,
+    448,
+    384,
+    6,
+    4,
+    80,
+    2007
+  ],
+  "mel": [
+    80,
+    201
+  ],
+  "storedVocabulary": 50257,
+  "maxTokenBytes": 33,
+  "tensorStart": 572465,
+  "tensorCount": 167,
+  "inventory": [
+    {
+      "name": "decoder.positional_embedding",
+      "dimensions": [
+        384,
+        448
+      ],
+      "type": 0,
+      "offset": 572513,
+      "bytes": 688128
+    },
+    {
+      "name": "encoder.positional_embedding",
+      "dimensions": [
+        384,
+        1500
+      ],
+      "type": 0,
+      "offset": 1260689,
+      "bytes": 2304000
+    },
+    {
+      "name": "decoder.token_embedding.weight",
+      "dimensions": [
+        384,
+        51865
+      ],
+      "type": 8,
+      "offset": 3564739,
+      "bytes": 21160920
+    },
+    {
+      "name": "decoder.blocks.0.mlp_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 24725705,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.mlp_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 24727285,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.mlp.0.weight",
+      "dimensions": [
+        384,
+        1536
+      ],
+      "type": 8,
+      "offset": 24728870,
+      "bytes": 626688
+    },
+    {
+      "name": "decoder.blocks.0.mlp.0.bias",
+      "dimensions": [
+        1536
+      ],
+      "type": 0,
+      "offset": 25355601,
+      "bytes": 6144
+    },
+    {
+      "name": "decoder.blocks.0.mlp.2.weight",
+      "dimensions": [
+        1536,
+        384
+      ],
+      "type": 8,
+      "offset": 25361794,
+      "bytes": 626688
+    },
+    {
+      "name": "decoder.blocks.0.mlp.2.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 25988525,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 25990108,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 25991689,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 25993279,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.0.attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 26149999,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 26151587,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.0.attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 26308313,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.0.attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 26465033,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 26466621,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.0.attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 26623339,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.cross_attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 26624928,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.cross_attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 26626515,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.cross_attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 26628111,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.0.cross_attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 26784837,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.cross_attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 26786431,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.0.cross_attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 26943163,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.0.cross_attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 27099889,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.0.cross_attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 27101483,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.0.cross_attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 27258207,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.mlp_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 27259789,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.mlp_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 27261369,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.mlp.0.weight",
+      "dimensions": [
+        384,
+        1536
+      ],
+      "type": 8,
+      "offset": 27262954,
+      "bytes": 626688
+    },
+    {
+      "name": "decoder.blocks.1.mlp.0.bias",
+      "dimensions": [
+        1536
+      ],
+      "type": 0,
+      "offset": 27889685,
+      "bytes": 6144
+    },
+    {
+      "name": "decoder.blocks.1.mlp.2.weight",
+      "dimensions": [
+        1536,
+        384
+      ],
+      "type": 8,
+      "offset": 27895878,
+      "bytes": 626688
+    },
+    {
+      "name": "decoder.blocks.1.mlp.2.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 28522609,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 28524192,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 28525773,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 28527363,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.1.attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 28684083,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 28685671,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.1.attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 28842397,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.1.attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 28999117,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 29000705,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.1.attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 29157423,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.cross_attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 29159012,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.cross_attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 29160599,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.cross_attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 29162195,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.1.cross_attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 29318921,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.cross_attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 29320515,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.1.cross_attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 29477247,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.1.cross_attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 29633973,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.1.cross_attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 29635567,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.1.cross_attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 29792291,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.mlp_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 29793873,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.mlp_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 29795453,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.mlp.0.weight",
+      "dimensions": [
+        384,
+        1536
+      ],
+      "type": 8,
+      "offset": 29797038,
+      "bytes": 626688
+    },
+    {
+      "name": "decoder.blocks.2.mlp.0.bias",
+      "dimensions": [
+        1536
+      ],
+      "type": 0,
+      "offset": 30423769,
+      "bytes": 6144
+    },
+    {
+      "name": "decoder.blocks.2.mlp.2.weight",
+      "dimensions": [
+        1536,
+        384
+      ],
+      "type": 8,
+      "offset": 30429962,
+      "bytes": 626688
+    },
+    {
+      "name": "decoder.blocks.2.mlp.2.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 31056693,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 31058276,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 31059857,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 31061447,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.2.attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 31218167,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 31219755,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.2.attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 31376481,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.2.attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 31533201,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 31534789,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.2.attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 31691507,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.cross_attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 31693096,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.cross_attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 31694683,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.cross_attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 31696279,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.2.cross_attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 31853005,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.cross_attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 31854599,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.2.cross_attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 32011331,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.2.cross_attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 32168057,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.2.cross_attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 32169651,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.2.cross_attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 32326375,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.mlp_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 32327957,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.mlp_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 32329537,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.mlp.0.weight",
+      "dimensions": [
+        384,
+        1536
+      ],
+      "type": 8,
+      "offset": 32331122,
+      "bytes": 626688
+    },
+    {
+      "name": "decoder.blocks.3.mlp.0.bias",
+      "dimensions": [
+        1536
+      ],
+      "type": 0,
+      "offset": 32957853,
+      "bytes": 6144
+    },
+    {
+      "name": "decoder.blocks.3.mlp.2.weight",
+      "dimensions": [
+        1536,
+        384
+      ],
+      "type": 8,
+      "offset": 32964046,
+      "bytes": 626688
+    },
+    {
+      "name": "decoder.blocks.3.mlp.2.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 33590777,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 33592360,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 33593941,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 33595531,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.3.attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 33752251,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 33753839,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.3.attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 33910565,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.3.attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 34067285,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 34068873,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.3.attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 34225591,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.cross_attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 34227180,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.cross_attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 34228767,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.cross_attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 34230363,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.3.cross_attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 34387089,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.cross_attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 34388683,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.3.cross_attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 34545415,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.3.cross_attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 34702141,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.blocks.3.cross_attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 34703735,
+      "bytes": 156672
+    },
+    {
+      "name": "decoder.blocks.3.cross_attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 34860459,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 34862028,
+      "bytes": 1536
+    },
+    {
+      "name": "decoder.ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 34863595,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.conv1.weight",
+      "dimensions": [
+        3,
+        80,
+        384
+      ],
+      "type": 1,
+      "offset": 34865175,
+      "bytes": 184320
+    },
+    {
+      "name": "encoder.conv1.bias",
+      "dimensions": [
+        1,
+        384
+      ],
+      "type": 0,
+      "offset": 35049533,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.conv2.weight",
+      "dimensions": [
+        3,
+        384,
+        384
+      ],
+      "type": 1,
+      "offset": 35051113,
+      "bytes": 884736
+    },
+    {
+      "name": "encoder.conv2.bias",
+      "dimensions": [
+        1,
+        384
+      ],
+      "type": 0,
+      "offset": 35935887,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.0.mlp_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 35937469,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.0.mlp_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 35939049,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.0.mlp.0.weight",
+      "dimensions": [
+        384,
+        1536
+      ],
+      "type": 8,
+      "offset": 35940634,
+      "bytes": 626688
+    },
+    {
+      "name": "encoder.blocks.0.mlp.0.bias",
+      "dimensions": [
+        1536
+      ],
+      "type": 0,
+      "offset": 36567365,
+      "bytes": 6144
+    },
+    {
+      "name": "encoder.blocks.0.mlp.2.weight",
+      "dimensions": [
+        1536,
+        384
+      ],
+      "type": 8,
+      "offset": 36573558,
+      "bytes": 626688
+    },
+    {
+      "name": "encoder.blocks.0.mlp.2.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 37200289,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.0.attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 37201872,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.0.attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 37203453,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.0.attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 37205043,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.0.attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 37361763,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.0.attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 37363351,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.0.attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 37520077,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.0.attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 37676797,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.0.attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 37678385,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.0.attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 37835103,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.1.mlp_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 37836685,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.1.mlp_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 37838265,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.1.mlp.0.weight",
+      "dimensions": [
+        384,
+        1536
+      ],
+      "type": 8,
+      "offset": 37839850,
+      "bytes": 626688
+    },
+    {
+      "name": "encoder.blocks.1.mlp.0.bias",
+      "dimensions": [
+        1536
+      ],
+      "type": 0,
+      "offset": 38466581,
+      "bytes": 6144
+    },
+    {
+      "name": "encoder.blocks.1.mlp.2.weight",
+      "dimensions": [
+        1536,
+        384
+      ],
+      "type": 8,
+      "offset": 38472774,
+      "bytes": 626688
+    },
+    {
+      "name": "encoder.blocks.1.mlp.2.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 39099505,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.1.attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 39101088,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.1.attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 39102669,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.1.attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 39104259,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.1.attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 39260979,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.1.attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 39262567,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.1.attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 39419293,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.1.attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 39576013,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.1.attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 39577601,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.1.attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 39734319,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.2.mlp_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 39735901,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.2.mlp_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 39737481,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.2.mlp.0.weight",
+      "dimensions": [
+        384,
+        1536
+      ],
+      "type": 8,
+      "offset": 39739066,
+      "bytes": 626688
+    },
+    {
+      "name": "encoder.blocks.2.mlp.0.bias",
+      "dimensions": [
+        1536
+      ],
+      "type": 0,
+      "offset": 40365797,
+      "bytes": 6144
+    },
+    {
+      "name": "encoder.blocks.2.mlp.2.weight",
+      "dimensions": [
+        1536,
+        384
+      ],
+      "type": 8,
+      "offset": 40371990,
+      "bytes": 626688
+    },
+    {
+      "name": "encoder.blocks.2.mlp.2.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 40998721,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.2.attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 41000304,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.2.attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 41001885,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.2.attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 41003475,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.2.attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 41160195,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.2.attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 41161783,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.2.attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 41318509,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.2.attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 41475229,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.2.attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 41476817,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.2.attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 41633535,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.3.mlp_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 41635117,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.3.mlp_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 41636697,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.3.mlp.0.weight",
+      "dimensions": [
+        384,
+        1536
+      ],
+      "type": 8,
+      "offset": 41638282,
+      "bytes": 626688
+    },
+    {
+      "name": "encoder.blocks.3.mlp.0.bias",
+      "dimensions": [
+        1536
+      ],
+      "type": 0,
+      "offset": 42265013,
+      "bytes": 6144
+    },
+    {
+      "name": "encoder.blocks.3.mlp.2.weight",
+      "dimensions": [
+        1536,
+        384
+      ],
+      "type": 8,
+      "offset": 42271206,
+      "bytes": 626688
+    },
+    {
+      "name": "encoder.blocks.3.mlp.2.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 42897937,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.3.attn_ln.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 42899520,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.3.attn_ln.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 42901101,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.3.attn.query.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 42902691,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.3.attn.query.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 43059411,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.3.attn.key.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 43060999,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.3.attn.value.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 43217725,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.3.attn.value.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 43374445,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.blocks.3.attn.out.weight",
+      "dimensions": [
+        384,
+        384
+      ],
+      "type": 8,
+      "offset": 43376033,
+      "bytes": 156672
+    },
+    {
+      "name": "encoder.blocks.3.attn.out.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 43532751,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.ln_post.weight",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 43534325,
+      "bytes": 1536
+    },
+    {
+      "name": "encoder.ln_post.bias",
+      "dimensions": [
+        384
+      ],
+      "type": 0,
+      "offset": 43535897,
+      "bytes": 1536
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+--- a/scripts/issue201/whispercpp-lab/model-worker.mjs
++++ b/scripts/issue201/whispercpp-lab/model-worker.mjs
+@@ -3,6 +3,7 @@
+ import { speechSegments, withinSourceCoverage } from './lab-contract.mjs'
+ import { verifyCandidate, modelCachePayload, WASM_IDENTITY, GLUE_IDENTITY } from './candidate.mjs'
+ import { createSpeechWorkerProtocol } from './worker-protocol.mjs'
++import { observeModuleFactory } from './observe-module.mjs'
+ 
+ let manifest
+ let core = null
+@@ -80,10 +81,12 @@
+     // Module import requests are also bounded by the frozen server and runner.
+     globalThis.fetch = () => { throw new Error('Inference worker cannot fetch') }
+     globalThis.XMLHttpRequest = class { constructor() { throw new Error('Inference worker cannot use XHR') } }
+-    core = createSpeechWorkerProtocol({ createModule, wasmIdentity: WASM_IDENTITY, crypto,
++    const observed = observeModuleFactory(createModule)
++    core = createSpeechWorkerProtocol({ createModule: observed.createModule, wasmIdentity: WASM_IDENTITY, crypto,
+       emit: value => { coreReply = value }, close: () => {} })
+     post('phase', { phase: 'model-load' })
+-    const result = await callCore('load', { model: modelBytes, wasm: wasmBytes })
++    const result = try { await callCore('load', { model: modelBytes, wasm: wasmBytes }) }
++    finally { post('native-diagnostics', { detail: observed.snapshot() }) }
+     ledger.modelOwners = 1
+     post('ready', { loadMs: performance.now() - started, ledger: { ...ledger }, heapBytes: result.heapBytes,
+       runtime: manifest.runtime, modelIdentity, bundleId: manifest.model.bundleId,
+--- a/scripts/issue201/whispercpp-lab/preflight.mjs
++++ b/scripts/issue201/whispercpp-lab/preflight.mjs
+@@ -55,6 +55,7 @@
+   const modules = {
+     'lab-client.mjs': 'whispercpp-lab/lab-client.mjs', 'model-worker.mjs': 'whispercpp-lab/model-worker.mjs',
+     'candidate.mjs': 'whispercpp-lab/candidate.mjs', 'lab-contract.mjs': 'lab-contract.mjs',
++    'observe-module.mjs': 'whispercpp-diagnostic/observe-module.mjs',
+     'worker-protocol.mjs': 'whispercpp/worker-protocol.mjs', 'model-format.mjs': 'whispercpp/model-format.mjs',
+   }
+   for (const [url, file] of Object.entries(modules)) {

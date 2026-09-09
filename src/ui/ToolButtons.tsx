@@ -23,7 +23,9 @@ import { useTransportStore } from '../state/transportStore'
 import { usePreferencesStore } from '../state/preferencesStore'
 import { shortcutForCommand, type EditorCommandId } from '../app/editorCommands'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
+import AnimationEntry from './animation/AnimationEntry'
 
+const TitleTemplateDialog = lazy(() => import('./TitleTemplateDialog'))
 const TextOverlayDialog = lazy(() => import('./TextOverlayDialog'))
 const AdjustmentDialog = lazy(() => import('./AdjustmentDialog'))
 
@@ -36,6 +38,9 @@ const TOOLS = [
 ] as const
 
 export default function ToolButtons() {
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const templateButtonRef = useRef<HTMLButtonElement | null>(null)
+  const closeTemplates = () => { setTemplatesOpen(false); requestAnimationFrame(() => templateButtonRef.current?.focus()) }
   const [textOpen, setTextOpen] = useState(false)
   const [adjustmentOpen, setAdjustmentOpen] = useState(false)
   const textButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -90,6 +95,7 @@ export default function ToolButtons() {
         >
           <TextT aria-hidden="true" size={17} weight="bold" />
         </button>
+        <button ref={templateButtonRef} type="button" className="tool-button" aria-label="Title templates" title="Title templates" aria-haspopup="dialog" aria-expanded={templatesOpen} disabled={closing} onClick={() => setTemplatesOpen(true)}>T+</button>
         <button
           ref={adjustmentButtonRef}
           type="button"
@@ -113,7 +119,9 @@ export default function ToolButtons() {
         >
           <Magnet aria-hidden="true" size={17} weight="bold" />
         </button>
+        <AnimationEntry variant="tool" label="Animation" />
       </div>
+      {templatesOpen && <LazySurfaceBoundary variant="dialog" loadingLabel="Loading title templates…" failureTitle="Title templates could not load" onClose={closeTemplates}><TitleTemplateDialog onClose={closeTemplates} /></LazySurfaceBoundary>}
       {textOpen && (
         <LazySurfaceBoundary
           variant="dialog"

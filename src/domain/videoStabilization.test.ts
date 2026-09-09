@@ -1,3 +1,4 @@
+import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import { defaultClipAnimation, evaluateAnimationTrack } from './clipAnimation'
 import { defaultClipVisualSettings } from './clipInspector'
@@ -43,7 +44,7 @@ function clip(overrides: Partial<Clip> = {}): Clip {
 
 function doc(item = clip(), width = 1_920, height = 1_080): TimelineDoc {
   return {
-    schemaVersion: 21,
+    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
     id: 'doc-stabilize',
     name: 'Stabilization',
     frameRate: { num: 30, den: 1 },

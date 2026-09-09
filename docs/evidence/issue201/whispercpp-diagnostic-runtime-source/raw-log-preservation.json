@@ -1,0 +1,15 @@
+{
+  "purpose": "The raw gzip files preserve exact command-output bytes; corresponding readable text files have trailing whitespace and excess final blank lines removed.",
+  "files": [
+    {
+      "path": "lint-final.txt.raw.gz",
+      "decodedBytes": 41,
+      "decodedSha256": "0f964a5c8a2180ff35b0c5691b91d545da949fc82da2e3154466eaf64eaef216"
+    },
+    {
+      "path": "tests-cross-realm-harness-failure-32-pass-4-fail.txt.raw.gz",
+      "decodedBytes": 8095,
+      "decodedSha256": "8d3a083048f8727ee779aded0c94af75996af8bc48d486fce98279b12c8e642e"
+    }
+  ]
+}
