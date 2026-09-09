@@ -9,6 +9,8 @@
  * dumb facade caller ARCHITECTURE.md sanctions.
  */
 
+import { useSyncExternalStore } from 'react'
+import { getSpeechAdmissionStatus, subscribeSpeechAdmission } from '../app/speechRetirement'
 import { CaretLeft, CaretRight, Pause, Play } from '@phosphor-icons/react'
 import {
   executeEditorCommand,
@@ -49,6 +51,7 @@ function SequenceEditButton({
 }
 
 export default function TransportBar() {
+  const speechStatus = useSyncExternalStore(subscribeSpeechAdmission, getSpeechAdmissionStatus, getSpeechAdmissionStatus)
   const isPlaying = useTransportStore((s) => s.isPlaying)
   useTransportStore((s) => s.timelineInFrame)
   useTransportStore((s) => s.timelineOutExclusive)
@@ -64,6 +67,7 @@ export default function TransportBar() {
 
   return (
     <div className="transport-bar" data-testid="transport-bar">
+      {speechStatus && <span role="status" className="transport-speech-status">{speechStatus}</span>}
       <button
         className="transport-button"
         aria-label="one frame back"

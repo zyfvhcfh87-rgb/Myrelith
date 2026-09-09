@@ -35,6 +35,7 @@ import {
   play,
 } from './transportController'
 import type { TransportDeps } from './transportController'
+import { registerSpeechRetirement } from './speechRetirement'
 
 function makeClip(id: string, duration: number): Clip {
   return {
@@ -263,6 +264,41 @@ afterEach(async () => {
 })
 
 describe('source / program exclusive playback', () => {
+  test('speech retirement gates Source allocation and only the latest source starts after a change', async () => {
+    const retirement = deferred<void>()
+    const retire = vi.fn(() => retirement.promise)
+    const unregister = registerSpeechRetirement(retire)
+    try {
+      openReadySource()
+      stepShuttle('l')
+      expect(retire).toHaveBeenCalledExactlyOnceWith('Source playback')
+      expect(fake.clock.resume).toHaveBeenCalled()
+      expect(fake.sourceStartAudio).not.toHaveBeenCalled()
+      expect(fake.deps.fetchBlob).not.toHaveBeenCalled()
+      expect(fake.pendingCount()).toBe(0)
+
+      openReadySource({ id: 'asset-other', fileName: 'other.mp4', objectUrl: 'blob:other' })
+      stepShuttle('l')
+      expect(retire).toHaveBeenCalledTimes(2)
+      fake.clock.currentTime = 1
+      fake.pump()
+      expect(source().session?.playheadFrame).toBe(0)
+      expect(fake.sourceStartAudio).not.toHaveBeenCalled()
+      expect(fake.deps.fetchBlob).not.toHaveBeenCalled()
+      expect(fake.pendingCount()).toBe(0)
+
+      retirement.resolve()
+      await waitForSourceClock()
+      expect(fake.sourceStartAudio).toHaveBeenCalledOnce()
+      expect(fake.sourceStartAudio.mock.calls[0][1].id).toBe('source-review:asset-other')
+      expect(fake.startAudio).not.toHaveBeenCalled()
+      expect(source().session?.source.assetId).toBe('asset-other')
+      fake.clock.currentTime = 2
+      fake.pump()
+      expect(source().session?.playheadFrame).toBe(30)
+    } finally { retirement.resolve(); unregister() }
+  })
+
   test('starting source pauses Program and does not start a second mix', async () => {
     openReadySource()
     play()

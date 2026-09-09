@@ -1,0 +1,39 @@
+{
+  "kind": "issue201-cooperative-cancellation-runtime07",
+  "acceptedSourceCommit": "0df9fd53c886b55aac3ade7719038fe054873e66",
+  "frozenRuntimeCheckpoint": "9e4e061b82aa6a189ad88e8177712f32214d80469f0640160585570d5990712b",
+  "sourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp-cancellation/run-lab.mjs",
+      "bytes": 43642,
+      "sha256": "90912d589a7f9c82993b213f489b4c6462bd2d7b3eac3db6f708338035d88395"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-cancellation/preflight.mjs",
+      "bytes": 1536,
+      "sha256": "9ec5aa60a4d09994c42f0a2af2c88f1cd90b238682db841968b155d3efc65536"
+    },
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_CANCELLATION_RUNTIME.md",
+      "bytes": 2020,
+      "sha256": "ee84300dc5ea6a2281da7179f55d8453d42c745a8d6d61906cdb92fc452f0fa7"
+    }
+  ],
+  "referenceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp-cancellation/lab-client.mjs",
+      "bytes": 15245,
+      "sha256": "8fa12edcf985bdf3232e285837de4880c0b4fbe27d55e4c6ac001c489dc96acd"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-cancellation/model-worker.mjs",
+      "bytes": 14462,
+      "sha256": "070bc8bd3a1b255aa16d0c86b28e2890954a4e083cac3e10a5501fd179e2c141"
+    },
+    {
+      "path": "docs/evidence/issue201/whispercpp-bounded-support-runtime/checkpoint.json",
+      "bytes": 9876,
+      "sha256": "9e4e061b82aa6a189ad88e8177712f32214d80469f0640160585570d5990712b"
+    }
+  ]
+}

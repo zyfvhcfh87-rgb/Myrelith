@@ -1,0 +1,490 @@
+{
+  "attempt": {
+    "pid": 83473,
+    "startedAt": "2026-09-09T09:38:50.136Z",
+    "checkpointSha256": "85cf484046b376c879d76b55a560ec5e3d7f5e418d4daf4fb83f1812f269fa2b",
+    "commit": "f1df79b81bc3ab047f4985a243d66649e74b4b5c"
+  },
+  "release": {
+    "checkedAt": "2026-09-09T09:41:33.924143+00:00",
+    "pids": [
+      83473,
+      83502,
+      83503,
+      83504,
+      83505,
+      84929,
+      84965,
+      84966,
+      84967,
+      84968
+    ],
+    "remaining": [],
+    "port5201ConnectResult": 61,
+    "profileAbsent": true,
+    "ownedAwakeHelper": null
+  },
+  "acceptance": {
+    "automatedStatus": "passed",
+    "expectedCases": 23,
+    "completedCases": 23,
+    "missing": [],
+    "failed": [],
+    "unexpected": [],
+    "duplicateNames": false,
+    "qualification": "Automatic laboratory checks only; no production/model enablement verdict."
+  },
+  "memory": {
+    "baseline": 272351232,
+    "peak": 1212547072,
+    "delta": 940195840,
+    "samples": 1010,
+    "maxSampleGapMs": 108,
+    "maximumActiveEpochGapMs": 108,
+    "failures": [],
+    "scope": "Candidate work inside browser epochs. Browser launch and verified-absent reopen intervals are disclosed separately; no RSS or cadence claim for those intervals."
+  },
+  "longReview": {
+    "windows": 12,
+    "timedWindows": 8,
+    "untimedWindows": 4,
+    "timedCues": 40
+  },
+  "longElapsedMs": 67115,
+  "longFinalLedger": {
+    "modelOwners": 1,
+    "inputOwners": 0,
+    "sampleOwners": 0,
+    "acquiredSamples": 2784,
+    "closedSamples": 2784,
+    "pcmBytes": 0,
+    "maxPcmBytes": 3840000,
+    "windows": 12
+  },
+  "longCleanup": {
+    "mode": "cooperative",
+    "reason": "long-job-complete",
+    "elapsedMs": 2.1000000089406967,
+    "cooperativeZero": true,
+    "ledger": {
+      "modelOwners": 0,
+      "inputOwners": 0,
+      "sampleOwners": 0,
+      "acquiredSamples": 2784,
+      "closedSamples": 2784,
+      "pcmBytes": 0,
+      "maxPcmBytes": 3840000,
+      "windows": 12
+    }
+  },
+  "shortReview": {
+    "windows": 1,
+    "timedWindows": 0,
+    "untimedWindows": 1,
+    "timedCues": 0
+  },
+  "shortText": " Mr. Kulman",
+  "cases": [
+    {
+      "name": "no-model-and-lazy-runtime",
+      "passed": true,
+      "elapsedMs": 38,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "cancel-acquisition",
+      "passed": true,
+      "elapsedMs": 111,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "verified-model-install",
+      "passed": true,
+      "elapsedMs": 66,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "cancel-cache-write-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 373,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "cancel-cache-commit-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 383,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "corrupt-cache-rejected-before-inference",
+      "passed": true,
+      "elapsedMs": 130,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "selected-local-files-install",
+      "passed": true,
+      "elapsedMs": 94,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "capacity-rejection-preserves-model",
+      "passed": true,
+      "elapsedMs": 69,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "transcribe-english-8",
+      "passed": true,
+      "elapsedMs": 2745,
+      "wordErrorRate": 0.058823529411764705,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 1
+      },
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "transcribe-english-9",
+      "passed": true,
+      "elapsedMs": 2785,
+      "wordErrorRate": 0.058823529411764705,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 1
+      },
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "transcribe-french-10",
+      "passed": true,
+      "elapsedMs": 2762,
+      "wordErrorRate": 0.4,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 1
+      },
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "transcribe-silence-11",
+      "passed": true,
+      "elapsedMs": 138,
+      "wordErrorRate": null,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 0
+      },
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "one-second-speech-window",
+      "passed": true,
+      "elapsedMs": 2703,
+      "wordErrorRate": null,
+      "review": {
+        "windows": 1,
+        "timedWindows": 0,
+        "untimedWindows": 1,
+        "timedCues": 0
+      },
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "corrupt-audio-rejection",
+      "passed": true,
+      "elapsedMs": 125,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "cancel-model-load",
+      "passed": true,
+      "elapsedMs": 149,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "cancel-prepare",
+      "passed": true,
+      "elapsedMs": 163,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "cancel-infer",
+      "passed": true,
+      "elapsedMs": 5961,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "project-replacement",
+      "passed": true,
+      "elapsedMs": 5996,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "300-second-bounded-workload",
+      "passed": true,
+      "elapsedMs": 67115,
+      "wordErrorRate": null,
+      "review": {
+        "windows": 12,
+        "timedWindows": 8,
+        "untimedWindows": 4,
+        "timedCues": 40
+      },
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "offline-loaded-app-and-fresh-worker",
+      "passed": true,
+      "elapsedMs": 2857,
+      "wordErrorRate": null,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 1
+      },
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": null,
+      "error": null
+    },
+    {
+      "name": "offline-page-reload",
+      "passed": true,
+      "elapsedMs": 2994,
+      "wordErrorRate": null,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 1
+      },
+      "offlineNavigation": {
+        "status": "requires-app-connection",
+        "error": "page.reload: net::ERR_INTERNET_DISCONNECTED\nCall log:\n\u001b[2m  - waiting for navigation until \"load\"\u001b[22m\n"
+      },
+      "modelDownloadsBlocked": true,
+      "error": null
+    },
+    {
+      "name": "offline-persistent-browser-reopen",
+      "passed": true,
+      "elapsedMs": 3087,
+      "wordErrorRate": null,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 1
+      },
+      "offlineNavigation": {
+        "status": "browser-cache-navigation",
+        "supportedGuarantee": false
+      },
+      "modelDownloadsBlocked": true,
+      "error": null
+    },
+    {
+      "name": "remove-model-and-offline-no-model",
+      "passed": true,
+      "elapsedMs": 8,
+      "wordErrorRate": null,
+      "review": null,
+      "offlineNavigation": null,
+      "modelDownloadsBlocked": true,
+      "error": null
+    }
+  ],
+  "retirements": [
+    {
+      "name": "cancel-model-load",
+      "elapsedMs": 50,
+      "cooperativeZero": true
+    },
+    {
+      "name": "cancel-prepare",
+      "elapsedMs": 5.200000002980232,
+      "cooperativeZero": true
+    },
+    {
+      "name": "cancel-infer",
+      "elapsedMs": 5790.29999999702,
+      "cooperativeZero": true
+    },
+    {
+      "name": "project-replacement",
+      "elapsedMs": 5827.79999999702,
+      "cooperativeZero": true
+    }
+  ],
+  "finalCleanup": {
+    "status": "verified",
+    "state": {
+      "generation": 1,
+      "phase": "idle",
+      "workerOwners": 0,
+      "acquisitionOwners": 0,
+      "admissionFailure": null,
+      "lastCleanup": {
+        "mode": "cooperative",
+        "reason": "offline-reopen-complete",
+        "elapsedMs": 2.4000000059604645,
+        "cooperativeZero": true,
+        "ledger": {
+          "modelOwners": 0,
+          "inputOwners": 0,
+          "sampleOwners": 0,
+          "acquiredSamples": 46,
+          "closedSamples": 46,
+          "pcmBytes": 0,
+          "maxPcmBytes": 749440,
+          "windows": 1
+        }
+      },
+      "events": []
+    },
+    "cache": {
+      "model": {
+        "error": "No local speech model is installed"
+      },
+      "estimate": {
+        "quota": 10737418240,
+        "usage": 0,
+        "usageDetails": {}
+      },
+      "cacheNames": [
+        "myrelith-issue201-whispercpp-lab-registry"
+      ]
+    }
+  },
+  "stopReason": null,
+  "runtime": {
+    "browserVersion": {
+      "protocolVersion": "1.3",
+      "product": "HeadlessChrome/151.0.7922.34",
+      "revision": "@782af9cb30a53f54487e5d2e44738645a8ec457c",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+      "jsVersion": "15.1.206.8"
+    },
+    "platform": "darwin",
+    "architecture": "arm64",
+    "nodeVersion": "v26.8.1",
+    "engine": {
+      "engine": "whisper.cpp",
+      "version": "1.9.3-dev",
+      "sourceRevision": "371b5a7561823ab2bb32142d2751e35e7534727b",
+      "generatedCheckpoint": "ac2c447509946ecbab05486297e9080846e5889d",
+      "device": "wasm",
+      "dtype": "q8_0",
+      "threads": 1,
+      "initialHeapBytes": 67108864,
+      "maximumHeapBytes": 536870912,
+      "stackBytes": 5242880,
+      "wholeCallTokenBudget": 448,
+      "windowDeadlineMs": 120000,
+      "artifacts": [
+        {
+          "name": "myrelith-whisper.mjs",
+          "bytes": 22350,
+          "sha256": "db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7",
+          "packedPath": "docs/evidence/issue201/whispercpp-generated/myrelith-whisper.mjs.gz"
+        },
+        {
+          "name": "myrelith-whisper.wasm",
+          "bytes": 1198548,
+          "sha256": "2f05c1ba7a828ba93a5ab1c7dd752f0d055360d02aa23edc9b60572424e01ef2",
+          "packedPath": "docs/evidence/issue201/whispercpp-untimed-runtime/myrelith-whisper.wasm.gz"
+        },
+        {
+          "name": "mediabunny.mjs",
+          "bytes": 624835,
+          "sha256": "a7e7e14265b787de0daf23d379a8b4afa4b36b74711d71a2f5e075bff6a671a6",
+          "localPath": ".tmp/issue201-speech-lab/assets/mediabunny.mjs"
+        }
+      ],
+      "diagnostics": {
+        "kind": "bounded-initialization-context-v1",
+        "bytes": 3103,
+        "sha256": "f09df803982b932355225e1fb7854c16451bdd5a73a6532e2d6393ad526e6a68",
+        "sourcePath": "scripts/issue201/whispercpp-diagnostic/observe-module.mjs",
+        "maximumRecords": 64,
+        "maximumCharacters": 32768,
+        "maximumCharactersPerRecord": 2048
+      }
+    },
+    "bundleId": "sha256:6f4ab890b02876493211844b95d622da99199d8abb56ec54f6e37ca425091370",
+    "configurationRevision": "5359861c739e955e79d9a303bcbc70fb988958b1"
+  }
+}

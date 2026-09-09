@@ -1,0 +1,378 @@
+{
+  "release": {
+    "checkedAt": "2026-09-09T09:32:21.954933+00:00",
+    "pids": [
+      79781,
+      79810,
+      79811,
+      79812,
+      79813,
+      81122
+    ],
+    "remaining": [],
+    "port5201ConnectResult": 61,
+    "profileAbsent": true,
+    "ownedAwakeHelper": null
+  },
+  "acceptance": {
+    "automatedStatus": "failed-incomplete",
+    "expectedCases": 23,
+    "completedCases": 21,
+    "missing": [
+      "offline-persistent-browser-reopen",
+      "remove-model-and-offline-no-model"
+    ],
+    "failed": [
+      "offline-page-reload"
+    ],
+    "unexpected": [],
+    "duplicateNames": false,
+    "qualification": "Automatic laboratory checks only; no production/model enablement verdict."
+  },
+  "memory": {
+    "baseline": 287899648,
+    "peak": 1191444480,
+    "delta": 903544832,
+    "samples": 942,
+    "maxGap": 108,
+    "maximumActiveEpochGapMs": 113,
+    "failures": []
+  },
+  "longReview": {
+    "windows": 12,
+    "timedWindows": 8,
+    "untimedWindows": 4,
+    "timedCues": 40
+  },
+  "longElapsedMs": 66689,
+  "longWindows": [
+    {
+      "start": 0,
+      "end": 30,
+      "timing": "model",
+      "textCharacters": 428,
+      "cues": 5,
+      "elapsedMs": 5832.4000000059605
+    },
+    {
+      "start": 25,
+      "end": 55,
+      "timing": "model",
+      "textCharacters": 420,
+      "cues": 5,
+      "elapsedMs": 5721.699999988079
+    },
+    {
+      "start": 50,
+      "end": 80,
+      "timing": "unavailable",
+      "textCharacters": 421,
+      "cues": 0,
+      "elapsedMs": 5693.100000008941
+    },
+    {
+      "start": 75,
+      "end": 105,
+      "timing": "model",
+      "textCharacters": 402,
+      "cues": 5,
+      "elapsedMs": 5727.899999991059
+    },
+    {
+      "start": 100,
+      "end": 130,
+      "timing": "unavailable",
+      "textCharacters": 412,
+      "cues": 0,
+      "elapsedMs": 5851.5
+    },
+    {
+      "start": 125,
+      "end": 155,
+      "timing": "unavailable",
+      "textCharacters": 414,
+      "cues": 0,
+      "elapsedMs": 5752.29999999702
+    },
+    {
+      "start": 150,
+      "end": 180,
+      "timing": "model",
+      "textCharacters": 406,
+      "cues": 5,
+      "elapsedMs": 5731.5
+    },
+    {
+      "start": 175,
+      "end": 205,
+      "timing": "unavailable",
+      "textCharacters": 413,
+      "cues": 0,
+      "elapsedMs": 5849.4000000059605
+    },
+    {
+      "start": 200,
+      "end": 230,
+      "timing": "model",
+      "textCharacters": 404,
+      "cues": 6,
+      "elapsedMs": 5723.4000000059605
+    },
+    {
+      "start": 225,
+      "end": 255,
+      "timing": "model",
+      "textCharacters": 399,
+      "cues": 5,
+      "elapsedMs": 5690.79999999702
+    },
+    {
+      "start": 250,
+      "end": 280,
+      "timing": "model",
+      "textCharacters": 414,
+      "cues": 5,
+      "elapsedMs": 5705.70000000298
+    },
+    {
+      "start": 275,
+      "end": 300,
+      "timing": "model",
+      "textCharacters": 332,
+      "cues": 4,
+      "elapsedMs": 3073.1000000089407
+    }
+  ],
+  "longCleanup": {
+    "mode": "cooperative",
+    "reason": "long-job-complete",
+    "elapsedMs": 2.300000011920929,
+    "cooperativeZero": true,
+    "ledger": {
+      "modelOwners": 0,
+      "inputOwners": 0,
+      "sampleOwners": 0,
+      "acquiredSamples": 2784,
+      "closedSamples": 2784,
+      "pcmBytes": 0,
+      "maxPcmBytes": 3840000,
+      "windows": 12
+    }
+  },
+  "cases": [
+    {
+      "name": "no-model-and-lazy-runtime",
+      "passed": true,
+      "elapsedMs": 37,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "cancel-acquisition",
+      "passed": true,
+      "elapsedMs": 112,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "verified-model-install",
+      "passed": true,
+      "elapsedMs": 70,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "cancel-cache-write-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 390,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "cancel-cache-commit-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 384,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "corrupt-cache-rejected-before-inference",
+      "passed": true,
+      "elapsedMs": 120,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "selected-local-files-install",
+      "passed": true,
+      "elapsedMs": 101,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "capacity-rejection-preserves-model",
+      "passed": true,
+      "elapsedMs": 68,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "transcribe-english-8",
+      "passed": true,
+      "elapsedMs": 2784,
+      "wordErrorRate": 0.058823529411764705,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 1
+      },
+      "error": null
+    },
+    {
+      "name": "transcribe-english-9",
+      "passed": true,
+      "elapsedMs": 2791,
+      "wordErrorRate": 0.058823529411764705,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 1
+      },
+      "error": null
+    },
+    {
+      "name": "transcribe-french-10",
+      "passed": true,
+      "elapsedMs": 2722,
+      "wordErrorRate": 0.4,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 1
+      },
+      "error": null
+    },
+    {
+      "name": "transcribe-silence-11",
+      "passed": true,
+      "elapsedMs": 129,
+      "wordErrorRate": null,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 0
+      },
+      "error": null
+    },
+    {
+      "name": "one-second-speech-window",
+      "passed": true,
+      "elapsedMs": 2665,
+      "wordErrorRate": null,
+      "review": {
+        "windows": 1,
+        "timedWindows": 0,
+        "untimedWindows": 1,
+        "timedCues": 0
+      },
+      "error": null
+    },
+    {
+      "name": "corrupt-audio-rejection",
+      "passed": true,
+      "elapsedMs": 119,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "cancel-model-load",
+      "passed": true,
+      "elapsedMs": 144,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "cancel-prepare",
+      "passed": true,
+      "elapsedMs": 157,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "cancel-infer",
+      "passed": true,
+      "elapsedMs": 5898,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "project-replacement",
+      "passed": true,
+      "elapsedMs": 6070,
+      "wordErrorRate": null,
+      "review": null,
+      "error": null
+    },
+    {
+      "name": "300-second-bounded-workload",
+      "passed": true,
+      "elapsedMs": 66689,
+      "wordErrorRate": null,
+      "review": {
+        "windows": 12,
+        "timedWindows": 8,
+        "untimedWindows": 4,
+        "timedCues": 40
+      },
+      "error": null
+    },
+    {
+      "name": "offline-loaded-app-and-fresh-worker",
+      "passed": true,
+      "elapsedMs": 2810,
+      "wordErrorRate": null,
+      "review": {
+        "windows": 1,
+        "timedWindows": 1,
+        "untimedWindows": 0,
+        "timedCues": 1
+      },
+      "error": null
+    },
+    {
+      "name": "offline-page-reload",
+      "passed": false,
+      "elapsedMs": 74,
+      "wordErrorRate": null,
+      "review": null,
+      "error": "page.reload: net::ERR_INTERNET_DISCONNECTED\nCall log:\n\u001b[2m  - waiting for navigation until \"load\"\u001b[22m\n"
+    }
+  ],
+  "stopReason": {
+    "type": "case-failure",
+    "case": "offline-page-reload",
+    "message": "page.reload: net::ERR_INTERNET_DISCONNECTED\nCall log:\n\u001b[2m  - waiting for navigation until \"load\"\u001b[22m\n",
+    "at": 1788946257933
+  },
+  "finalCleanup": {
+    "status": "unavailable",
+    "reason": "Browser closed after failure; no cooperative model/cache cleanup claim"
+  },
+  "launchQualification": "Sandbox denied prelaunch socket probe (EPERM 1). Runner bound port5201; independent postlaunch lsof confirmed runner79781 as listener. No prelaunch port-clear claim."
+}

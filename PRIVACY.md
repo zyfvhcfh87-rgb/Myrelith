@@ -1,6 +1,6 @@
 # Myrelith Privacy Notice
 
-**Effective date:** 1 August 2026
+**Effective date:** 9 September 2026
 
 Myrelith is a browser-based video editor maintained by Aryel in Belgium. This
 notice applies to the hosted Myrelith app at
@@ -11,7 +11,8 @@ notice applies to the hosted Myrelith app at
 Myrelith has no user accounts, advertising, tracking pixels, or in-app analytics.
 The videos, audio, images, and project files you choose are processed on your
 device and are not uploaded to Myrelith or Cloudflare. The app stores only the
-local preferences, file permissions, and recovery information described below.
+local preferences, file permissions, recovery information, and optional speech
+model cache described below.
 
 Cloudflare delivers the website. Like other web hosts, it processes network
 and request data needed to serve and protect the site.
@@ -31,11 +32,13 @@ Myrelith may use browser storage for:
 - opaque browser file handles for recent project and remembered source-media
   shortcuts in IndexedDB, when your browser supports them and you grant access;
 - up to three recovery snapshots for each of up to eight recent recovery
-  journals in IndexedDB; and
+  journals in IndexedDB;
+- an optional speech model in Cache Storage, installed only when you choose
+  to download it or select the exact model file; and
 - temporary decoded media, previews, and export data in memory while you edit.
 
 Recovery snapshots contain the portable project description: names, timeline
-structure, clip settings, and source metadata. They do not contain the source
+structure, clip settings, caption text, and source metadata. They do not contain the source
 video, audio, or image bytes. Opaque file handles are browser-managed
 permissions, not filesystem paths, and they do not grant access until the
 browser permits it.
@@ -53,6 +56,23 @@ or your browser evicts it. Closing a tab clears working memory.
 
 Myrelith does not use cookies and Cloudflare Web Analytics is disabled for this
 project. Therefore Myrelith does not show a cookie-consent banner.
+
+## Optional local transcription
+
+Choosing **Download and install model** requests the pinned Whisper model from
+Hugging Face and its file-delivery hosts. Those hosts receive the network
+request needed to deliver the model, including your IP address. Myrelith sends
+this download without credentials or a referrer. Selecting the exact local
+model file instead does not request a model download.
+
+Audio decoding and transcription run on your device. Myrelith does not upload
+your audio or transcript. Review text stays in memory until you apply it;
+applied captions become ordinary project data and may appear in local saves
+and recovery snapshots. The model cache is separate from project files, has a
+96 MiB budget including installation, and can be removed using **Remove local
+model**, the app's local-data controls, or your browser's site-data controls.
+The browser may also evict cached files. Speech runtime files are served with
+the app; opening the app can still require a connection.
 
 ## What the host processes
 
@@ -75,8 +95,9 @@ for more detail.
 
 ## Sharing, sale, and automated decisions
 
-Myrelith does not sell personal data. Request data is shared with Cloudflare only
-as needed to host and protect the site, or disclosed if legally required. The
+Myrelith does not sell personal data. Site request data is shared with Cloudflare
+as needed to host and protect the site. An optional model download also contacts
+the model hosts described above. Data may be disclosed if legally required. The
 site does not use personal data for advertising, profiling, or automated
 decisions with legal or similarly significant effects.
 

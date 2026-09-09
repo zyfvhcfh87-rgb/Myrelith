@@ -1,19 +1,19 @@
 # Issue #201 — semantic ASS, batch captions, and optional local speech
 
-Status: **caption editing/interchange implemented and accepted locally; optional
-local transcription remains incomplete, so #201 must remain open.** Schema 24
-styles, strict ASS import/export with explicit loss review, atomic batch edits,
-appearance advice and SRT/VTT/ASS downloads are integrated. The root's
-[two browser workflows](evidence/milestone9/caption-workflows.md) cover actual
-editing, Undo/Redo, portable Save/Open, downloads and narrow dialog focus.
-Transcription remains an isolated laboratory: English/French and cancellation
-cases passed, but rapid worker replacement exceeded the fixed resident-memory
-limit before long-audio inference. Long-job/offline lifecycle and production
-app wiring are not qualified. No production speech control is exposed.
+Status: **implementation and local acceptance complete.** The exact local speech
+model passed all 23 laboratory cases and received supervisor GO on 2026-09-09;
+the built product subsequently passed [all 13 acceptance checks](evidence/issue201/PRODUCT_ACCEPTANCE.md),
+5,226 full-suite tests, 17 runner checks, build/typecheck, lint and production audit.
+Publication and issue closure are verified separately. The
+[current model decision](evidence/issue201/MODEL_DECISION.md) records exact
+candidate identity, measured limits and the updated untimed/offline/cancellation
+contracts.
+The root's [caption browser workflows](evidence/milestone9/caption-workflows.md)
+remain the accepted baseline for editing, Undo/Redo, Save/Open and downloads.
 
 The starting tree was `ce91074c276ca6892a74addb7dd673b9a19c7eeb`, branch
 `codex/issue201`. The proposals below retain their historical context and do
-not authorize speech promotion before its separate measured gate.
+not authorize speech promotion before its separate measured gate (now passed).
 
 ## Acceptance and existing authorities
 
@@ -187,22 +187,18 @@ must keep the selected cue and Apply/Cancel reachable. No mouse-only operation.
 
 ## Speech decision and exact lifecycle
 
-The measured candidate is documented in
-[the model decision](evidence/issue201/MODEL_DECISION.md) and machine-readable
-[replacement manifest](evidence/issue201/replacement-manifest.json). The current
-lab candidate uses Transformers.js 4.2.0 and the exact WASM-only ORT closure
-documented in [replacement preflight](evidence/issue201/REPLACEMENT_PREFLIGHT.md);
-the initial 3.8.1 measurements are retained as superseded evidence.
-This first review **does not grant speech enablement**: complete offline assets,
-actual browser transfer/cache/resident measurements, transitive notice review,
-real transcription and cancellation still require Gate 1's exclusive lab.
+The supervisor approved the exact whisper.cpp tiny-q8_0 candidate after
+[runtime09 passed all 23 cases](evidence/issue201/WHISPER_CPP_RUNTIME_RUN_09.md).
+The [current model decision](evidence/issue201/MODEL_DECISION.md) binds its model,
+runtime, notices and measurements. Earlier Transformers.js/ORT and failed
+whisper.cpp attempts remain immutable historical evidence. No new research gate
+is needed for the bounded production integration below.
 
 Proposed first product scope: one explicitly selected connected source with a
 primary audio stream, a source-time window of 1–300 seconds and a user-chosen
 integer insertion frame in the active sequence. This transcribes the named
 source, not the finished sequence mix. It never guesses retimed clip placement.
-Offer explicit language selection from the pinned model's supported language
-tokens. Automatic language detection, word-level confidence and text translation
+Offer explicit English or French selection; these are the measured languages. Automatic language detection, word-level confidence and text translation
 are not required for this first path. Disclose tested languages separately from
 the model's advertised multilingual capabilities.
 
@@ -213,9 +209,9 @@ the model's advertised multilingual capabilities.
 - Proposed narrow architecture exception: a dedicated
   `workers/caption-transcription.worker.ts` imports only its reviewed
   `pipeline/captionTranscriptionProtocol.ts` and bounded audio-preparation
-  implementation, domain data and the pinned external runtime. Obtain explicit
-  review before updating ARCHITECTURE.md/its static guards. No lab import enters
-  production.
+  implementation, domain data and the pinned external runtime. The supervisor
+  approved this narrow exception; update ARCHITECTURE.md and its static guard
+  together. No lab import enters production.
 - Stream native decoded samples sequentially and close each AudioData/Input/
   iterator in finally. Use existing canonical channel fold-down and a bounded
   anti-aliasing resampler to mono 16 kHz. Never full-file `decodeAudioData`,
@@ -233,19 +229,33 @@ the model's advertised multilingual capabilities.
 - Treat model timestamps as approximate source evidence. Validate finite,
   ordered segment endpoints in the source window, convert at the declared
   timestamp/sample boundary to rational integer target frames, and reject or
-  separately present untimed text when an endpoint is absent. Do not invent
+  separately present the entire window as untimed text when model endpoint
+  coverage fails. Untimed text has no cue endpoints and requires explicit user
+  timing before Apply; source-window coverage is never guessed cue timing. Do not invent
   confidence, silent missing tails or source-time certainty. Output remains a
   review draft until one fresh budget-checked history operation creates ordinary
   editable cues. Cancellation produces no project edit.
 - Cancel on retry/supersession, close, project or sequence replacement, source
   relink/change, clearing local derived data, or essential resource preemption.
-  Terminate a busy WASM worker; otherwise await bounded cooperative disposal
-  then terminate at a 100 ms deadline. Retain scheduler admission until worker
-  termination and parent-owned cache transactions have drained/rolled back.
+  Reject the user request promptly and retain its worker/admission while native
+  work drains to the next cancellation boundary. Active cleanup may consume the
+  remaining current phase/window deadline plus 100ms; idle cleanup uses 100ms.
+  Unacknowledged cleanup blocks retry and never claims cooperative release.
+  Retain scheduler admission until actual owned cleanup and parent-owned cache
+  transactions have drained/rolled back. Essential media must request this
+  retirement before allocating; an analysis reservation alone is not preemption.
   Reject late request ids/generations, detach late transferred PCM, clear bounded
   results and revoke owned URLs. Record termination separately from an observed
   cooperative-zero ledger. The lazy teardown seam must not import speech on
   projects that never requested it.
+
+The loaded editor can transcribe offline with verified cached model/runtime
+files. Opening/reopening requires its app files to be served; ordinary HTTP
+cache availability is not an offline navigation guarantee. Model cache identity
+and provenance survive reopening without another model download. No service
+worker/PWA is added. Actual product acceptance must include common 48kHz stereo
+connected-source input using canonical fold-down and bounded streaming
+resampling; lab 8/16kHz mono fixtures alone do not qualify camera audio.
 
 ## Optional spelling and translation
 

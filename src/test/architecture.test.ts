@@ -301,6 +301,10 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
           && new Set(['pipeline/multicamMonitorDecode.ts', 'pipeline/multicamMonitorProtocol.ts']).has(toName)
         )
         || (
+          fromName === 'workers/caption-transcription.worker.ts'
+          && new Set(['pipeline/speechAudioDecode.ts', 'pipeline/speechProtocol.ts']).has(toName)
+        )
+        || (
           fromName === 'workers/audio-alignment.worker.ts'
           && new Set(['pipeline/audioAlignmentDecode.ts', 'pipeline/audioAlignmentProtocol.ts']).has(toName)
         )

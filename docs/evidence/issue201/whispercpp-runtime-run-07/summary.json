@@ -1,0 +1,246 @@
+{
+  "release": {
+    "checkedAt": "2026-09-09T09:06:29.122451+00:00",
+    "pids": [
+      73045,
+      73075,
+      73076,
+      73077,
+      73078
+    ],
+    "remaining": [],
+    "port5201ConnectResult": 61,
+    "profileAbsent": true,
+    "ownedAwakeHelper": null
+  },
+  "acceptance": {
+    "automatedStatus": "failed-incomplete",
+    "expectedCases": 23,
+    "completedCases": 19,
+    "missing": [
+      "offline-loaded-app-and-fresh-worker",
+      "offline-page-reload",
+      "offline-persistent-browser-reopen",
+      "remove-model-and-offline-no-model"
+    ],
+    "failed": [
+      "300-second-bounded-workload"
+    ],
+    "unexpected": [],
+    "duplicateNames": false,
+    "qualification": "Automatic laboratory checks only; no production/model enablement verdict."
+  },
+  "memory": {
+    "baseline": 286965760,
+    "peak": 1172373504,
+    "delta": 885407744,
+    "samples": 419,
+    "maxGap": 110,
+    "maximumActiveEpochGapMs": 110,
+    "failures": []
+  },
+  "cases": [
+    {
+      "name": "no-model-and-lazy-runtime",
+      "passed": true,
+      "elapsedMs": 39,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-acquisition",
+      "passed": true,
+      "elapsedMs": 110,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "verified-model-install",
+      "passed": true,
+      "elapsedMs": 70,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-cache-write-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 382,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-cache-commit-restores-committed-model",
+      "passed": true,
+      "elapsedMs": 378,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "corrupt-cache-rejected-before-inference",
+      "passed": true,
+      "elapsedMs": 140,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "selected-local-files-install",
+      "passed": true,
+      "elapsedMs": 91,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "capacity-rejection-preserves-model",
+      "passed": true,
+      "elapsedMs": 67,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "transcribe-english-8",
+      "passed": true,
+      "elapsedMs": 2818,
+      "wordErrorRate": 0.058823529411764705,
+      "error": null
+    },
+    {
+      "name": "transcribe-english-9",
+      "passed": true,
+      "elapsedMs": 2746,
+      "wordErrorRate": 0.058823529411764705,
+      "error": null
+    },
+    {
+      "name": "transcribe-french-10",
+      "passed": true,
+      "elapsedMs": 2730,
+      "wordErrorRate": 0.4,
+      "error": null
+    },
+    {
+      "name": "transcribe-silence-11",
+      "passed": true,
+      "elapsedMs": 138,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "one-second-speech-window",
+      "passed": true,
+      "elapsedMs": 2646,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "corrupt-audio-rejection",
+      "passed": true,
+      "elapsedMs": 128,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-model-load",
+      "passed": true,
+      "elapsedMs": 145,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-prepare",
+      "passed": true,
+      "elapsedMs": 155,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "cancel-infer",
+      "passed": true,
+      "elapsedMs": 5888,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "project-replacement",
+      "passed": true,
+      "elapsedMs": 5869,
+      "wordErrorRate": null,
+      "error": null
+    },
+    {
+      "name": "300-second-bounded-workload",
+      "passed": false,
+      "elapsedMs": 17297,
+      "wordErrorRate": null,
+      "error": "page.evaluate: Error: Core inference--944; cooperativeZero=true\n    at worker.onmessage (http://127.0.0.1:5201/lab-client.mjs:251:23)"
+    }
+  ],
+  "stopReason": {
+    "type": "case-failure",
+    "case": "300-second-bounded-workload",
+    "message": "page.evaluate: Error: Core inference--944; cooperativeZero=true\n    at worker.onmessage (http://127.0.0.1:5201/lab-client.mjs:251:23)"
+  },
+  "finalCleanup": {
+    "status": "unavailable",
+    "reason": "Browser closed after failure; no cooperative model/cache cleanup claim"
+  },
+  "retirements": [
+    {
+      "name": "cancel-model-load",
+      "immediateOwners": 1,
+      "elapsedMs": 46.70000000298023,
+      "cooperativeZero": true
+    },
+    {
+      "name": "cancel-prepare",
+      "immediateOwners": 1,
+      "elapsedMs": 9,
+      "cooperativeZero": true
+    },
+    {
+      "name": "cancel-infer",
+      "immediateOwners": 1,
+      "elapsedMs": 5718.70000000298,
+      "cooperativeZero": true
+    },
+    {
+      "name": "project-replacement",
+      "immediateOwners": 1,
+      "elapsedMs": 5696.899999991059,
+      "cooperativeZero": true
+    }
+  ],
+  "longCase": {
+    "completedWindows": [
+      {
+        "start": 0,
+        "end": 30,
+        "chunks": 5
+      },
+      {
+        "start": 25,
+        "end": 55,
+        "chunks": 5
+      }
+    ],
+    "failedWindow": {
+      "start": 50,
+      "end": 80
+    },
+    "terminalCleanup": {
+      "mode": "cooperative-error",
+      "reason": "transcription-failed",
+      "elapsedMs": 0,
+      "cooperativeZero": true,
+      "ledger": {
+        "modelOwners": 0,
+        "inputOwners": 0,
+        "sampleOwners": 0,
+        "acquiredSamples": 705,
+        "closedSamples": 705,
+        "pcmBytes": 0,
+        "maxPcmBytes": 3840000,
+        "windows": 2
+      }
+    }
+  }
+}

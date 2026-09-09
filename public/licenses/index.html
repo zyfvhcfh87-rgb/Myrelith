@@ -35,6 +35,22 @@
         listed in the repository's <code>THIRD_PARTY_NOTICES.md</code>.
       </p>
 
+      <h2>Optional local speech</h2>
+      <p>
+        The local transcription worker uses whisper.cpp (MIT), built with
+        Emscripten 6.0.8. The optional Whisper tiny Q8 model is downloaded or
+        selected by the user. Its model card identifies MIT, and the OpenAI
+        Whisper MIT notice is preserved. The exact upstream conversion and
+        quantizer revision is unknown.
+      </p>
+      <p>
+        <a href="/speech-runtime/runtime-notices.zip" download>Download speech runtime and model notices</a>.
+        This archive includes whisper.cpp, OpenAI Whisper, Emscripten, and the
+        included C/C++ runtime component notices. Exact source, model, and
+        payload identities are recorded in the repository's
+        <code>THIRD_PARTY_NOTICES.md</code> and speech model decision record.
+      </p>
+
       <h2>FFmpeg-derived AC-3/E-AC-3 module</h2>
       <p>
         The optional local AC-3/E-AC-3 decoder extension contains a WebAssembly

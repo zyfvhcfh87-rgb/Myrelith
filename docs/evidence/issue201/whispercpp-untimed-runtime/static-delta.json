@@ -1,0 +1,49 @@
+{
+  "factoryExecuted": false,
+  "wasmExecuted": false,
+  "importsUnchanged": true,
+  "exportsUnchanged": true,
+  "memoriesUnchanged": true,
+  "tablesUnchanged": true,
+  "globalsUnchanged": true,
+  "importCount": 59,
+  "exportCount": 22,
+  "speechExportCount": 11,
+  "memories": [
+    {
+      "flags": 1,
+      "initial": 1024,
+      "maximum": 8192
+    }
+  ],
+  "tables": [
+    {
+      "type": "funcref",
+      "flags": 1,
+      "initial": 1162,
+      "maximum": 1162
+    }
+  ],
+  "stack": {
+    "globalIndex": 0,
+    "initialPointer": 5923424,
+    "getExport": "wa",
+    "restoreExport": "va",
+    "completeHelperBodiesInspected": true,
+    "runtimeStackBoundsTested": false
+  },
+  "heapMaximum": 536870912,
+  "linearGrowthStep": 16777216,
+  "importCategoryCounts": {
+    "exceptions": 10,
+    "indirectCallWithExceptionHandling": 34,
+    "time": 3,
+    "fileStubs": 6,
+    "output": 1,
+    "memory": 2,
+    "environment": 2,
+    "abort": 1
+  },
+  "definedFunctions": 1309,
+  "noImplicitStart": true
+}

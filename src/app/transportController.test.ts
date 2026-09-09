@@ -1545,3 +1545,46 @@ describe('stepFrame', () => {
     expect(transport().playheadFrame).toBe(31) // really paused
   })
 })
+
+describe('speech retirement before Program starts and restarts', () => {
+  test('edits during a pending drain start only the latest request; Pause cancels it', async () => {
+    const { registerSpeechRetirement } = await import('./speechRetirement')
+    // Establish subscriptions before speech owns resources, then pause.
+    play(); pause()
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    let release!: () => void
+    const drain = new Promise<void>(resolve => { release = resolve })
+    const unregister = registerSpeechRetirement(() => drain)
+    try {
+      play()
+      expect(fake.clock.resume).toHaveBeenCalled()
+      useDocumentStore.getState().setDoc(makeAudibleDoc(150))
+      fake.fireDeviceChange()
+      fake.clock.currentTime = 2; fake.pump()
+      expect(fake.startAudio).not.toHaveBeenCalled()
+      expect(transport().playheadFrame).toBe(0)
+      release()
+      await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+      expect(fake.startAudio.mock.calls[0][1].tracks[0]!.clips[0]!.timelineRange.durationFrames).toBe(150)
+      pause()
+    } finally { release(); unregister() }
+    let releasePaused!: () => void
+    const stop = registerSpeechRetirement(() => new Promise<void>(resolve => { releasePaused = resolve }))
+    try {
+      play(); pause(); releasePaused()
+      await Promise.resolve(); await Promise.resolve()
+      expect(fake.startAudio).toHaveBeenCalledOnce()
+      expect(transport().isPlaying).toBe(false)
+    } finally { stop() }
+  })
+  test('a synchronous retirement failure resets playing through the admission catch', async () => {
+    const { registerSpeechRetirement } = await import('./speechRetirement')
+    const unregister = registerSpeechRetirement(() => { throw new Error('cleanup unavailable') })
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      expect(() => play()).not.toThrow()
+      await vi.waitFor(() => expect(transport().isPlaying).toBe(false))
+      expect(fake.startAudio).not.toHaveBeenCalled()
+    } finally { unregister(); warning.mockRestore() }
+  })
+})

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "frozenRuntimeCheckpoint": "19bf7e1080260a1b5eea9d461b44e0a6b56074bad460a7c9cec49f433d8ad5ad",
+  "offlineSupport": "App files must be served on opening; verified cached model transcribes offline after app load",
+  "sourceFiles": [
+    {
+      "path": "scripts/issue201/whispercpp-offline-support/run-lab.mjs",
+      "bytes": 47451,
+      "sha256": "977ecefa9328bb7bf202d086d9fa81713011cdb39d32f25b771b680056c7b2b8"
+    },
+    {
+      "path": "scripts/issue201/whispercpp-offline-support/preflight.mjs",
+      "bytes": 1194,
+      "sha256": "34b2fdb488027c7f7363403cf48873bba3342a559c36e466f78af7ab6a8c649e"
+    },
+    {
+      "path": "docs/evidence/issue201/WHISPER_CPP_OFFLINE_SUPPORT.md",
+      "bytes": 2372,
+      "sha256": "0d5c67fa98940d1dd5a37e48010530e6c7f5270a10cd4feac638d0d3c9459815"
+    }
+  ],
+  "referenceFiles": [
+    {
+      "path": "docs/evidence/issue201/whispercpp-untimed-runtime.json",
+      "bytes": 2642,
+      "sha256": "19bf7e1080260a1b5eea9d461b44e0a6b56074bad460a7c9cec49f433d8ad5ad"
+    }
+  ]
+}

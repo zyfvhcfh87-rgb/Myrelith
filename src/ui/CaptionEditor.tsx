@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -23,6 +25,7 @@ import type { CaptionItem, CaptionItemId, CaptionTrackId } from '../domain/schem
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 
+const CaptionTranscriptionPanel = lazy(() => import('./CaptionTranscriptionPanel'))
 const MAX_RENDERED_CUES = 200
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
@@ -54,7 +57,8 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
   const imported = useSyncExternalStore(importer.subscribe, importer.getSnapshot, importer.getSnapshot)
   const exporter = useMemo(() => new CaptionExportController(), [])
   const exported = useSyncExternalStore(exporter.subscribe, exporter.getSnapshot, exporter.getSnapshot)
-  const reviewing = review.label !== null || imported.phase !== 'idle' || exported.phase !== 'idle'
+  const [speechOpen, setSpeechOpen] = useState(false)
+  const reviewing = speechOpen || review.label !== null || imported.phase !== 'idle' || exported.phase !== 'idle'
   const returnFocus = useRef<HTMLElement | null>(null)
   const wasReviewing = useRef(false)
   const selectionAnchor = useRef<string | null>(null)
@@ -289,7 +293,8 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
     event.stopPropagation()
     if (event.key === 'Escape') {
       event.preventDefault()
-      if (exported.phase !== 'idle') cancelExport()
+      if (speechOpen) setSpeechOpen(false)
+      else if (exported.phase !== 'idle') cancelExport()
       else if (imported.phase !== 'idle') cancelImport()
       else if (review.label !== null) cancelReview(); else closeEditor()
       return
@@ -300,7 +305,7 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
     if (focusable.length === 0) return
     const first = focusable[0]!
     const last = focusable[focusable.length - 1]!
-    if (event.shiftKey && (document.activeElement === first || ['caption-review-heading', 'caption-import-heading', 'caption-export-heading'].includes(document.activeElement?.id ?? ''))) {
+    if (event.shiftKey && (document.activeElement === first || ['caption-review-heading', 'caption-import-heading', 'caption-export-heading', 'caption-speech-heading', 'caption-speech-review-heading'].includes(document.activeElement?.id ?? ''))) {
       event.preventDefault()
       last.focus()
     } else if (!event.shiftKey && document.activeElement === last) {
@@ -318,7 +323,7 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
         className="caption-editor"
         role="dialog"
         aria-modal="true"
-        aria-labelledby={exported.phase !== 'idle' ? 'caption-export-heading' : review.label !== null || imported.review ? 'caption-review-heading' : imported.phase !== 'idle' ? 'caption-import-heading' : 'caption-editor-title'}
+        aria-labelledby={speechOpen ? 'caption-speech-heading' : exported.phase !== 'idle' ? 'caption-export-heading' : review.label !== null || imported.review ? 'caption-review-heading' : imported.phase !== 'idle' ? 'caption-import-heading' : 'caption-editor-title'}
         tabIndex={-1}
         onKeyDown={onDialogKeyDown}
       >
@@ -348,6 +353,7 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
             </select>
           </label>
           <button type="button" onClick={addTrack}>Add track</button>
+          <button type="button" onClick={event => { returnFocus.current = event.currentTarget; setSpeechOpen(true) }}>Transcribe local audio</button>
           <label className="caption-import-button">
             Import SRT/VTT/ASS
             <input
@@ -543,6 +549,9 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
           <p role="status" aria-live="polite" aria-atomic="true">{status}</p>
           <span>Frame {playhead} · half-open ranges · plain text only</span>
         </footer>
+        {speechOpen && <Suspense fallback={<section data-caption-review><h3 id="caption-speech-heading">Loading transcription tools…</h3><button type="button" onClick={() => setSpeechOpen(false)}>Close transcription</button></section>}>
+          <CaptionTranscriptionPanel onClose={() => setSpeechOpen(false)} />
+        </Suspense>}
       </div>
     </div>
   )

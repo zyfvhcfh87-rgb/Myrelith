@@ -12,7 +12,7 @@
   <body>
     <main>
       <a class="back" href="/">← Back to Myrelith</a>
-      <p class="eyebrow">Effective 1 August 2026</p>
+      <p class="eyebrow">Effective 9 September 2026</p>
       <h1>Privacy</h1>
       <p class="lede">
         Myrelith edits on your device. Your source videos, audio, images, and
@@ -37,7 +37,8 @@
       <ul>
         <li>preferences and the last export selection;</li>
         <li>browser-managed file handles for recent projects and remembered media, when you grant access;</li>
-        <li>bounded crash-recovery snapshots containing project names, timeline structure, settings, and source metadata; and</li>
+        <li>bounded crash-recovery snapshots containing project names, timeline structure, settings, caption text, and source metadata;</li>
+        <li>an optional speech model in Cache Storage, installed only when you choose to download it or select the exact model file; and</li>
         <li>temporary decoded media, previews, and export data in memory while you edit.</li>
       </ul>
       <p>
@@ -52,6 +53,27 @@
         preferences, recent-file shortcuts, recovery copies, or remembered
         permissions from the previous public hostname. Save a portable project
         file there and open it in Myrelith; local media may need permission again.
+      </p>
+
+      <h2>Optional local transcription</h2>
+      <p>
+        Choosing <strong>Download and install model</strong> requests the pinned
+        Whisper model from Hugging Face and its file-delivery hosts. Those hosts
+        receive the network request needed to deliver the model, including your
+        IP address. Myrelith sends this download without credentials or a
+        referrer. Selecting the exact local model file instead does not request
+        a model download.
+      </p>
+      <p>
+        Audio decoding and transcription run on your device. Myrelith does not
+        upload your audio or transcript. Review text stays in memory until you
+        apply it; applied captions become ordinary project data and may appear
+        in local saves and recovery snapshots. The model cache is separate from
+        project files, has a 96 MiB budget including installation, and can be
+        removed using <strong>Remove local model</strong>, the app's local-data
+        controls, or your browser's site-data controls. The browser may also
+        evict cached files. Speech runtime files are served with the app;
+        opening the app can still require a connection.
       </p>
 
       <h2>Data processed by the host</h2>
@@ -74,8 +96,9 @@
       <p>
         Myrelith does not sell personal data or use it for advertising, profiling,
         or automated decisions with legal or similarly significant effects.
-        Request data is shared with Cloudflare only as needed to host and
-        protect the site, or disclosed if legally required.
+        Site request data is shared with Cloudflare as needed to host and
+        protect the site. An optional model download also contacts the model
+        hosts described above. Data may be disclosed if legally required.
       </p>
 
       <h2>Your rights</h2>

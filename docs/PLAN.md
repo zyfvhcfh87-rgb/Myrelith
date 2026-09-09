@@ -11,10 +11,12 @@ record; new post-MVP work needs a new user-approved plan. Companion context:
 The issue plans hold the selected post-MVP scope and staged evidence:
 [masks #198](ISSUE_198_PLAN.md), [animation #199](ISSUE_199_PLAN.md),
 [titles #200](ISSUE_200_PLAN.md), [captions/speech #201](ISSUE_201_PLAN.md),
-and [HDR research #202](ISSUE_202_PLAN.md). Masks, animation, titles, caption
-authoring and the HDR no-go research decision have local feature acceptance.
-Transcription still needs lifecycle qualification and app wiring; #201 remains
-open. The combined engineering/publication gate is orchestrator-owned. See
+and [HDR research #202](ISSUE_202_PLAN.md). PR #226 merged masks, animation,
+titles, caption authoring and the HDR no-go research decision. The remaining
+local transcription slice now has its separate 23-case model GO, 13-case built
+product acceptance, and full engineering validation. Its focused publication
+gate is orchestrator-owned. See [speech acceptance](evidence/issue201/PRODUCT_ACCEPTANCE.md)
+and
 [HANDOFF.md](HANDOFF.md#milestone-9-integration-2026-09-09) for current behavior
 and qualifications; the completed MVP record below is unchanged.
 
