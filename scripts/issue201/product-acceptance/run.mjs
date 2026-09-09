@@ -152,10 +152,10 @@ async function openSpeech() {
   await expect(page.getByRole('heading', { name: 'Transcribe local audio' })).toBeFocused()
 }
 async function selectSource(name, start, end, language = 'en') {
-  await page.getByLabel('Connected audio source', { exact: true }).selectOption({ label: name })
+  await speech().getByLabel('Connected audio source').selectOption({ label: name })
   await page.getByLabel('Source start (seconds)', { exact: true }).fill(String(start))
   await page.getByLabel('Source end (seconds)', { exact: true }).fill(String(end))
-  await page.getByLabel('Language', { exact: true }).selectOption(language)
+  await speech().getByLabel('Language').selectOption(language)
   await page.getByLabel('Insert at timeline frame', { exact: true }).fill('17')
 }
 async function transcribe() {
@@ -242,7 +242,7 @@ try {
   })
   await step('import-connected-audio', async () => {
     await page.getByLabel('Import media', { exact: true }).setInputFiles([fixturePaths.stereo, fixturePaths['english.wav'], fixturePaths['french.wav'], fixturePaths['english-300.wav'], fixturePaths['silence.wav']])
-    await openSpeech(); await expect(page.getByLabel('Connected audio source', { exact: true }).locator('option')).toHaveCount(5)
+    await openSpeech(); await expect(speech().getByLabel('Connected audio source').locator('option')).toHaveCount(5)
   })
   await step('explicit-download', async () => {
     await page.route(modelInfo.url, route => route.fulfill({ status: 200, contentType: 'application/octet-stream', headers: { 'content-length': String(model.length) }, body: model }))
