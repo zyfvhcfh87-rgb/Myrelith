@@ -22,6 +22,7 @@ export type MediaDecoderCapabilityBoundary =
   | 'waveform'
   | 'audio-playback'
   | 'audio-alignment'
+  | 'caption-transcription'
   | 'proxy-generation'
   | 'export-video'
   | 'export-audio'

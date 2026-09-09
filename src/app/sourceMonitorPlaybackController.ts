@@ -1,3 +1,4 @@
+import { beginSpeechRetirement } from './speechRetirement'
 /**
  * app/sourceMonitorPlaybackController.ts — composition root for Source
  * Monitor playback.
@@ -505,13 +506,15 @@ function startSourceClock(): void {
   }
   const previewDrain = beginPreviewPlaybackDrain()
   const programDrain = beginProgramPlaybackDrain()
-  if (!previewDrain && !programDrain) {
+  const speechDrain = beginSpeechRetirement('Source playback')
+  if (!previewDrain && !programDrain && !speechDrain) {
     startAdmittedSource()
     return
   }
   const admissionTask = Promise.all([
     previewDrain ?? Promise.resolve(),
     programDrain ?? Promise.resolve(),
+    ...(speechDrain ? [speechDrain] : []),
   ]).then(startAdmittedSource).catch((cause) => {
     if (generation !== state.playGeneration || !isCurrentRun()) return
     warnSourceAudio('Program playback handoff failed', cause)

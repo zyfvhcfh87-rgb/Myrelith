@@ -1,3 +1,4 @@
+import { beginSpeechRetirement } from './speechRetirement'
 /**
  * app/sourceMonitorPreviewController.ts — composition root for Source
  * Monitor pixels.
@@ -318,6 +319,9 @@ async function loadVisualSource(
   let failureReason: MediaRuntimeFailure['reason'] = 'resource-unavailable'
   let failureTrackKind: 'video' | null = session.source.kind === 'video' ? 'video' : null
   try {
+    const speechDrain = beginSpeechRetirement('Source selection')
+    if (speechDrain) await speechDrain
+    if (!isCurrentSourceLoad(bridge, sourceKey, loadGeneration)) return
     const blob = await deps.fetchBlob(asset.objectUrl)
     if (!isCurrentSourceLoad(bridge, sourceKey, loadGeneration)) return
     failureReason = 'decode-failed'

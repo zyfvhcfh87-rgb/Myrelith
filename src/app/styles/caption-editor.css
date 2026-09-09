@@ -389,3 +389,14 @@
   .caption-track-settings { margin-inline: 12px; }
   .caption-editor-footer { flex-wrap: wrap; }
 }
+
+/* Speech controls keep a small bounded page readable at narrow editor widths. */
+.caption-speech-panel .caption-track-settings { grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); margin: 14px 0; }
+.caption-speech-panel label { display: grid; gap: 6px; min-width: 0; }
+.caption-speech-panel input, .caption-speech-panel select, .caption-speech-panel textarea { width: 100%; min-width: 0; }
+.caption-speech-panel input[type=checkbox] { width: auto; justify-self: start; }
+.caption-speech-panel textarea { min-height: 90px; resize: vertical; }
+.caption-speech-panel fieldset > p { grid-column: 1 / -1; }
+.caption-speech-panel button { margin: 4px; }
+.caption-speech-rows { max-height: 42vh; overflow-y: auto; }
+.transport-speech-status { max-width: min(480px, 35vw); font-size: 11px; overflow-wrap: anywhere; }

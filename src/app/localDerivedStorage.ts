@@ -76,6 +76,18 @@ export function createDisposableStorageController(
 
 export const localDerivedStorage = createDisposableStorageController([
   {
+    id: 'speech-model-cache-v1',
+    async estimate() {
+      if (typeof caches === 'undefined') return { bytes: 0, itemCount: 0 }
+      const { SPEECH_MODEL, validSpeechCacheName } = await import('../domain/speechModel')
+      const count = (await caches.keys()).filter(validSpeechCacheName).length
+      return { bytes: count * SPEECH_MODEL.bytes, itemCount: count }
+    },
+    async clear() {
+      if (typeof caches !== 'undefined') await (await import('../codecs/speech/modelCache')).removeSpeechModel()
+    },
+  },
+  {
     id: 'opfs-proxy-cache-v1',
     async estimate() {
       const estimate = await proxyStorage.estimate()

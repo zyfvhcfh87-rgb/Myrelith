@@ -1,3 +1,4 @@
+import { beginSpeechRetirement } from './speechRetirement'
 import { projectTitleExportError } from '../domain/titleExport'
 import { firstCaptionExportBlocker } from '../domain/captionExport'
 import { documentGradingEffects } from '../domain/colorGradingBudget'
@@ -556,7 +557,12 @@ function trackActiveExport(
   // Export owns a separate decoder/surface budget. Retire optional monitoring
   // before profile probes, Blob retention, plugin consumption or allocation.
   const resourceLease = mediaResourceAdmission.reserve({ kind: 'export', decoderSlots: 0, surfaceBytes: 0, monitorCompatible: false })
-  const completion = Promise.resolve().then(start).catch((cause) => {
+  const completion = Promise.resolve().then(async () => {
+    const speechDrain = beginSpeechRetirement('Export')
+    if (speechDrain) await speechDrain
+    if (lifecycle.cancelRequested || lifecycle.preflightAbort.signal.aborted || state.active?.token !== token) return undefined
+    return start()
+  }).catch((cause) => {
     reportExportRuntimeFailure(cause, runtimeGuards)
     throw cause
   }).finally(() => {
