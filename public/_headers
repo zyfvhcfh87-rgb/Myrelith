@@ -1,0 +1,7 @@
+# Immutable Vite filenames and digest-named reviewed speech runtime assets.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/speech-runtime/db0bda310e36278e30b9c439f2d7acd026c4cddee1ecb930e027f622195c1ea7.mjs
+  Cache-Control: public, max-age=31536000, immutable
+/speech-runtime/2f05c1ba7a828ba93a5ab1c7dd752f0d055360d02aa23edc9b60572424e01ef2.wasm
+  Cache-Control: public, max-age=31536000, immutable

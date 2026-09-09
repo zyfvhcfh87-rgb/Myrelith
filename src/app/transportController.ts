@@ -1,3 +1,4 @@
+import { beginSpeechRetirement } from './speechRetirement'
 /**
  * app/transportController.ts — Composition root for playback transport.
  * Phase 4.0.5 (transport bar).
@@ -539,7 +540,7 @@ export function configureTransport(deps: Partial<TransportDeps>): void {
   state.deps = { ...realDeps, ...deps }
 }
 
-function startPlayback(
+function startAdmittedPlayback(
   fromFrame: number,
   unlockedContext?: Promise<unknown>,
 ): void {
@@ -686,6 +687,29 @@ function startPlayback(
   void playbackTask.then(() => state.playbackTasks.delete(playbackTask))
 }
 
+/** Every start and restart passes this barrier; edits cannot bypass a pending drain. */
+function startPlayback(from: number, unlockedContext?: Promise<unknown>): void {
+  const speechDrain = beginSpeechRetirement('Program playback')
+  if (!speechDrain) { startAdmittedPlayback(from, unlockedContext); return }
+  const generation = ++state.playGeneration
+  let resumed = unlockedContext
+  if (!resumed) {
+    try { resumed = Promise.resolve(ensureClock().resume()) }
+    catch (cause) { resumed = Promise.reject(cause) }
+  }
+  void resumed.catch(() => undefined)
+  const admissionTask = speechDrain.then(() => {
+    if (generation !== state.playGeneration || !useTransportStore.getState().isPlaying) return
+    startAdmittedPlayback(useTransportStore.getState().playheadFrame, resumed)
+  }).catch(cause => {
+    if (generation !== state.playGeneration || !useTransportStore.getState().isPlaying) return
+    warnAudio('Speech playback handoff failed', cause)
+    useTransportStore.getState().setIsPlaying(false)
+  })
+  state.playbackTasks.add(admissionTask)
+  void admissionTask.then(() => state.playbackTasks.delete(admissionTask))
+}
+
 function restartPlayback(): void {
   const transport = useTransportStore.getState()
   if (!transport.isPlaying) return
@@ -746,7 +770,7 @@ export function play(): void {
       admissionGeneration !== state.playGeneration
       || !useTransportStore.getState().isPlaying
     ) return
-    warnAudio('Source playback handoff failed', cause)
+    warnAudio('Playback resource handoff failed', cause)
     useTransportStore.getState().setIsPlaying(false)
   })
   state.playbackTasks.add(admissionTask)

@@ -105,6 +105,16 @@ non-negotiable rules. Re-read it at the start of every coding session.
     `pipeline/motionAnalysisDecode.ts` (the bounded sequential decode and
     grayscale core) and `pipeline/motionAnalysisProtocol.ts` (its serializable
     worker contract); the worker is their sole production runtime host,
+  - `workers/caption-transcription.worker.ts` may import only
+    `pipeline/speechAudioDecode.ts` and `pipeline/speechProtocol.ts`, browser-free
+    speech domain contracts, and the pinned `codecs/speech/` runtime leaf.
+    It owns one sequential source iterator and the exact reviewed whisper.cpp
+    model/runtime. Every sample closes in finally. Cancellation rejects the
+    request immediately, but analysis admission remains until cooperative native
+    cleanup is acknowledged. Essential playback/source/export admission awaits
+    that cleanup; a failed acknowledgement blocks further speech/admission until
+    reload. Complete transcript review retains text only, never the native model.
+    Production imports no issue laboratory or evidence module,
   - `workers/audio-alignment.worker.ts` may import only
     `pipeline/audioAlignmentDecode.ts` and `pipeline/audioAlignmentProtocol.ts`;
     it owns one sequential audio iterator, closes samples in finally, and is
