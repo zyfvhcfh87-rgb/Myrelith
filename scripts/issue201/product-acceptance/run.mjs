@@ -316,9 +316,13 @@ try {
   }, 300_000)
   await step('cancel-inference-play-pause-and-retry', async () => {
     await selectSource('english-300.wav', 0, 300)
+    const previousJobs = (await observed()).jobs.length
     await button('Transcribe selected window').click()
     await expect(button('Cancel speech')).toBeFocused()
-    await page.waitForFunction(() => window.__speechAcceptance.jobs.at(-1)?.phases.some(phase => phase.category === 'infer'), null, { timeout: 120_000 })
+    await page.waitForFunction(count => {
+      const jobs = window.__speechAcceptance.jobs, job = jobs.at(-1)
+      return jobs.length === count + 1 && !job.reply && job.phases.some(phase => phase.category === 'infer')
+    }, previousJobs, { timeout: 120_000 })
     await page.keyboard.press('Escape'); await expect(button('Transcribe local audio')).toBeFocused()
     await page.keyboard.press('Escape'); await expect(button('Captions')).toBeFocused()
     await button('play').click(); await expect(page.locator('.transport-speech-status')).toContainText('waiting for speech cleanup')
@@ -358,6 +362,7 @@ try {
   })
 } catch (error) {
   if (!stopReason) {
+    try { result.failedObservation = await bounded(observed(), 1000, 'Failure observation timeout') } catch { /* Preserve first failure. */ }
     try { await page?.screenshot({ path: path.join(output, 'failure.png'), timeout: 1000 }) } catch { /* Preserve first failure. */ }
     fail(error)
   }
