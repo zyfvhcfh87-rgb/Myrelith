@@ -77,6 +77,11 @@ function fail(error) {
 }
 const server = createServer((request, response) => {
   const pathname = new URL(request.url, 'http://127.0.0.1:5201').pathname
+  if (pathname === '/model-fixture') {
+    if (request.method !== 'GET' || activeCase !== 'explicit-download') { response.writeHead(403); response.end(); return }
+    response.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': model.length, 'cache-control': 'no-store', 'access-control-allow-origin': '*' })
+    response.end(model); return
+  }
   const key = pathname === '/' ? '/index.html' : pathname.endsWith('/') ? pathname + 'index.html' : pathname
   const bytes = files.get(key)
   if (request.method !== 'GET' || !bytes) { response.writeHead(pathname === '/favicon.ico' ? 204 : 404); response.end(); return }
@@ -245,11 +250,12 @@ try {
     await openSpeech(); await expect(speech().getByLabel('Connected audio source').locator('option')).toHaveCount(5)
   })
   await step('explicit-download', async () => {
-    await page.route(modelInfo.url, route => route.fulfill({ status: 200, contentType: 'application/octet-stream', headers: { 'content-length': String(model.length) }, body: model }))
+    // Keep the large transfer on HTTP rather than blocking the CDP sampling pipe.
+    await page.route(modelInfo.url, route => route.fulfill({ status: 302, headers: { location: 'http://127.0.0.1:5201/model-fixture', 'access-control-allow-origin': '*' }, body: '' }))
     await button('Download and install model').click(); await expect(speech()).toContainText('Speech model installed.', { timeout: 30_000 })
     await page.unroute(modelInfo.url)
     const facts = await cacheFacts(); assert.equal(facts.models.length, 1); assert.equal(facts.models[0].hash, hash(model))
-    return { modelDownload: 'Exact requested URL fulfilled with the already verified local bytes; no live model-host transfer claimed', ...facts }
+    return { modelDownload: 'Exact requested URL redirected to the already verified local HTTP fixture; no live model-host transfer claimed', ...facts }
   })
   await step('remove-and-local-file-install', async () => {
     await button('Remove local model').click(); await expect(speech()).toContainText('The local speech model was removed.')
@@ -360,6 +366,8 @@ try {
   result.memory = monitor.snapshot(); result.stopReason = stopReason ?? null
   result.passed = !result.stopReason && result.errors.length === 0 && result.memory.qualified && result.cases.length === 13
   await writeFile(path.join(output, 'result.json'), JSON.stringify(result, null, 2))
-  console.log(JSON.stringify({ passed: result.passed, cases: result.cases.length, stopReason: result.stopReason, errors: result.errors, memory: result.memory, output }, null, 2))
+  console.log(JSON.stringify({ passed: result.passed, cases: result.cases.length, stopReason: result.stopReason,
+    errors: result.errors.map(error => error.message ?? error.reason), memory: { baseline: result.memory.firstBaseline, peak: result.memory.peak,
+      samples: result.memory.samples, maximumActiveEpochGapMs: result.memory.maximumActiveEpochGapMs, qualified: result.memory.qualified }, output }, null, 2))
   process.exitCode = result.passed ? 0 : 1
 }
