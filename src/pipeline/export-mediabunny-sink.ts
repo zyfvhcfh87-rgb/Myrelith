@@ -1,3 +1,4 @@
+import { validateExportRange, exportSampleBoundary, type ExportRange } from '../domain/exportRange'
 /** Transactional buffered/direct-file Mediabunny export sink. */
 import { hasVideoBusEffects, videoBusRenderBudgetError } from '../domain/videoBusStage'
 
@@ -165,6 +166,7 @@ export async function createMediabunnyExportSink(
     project: SequenceProject
     sequenceId: string
   }>,
+  range?: ExportRange,
 ): Promise<ExportVideoSink> {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -193,16 +195,18 @@ export async function createMediabunnyExportSink(
     ? (audioSettings.audioChannelLayout === 'mono' ? 1 : 2)
     : null
   const hasAudio = audioSettings !== null
-  const expectedFrames = docDurationFrames(doc)
+  const window = range ? validateExportRange(doc, range) : { startFrame: 0, endFrame: docDurationFrames(doc) }
+  const expectedFrames = window.endFrame
   const encoderSampleRate = audioSettings && audioSettings.audioCodec
     ? exportAudioEncoderSampleRate(doc.audioSampleRate, audioSettings.audioCodec)
     : doc.audioSampleRate
+  const firstAudioSample = exportSampleBoundary(window.startFrame, doc, encoderSampleRate)
   const expectedAudioSamples = hasAudio
     ? scaleExportSampleIndex(
       audioSampleBoundary(expectedFrames, doc),
       doc.audioSampleRate,
       encoderSampleRate,
-    )
+    ) - firstAudioSample
     : 0
 
   if (typeof OffscreenCanvas === 'undefined') {
@@ -469,7 +473,7 @@ export async function createMediabunnyExportSink(
               const encoded = resampled.encoded
               if (encoded.sampleCount <= 0) return
               const chunk = {
-                startSample: encoded.startSample,
+                startSample: encoded.startSample - firstAudioSample,
                 sampleCount: encoded.sampleCount,
                 data: interleaveAudioBlock(encoded, outputAudioChannels),
               }
@@ -532,6 +536,15 @@ export async function createMediabunnyExportSink(
   }
 
   return {
+    prerollFrame: async () => {
+      if (state !== 'open' || nextFrame >= window.startFrame) throw new Error('Invalid audio pre-roll frame')
+      try {
+        await mixer?.writeFrame(nextFrame, async (block) => {
+          audioResampleCarry = resampleMixedAudioBlock(block, doc.audioSampleRate, encoderSampleRate, audioResampleCarry).carry
+        })
+        nextFrame++
+      } catch (cause) { return failAfterCancel(cause) }
+    },
     ctx: context as Composite2D,
     transitionSurfaceProvider: {
       get: () => {

@@ -1,3 +1,4 @@
+import { RenderQueuePanel } from './RenderQueuePanel'
 /**
  * ui/ExportDialog.tsx — Phase 5.2b export settings/progress/download flow.
  *
@@ -930,6 +931,8 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
             onDraftValidityChange={setAdvancedDraftsValid}
             onRetryCapabilities={() => refreshCapabilities(doc)}
           />
+
+          <RenderQueuePanel profile={activeProfile} onProfile={selectCustomProfile} disabled={phase !== 'configure' || !advancedDraftsValid} />
 
           <ExportPhaseContent
             phase={phase}

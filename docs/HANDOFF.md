@@ -51,6 +51,38 @@ Keep the documented lossy-codec limits, staged title coverage, headless Mac
 font-popup limitation and unqualified physical HDR display explicit. These
 focused results do not assert that the broader browser suite is green.
 
+## Post-MVP issue #203 — persistent render jobs, custom presets, and range exports (2026-09-10)
+
+The approved implementation plan is [ISSUE_203_PLAN.md](ISSUE_203_PLAN.md).
+The local implementation is complete on the working tree; publication and
+issue closure remain separate. Export now accepts one validated half-open frame
+range, renders absolute source frames with zero-based output timestamps, and
+streams audio pre-roll from frame zero before discarding the prefix. Exact
+sample-boundary and cancellation behavior is covered by focused pipeline/sink
+tests.
+
+`domain/renderJobs.ts` and `app/localRenderStorage.ts` persist bounded concrete
+job/preset metadata in IndexedDB. `app/renderQueueController.ts` is the sole
+queue owner: it serializes attempts under `myrelith-render-queue`, waits for
+cleanup before cancellation/retry, prepares fresh plugin attempts, retains at
+most one buffered download, and marks reload/background output unverified.
+`app/renderSnapshot.ts` retains only bounded in-memory project references and
+hashes the validated portable project representation, so a reopened recovery
+copy can match the queued revision without storing project/media bytes in the
+render library. The UI supports full, In/Out, and explicit marker ranges,
+named local presets, ordering, retry, removal, cancellation, and download
+discard.
+
+Focused validation passes: 86 Issue #203 unit/controller/pipeline/storage cases and
+two muted headless Chromium flows (non-zero range picture/audio export and
+preset/queue/reload/recovery). `npm run build`, `npm run lint`, and
+`git diff --check` pass. The full Vitest run is 5,252/5,253: the one existing
+plugin startup `safe-mode` failure remains unrelated and reproduces in the
+baseline suite. Browser AAC duration metadata exposes codec packet padding for
+very short files; browser acceptance therefore asserts no audio truncation,
+while the exact sample count is locked by the focused sink test. No GitHub PR,
+merge, or issue closure has been performed.
+
 ## Myrelith rebrand (2026-08-09)
 
 The current product, package, repository, documentation, UI, benchmark, future

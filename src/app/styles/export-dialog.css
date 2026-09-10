@@ -633,3 +633,12 @@
     flex-direction: column;
   }
 }
+
+.render-queue { border-top: 1px solid var(--border, #555); margin-top: 1rem; padding-top: 1rem; }
+.render-queue summary { cursor: pointer; padding: .5rem 0; font-weight: 600; }
+.render-queue label { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .5rem 0; }
+.render-queue input, .render-queue select { min-width: 0; max-width: 100%; }
+.render-queue-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0; }
+.render-queue button { min-height: 32px; }
+.render-job-list { padding-left: 1.5rem; overflow-wrap: anywhere; }
+.render-job-list li { margin: .75rem 0; padding-bottom: .5rem; border-bottom: 1px solid var(--border, #555); }

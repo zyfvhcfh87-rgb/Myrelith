@@ -6,6 +6,24 @@ how the codebase actually evolved. This completed roadmap remains the MVP gate
 record; new post-MVP work needs a new user-approved plan. Companion context:
 [HANDOFF.md](HANDOFF.md).
 
+## Post-MVP issue #203 — persistent render jobs, custom presets, and range exports
+
+The approved plan and implementation record are in
+[ISSUE_203_PLAN.md](ISSUE_203_PLAN.md). The local implementation adds the
+validated half-open range contract, absolute-frame/zero-based export plumbing,
+audio pre-roll and exact sample rebasing, bounded IndexedDB job/preset metadata,
+portable-revision hashing, a serial queue controller with Web Lock ownership,
+and accessible Export-dialog controls for named presets and Full/In-Out/marker
+ranges. It keeps project/media snapshots, handles, output URLs and plugin
+tokens outside persistent render storage.
+
+Local acceptance passes 86 focused Issue #203 cases, two muted headless
+Chromium flows, production build/typecheck, lint, and diff checks. The full
+Vitest suite remains 5,252/5,253 because the existing plugin startup safe-mode
+failure reproduces independently; it is recorded in HANDOFF.md rather than
+treated as an Issue #203 failure. Publication, merge, and issue closure remain
+explicitly separate.
+
 ## Post-MVP milestone 9 integration (2026-09-09)
 
 The issue plans hold the selected post-MVP scope and staged evidence:

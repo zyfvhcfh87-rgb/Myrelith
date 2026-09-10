@@ -1116,6 +1116,23 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   and uses `StreamTarget` with at most 1 MiB of awaited positioned writes.
   Myrelith commits only after successful mux finalization; cancellation or
   failure aborts, and uncertain abort cleanup is a terminal integrity error.
+- `domain/exportRange.ts` is the single half-open `[startFrame, endFrame)` range
+  contract. Ranged export renders absolute project frames but rebases video and
+  audio output to zero; audio pre-roll advances the mixer from frame zero and
+  discards its encoded prefix so stateful effects keep their full-timeline
+  history. Range admission charges pre-roll work separately from output-size
+  estimates and preserves integer/rational frame and sample boundaries.
+- `domain/renderJobs.ts`, `app/localRenderStorage.ts`, and
+  `app/renderQueueController.ts` own the browser-local render library. IndexedDB
+  stores bounded metadata, concrete profiles, ranges, revision/source facts and
+  delivery status only; project snapshots, media bytes, handles, URLs and plugin
+  tokens never enter the library. `app/renderSnapshot.ts` retains bounded
+  in-memory project references, hashes the validated portable project
+  representation so recovery round trips keep identity, and requires the same
+  local-project binding plus connected descriptors after reload. Queue attempts
+  are serialized under the origin-wide Web Lock, prepare fresh plugin attempts,
+  retain ownership through cancellation cleanup, and stop on uncertain output
+  cleanup. React reads serializable queue facts from `renderQueueStore` only.
 - AAC and Opus must preserve the exact scheduled presentation length. The
   exact-version Mediabunny patch writes and reopens Opus `CodecDelay`, 80 ms
   `SeekPreRoll`, final `DiscardPadding`, source-rate metadata, and exact
