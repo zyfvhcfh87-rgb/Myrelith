@@ -131,4 +131,25 @@ describe('CollectMediaDialog', () => {
     })
     expect(await screen.findByRole('alert')).toHaveTextContent(/Incomplete archive/)
   })
+
+  test('Close during a copy waits for cancel before dismissing', async () => {
+    const onClose = vi.fn()
+    let finish!: (value: { status: 'cancelled' }) => void
+    collect.collectActiveProject.mockImplementation(
+      () => new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    render(<CollectMediaDialog onClose={onClose} />)
+    await screen.findByText(/Included 1/)
+    fireEvent.click(screen.getByRole('button', { name: 'Choose folder and collect' }))
+    await waitFor(() => expect(collect.collectActiveProject).toHaveBeenCalledOnce())
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(collect.cancelCollectMedia).toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    act(() => {
+      finish({ status: 'cancelled' })
+    })
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce())
+  })
 })

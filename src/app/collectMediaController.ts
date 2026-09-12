@@ -368,8 +368,11 @@ export async function collectActiveProject(
       item.disposition === 'included' && item.plannedRelativePath
     ))
     await deps.prepareDestination(destination)
+    if (generation !== collectGeneration) {
+      return { status: 'cancelled' }
+    }
     const items: CollectMediaManifestItem[] = preflight.items.map((item) => (
-      manifestItemFromPreflight(item)
+      manifestItemFromPreflight(item, { collectedRelativePath: null })
     ))
     const byId = new Map(items.map((item) => [item.id, item]))
     const errors: string[] = []
@@ -378,6 +381,9 @@ export async function collectActiveProject(
     let stopMessage: string | null = null
 
     for (const planned of copyable) {
+      if (generation !== collectGeneration) {
+        return { status: 'cancelled' }
+      }
       if (abort.signal.aborted) {
         stopMessage = 'The collect-media copy was cancelled.'
         break
@@ -436,6 +442,10 @@ export async function collectActiveProject(
       }
     }
 
+    if (generation !== collectGeneration) {
+      return { status: 'cancelled' }
+    }
+
     const archiveProjectName = projectFileName(deps.getProject().name)
     const projectFile = isCollectArchiveProjectFileName(archiveProjectName)
       ? archiveProjectName
@@ -489,6 +499,9 @@ export async function collectActiveProject(
       currentName: null,
       bytesCopied,
     })
+    if (generation !== collectGeneration) {
+      return { status: 'cancelled' }
+    }
     let complete = false
     try {
       complete = await deps.finalize(destination, manifest)

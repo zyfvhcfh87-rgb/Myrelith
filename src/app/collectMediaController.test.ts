@@ -324,6 +324,90 @@ describe('collect-media controller', () => {
     expect(loaded.complete).toBe(false)
   })
 
+  test('uncopied files after a stop are omitted instead of marked included', async () => {
+    const first = makeAsset({ id: 'asset-a', fileName: 'ok.mp4', objectUrl: 'blob:a', size: 4 })
+    const second = makeAsset({ id: 'asset-b', fileName: 'big.mp4', objectUrl: 'blob:b', size: 4 })
+    const third = makeAsset({ id: 'asset-c', fileName: 'later.mp4', objectUrl: 'blob:c', size: 4 })
+    const destination = new MemoryDirectory() as unknown as CollectMediaDirectoryHandle
+    const deps = createDeps([first, second, third], {
+      writeBlob: async (root, relativePath, blob, signal, onChunk) => {
+        if (relativePath.endsWith('big.mp4')) {
+          throw new DOMException('quota', 'QuotaExceededError')
+        }
+        return writeBlobAtRelativePath(root, relativePath, blob, signal, onChunk)
+      },
+    })
+    const result = await collectActiveProject(
+      destination,
+      { includeProxies: false, includeTitleTemplates: false },
+      undefined,
+      deps,
+    )
+    expect(result.status).toBe('partial')
+    if (result.status !== 'partial') return
+    const copied = result.manifest.items.find((item) => item.id === 'asset-a')
+    expect(copied?.disposition).toBe('included')
+    expect(copied?.collectedRelativePath).toBe('media/ok.mp4')
+    const failed = result.manifest.items.find((item) => item.id === 'asset-b')
+    expect(failed?.disposition).toBe('excluded')
+    expect(failed?.collectedRelativePath).toBeNull()
+    const uncopied = result.manifest.items.find((item) => item.id === 'asset-c')
+    expect(uncopied?.disposition).toBe('excluded')
+    expect(uncopied?.collectedRelativePath).toBeNull()
+    expect(uncopied?.error).toMatch(/quota|disk/)
+    expect(uncopied?.reason).toMatch(/stopped/)
+  })
+
+  test('a superseded collect does not overwrite a later archive', async () => {
+    const first = makeAsset({ id: 'asset-a', fileName: 'one.mp4', objectUrl: 'blob:a', size: 4 })
+    const second = makeAsset({ id: 'asset-b', fileName: 'two.mp4', objectUrl: 'blob:b', size: 8 })
+    const destination = new MemoryDirectory() as unknown as CollectMediaDirectoryHandle
+    const started = deferred()
+    const release = deferred()
+    const firstProjectWrites: string[] = []
+    const firstDeps = createDeps([first], {
+      writeBlob: async (root, relativePath, blob, signal, onChunk) => {
+        started.resolve()
+        await release.promise
+        return writeBlobAtRelativePath(root, relativePath, blob, signal, onChunk)
+      },
+      writeProjectFile: async (root, fileName, text) => {
+        firstProjectWrites.push(fileName)
+        return writeTextFile(root, fileName, text)
+      },
+      finalize: async (root, manifest) => {
+        firstProjectWrites.push('manifest')
+        return finalizeCollectArchive(root, manifest)
+      },
+    })
+    const pendingFirst = collectActiveProject(
+      destination,
+      { includeProxies: false, includeTitleTemplates: false },
+      undefined,
+      firstDeps,
+    )
+    await started.promise
+    const secondResult = await collectActiveProject(
+      destination,
+      { includeProxies: false, includeTitleTemplates: false },
+      undefined,
+      createDeps([second]),
+    )
+    release.resolve()
+    const firstResult = await pendingFirst
+    expect(firstResult.status).toBe('cancelled')
+    expect(firstProjectWrites).toEqual([])
+    expect(secondResult.status).toBe('complete')
+    if (secondResult.status !== 'complete') return
+    const loaded = await loadCollectedArchive(destination)
+    expect(loaded.complete).toBe(true)
+    expect(loaded.manifest.items.find((item) => item.id === 'asset-b')?.disposition)
+      .toBe('included')
+    expect(loaded.manifest.items.find((item) => item.id === 'asset-a')).toBeUndefined()
+    const copied = await (await destination.getDirectoryHandle('media')).getFileHandle('two.mp4')
+    expect((await copied.getFile()).size).toBe(8)
+  })
+
   test('permission loss is partial and never reported complete', async () => {
     const first = makeAsset({ id: 'asset-a', fileName: 'ok.mp4', objectUrl: 'blob:a', size: 4 })
     const second = makeAsset({ id: 'asset-b', fileName: 'locked.mp4', objectUrl: 'blob:b', size: 4 })

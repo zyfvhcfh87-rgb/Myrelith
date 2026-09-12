@@ -50,6 +50,7 @@ export default function CollectMediaDialog({ onClose }: CollectMediaDialogProps)
   const [progress, setProgress] = useState<CollectMediaProgress | null>(null)
   const [result, setResult] = useState<CollectMediaResult | null>(null)
   const [busy, setBusy] = useState(false)
+  const collectRunRef = useRef<Promise<unknown> | null>(null)
   const picker = getCollectMediaPickerAvailability()
   const working = busy && result === null
 
@@ -80,6 +81,11 @@ export default function CollectMediaDialog({ onClose }: CollectMediaDialogProps)
 
   const close = useCallback((): void => {
     if (busy) cancelCollectMedia()
+    const running = collectRunRef.current
+    if (running) {
+      void running.finally(() => onClose())
+      return
+    }
     onClose()
   }, [busy, onClose])
 
@@ -89,8 +95,13 @@ export default function CollectMediaDialog({ onClose }: CollectMediaDialogProps)
     setResult(null)
     try {
       const destination = await pickCollectMediaDestination()
-      const next = await collectActiveProject(destination, policy, setProgress)
-      setResult(next)
+      const running = collectActiveProject(destination, policy, setProgress)
+      collectRunRef.current = running
+      try {
+        setResult(await running)
+      } finally {
+        collectRunRef.current = null
+      }
     } catch (cause) {
       if (isCollectMediaAbort(cause)) {
         setResult({ status: 'cancelled' })
