@@ -193,12 +193,24 @@ export async function* exportAudioOnly(
     undefined,
     deps.projectMixPlan,
   )
+  const encoderSampleRate = validated.codec === 'pcm-s16'
+    ? doc.audioSampleRate
+    : exportAudioEncoderSampleRate(doc.audioSampleRate, validated.codec)
   let nextFrame = 0
   let finalized = false
+  let output: Output | null = null
+  let audioResampleCarry: ExportAudioResampleCarry | null = null
   try {
     yield 0
     for (let frame = 0; frame < window.startFrame; frame++) {
-      await mixer.writeFrame(frame, async () => undefined)
+      await mixer.writeFrame(frame, async (block) => {
+        audioResampleCarry = resampleMixedAudioBlock(
+          block,
+          doc.audioSampleRate,
+          encoderSampleRate,
+          audioResampleCarry,
+        ).carry
+      })
       nextFrame++
       yield frame / (window.endFrame + 1)
     }
@@ -237,10 +249,9 @@ export async function* exportAudioOnly(
       )
     }
 
-    const encoderSampleRate = exportAudioEncoderSampleRate(doc.audioSampleRate, validated.codec)
     const format = validated.container === 'webm' ? new WebMOutputFormat() : new Mp4OutputFormat()
     const target = new BufferTarget()
-    const output = new Output({ format, target })
+    output = new Output({ format, target })
     const firstAudioSample = exportSampleBoundary(window.startFrame, doc, encoderSampleRate)
     const expectedAudioSamples = exportSampleBoundary(window.endFrame, doc, encoderSampleRate) - firstAudioSample
     const audioSource = new AudioSampleSource({
@@ -257,7 +268,6 @@ export async function* exportAudioOnly(
     })
     output.addAudioTrack(audioSource)
     await output.start()
-    let audioResampleCarry: ExportAudioResampleCarry | null = null
     const aacAssembler = validated.codec === 'aac' ? new AacInputAssembler(channelCount) : null
     const writeEncoded = async (chunk: AacInputChunk): Promise<void> => {
       const sample = new AudioSample({
@@ -273,40 +283,31 @@ export async function* exportAudioOnly(
         sample.close()
       }
     }
-    try {
-      for (let frame = window.startFrame; frame < window.endFrame; frame++) {
-        await mixer.writeFrame(frame, async (block) => {
-          const resampled = resampleMixedAudioBlock(
-            block,
-            doc.audioSampleRate,
-            encoderSampleRate,
-            audioResampleCarry,
-          )
-          audioResampleCarry = resampled.carry
-          if (resampled.encoded.sampleCount <= 0) return
-          const chunk = {
-            startSample: resampled.encoded.startSample - firstAudioSample,
-            sampleCount: resampled.encoded.sampleCount,
-            data: interleaveAudioBlock(resampled.encoded, channelCount),
-          }
-          if (aacAssembler) await aacAssembler.add(chunk, writeEncoded)
-          else await writeEncoded(chunk)
-        })
-        nextFrame++
-        yield (frame + 1) / (window.endFrame + 1)
-      }
-      await mixer.close()
-      await aacAssembler?.flush(writeEncoded)
-      audioSource.close()
-      await output.finalize()
-    } catch (cause) {
-      try {
-        await output.cancel()
-      } catch {
-        // Operational failure stays primary.
-      }
-      throw cause
+    for (let frame = window.startFrame; frame < window.endFrame; frame++) {
+      await mixer.writeFrame(frame, async (block) => {
+        const resampled = resampleMixedAudioBlock(
+          block,
+          doc.audioSampleRate,
+          encoderSampleRate,
+          audioResampleCarry,
+        )
+        audioResampleCarry = resampled.carry
+        if (resampled.encoded.sampleCount <= 0) return
+        const chunk = {
+          startSample: resampled.encoded.startSample - firstAudioSample,
+          sampleCount: resampled.encoded.sampleCount,
+          data: interleaveAudioBlock(resampled.encoded, channelCount),
+        }
+        if (aacAssembler) await aacAssembler.add(chunk, writeEncoded)
+        else await writeEncoded(chunk)
+      })
+      nextFrame++
+      yield (frame + 1) / (window.endFrame + 1)
     }
+    await mixer.close()
+    await aacAssembler?.flush(writeEncoded)
+    audioSource.close()
+    await output.finalize()
     if (target.buffer === null) throw new Error('Audio-only export finalized without a buffer')
     finalized = true
     return await publish(
@@ -314,11 +315,18 @@ export async function* exportAudioOnly(
       validated,
       deps.fileDestination,
     )
-  } catch (cause) {
+  } finally {
     try {
       await mixer.close()
     } catch {
       // Operational failure stays primary.
+    }
+    if (output !== null && !finalized) {
+      try {
+        await output.cancel()
+      } catch {
+        // Operational failure stays primary.
+      }
     }
     if (!finalized) {
       try {
@@ -327,6 +335,5 @@ export async function* exportAudioOnly(
         if (cleanup instanceof DirectFileAbortError) throw cleanup
       }
     }
-    throw cause
   }
 }

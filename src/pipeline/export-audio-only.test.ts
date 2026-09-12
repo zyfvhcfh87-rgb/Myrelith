@@ -74,4 +74,31 @@ describe('audio-only WAV export', () => {
     expect(view.getUint32(24, true)).toBe(48_000)
     expect(view.getUint16(20, true)).toBe(1)
   })
+
+  test('early return closes the mixer after cooperative cancel', async () => {
+    let closed = 0
+    const source: ExportAudioMediaSource = {
+      async openClip() {
+        return {
+          async read(sampleCount) {
+            return [new Float32Array(sampleCount), new Float32Array(sampleCount)]
+          },
+          close() {},
+        }
+      },
+      close() {
+        closed++
+      },
+    }
+    const generator = exportAudioOnly(doc(3), DEFAULT_AUDIO_ONLY_PROFILE, source, {
+      range: { startFrame: 1, endFrame: 3 },
+    })
+    await generator.next()
+    await generator.next()
+    await expect(generator.return(undefined)).resolves.toEqual({
+      value: undefined,
+      done: true,
+    })
+    expect(closed).toBe(1)
+  })
 })

@@ -82,6 +82,13 @@ export interface ExportCapabilitiesControllerDeps {
   ): Promise<{ readonly supported: boolean; readonly reason: string | null }>
 }
 
+function throwIfAborted(signal?: AbortSignal, message = 'Export capability check was canceled'): void {
+  if (!signal?.aborted) return
+  if (typeof signal.throwIfAborted === 'function') signal.throwIfAborted()
+  if (signal.reason !== undefined) throw signal.reason
+  throw new DOMException(message, 'AbortError')
+}
+
 const realDeps: ExportCapabilitiesControllerDeps = {
   getDocument: () => useDocumentStore.getState().doc,
   checkProfile: (doc, profile) => checkExportProfileSupport(
@@ -155,6 +162,7 @@ async function proveDeliverySettings(
       profile.videoCodec,
       signal,
     )
+    throwIfAborted(signal, 'Alpha proof cancelled')
     return { settings: profile, supported: proof.supported, reason: proof.reason }
   }
   return {
@@ -258,6 +266,7 @@ export async function preflightExportProfile(
   const parsed = parseExportSettings(profile)
   if (isDeliveryProfile(parsed)) {
     const result = await proveDeliverySettings(doc, parsed, signal, deps)
+    throwIfAborted(signal)
     if (!result.supported) {
       throw new Error(
         result.reason ?? 'The selected delivery product is unavailable. No codec was substituted.',

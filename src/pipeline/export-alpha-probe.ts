@@ -111,14 +111,24 @@ async function roundTrip(codec: AlphaVideoCodec, signal?: AbortSignal): Promise<
   }
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return
+  if (typeof signal.throwIfAborted === 'function') signal.throwIfAborted()
+  if (signal.reason !== undefined) throw signal.reason
+  throw new DOMException('Alpha proof cancelled', 'AbortError')
+}
+
 export async function proveAlphaVideoCodec(
   codec: AlphaVideoCodec,
   signal?: AbortSignal,
 ): Promise<Readonly<AlphaCapabilityResult>> {
+  throwIfAborted(signal)
   try {
     await roundTrip(codec, signal)
+    throwIfAborted(signal)
     return Object.freeze({ codec, supported: true, reason: null })
   } catch (cause) {
+    throwIfAborted(signal)
     const reason = cause instanceof Error && cause.message.trim()
       ? cause.message.trim()
       : String(cause)

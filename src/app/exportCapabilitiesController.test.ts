@@ -206,4 +206,25 @@ describe('advanced and pre-start capability facade', () => {
     expect(deps.checkProfile).not.toHaveBeenCalled()
     expect(deps.verifyProfile).not.toHaveBeenCalled()
   })
+
+  test('alpha preflight preserves cancellation instead of a capability failure', async () => {
+    const deps = makeDeps()
+    const abort = new AbortController()
+    const reason = new DOMException('Export cancelled', 'AbortError')
+    deps.proveAlphaVideo = vi.fn(async () => {
+      abort.abort(reason)
+      return {
+        codec: 'vp9' as const,
+        supported: false,
+        reason: 'VP9 alpha is unavailable on this browser: Alpha proof cancelled',
+      }
+    })
+    const { DEFAULT_ALPHA_VIDEO_PROFILE } = await import('../domain/deliveryProduct')
+    await expect(preflightExportProfile(
+      DOC,
+      DEFAULT_ALPHA_VIDEO_PROFILE,
+      abort.signal,
+      deps,
+    )).rejects.toBe(reason)
+  })
 })
