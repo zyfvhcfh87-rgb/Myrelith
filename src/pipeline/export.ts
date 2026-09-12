@@ -1,3 +1,4 @@
+import { validateExportRange, type ExportRange } from '../domain/exportRange'
 import { titleCompositionError } from '../domain/titleComposition'
 import { ColorGradingRuntime, ColorGradingCancelledError, type ColorGradingFrame } from './colorGradingRuntime'
 import type { PortableColorLut } from '../domain/colorLutCatalog'
@@ -120,12 +121,14 @@ export interface ExportVideoSink {
   transitionSurfaceProvider: TransitionSurfaceProvider
   lensRemapProvider?: LensRemapProvider | null
   /** Adds all encoded media belonging to this document frame. */
+  prerollFrame?(): Promise<void>
   addFrame(timestampSec: number, durationSec: number): Promise<void>
   finalize(): Promise<ExportResult>
   cancel(reason?: unknown): Promise<void>
 }
 
 export interface ExportDeps {
+  readonly range?: ExportRange
   readonly colorLuts?: readonly PortableColorLut[]
   readonly checkColorGradingCurrent?: () => void
   composite: typeof compositeFrame
@@ -134,6 +137,7 @@ export interface ExportDeps {
   createVideoSink(
     doc: TimelineDoc,
     settings: ExportSettings,
+    range?: ExportRange,
   ): Promise<ExportVideoSink>
 }
 
@@ -163,9 +167,12 @@ function exportFrameCount(doc: TimelineDoc): number {
 export function assertExportAdmission(
   doc: TimelineDoc,
   settings: ExportSettings,
+  range?: ExportRange,
 ): Readonly<ExportAdmission> {
   const validatedSettings = assertSettings(settings)
-  const frameCount = exportFrameCount(doc)
+  exportFrameCount(doc)
+  const window = validateExportRange(doc, range)
+  const frameCount = window.endFrame - window.startFrame
   assertRenderSurfaceBudget(doc.width, doc.height)
   const frameDurationSec = assertBoundaryTime(
     framesToSeconds(1, doc.frameRate),
@@ -323,9 +330,9 @@ export async function* exportTimeline(
   }
 
   try {
-    const admission = assertExportAdmission(doc, settings)
+    const admission = assertExportAdmission(doc, settings, deps.range)
+    const window = validateExportRange(doc, deps.range)
     const validatedSettings = admission.settings
-    const frameCount = admission.frameCount
     const frameDurationSec = admission.frameDurationSec
     gradingRuntime = new ColorGradingRuntime()
     const check = deps.checkColorGradingCurrent ?? (() => {})
@@ -333,8 +340,12 @@ export async function* exportTimeline(
     const grading: ColorGradingFrame = { runtime: gradingRuntime, context: gradingRuntime.context, check, policy: 'fail' }
     yield 0
 
-    sink = await deps.createVideoSink(doc, validatedSettings)
-    for (let frame = 0; frame < frameCount; frame++) {
+    sink = await (deps.range ? deps.createVideoSink(doc, validatedSettings, deps.range) : deps.createVideoSink(doc, validatedSettings))
+    for (let frame = 0; frame < window.startFrame; frame++) {
+      await sink.prerollFrame?.()
+      yield frame / (window.endFrame + 1)
+    }
+    for (let frame = window.startFrame; frame < window.endFrame; frame++) {
       const lease = await media.openFrame(frame)
       await compositeAndCloseLease(
         doc,
@@ -347,11 +358,11 @@ export async function* exportTimeline(
       )
 
       const timestampSec = assertBoundaryTime(
-        framesToSeconds(frame, doc.frameRate),
+        framesToSeconds(frame - window.startFrame, doc.frameRate),
         'timestamp',
       )
       await sink.addFrame(timestampSec, frameDurationSec)
-      yield (frame + 1) / (frameCount + 1)
+      yield (frame + 1) / (window.endFrame + 1)
     }
 
     // Release every visual decoder before the muxer commits its terminal

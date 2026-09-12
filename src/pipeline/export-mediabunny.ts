@@ -37,7 +37,7 @@ export function createMediabunnyExportDeps(
     composite: compositeFrame,
     colorLuts: projectTarget?.project.colorLuts,
     videoEffectStageExecutor,
-    createVideoSink: (doc, settings) =>
+    createVideoSink: (doc, settings, range) =>
       createMediabunnyExportSink(
         doc,
         settings,
@@ -46,6 +46,7 @@ export function createMediabunnyExportDeps(
         fileDestination,
         projectMixPlan,
         projectTarget,
+        range,
       ),
   }
 }

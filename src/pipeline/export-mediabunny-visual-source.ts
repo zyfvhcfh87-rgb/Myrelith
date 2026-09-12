@@ -1,3 +1,4 @@
+import { validateExportRange, type ExportRange } from '../domain/exportRange'
 /** Bounded Mediabunny/static-image visual source for timeline export. */
 
 import {
@@ -116,14 +117,16 @@ async function videoRequestSchedule(
   doc: TimelineDoc,
   planner: VideoCompositionPlanner,
   closed: () => boolean,
+  range?: ExportRange,
 ): Promise<VideoRequestSchedule> {
-  const frameCount = docDurationFrames(doc)
+  const window = range ? validateExportRange(doc, range) : { startFrame: 0, endFrame: docDurationFrames(doc) }
+  const frameCount = window.endFrame
   if (!Number.isSafeInteger(frameCount) || frameCount < 0) {
     throw new RangeError('Cannot schedule an invalid export timeline')
   }
 
   const byAsset = new Map<AssetId, number[]>()
-  for (let frame = 0; frame < frameCount; frame++) {
+  for (let frame = window.startFrame; frame < frameCount; frame++) {
     if (closed()) throw new Error('Export media source is closed')
     if (frame > 0 && frame % EXPORT_SCHEDULE_YIELD_FRAMES === 0) {
       await yieldExportSchedule()
@@ -152,6 +155,7 @@ export function createMediabunnyExportMediaSource(
     project: SequenceProject
     sequenceId: string
   }>,
+  range?: ExportRange,
 ): ExportMediaSource {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -171,7 +175,7 @@ export function createMediabunnyExportMediaSource(
   const imageAbort = new AbortController()
   let closed = false
   let closePromise: Promise<void> | null = null
-  const schedulePromise = videoRequestSchedule(doc, planner, () => closed)
+  const schedulePromise = videoRequestSchedule(doc, planner, () => closed, range)
 
   const openAsset = (assetId: AssetId): Promise<DecodedVisualAsset> => {
     const cached = sessions.get(assetId)
@@ -338,7 +342,7 @@ export function createMediabunnyExportMediaSource(
     assertFrame(docFrame, 'Document frame')
     if (closed) throw new Error('Export media source is closed')
     const requests = await schedulePromise
-    if (docFrame >= requests.frameCount) {
+    if (docFrame < (range?.startFrame ?? 0) || docFrame >= requests.frameCount) {
       throw new Error(`Export received an extra document frame ${docFrame}`)
     }
     const plan = planner.planFrame(docFrame)

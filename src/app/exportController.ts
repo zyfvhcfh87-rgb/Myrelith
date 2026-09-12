@@ -1,3 +1,4 @@
+import { validateExportRange, type ExportRange } from '../domain/exportRange'
 import { beginSpeechRetirement } from './speechRetirement'
 import { projectTitleExportError } from '../domain/titleExport'
 import { firstCaptionExportBlocker } from '../domain/captionExport'
@@ -82,7 +83,7 @@ import type { VideoEffectStageExecutor } from '../pipeline/videoEffectStageExecu
 
 export type { ExportResult, ExportSettings } from '../pipeline/export'
 
-interface ProjectExportTarget {
+export interface ProjectExportTarget {
   readonly project: SequenceProject
   readonly sequenceId: string
 }
@@ -90,6 +91,8 @@ interface ProjectExportTarget {
 type ExportRun = AsyncGenerator<number, ExportResult | undefined, void>
 
 export interface ExportRunOptions {
+  readonly range?: ExportRange
+  readonly snapshot?: ProjectExportTarget
   /** Receives every exact progress value yielded by the pipeline. */
   onProgress?: (progress: number) => void
   /** Ephemeral one-shot capability; never stored in project/preferences state. */
@@ -113,6 +116,7 @@ export interface ExportControllerDeps {
     sourceBounds: SourceBoundsCatalog,
     pluginSnapshot?: PluginVideoEffectContributionSnapshot,
     projectTarget?: ProjectExportTarget,
+    range?: ExportRange,
   ): ExportMediaSource
   createPipelineDeps(
     resolveAsset: ExportAssetResolver,
@@ -328,6 +332,8 @@ function freezeRunOptions(callbacks: ExportCallbacks): Readonly<ExportRunOptions
     && typeof callbacks.onProgress !== 'function'
   ) throw new TypeError('Export progress callback must be a function')
   return Object.freeze({
+    ...(callbacks.range ? { range: Object.freeze({ ...callbacks.range }) } : {}),
+    ...(callbacks.snapshot ? { snapshot: Object.freeze({ ...callbacks.snapshot }) } : {}),
     ...(callbacks.onProgress ? { onProgress: callbacks.onProgress } : {}),
     ...(callbacks.fileDestination
       ? { fileDestination: callbacks.fileDestination }
@@ -561,6 +567,13 @@ function trackActiveExport(
     const speechDrain = beginSpeechRetirement('Export')
     if (speechDrain) await speechDrain
     if (lifecycle.cancelRequested || lifecycle.preflightAbort.signal.aborted || state.active?.token !== token) return undefined
+    if (typeof navigator !== 'undefined' && navigator.locks) {
+      return navigator.locks.request('myrelith-export-pipeline', { mode: 'exclusive', ifAvailable: true }, async (lock) => {
+        if (!lock) throw new Error('Another tab is exporting. Wait for its cleanup before starting another export.')
+        if (lifecycle.cancelRequested) return undefined
+        return start()
+      })
+    }
     return start()
   }).catch((cause) => {
     reportExportRuntimeFailure(cause, runtimeGuards)
@@ -625,7 +638,7 @@ async function preflightAndRunExport(
   if (lifecycle.cancelRequested) return undefined
   // Reject impossible work before Blob retention, profile probing, or the
   // cooperative per-asset visual schedule owned by createMediaSource().
-  assertExportAdmission(doc, settings)
+  assertExportAdmission(doc, settings, callbacks.range)
   let resolveAsset: ExportAssetResolver | null = null
   if (!pluginExecution) {
     resolveAsset = createAssetResolver(assets, deps.fetchBlob)
@@ -663,7 +676,7 @@ async function preflightAndRunExport(
   let media: ExportMediaSource | null = null
   let generator: ExportRun
   try {
-    const pipelineDeps = deps.createPipelineDeps(
+    const basePipelineDeps = deps.createPipelineDeps(
       resolveAsset,
       sourceBounds,
       callbacks.fileDestination,
@@ -671,12 +684,14 @@ async function preflightAndRunExport(
       audioMixPlan,
       projectTarget,
     )
+    const pipelineDeps = { ...basePipelineDeps, ...(callbacks.range ? { range: callbacks.range } : {}) }
     media = deps.createMediaSource(
       doc,
       resolveAsset,
       sourceBounds,
       pluginExecution?.pluginSnapshot,
       projectTarget,
+      callbacks.range,
     )
     if (lifecycle.cancelRequested) {
       await media.close()
@@ -734,17 +749,19 @@ export function startExport(
   }
 
   const documentState = useDocumentStore.getState()
-  const doc = documentState.doc
-  const projectTarget = Object.freeze({
+  const projectTarget = callbacks.snapshot ?? Object.freeze({
     project: documentState.project,
     sequenceId: documentState.activeSequenceId,
   })
+  const doc = sequenceById(projectTarget.project, projectTarget.sequenceId)
+  if (!doc) return Promise.reject(new Error('Queued sequence is unavailable'))
   let runSettings: Readonly<ExportSettings>
   let runOptions: Readonly<ExportRunOptions>
   let captured: CapturedExportInputs
   try {
     runSettings = validateExportProfile(settings)
     runOptions = freezeRunOptions(callbacks)
+    validateExportRange(doc, runOptions.range)
     assertDestinationCapability(runSettings, runOptions)
     if (reachableSequences(projectTarget).some(documentHasOutputPluginEffects)) {
       throw new Error('Plugin-aware export requires a prepared one-shot attempt')

@@ -944,3 +944,21 @@ describe('exportTimeline ownership and failures', () => {
     expect(h.closeMedia).toHaveBeenCalledOnce()
   })
 })
+
+describe('Issue 203 absolute range scheduling', () => {
+  test('pre-rolls without drawing then emits only selected absolute frames at zero-based timestamps', async () => {
+    const h=makeHarness(); const preroll=vi.fn(async()=>{})
+    h.sink.prerollFrame=preroll
+    await drain(exportTimeline(makeDoc(8),SETTINGS,h.media,{...h.deps,range:{startFrame:5,endFrame:7}}))
+    expect(preroll).toHaveBeenCalledTimes(5)
+    expect(h.openFrame.mock.calls.map(([frame])=>frame)).toEqual([5,6])
+    expect(h.addFrame.mock.calls).toEqual([[0,1/30],[1/30,1/30]])
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+  test('cancelling during pre-roll closes the sink and media without an output frame',async()=>{
+    const h=makeHarness();h.sink.prerollFrame=vi.fn(async()=>{})
+    const run=exportTimeline(makeDoc(8),SETTINGS,h.media,{...h.deps,range:{startFrame:5,endFrame:7}})
+    await run.next();await run.next();await run.return(undefined)
+    expect(h.openFrame).not.toHaveBeenCalled();expect(h.cancel).toHaveBeenCalledOnce();expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+})

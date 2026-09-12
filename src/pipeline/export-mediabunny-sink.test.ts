@@ -1094,3 +1094,18 @@ describe('createMediabunnyExportSink audio behavior', () => {
     expect(decoded.close).toHaveBeenCalledOnce()
   })
 })
+
+test('Issue 203 pre-roll rebases fractional-rate 96 kHz audio exactly once', async()=>{
+ const doc=makeAudioDoc([makeAudioTrack('audio',makeAudioClip('silent','silent-source',5))])
+ doc.audioSampleRate=96000;doc.tracks[0]!.muted=true
+ const profile=exportPresetById('web').profile
+ const sink=await createMediabunnyExportSink(doc,profile,async()=>{throw new Error('Muted pre-roll must not decode')},new Map(),undefined,undefined,undefined,{startFrame:1,endFrame:3})
+ await sink.prerollFrame!()
+ expect(mb.encodedAudioSamples).toHaveLength(0)
+ await sink.addFrame(0,1001/30000);await sink.addFrame(1001/30000,1001/30000);await sink.finalize()
+ const samples=mb.encodedAudioSamples as FakeAudioSampleRecord[]
+ expect(samples[0]?.timestamp).toBe(0)
+ const start=Math.floor(audioSampleBoundary(1,doc)/2),end=Math.floor(audioSampleBoundary(3,doc)/2)
+ expect(samples.reduce((sum,sample)=>sum+sample.numberOfFrames,0)).toBe(end-start)
+ expect(samples.every(sample=>sample.close.mock.calls.length===1)).toBe(true)
+})
