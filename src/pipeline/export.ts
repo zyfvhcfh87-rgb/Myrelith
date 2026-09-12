@@ -16,6 +16,12 @@ import {
   type ExportMimeType,
   type ExportProfile,
 } from '../domain/exportProfile'
+import {
+  assertDeliveryWorkBudget,
+  isDeliveryProfile,
+  validateDeliveryProfile,
+  type DeliveryProfile,
+} from '../domain/deliveryProduct'
 import type { TimelineDoc } from '../domain/schema'
 import { fullResolutionPresentationProfile } from '../domain/presentationProfile'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
@@ -32,7 +38,7 @@ import {
 } from './render'
 import type { LensRemapProvider } from './lensRemap'
 
-export type ExportSettings = ExportProfile
+export type ExportSettings = ExportProfile | DeliveryProfile
 
 /** Cleanup failure that can invalidate claims about an output destination. */
 export class ExportCleanupIntegrityError extends Error {}
@@ -56,7 +62,50 @@ export interface DirectFileExportResult {
   readonly profile: Readonly<ExportProfile>
 }
 
-export type ExportResult = BufferedExportResult | DirectFileExportResult
+export type ExportCompletion = 'complete' | 'partial'
+export type AlternativeDeliveryKind = 'image-sequence' | 'audio-only' | 'alpha-video' | 'av-media'
+
+export interface AlternativeBufferedExportResult {
+  readonly destination: 'download'
+  readonly kind: AlternativeDeliveryKind
+  readonly buffer: ArrayBuffer
+  readonly mimeType: string
+  readonly fileExtension: string
+  readonly label: string
+  readonly completion: ExportCompletion
+  readonly writtenFrames?: number
+  readonly expectedFrames?: number
+  readonly files?: readonly string[]
+}
+
+export interface DirectoryExportResult {
+  readonly destination: 'directory'
+  readonly kind: 'image-sequence'
+  readonly directoryName: string
+  readonly files: readonly string[]
+  readonly writtenFrames: number
+  readonly expectedFrames: number
+  readonly completion: ExportCompletion
+  readonly label: string
+}
+
+export interface AlternativeFileExportResult {
+  readonly destination: 'file'
+  readonly kind: AlternativeDeliveryKind
+  readonly fileName: string
+  readonly byteLength: number
+  readonly mimeType: string
+  readonly fileExtension: string
+  readonly label: string
+  readonly completion: ExportCompletion
+}
+
+export type ExportResult =
+  | BufferedExportResult
+  | DirectFileExportResult
+  | AlternativeBufferedExportResult
+  | AlternativeFileExportResult
+  | DirectoryExportResult
 
 export function createBufferedExportResult(
   buffer: ArrayBuffer,
@@ -105,6 +154,45 @@ export function createDirectFileExportResult(
   })
 }
 
+export function createAlternativeBufferedExportResult(
+  value: AlternativeBufferedExportResult,
+): Readonly<AlternativeBufferedExportResult> {
+  if (!(value.buffer instanceof ArrayBuffer)) {
+    throw new TypeError('Buffered delivery result requires an ArrayBuffer')
+  }
+  if (value.destination !== 'download') {
+    throw new TypeError('Buffered delivery result requires the download destination')
+  }
+  return Object.freeze({ ...value, files: value.files ? Object.freeze([...value.files]) : undefined })
+}
+
+export function createDirectoryExportResult(
+  value: DirectoryExportResult,
+): Readonly<DirectoryExportResult> {
+  if (value.destination !== 'directory') {
+    throw new TypeError('Directory delivery result requires the directory destination')
+  }
+  if (!Number.isSafeInteger(value.writtenFrames) || value.writtenFrames < 0) {
+    throw new TypeError('Directory delivery result requires a written frame count')
+  }
+  return Object.freeze({
+    ...value,
+    files: Object.freeze([...value.files]),
+  })
+}
+
+export function createAlternativeFileExportResult(
+  value: AlternativeFileExportResult,
+): Readonly<AlternativeFileExportResult> {
+  if (value.destination !== 'file') {
+    throw new TypeError('File delivery result requires the file destination')
+  }
+  if (!Number.isSafeInteger(value.byteLength) || value.byteLength < 0) {
+    throw new TypeError('File delivery result requires a non-negative byte length')
+  }
+  return Object.freeze({ ...value })
+}
+
 export interface ExportFrameLease extends FrameSource {
   /** Exact shared plan used to schedule every decode in this lease. */
   plan: VideoCompositionPlan
@@ -120,6 +208,9 @@ export interface ExportVideoSink {
   ctx: Composite2D
   transitionSurfaceProvider: TransitionSurfaceProvider
   lensRemapProvider?: LensRemapProvider | null
+  compositeBackground?: 'opaque' | 'transparent'
+  preservePartialOnFailure?: boolean
+  commitPartial?(): Promise<ExportResult | undefined>
   /** Adds all encoded media belonging to this document frame. */
   prerollFrame?(): Promise<void>
   addFrame(timestampSec: number, durationSec: number): Promise<void>
@@ -148,6 +239,7 @@ export interface ExportAdmission {
 }
 
 function assertSettings(settings: ExportSettings): Readonly<ExportSettings> {
+  if (isDeliveryProfile(settings)) return validateDeliveryProfile(settings)
   return validateExportProfile(settings)
 }
 
@@ -173,12 +265,18 @@ export function assertExportAdmission(
   exportFrameCount(doc)
   const window = validateExportRange(doc, range)
   const frameCount = window.endFrame - window.startFrame
-  assertRenderSurfaceBudget(doc.width, doc.height)
+  if (!isDeliveryProfile(validatedSettings) || validatedSettings.kind !== 'audio-only') {
+    assertRenderSurfaceBudget(doc.width, doc.height)
+  }
   const frameDurationSec = assertBoundaryTime(
     framesToSeconds(1, doc.frameRate),
     'duration',
   )
-  assertExportWorkBudget(frameCount, doc.frameRate, validatedSettings)
+  if (isDeliveryProfile(validatedSettings)) {
+    assertDeliveryWorkBudget(frameCount, doc, validatedSettings)
+  } else {
+    assertExportWorkBudget(frameCount, doc.frameRate, validatedSettings)
+  }
   return Object.freeze({
     settings: validatedSettings,
     frameCount,
@@ -245,6 +343,7 @@ async function compositeAndCloseLease(
       sink.lensRemapProvider,
       videoEffectStageExecutor,
       grading,
+      sink.compositeBackground === 'transparent' ? 'transparent' : 'opaque',
     )
     // Preview intentionally softens source failures into `missing` so a later
     // repaint can recover. Export has no retry boundary: preserve the exact
@@ -380,6 +479,20 @@ export async function* exportTimeline(
     throw cause
   } finally {
     gradingRuntime?.dispose()
+    let partial: ExportResult | undefined
+    if (
+      sink
+      && !sinkFinalized
+      && typeof sink.commitPartial === 'function'
+      && (!operationalFailure || sink.preservePartialOnFailure === true)
+    ) {
+      try {
+        partial = await sink.commitPartial()
+        if (partial) sinkFinalized = true
+      } catch {
+        // Partial commit failure falls through to ordinary cancel cleanup.
+      }
+    }
     await cleanupExport(
       sink,
       sinkFinalized,
@@ -387,5 +500,6 @@ export async function* exportTimeline(
       operationalFailure,
       operationalCause,
     )
+    if (partial) return partial
   }
 }

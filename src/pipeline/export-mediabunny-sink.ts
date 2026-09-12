@@ -16,12 +16,11 @@ import type { SequenceProject } from '../domain/projectSequences'
 import type { TimelineAudioMixPlan } from '../domain/audioMixPlan'
 import { docDurationFrames, projectReachableSequences } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
-import { exportAudioEncoderSampleRate } from '../domain/exportProfile'
+import { exportAudioEncoderSampleRate, type ExportProfile } from '../domain/exportProfile'
 import {
   createBufferedExportResult,
   createDirectFileExportResult,
   type ExportResult,
-  type ExportSettings,
   type ExportVideoSink,
 } from './export'
 import {
@@ -63,7 +62,7 @@ const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
 
 function assertVideoSinkInputs(
   doc: TimelineDoc,
-  settings: ExportSettings,
+  settings: ExportProfile,
   includeAudio: boolean,
 ): number {
   const implementationReason = mediabunnyExportImplementationUnavailableReason(
@@ -157,7 +156,7 @@ function trimAacPaddingPacket(
 /** Creates and starts the selected buffered or direct-file Mediabunny sink. */
 export async function createMediabunnyExportSink(
   doc: TimelineDoc,
-  settings: ExportSettings,
+  settings: ExportProfile,
   resolveAsset: ExportAssetResolver,
   sourceBounds: SourceBoundsCatalog = new Map(),
   fileDestination?: PreparedExportFileCapability,
@@ -167,6 +166,7 @@ export async function createMediabunnyExportSink(
     sequenceId: string
   }>,
   range?: ExportRange,
+  options?: Readonly<{ alpha?: boolean }>,
 ): Promise<ExportVideoSink> {
   if (typeof resolveAsset !== 'function') {
     throw new TypeError('resolveAsset must be a function')
@@ -267,7 +267,9 @@ export async function createMediabunnyExportSink(
     lensBackend?.dispose()
     throw cause
   }
-  const context = canvas.getContext('2d', SRGB_2D_CONTEXT)
+  const context = canvas.getContext('2d', options?.alpha
+    ? { colorSpace: 'srgb', alpha: true }
+    : SRGB_2D_CONTEXT)
   if (!context) {
     lensBackend?.dispose()
     canvas.width = 1
@@ -320,6 +322,7 @@ export async function createMediabunnyExportSink(
       bitrate: settings.videoBitrate,
       bitrateMode: settings.videoBitrateMode,
       keyFrameInterval: settings.keyFrameIntervalMicroseconds / 1_000_000,
+      ...(options?.alpha ? { alpha: 'keep' as const } : {}),
     })
     output.addVideoTrack(source, { frameRate })
     if (audioSettings) {
@@ -546,13 +549,22 @@ export async function createMediabunnyExportSink(
       } catch (cause) { return failAfterCancel(cause) }
     },
     ctx: context as Composite2D,
+    compositeBackground: options?.alpha ? 'transparent' : 'opaque',
     transitionSurfaceProvider: {
       get: () => {
         if (transitionSurfaces) return transitionSurfaces
         const legCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const legContext = legCanvas.getContext('2d', { ...SRGB_2D_CONTEXT, willReadFrequently: true })
+        const legContext = legCanvas.getContext('2d', {
+          ...SRGB_2D_CONTEXT,
+          willReadFrequently: true,
+          ...(options?.alpha ? { alpha: true } : {}),
+        })
         const groupCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const groupContext = groupCanvas.getContext('2d', { ...SRGB_2D_CONTEXT, willReadFrequently: true })
+        const groupContext = groupCanvas.getContext('2d', {
+          ...SRGB_2D_CONTEXT,
+          willReadFrequently: true,
+          ...(options?.alpha ? { alpha: true } : {}),
+        })
         if (!legContext || !groupContext) {
           legCanvas.width = 1
           legCanvas.height = 1

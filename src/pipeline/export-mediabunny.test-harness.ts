@@ -20,6 +20,7 @@ import {
   DEFAULT_EXPORT_PROFILE,
   exportPresetById,
   updateExportProfile,
+  type ExportProfile,
 } from '../domain/exportProfile'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
@@ -30,7 +31,6 @@ import {
 } from './render'
 import {
   exportTimeline,
-  type ExportSettings,
 } from './export'
 import { StaticImageDecodeError } from './static-image'
 import { audioSampleBoundary } from './export-audio'
@@ -501,7 +501,7 @@ import {
   createMediabunnyExportSink,
 } from './export-mediabunny'
 
-const SETTINGS: ExportSettings = {
+const SETTINGS: ExportProfile = {
   ...DEFAULT_EXPORT_PROFILE,
   videoBitrate: 250_000,
 }

@@ -1,5 +1,6 @@
 /** Stable facade for the split Mediabunny export adapters. */
 
+import { isAlphaVideoProfile, isDeliveryProfile, alphaVideoAsExportProfile } from '../domain/deliveryProduct'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { ExportDeps } from './export'
 import type { PreparedExportFileCapability } from './export-file-target'
@@ -37,8 +38,24 @@ export function createMediabunnyExportDeps(
     composite: compositeFrame,
     colorLuts: projectTarget?.project.colorLuts,
     videoEffectStageExecutor,
-    createVideoSink: (doc, settings, range) =>
-      createMediabunnyExportSink(
+    createVideoSink: (doc, settings, range) => {
+      if (isAlphaVideoProfile(settings)) {
+        return createMediabunnyExportSink(
+          doc,
+          alphaVideoAsExportProfile(settings),
+          resolveAsset,
+          sourceBounds,
+          fileDestination,
+          projectMixPlan,
+          projectTarget,
+          range,
+          { alpha: true },
+        )
+      }
+      if (isDeliveryProfile(settings)) {
+        throw new TypeError('The Mediabunny video sink does not execute alternative delivery products')
+      }
+      return createMediabunnyExportSink(
         doc,
         settings,
         resolveAsset,
@@ -47,6 +64,7 @@ export function createMediabunnyExportDeps(
         projectMixPlan,
         projectTarget,
         range,
-      ),
+      )
+    },
   }
 }
