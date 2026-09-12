@@ -121,6 +121,17 @@ describe('delivery products', () => {
     expect(deliveryWorkBudgetReason(5_000_001, sequence, DEFAULT_IMAGE_SEQUENCE_PROFILE)).toMatch(/frame limit/)
   })
 
+  test('audio-only file destinations still use the memory-buffered work limit', () => {
+    const sequence = doc()
+    const fileWav = validateDeliveryProfile({
+      ...DEFAULT_AUDIO_ONLY_PROFILE,
+      destination: 'file',
+    })
+    expect(deliveryWorkBudgetReason(30, sequence, fileWav)).toBeNull()
+    expect(deliveryWorkBudgetReason(2_592_000, sequence, fileWav)).toMatch(/memory-buffered/)
+    expect(deliveryWorkBudgetReason(2_592_000, sequence, DEFAULT_AUDIO_ONLY_PROFILE)).toMatch(/memory-buffered/)
+  })
+
   test('rejects chapter sidecars for a single file destination and allows ZIP or PNG folders', () => {
     expect(() => assertChapterDelivery('file', { mode: 'sidecar' })).toThrow(
       /cannot be stored inside a single media file/i,

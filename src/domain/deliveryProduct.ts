@@ -544,13 +544,20 @@ export function deliveryWorkBudgetReason(
     estimated += (payload * 11n) / 10n
   }
 
-  const outputLimit = profile.destination === 'download'
+  // Audio-only always builds the mix (and muxed payload) in memory, then
+  // writes once. File destination does not stream, so it cannot use the
+  // larger direct-file budget that classic StreamTarget export earns.
+  const memoryBuffered = profile.kind === 'audio-only' || profile.destination === 'download'
+  const outputLimit = memoryBuffered
     ? MAX_BUFFERED_EXPORT_ESTIMATE_BYTES
     : MAX_DIRECT_EXPORT_ESTIMATE_BYTES
   if (estimated > BigInt(outputLimit)) {
-    return profile.destination === 'download'
-      ? 'Estimated output exceeds the memory-buffered export limit. Choose a folder or shorten the range.'
-      : 'Estimated output exceeds the direct-file export limit.'
+    if (memoryBuffered) {
+      return profile.kind === 'audio-only'
+        ? 'Estimated output exceeds the memory-buffered export limit. Shorten the range.'
+        : 'Estimated output exceeds the memory-buffered export limit. Choose a folder or shorten the range.'
+    }
+    return 'Estimated output exceeds the direct-file export limit.'
   }
   return null
 }

@@ -409,6 +409,13 @@ async function cleanupExport(
   ) throw cleanupFailure
 }
 
+function isQuotaExceededCause(cause: unknown): boolean {
+  return typeof cause === 'object'
+    && cause !== null
+    && 'name' in cause
+    && (cause.name === 'QuotaExceededError' || cause.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+}
+
 export async function* exportTimeline(
   doc: TimelineDoc,
   settings: ExportSettings,
@@ -484,7 +491,13 @@ export async function* exportTimeline(
       sink
       && !sinkFinalized
       && typeof sink.commitPartial === 'function'
-      && (!operationalFailure || sink.preservePartialOnFailure === true)
+      && (
+        !operationalFailure
+        || (
+          sink.preservePartialOnFailure === true
+          && isQuotaExceededCause(operationalCause)
+        )
+      )
     ) {
       try {
         partial = await sink.commitPartial()
@@ -500,6 +513,8 @@ export async function* exportTimeline(
       operationalFailure,
       operationalCause,
     )
+    // Returning from finally would replace a thrown composite/media failure
+    // with a successful partial. Only cancel and quota may surface one.
     if (partial) return partial
   }
 }
