@@ -6,10 +6,14 @@ import {
   exportPresetById,
   updateExportProfile,
   type ExportContainer,
-  type ExportFileExtension,
   type ExportPresetId,
   type ExportProfile,
 } from '../domain/exportProfile'
+import {
+  deliveryProductLabel,
+  isDeliveryProfile,
+  type ExportSettingsUnion,
+} from '../domain/deliveryProduct'
 import type { TimelineDoc } from '../domain/schema'
 import { docDurationFrames } from '../domain/selectors'
 import type { ExportPreferenceSelectionId } from '../state/preferencesStore'
@@ -57,12 +61,12 @@ export function changeExportContainer(
 
 export function exportFileName(
   projectName: string,
-  extension: ExportFileExtension,
+  extension: string,
 ): string {
   let base = projectName
     .trim()
     .replace(/[. ]+$/g, '')
-    .replace(/\.(?:mp4|webm)$/i, '')
+    .replace(/\.(?:mp4|webm|wav|m4a|zip)$/i, '')
   base = base.replace(/[<>:"/\\|?*]/g, '-')
   base = Array.from(base, (character) =>
     character.charCodeAt(0) < 32 ? '-' : character,
@@ -124,6 +128,11 @@ export function exportAudioCodecLabel(profile: Readonly<ExportProfile>): string 
 export function exportProfileSummary(profile: Readonly<ExportProfile>): string {
   return `${profile.container.toUpperCase()} · ${exportVideoCodecLabel(profile)} · ` +
     exportAudioCodecLabel(profile)
+}
+
+export function exportSettingsLabel(settings: Readonly<ExportSettingsUnion>): string {
+  if (isDeliveryProfile(settings)) return deliveryProductLabel(settings)
+  return exportProfileSummary(settings)
 }
 
 export function presetLabel(id: ExportPresetId): string {

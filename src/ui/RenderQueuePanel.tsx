@@ -1,5 +1,6 @@
 import { useEffect,useState } from 'react'
-import type { ExportProfile } from '../domain/exportProfile'
+import type { ExportSettingsUnion } from '../domain/deliveryProduct'
+import { exportSettingsSummary } from '../domain/deliveryProduct'
 import { docDurationFrames } from '../domain/selectors'
 import { validateExportRange } from '../domain/exportRange'
 import { activeRenderJob } from '../domain/renderJobs'
@@ -8,7 +9,7 @@ import { useTransportStore } from '../state/transportStore'
 import { useRenderQueueStore } from '../state/renderQueueStore'
 import { initializeRenderQueue,refreshRenderQueue,enqueueRenderJob,runRenderQueue,chooseRenderDestination,cancelRenderQueue,retryRenderJob,reorderRenderJob,removeRenderJob,consumeRenderDownload,saveExportPreset,removeExportPreset,reportRenderQueueError } from '../app/renderQueueController'
 
-export function RenderQueuePanel({profile,onProfile,disabled}:{profile:Readonly<ExportProfile>|null;onProfile:(profile:Readonly<ExportProfile>)=>void;disabled:boolean}){
+export function RenderQueuePanel({profile,onProfile,disabled,chapters}:{profile:Readonly<ExportSettingsUnion>|null;onProfile:(profile:Readonly<ExportSettingsUnion>)=>void;disabled:boolean;chapters?:{mode:'off'|'sidecar'}}){
  const doc=useDocumentStore(state=>state.doc)
  const inOut=useTransportStore(state=>state.inOut)
  const view=useRenderQueueStore()
@@ -56,8 +57,8 @@ export function RenderQueuePanel({profile,onProfile,disabled}:{profile:Readonly<
    {mode==='markers'&&<div className="render-queue-actions">{(['Start','End'] as const).map(edge=>{const id=edge==='Start'?'render-start-marker':'render-end-marker';return <label key={edge} htmlFor={id}>{edge} marker <select id={id} value={edge==='Start'?startMarker:endMarker} onChange={event=>(edge==='Start'?setStartMarker:setEndMarker)(event.target.value)}><option value="">Choose marker</option>{markers.map(marker=><option key={marker.id} value={marker.id}>{marker.label||'Marker'} — frame {marker.frame}</option>)}</select></label>})}</div>}
    <p>{range?`Frames ${range.startFrame}–${range.endFrame} (End exclusive): ${range.endFrame-range.startFrame} of ${docDurationFrames(doc)} frames.`:rangeError}</p>
    <div className="render-queue-actions">
-    <button type="button" disabled={disabled||pending||!profile||!range||view.jobs.length>=100} onClick={()=>act(()=>enqueueRenderJob(name.trim()||doc.name,profile!,range!))}>Add render job</button>
-    <button type="button" disabled={disabled||pending||!!view.activeId||!!view.downloadId||!next} onClick={()=>act(()=>next?.profile.destination==='file'?chooseRenderDestination():runRenderQueue())}>{next?.profile.destination==='file'?'Choose file and run next':'Run next job'}</button>
+    <button type="button" disabled={disabled||pending||!profile||!range||view.jobs.length>=100} onClick={()=>act(()=>enqueueRenderJob(name.trim()||doc.name,profile!,range!,chapters))}>Add render job</button>
+    <button type="button" disabled={disabled||pending||!!view.activeId||!!view.downloadId||!next} onClick={()=>act(()=>next?.profile.destination==='file'||next?.profile.destination==='directory'?chooseRenderDestination():runRenderQueue())}>{next?.profile.destination==='file'?'Choose file and run next':next?.profile.destination==='directory'?'Choose folder and run next':'Run next job'}</button>
     <button type="button" disabled={!view.activeId} onClick={()=>act(()=>cancelRenderQueue())}>Cancel active job</button>
     <button type="button" disabled={pending} onClick={()=>act(refreshRenderQueue)}>Refresh queue</button>
    </div>
@@ -65,7 +66,7 @@ export function RenderQueuePanel({profile,onProfile,disabled}:{profile:Readonly<
    {view.activeId&&<p role="status">{view.background?'Last observed progress':'Rendering, including any audio pre-roll'}: {Math.floor(view.progress*100)}%</p>}
    {view.error&&<p role="status" aria-live="polite">{view.error}</p>}
    <ol className="render-job-list">{view.jobs.map((job,index)=><li key={job.id}>
-    <strong>{job.name}</strong> — {job.status} · frames {job.range.startFrame}–{job.range.endFrame} · {job.profile.container.toUpperCase()}/{job.profile.videoCodec} · attempt {job.attempts}
+    <strong>{job.name}</strong> — {job.status} · frames {job.range.startFrame}–{job.range.endFrame} · {exportSettingsSummary(job.profile)}{job.chapters.mode==='sidecar'?' · chapters sidecar':''} · attempt {job.attempts}
     <p>{job.message} {job.delivery==='uncertain'?'Inspect the selected file; cleanup could not be confirmed.':''}</p>
     <div className="render-queue-actions">
      <button type="button" aria-label={`Move ${job.name} up`} disabled={pending||activeRenderJob(job)||index===0} onClick={()=>act(()=>reorderRenderJob(job.id,-1))}>↑</button>

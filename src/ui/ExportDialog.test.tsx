@@ -18,6 +18,7 @@ import {
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   checkCurrentExportProfile,
+  checkCurrentExportSettings,
   getExportPresetCapabilities,
   type ExportCapabilitySnapshot,
 } from '../app/exportCapabilitiesController'
@@ -73,6 +74,7 @@ vi.mock('../app/exportController', () => ({
 vi.mock('../app/exportCapabilitiesController', () => ({
   getExportPresetCapabilities: vi.fn(),
   checkCurrentExportProfile: vi.fn(),
+  checkCurrentExportSettings: vi.fn(),
 }))
 
 vi.mock('../app/exportFilePicker', () => ({
@@ -242,6 +244,7 @@ const startMock = vi.mocked(startExport)
 const cancelMock = vi.mocked(cancelExport)
 const presetCapabilitiesMock = vi.mocked(getExportPresetCapabilities)
 const customCapabilityMock = vi.mocked(checkCurrentExportProfile)
+const settingsCapabilityMock = vi.mocked(checkCurrentExportSettings)
 const pickerAvailabilityMock = vi.mocked(getExportFilePickerAvailability)
 const requestFileDestinationMock = vi.mocked(requestExportFileDestination)
 function pluginClip(): Clip {
@@ -352,6 +355,20 @@ beforeEach(() => {
     supported: true,
     reason: null,
   }))
+  settingsCapabilityMock.mockReset()
+  settingsCapabilityMock.mockImplementation(async (settings) => {
+    const kind = settings && typeof settings === 'object' && 'kind' in settings
+      ? (settings as { readonly kind?: string }).kind
+      : undefined
+    if (kind === 'alpha-video') {
+      return {
+        settings,
+        supported: false,
+        reason: 'Alpha video is offered only after a local encode/decode proof.',
+      }
+    }
+    return { settings, supported: true, reason: null }
+  })
   pickerAvailabilityMock.mockReset()
   pickerAvailabilityMock.mockReturnValue({ available: true, reason: null })
   requestFileDestinationMock.mockReset()
@@ -387,7 +404,7 @@ async function readyStartButton(): Promise<HTMLButtonElement> {
 
 function profileRadio(label: string): HTMLInputElement {
   return screen.getByRole('radio', {
-    name: new RegExp(`^${label}`),
+    name: label === 'Auto' ? /^Auto(?![a-z])/ : new RegExp(`^${label}`),
   }) as HTMLInputElement
 }
 
@@ -1328,7 +1345,9 @@ describe('Export dialog lifecycle', () => {
     await openDialog()
     fireEvent.click(await readyStartButton())
     fireEvent.click(await screen.findByRole('button', { name: /Review bypass/ }))
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox', {
+      name: /I understand these exact effects will be omitted/i,
+    }))
     fireEvent.click(screen.getByRole('button', { name: 'Export with listed plugins bypassed' }))
     await waitFor(() => expect(port.approveReviewedBlockers).toHaveBeenCalledOnce())
     expect(screen.getByRole('button', { name: 'Back to blocked effects' })).toBeDisabled()
@@ -1340,5 +1359,100 @@ describe('Export dialog lifecycle', () => {
       await approval.promise
     })
     expect(port.start).not.toHaveBeenCalled()
+  })
+})
+
+describe('Export dialog alternative delivery', () => {
+  test('offers PNG and audio-only, and keeps alpha disabled until a local proof exists', async () => {
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+
+    expect(screen.getByRole('radio', { name: 'MP4 / WebM video' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'PNG image sequence' })).toBeEnabled()
+    expect(screen.getByRole('radio', { name: 'Audio only' })).toBeEnabled()
+    expect(screen.getByRole('radio', { name: /Alpha video/ })).toBeDisabled()
+    expect(screen.getByRole('checkbox', {
+      name: /Include chapter sidecar JSON/,
+    })).not.toBeChecked()
+  })
+
+  test('starts a PNG sequence download with the tagged image-sequence profile', async () => {
+    startMock.mockResolvedValue({
+      destination: 'download',
+      kind: 'image-sequence',
+      buffer: new Uint8Array([1, 2, 3, 4]).buffer,
+      mimeType: 'application/zip',
+      fileExtension: 'zip',
+      label: 'PNG sequence',
+      completion: 'complete',
+    })
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+    fireEvent.click(screen.getByRole('radio', { name: 'PNG image sequence' }))
+    fireEvent.click(await readyStartButton())
+
+    await waitFor(() => expect(startMock).toHaveBeenCalledOnce())
+    expect(startMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'image-sequence',
+        format: 'png',
+        destination: 'download',
+        fileNamePrefix: 'frame',
+      }),
+      { onProgress: expect.any(Function) },
+    )
+    expect(await screen.findByRole('link', { name: 'Download PNG sequence' })).toBeInTheDocument()
+  })
+
+  test('starts WAV audio-only without a video profile', async () => {
+    startMock.mockResolvedValue({
+      destination: 'download',
+      kind: 'audio-only',
+      buffer: new Uint8Array([1, 2, 3, 4]).buffer,
+      mimeType: 'audio/wav',
+      fileExtension: 'wav',
+      label: 'WAV',
+      completion: 'complete',
+    })
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+    fireEvent.click(screen.getByRole('radio', { name: 'Audio only' }))
+    fireEvent.click(await readyStartButton())
+
+    await waitFor(() => expect(startMock).toHaveBeenCalledOnce())
+    expect(startMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'audio-only',
+        codec: 'pcm-s16',
+        container: 'wav',
+      }),
+      { onProgress: expect.any(Function) },
+    )
+    expect(settingsCapabilityMock).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'audio-only', codec: 'pcm-s16' }),
+    )
+  })
+
+  test('passes chapter sidecar on classic video only when the checkbox is on', async () => {
+    startMock.mockResolvedValue(exportResult(DEFAULT_EXPORT_PROFILE))
+    render(<Toolbar />)
+    await openDialog()
+    await readyStartButton()
+    fireEvent.click(screen.getByRole('checkbox', {
+      name: /Include chapter sidecar JSON/,
+    }))
+    fireEvent.click(await readyStartButton())
+
+    await waitFor(() => expect(startMock).toHaveBeenCalledOnce())
+    expect(startMock).toHaveBeenCalledWith(
+      DEFAULT_EXPORT_PROFILE,
+      {
+        onProgress: expect.any(Function),
+        chapters: { mode: 'sidecar' },
+      },
+    )
   })
 })

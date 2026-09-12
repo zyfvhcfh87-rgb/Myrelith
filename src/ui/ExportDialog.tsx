@@ -17,14 +17,33 @@ import {
 import {
   DEFAULT_EXPORT_PROFILE,
   EXPORT_PRESETS,
+  updateExportProfile,
   type ExportProfile,
   type ExportSelectionId,
 } from '../domain/exportProfile'
+import {
+  DEFAULT_ALPHA_VIDEO_PROFILE,
+  DEFAULT_AUDIO_ONLY_PROFILE,
+  DEFAULT_IMAGE_SEQUENCE_PROFILE,
+  exportSettingsIncludesAudio,
+  exportSettingsIncludesVisual,
+  isDeliveryProfile,
+  parseExportSettings,
+  type AlphaVideoCodec,
+  type AudioOnlyContainer,
+  type ChapterMode,
+  type ExportSettingsUnion,
+} from '../domain/deliveryProduct'
 import {
   getExportFilePickerAvailability,
   requestExportFileDestination,
   type ExportFileDestinationCapability,
 } from '../app/exportFilePicker'
+import {
+  getExportDirectoryPickerAvailability,
+  requestExportDirectoryDestination,
+  type ExportDirectoryDestinationCapability,
+} from '../app/exportDirectoryPicker'
 import type { TimelineDoc } from '../domain/schema'
 import {
   docDurationFrames,
@@ -40,6 +59,7 @@ import {
   ExportDialogActions,
   ExportDialogHeader,
   ExportPhaseContent,
+  type DeliveryKindUi,
   type DownloadReady,
   type ExportPhase,
   type SavedFileReady,
@@ -56,7 +76,6 @@ import type { PluginEffectIssueView } from './plugins/pluginUiTypes'
 import type { PluginPreparedExportPort } from '../app/pluginPreparedExportOwner'
 
 type ExportControllerModule = typeof import('../app/exportController')
-type ExportSettings = Parameters<ExportControllerModule['startExport']>[0]
 type ExportCapabilitiesModule =
   typeof import('../app/exportCapabilitiesController')
 type ExportCapabilitySnapshot = Awaited<ReturnType<
@@ -145,11 +164,89 @@ interface ExportDialogProps {
   onClose(): void
 }
 
+function deliverySettings(
+  kind: DeliveryKindUi,
+  drafts: {
+    readonly pngPrefix: string
+    readonly pngOverwrite: boolean
+    readonly pngDestination: 'download' | 'directory'
+    readonly audioContainer: AudioOnlyContainer
+    readonly alphaCodec: AlphaVideoCodec
+    readonly chapterMode: ChapterMode
+    readonly videoAudio: Readonly<ExportProfile>
+  },
+): ExportSettingsUnion {
+  if (kind === 'image-sequence') {
+    return parseExportSettings({
+      ...DEFAULT_IMAGE_SEQUENCE_PROFILE,
+      fileNamePrefix: drafts.pngPrefix,
+      overwriteExisting: drafts.pngOverwrite,
+      destination: drafts.pngDestination,
+      chapters: { mode: drafts.chapterMode },
+    })
+  }
+  if (kind === 'audio-only') {
+    const base = drafts.audioContainer === 'wav'
+      ? DEFAULT_AUDIO_ONLY_PROFILE
+      : drafts.audioContainer === 'mp4'
+        ? {
+            ...DEFAULT_AUDIO_ONLY_PROFILE,
+            container: 'mp4' as const,
+            codec: 'aac' as const,
+            audioBitrate: 192_000,
+            audioBitrateMode: 'variable' as const,
+            mimeType: 'audio/mp4' as const,
+            fileExtension: 'm4a' as const,
+          }
+        : {
+            ...DEFAULT_AUDIO_ONLY_PROFILE,
+            container: 'webm' as const,
+            codec: 'opus' as const,
+            audioBitrate: 128_000,
+            audioBitrateMode: 'variable' as const,
+            mimeType: 'audio/webm' as const,
+            fileExtension: 'webm' as const,
+          }
+    return parseExportSettings({
+      ...base,
+      destination: drafts.videoAudio.destination === 'file' ? 'file' : 'download',
+      chapters: { mode: drafts.chapterMode },
+    })
+  }
+  if (kind === 'alpha-video') {
+    const audioOff = drafts.videoAudio.audioChannelLayout === 'off'
+    return parseExportSettings({
+      ...DEFAULT_ALPHA_VIDEO_PROFILE,
+      videoCodec: drafts.alphaCodec,
+      audioCodec: audioOff ? null : 'opus',
+      audioChannelLayout: audioOff ? 'off' : drafts.videoAudio.audioChannelLayout,
+      audioBitrate: audioOff ? null : (drafts.videoAudio.audioBitrate ?? 192_000),
+      audioBitrateMode: audioOff ? null : (drafts.videoAudio.audioBitrateMode ?? 'variable'),
+      destination: drafts.videoAudio.destination,
+      chapters: { mode: drafts.chapterMode },
+    })
+  }
+  return drafts.videoAudio
+}
+
 function errorMessage(cause: unknown): string {
   if (cause instanceof Error && cause.message.trim() !== '') {
     return cause.message
   }
   return 'Export failed. Please try again.'
+}
+
+function resultLabel(result: {
+  readonly label?: string
+  readonly completion?: 'complete' | 'partial'
+  readonly profile?: { readonly container: string }
+}): string {
+  if (result.label) {
+    return result.completion === 'partial' ? `${result.label} (partial)` : result.label
+  }
+  if (result.profile?.container === 'webm') return 'WebM'
+  if (result.profile?.container === 'mp4') return 'MP4'
+  return 'Export'
 }
 
 function directFileFailureMessage(cause: unknown): string {
@@ -202,7 +299,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   const capabilityTokenRef = useRef(0)
   const customCapabilityTokenRef = useRef(0)
   const previousSelectedSupportedRef = useRef<boolean | null>(null)
-  const runDestinationRef = useRef<'download' | 'file'>('download')
+  const runDestinationRef = useRef<'download' | 'file' | 'directory'>('download')
   const [phase, setPhase] = useState<ExportPhase>('configure')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -230,6 +327,23 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   const [customCapabilityState, setCustomCapabilityState] =
     useState<Readonly<CustomCapabilityState> | null>(null)
   const [advancedDraftsValid, setAdvancedDraftsValid] = useState(true)
+  const [deliveryKind, setDeliveryKind] = useState<DeliveryKindUi>('video')
+  const [chapterMode, setChapterMode] = useState<ChapterMode>('off')
+  const [pngPrefix, setPngPrefix] = useState('frame')
+  const [pngOverwrite, setPngOverwrite] = useState(false)
+  const [pngDestination, setPngDestination] = useState<'download' | 'directory'>('download')
+  const [audioContainer, setAudioContainer] = useState<AudioOnlyContainer>('wav')
+  const [alphaCodec, setAlphaCodec] = useState<AlphaVideoCodec>('vp9')
+  const [alphaVp9Supported, setAlphaVp9Supported] = useState<boolean | null>(null)
+  const [alphaAv1Supported, setAlphaAv1Supported] = useState<boolean | null>(null)
+  const [alphaReason, setAlphaReason] = useState<string | null>(null)
+  const [deliveryCapability, setDeliveryCapability] = useState<{
+    readonly supported: boolean | null
+    readonly reason: string | null
+  }>({ supported: null, reason: null })
+  const [directoryPickerAvailability] = useState(
+    () => getExportDirectoryPickerAvailability(),
+  )
   const titleId = useId()
   const descriptionId = useId()
   const progressId = useId()
@@ -296,15 +410,53 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     setPresetCapabilityState({ status: 'loading', doc: requestDoc })
     void loadExportCapabilities()
       .then(async (controller) => {
-        return controller.getExportPresetCapabilities()
-      })
-      .then((snapshot) => {
+        const snapshot = await controller.getExportPresetCapabilities()
         if (!mountedRef.current || token !== capabilityTokenRef.current) return
         setPresetCapabilityState({
           status: 'ready',
           doc: requestDoc,
           snapshot,
         })
+        try {
+          const checkSettings = controller.checkCurrentExportSettings
+          if (typeof checkSettings !== 'function') {
+            setAlphaVp9Supported(false)
+            setAlphaAv1Supported(false)
+            setAlphaReason(
+              'Alpha video is offered only after a local encode/decode proof.',
+            )
+            return
+          }
+          const [vp9, av1] = await Promise.all([
+            checkSettings({
+              ...DEFAULT_ALPHA_VIDEO_PROFILE,
+              videoCodec: 'vp9',
+              chapters: { mode: 'off' },
+            }),
+            checkSettings({
+              ...DEFAULT_ALPHA_VIDEO_PROFILE,
+              videoCodec: 'av1',
+              chapters: { mode: 'off' },
+            }),
+          ])
+          if (!mountedRef.current || token !== capabilityTokenRef.current) return
+          setAlphaVp9Supported(vp9.supported)
+          setAlphaAv1Supported(av1.supported)
+          setAlphaReason(
+            vp9.supported || av1.supported
+              ? null
+              : vp9.reason ?? av1.reason,
+          )
+          if (vp9.supported) setAlphaCodec('vp9')
+          else if (av1.supported) setAlphaCodec('av1')
+        } catch {
+          if (!mountedRef.current || token !== capabilityTokenRef.current) return
+          setAlphaVp9Supported(false)
+          setAlphaAv1Supported(false)
+          setAlphaReason(
+            'Alpha video is offered only after a local encode/decode proof.',
+          )
+        }
       })
       .catch((cause) => {
         if (!mountedRef.current || token !== capabilityTokenRef.current) return
@@ -335,9 +487,40 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     setCustomCapabilityState(null)
     setCustomProfile(profile)
     setSelectionId('custom')
+    setDeliveryKind('video')
     setError(null)
     setFilePickerMessage(null)
   }, [invalidatePluginPreparation])
+
+  const applyExportSettings = useCallback((
+    profile: Readonly<ExportSettingsUnion>,
+  ): void => {
+    if (isDeliveryProfile(profile)) {
+      invalidatePluginPreparation('plugin-export-profile-changed')
+      setPluginBlock(null)
+      setDeliveryKind(profile.kind)
+      setChapterMode(profile.chapters.mode)
+      if (profile.kind === 'image-sequence') {
+        setPngPrefix(profile.fileNamePrefix)
+        setPngOverwrite(profile.overwriteExisting)
+        setPngDestination(profile.destination)
+      } else if (profile.kind === 'audio-only') {
+        setAudioContainer(profile.container)
+        setCustomProfile(updateExportProfile(customProfile, {
+          destination: profile.destination,
+        }))
+      } else {
+        setAlphaCodec(profile.videoCodec)
+        setCustomProfile(updateExportProfile(customProfile, {
+          destination: profile.destination,
+        }))
+      }
+      setError(null)
+      setFilePickerMessage(null)
+      return
+    }
+    selectCustomProfile(profile)
+  }, [customProfile, invalidatePluginPreparation, selectCustomProfile])
 
   const currentPresetCapability = presetCapabilityState.doc === doc
     ? presetCapabilityState
@@ -403,6 +586,36 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     activeProfile = null
   }
 
+  const builtDelivery = deliverySettings(deliveryKind, {
+    pngPrefix,
+    pngOverwrite,
+    pngDestination,
+    audioContainer,
+    alphaCodec,
+    chapterMode,
+    videoAudio: displayProfile,
+  })
+  const exportSettings: Readonly<ExportSettingsUnion> | null = deliveryKind === 'video'
+    ? activeProfile
+    : builtDelivery
+
+  if (deliveryKind !== 'video') {
+    if (
+      pngDestination === 'directory'
+      && deliveryKind === 'image-sequence'
+      && !directoryPickerAvailability.available
+    ) {
+      selectedSupported = false
+      selectedReason = directoryPickerAvailability.reason
+    } else if (deliveryKind === 'alpha-video' && alphaVp9Supported !== true && alphaAv1Supported !== true) {
+      selectedSupported = false
+      selectedReason = alphaReason ?? 'Alpha video is unavailable on this browser.'
+    } else {
+      selectedSupported = deliveryCapability.supported
+      selectedReason = deliveryCapability.reason
+    }
+  }
+
   const presetAvailability: readonly Readonly<ExportPresetAvailability>[] = [
     {
       selectionId: 'auto',
@@ -429,7 +642,10 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   const offline = [...projectOutputMediaAssetIds(
     project,
     activeSequenceId,
-    displayProfile.audioChannelLayout !== 'off',
+    exportSettings
+      ? exportSettingsIncludesAudio(doc, exportSettings)
+      : displayProfile.audioChannelLayout !== 'off',
+    exportSettings ? exportSettingsIncludesVisual(exportSettings) : true,
   )].filter((assetId) => !mediaAssets.has(assetId))
   const offlineExportMessage = offline.length === 0
     ? null
@@ -443,9 +659,9 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     && hasContent
     && offlineExportMessage === null
     && selectedSupported === true
-    && activeProfile !== null
-    && advancedDraftsValid
-  const requiresPreparedExport = projectHasOutputPluginEffects(
+    && exportSettings !== null
+    && (deliveryKind !== 'video' || advancedDraftsValid)
+  const requiresPreparedExport = deliveryKind !== 'audio-only' && projectHasOutputPluginEffects(
     project,
     activeSequenceId,
   )
@@ -502,12 +718,12 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   }
 
   const beginExport = async (): Promise<void> => {
-    const exportSettings: ExportSettings | null = activeProfile
+    const runSettings = exportSettings
     if (
       runningRef.current
       || preparationInFlightRef.current
       || !canStart
-      || exportSettings === null
+      || runSettings === null
     ) return
     if (requiresPreparedExport && preparedTokenRef.current === null) {
       preparationInFlightRef.current = true
@@ -523,7 +739,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
           return
         }
         preparedPortRef.current = port
-        const prepared = await port.prepare(exportSettings, abort.signal)
+        const prepared = await port.prepare(runSettings, abort.signal)
         if (!mountedRef.current || generation !== preparationGenerationRef.current) {
           void port.cancel('plugin-export-stale-prepare').catch(() => undefined)
           return
@@ -534,7 +750,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
         }
         if (prepared.status !== 'ready') throw new Error('Plugin export checks did not produce a ready attempt.')
         preparedTokenRef.current = prepared.token
-        if (exportSettings.destination === 'file') {
+        if (runSettings.destination === 'file') {
           setFilePickerMessage('Plugin checks complete. Choose a file to begin this prepared export.')
           return
         }
@@ -555,7 +771,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     if (requiresPreparedExport && (!preparedPort || !preparedToken)) return
     runningRef.current = true
     cancelRequestedRef.current = false
-    runDestinationRef.current = exportSettings.destination
+    runDestinationRef.current = runSettings.destination
     const token = ++runTokenRef.current
     cancelProgressFrame()
     revokeDownload()
@@ -567,14 +783,14 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     setFilePickerMessage(null)
 
     let fileDestination: ExportFileDestinationCapability | undefined
+    let directoryDestination: ExportDirectoryDestinationCapability | undefined
 
     try {
-      if (exportSettings.destination === 'file') {
-        // Keep this call before the first await/dynamic import: the native
-        // save picker requires the Start button's transient user activation.
+      if (runSettings.destination === 'file') {
+        const extension = 'fileExtension' in runSettings ? runSettings.fileExtension : 'bin'
         const pickerPromise = requestExportFileDestination(
-          exportSettings,
-          exportFileName(doc.name, exportSettings.fileExtension),
+          runSettings,
+          exportFileName(doc.name, extension),
         )
         setPhase('choosing-file')
         const pickerResult = await pickerPromise
@@ -594,6 +810,26 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
         fileDestination = pickerResult.destination
       }
 
+      if (runSettings.destination === 'directory') {
+        const pickerPromise = requestExportDirectoryDestination()
+        setPhase('choosing-directory')
+        const pickerResult = await pickerPromise
+        if (!mountedRef.current || token !== runTokenRef.current) return
+        if (pickerResult.status === 'cancelled') {
+          runningRef.current = false
+          setFilePickerMessage('No folder selected.')
+          setPhase('configure')
+          return
+        }
+        if (pickerResult.status !== 'selected') {
+          runningRef.current = false
+          setError(pickerResult.reason)
+          setPhase('configure')
+          return
+        }
+        directoryDestination = pickerResult.destination
+      }
+
       setPhase('running')
       const controller = requiresPreparedExport ? null : await loadExportController()
       if (!mountedRef.current || token !== runTokenRef.current) {
@@ -611,12 +847,14 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       controllerRunStartedRef.current = true
       const callbacks = {
         onProgress: (value: number) => publishProgress(token, value),
+        ...(chapterMode === 'sidecar' ? { chapters: { mode: 'sidecar' as const } } : {}),
         ...(fileDestination ? { fileDestination } : {}),
+        ...(directoryDestination ? { directoryDestination } : {}),
       }
       if (requiresPreparedExport) preparedTokenRef.current = null
       const result = requiresPreparedExport
         ? await preparedPort!.start(preparedToken!, callbacks)
-        : await controller!.startExport(exportSettings, callbacks)
+        : await controller!.startExport(runSettings, callbacks)
       controllerRunStartedRef.current = false
       runningRef.current = false
       cancelRequestedRef.current = false
@@ -630,7 +868,15 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
 
       setProgress(1)
       latestProgressRef.current = 1
-      const formatLabel = result.profile.container === 'webm' ? 'WebM' : 'MP4'
+      const formatLabel = resultLabel(result)
+      if (result.destination === 'directory') {
+        setSavedFile({
+          fileName: result.directoryName,
+          formatLabel,
+        })
+        setPhase('saved')
+        return
+      }
       if (result.destination === 'file') {
         setSavedFile({
           fileName: result.fileName,
@@ -761,6 +1007,77 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
   }, [doc, refreshCapabilities])
 
   useEffect(() => {
+    if (deliveryKind === 'video') {
+      setDeliveryCapability({ supported: true, reason: null })
+      return
+    }
+    let cancelled = false
+    const settings = deliverySettings(deliveryKind, {
+      pngPrefix,
+      pngOverwrite,
+      pngDestination,
+      audioContainer,
+      alphaCodec,
+      chapterMode,
+      videoAudio: profileForSelectionFallback(selectionId, customProfile),
+    })
+    void loadExportCapabilities()
+      .then(async (controller) => {
+        let check: ExportCapabilitiesModule['checkCurrentExportSettings'] | undefined
+        try {
+          check = controller.checkCurrentExportSettings
+        } catch {
+          check = undefined
+        }
+        if (typeof check !== 'function') {
+          if (deliveryKind === 'alpha-video') {
+            return {
+              supported: false,
+              reason: 'Alpha video is offered only after a local encode/decode proof.',
+            }
+          }
+          if (deliveryKind === 'audio-only' && audioContainer !== 'wav') {
+            return {
+              supported: false,
+              reason: 'Compressed audio-only requires a local encoder proof. No codec was substituted.',
+            }
+          }
+          return { supported: true, reason: null as string | null }
+        }
+        return check(settings)
+      })
+      .then((result) => {
+        if (!cancelled) {
+          setDeliveryCapability({
+            supported: result.supported,
+            reason: result.reason,
+          })
+        }
+      })
+      .catch((cause) => {
+        if (!cancelled) {
+          setDeliveryCapability({
+            supported: false,
+            reason: errorMessage(cause),
+          })
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    deliveryKind,
+    pngPrefix,
+    pngOverwrite,
+    pngDestination,
+    audioContainer,
+    alphaCodec,
+    chapterMode,
+    selectionId,
+    customProfile,
+  ])
+
+  useEffect(() => {
     if (selectionId !== 'custom') {
       customCapabilityTokenRef.current++
       setCustomCapabilityState(null)
@@ -869,6 +1186,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
 
   const busy = preparingPluginExport
     || phase === 'choosing-file'
+    || phase === 'choosing-directory'
     || phase === 'running'
     || phase === 'cancelling'
   const percent = Math.round(progress * 100)
@@ -894,7 +1212,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       <div className="export-dialog-card">
         <ExportDialogHeader
           titleId={titleId}
-          busy={phase === 'choosing-file' || phase === 'running' || phase === 'cancelling'}
+          busy={phase === 'choosing-file' || phase === 'choosing-directory' || phase === 'running' || phase === 'cancelling'}
           closeButtonRef={closeButtonRef}
           onClose={closeDialog}
         />
@@ -930,9 +1248,37 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
             onChangeProfile={selectCustomProfile}
             onDraftValidityChange={setAdvancedDraftsValid}
             onRetryCapabilities={() => refreshCapabilities(doc)}
+            deliveryKind={deliveryKind}
+            onDeliveryKind={(kind) => {
+              invalidatePluginPreparation('plugin-export-product-changed')
+              setDeliveryKind(kind)
+              setError(null)
+              setDeliveryCapability({ supported: kind === 'video' ? true : null, reason: null })
+            }}
+            chapterMode={chapterMode}
+            onChapterMode={setChapterMode}
+            pngPrefix={pngPrefix}
+            onPngPrefix={setPngPrefix}
+            pngOverwrite={pngOverwrite}
+            onPngOverwrite={setPngOverwrite}
+            pngDestination={pngDestination}
+            onPngDestination={setPngDestination}
+            audioContainer={audioContainer}
+            onAudioContainer={setAudioContainer}
+            alphaCodec={alphaCodec}
+            onAlphaCodec={setAlphaCodec}
+            alphaVp9Supported={alphaVp9Supported}
+            alphaAv1Supported={alphaAv1Supported}
+            alphaReason={alphaReason}
+            directoryPickerAvailability={directoryPickerAvailability}
           />
 
-          <RenderQueuePanel profile={activeProfile} onProfile={selectCustomProfile} disabled={phase !== 'configure' || !advancedDraftsValid} />
+          <RenderQueuePanel
+            profile={exportSettings}
+            onProfile={applyExportSettings}
+            disabled={phase !== 'configure' || (deliveryKind === 'video' && !advancedDraftsValid)}
+            chapters={{ mode: chapterMode }}
+          />
 
           <ExportPhaseContent
             phase={phase}
@@ -977,7 +1323,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
           selectedSupported={selectedSupported}
           advancedDraftsValid={advancedDraftsValid}
           error={error}
-          displayProfile={displayProfile}
+          outputDestination={exportSettings?.destination ?? displayProfile.destination}
           download={download}
           savedFile={savedFile}
           onClose={closeDialog}

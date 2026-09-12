@@ -634,6 +634,27 @@
   }
 }
 
+.export-delivery-kind {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #2c3139;
+  border-radius: 8px;
+}
+
+.export-delivery-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.export-delivery-options {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
 .render-queue { border-top: 1px solid var(--border, #555); margin-top: 1rem; padding-top: 1rem; }
 .render-queue summary { cursor: pointer; padding: .5rem 0; font-weight: 600; }
 .render-queue label { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .5rem 0; }
