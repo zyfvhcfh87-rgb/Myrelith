@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Issue 208 compatibility inventory</title>
+  </head>
+  <body>
+    <main>
+      <h1>Issue 208 compatibility inventory</h1>
+      <p>Records capability facts. This is not a Firefox or Safari product claim.</p>
+      <button type="button">Run inventory</button>
+      <p role="status">Ready</p>
+    </main>
+    <script type="module">
+      import { runCompatibilityInventoryBrowserGate } from '/src/dev/issue208/compatibilityInventoryGate.ts'
+      const button = document.querySelector('button')
+      const status = document.querySelector('[role=status]')
+      button.addEventListener('click', async () => {
+        status.textContent = 'Running'
+        try {
+          const evidence = await runCompatibilityInventoryBrowserGate()
+          globalThis.__issue208InventoryResult = evidence
+          status.textContent = 'Passed'
+        } catch (error) {
+          const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+          globalThis.__issue208InventoryError = detail
+          status.textContent = `Failed: ${detail}`
+        }
+      })
+    </script>
+  </body>
+</html>

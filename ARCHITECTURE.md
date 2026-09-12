@@ -29,7 +29,7 @@ non-negotiable rules. Re-read it at the start of every coding session.
   to wire them together. ui components may import those controllers as
   their facade — but still never engine/, pipeline/, or workers/ directly.
 - The opt-in Issue #54 and Issue #70 evidence panels plus the checked-in Issue
-  #77, Issue #108, Issue #109, Issue #110, and Issue #111 browser gates have narrow,
+  #77, Issue #108, Issue #109, Issue #110, Issue #111, and Issue #208 browser gates have narrow,
   architecture-guarded dev exceptions. `dev/performance/runtime.ts` may compose
   existing `app/` controllers with `state/` and its bounded Mediabunny fixture
   generator;
@@ -71,6 +71,18 @@ non-negotiable rules. Re-read it at the start of every coding session.
   re-export the promoted production backend from `pipeline/lensRemapWebgl.ts`.
   Its gate may import only those sibling dev modules. Only
   `scripts/issue111/lens-remap-gate.html` imports the gate.
+  Issue #208's disposable Firefox/Safari capability inventory lives under
+  `dev/issue208/`. The serializable contract and pure decision import nothing
+  from production layers. The browser gate may compose existing `app/`
+  capability owners, browser-free `domain/` export presets, and the
+  production Mediabunny export-capability probe to record facts; its worker
+  may import only the sibling contract. Only
+  `scripts/issue208/compatibility-inventory-gate.html` may import the gate.
+  The standalone `scripts/issue208/run-inventory.mjs` runner may only serve,
+  launch, and record bounded evidence; it must not import production source
+  or treat Playwright Linux WebKit as Safari. The inventory never changes
+  the public Chromium support claim, adds a WebCodecs polyfill, or
+  introduces a server fallback.
   No ordinary application entry may import any gate, and no other `dev/`
   module may reach those layers. Only
   the build-gated exact route in `main.tsx` may import the Issue #54 UI, and
