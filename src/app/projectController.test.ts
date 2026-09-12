@@ -1872,7 +1872,7 @@ describe('portable project resume', () => {
     expect(deniedDeps.inspectMedia).not.toHaveBeenCalled()
 
     const changed = makeAsset({
-      lastModified: expected.lastModified + 1,
+      durationMicroseconds: expected.durationMicroseconds + 1_000_000,
       objectUrl: 'blob:changed',
     })
     const changedDeps = makeDeps({

@@ -1232,10 +1232,9 @@ async function restoreRememberedDescriptor(
     if (!pendingIsCurrent(pending, generation)) {
       return { status: 'cancelled' }
     }
-    if (
-      file.size !== descriptor.size
-      || file.lastModified !== descriptor.lastModified
-    ) {
+    // Size is the durable handle identity. Collected copies get a new write-time
+    // lastModified that the project descriptor cannot preserve.
+    if (file.size !== descriptor.size) {
       identityMismatch = true
       throw new Error('the remembered file changed since this project was saved')
     }
@@ -1277,10 +1276,6 @@ async function restoreRememberedDescriptor(
         message: inspection.compatibility.detail
           ?? `"${descriptor.fileName}" is not compatible in this browser. Open offline to relink it later.`,
       }
-    }
-    if (descriptor.lastModified !== candidate.asset.lastModified) {
-      identityMismatch = true
-      throw new Error('the remembered file changed since this project was saved')
     }
     const connected = relinkedAsset(
       descriptor,

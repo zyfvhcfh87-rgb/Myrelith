@@ -23,9 +23,14 @@ import {
   openCollectedProject,
   openLoadedCollectedArchive,
   openProjectFile,
+  openRecentProject,
   resetProjectController,
   type ProjectControllerDeps,
 } from './projectController'
+import {
+  LOCAL_PROJECT_RECORD_VERSION,
+  type RecentProjectRecord,
+} from './localProjectStorage'
 import type { LoadedCollectedArchive } from './collectMediaArchive'
 import type { CollectMediaDirectoryHandle } from './collectMediaArchive'
 
@@ -67,6 +72,10 @@ class MemoryFileHandle {
 
   async getFile(): Promise<File> {
     return new File([this.bytes], this.name, { type: 'video/mp4', lastModified: 9_999 })
+  }
+
+  async isSameEntry(other: FileSystemHandle): Promise<boolean> {
+    return other === this
   }
 
   async createWritable(): Promise<FileSystemWritableFileStream> {
@@ -304,6 +313,98 @@ describe('collected archive reopen', () => {
     expect(useMediaStore.getState().assets.has(original.id)).toBe(true)
     expect(deps.loadMediaHandle).not.toHaveBeenCalled()
     expect(deps.rememberMediaHandle).toHaveBeenCalledTimes(1)
+  })
+
+  test('a later Recent open reconnects remembered collected copies whose write time differs', async () => {
+    const original = makeAsset()
+    const serialized = serializeProjectFile(makeProject([descriptorFor(original)]))
+    const root = new MemoryDirectory()
+    const media = new MemoryDirectory()
+    root.directories.set('media', media)
+    const collectedHandle = new MemoryFileHandle('source.mp4', new Uint8Array(8))
+    media.files.set('source.mp4', collectedHandle)
+    const projectHandle = new MemoryFileHandle(
+      'Collected.myrelith',
+      new TextEncoder().encode(serialized),
+    )
+    root.files.set('Collected.myrelith', projectHandle)
+    const archive: LoadedCollectedArchive = {
+      root: root as unknown as CollectMediaDirectoryHandle,
+      complete: true,
+      projectFile: await projectHandle.getFile(),
+      projectHandle,
+      manifest: {
+        format: 'myrelith-collect-media',
+        formatVersion: 1,
+        status: 'complete',
+        createdAt: 1,
+        projectFileName: 'Collected.myrelith',
+        inclusionPolicy: { includeProxies: false, includeTitleTemplates: false },
+        items: [{
+          id: original.id,
+          kind: 'asset',
+          disposition: 'included',
+          originalFileName: 'source.mp4',
+          collectedRelativePath: 'media/source.mp4',
+          size: 8,
+          lastModified: 111,
+          mimeType: 'video/mp4',
+          fingerprint: null,
+          reason: 'copied',
+          error: null,
+        }],
+        errors: [],
+      },
+    }
+    const firstDeps = makeDeps()
+    await expect(openLoadedCollectedArchive(archive, firstDeps)).resolves.toEqual({
+      status: 'ready',
+    })
+    await expect(activateResumedProject(firstDeps)).resolves.toEqual({
+      status: 'activated',
+    })
+    expect(firstDeps.rememberMediaHandle).toHaveBeenCalledTimes(1)
+
+    await resetProjectController()
+    useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE, screen: 'resume' })
+    useMediaStore.getState().clearAssets()
+
+    const collectedFile = await collectedHandle.getFile()
+    expect(collectedFile.lastModified).not.toBe(original.lastModified)
+    const analyzed = makeAsset({
+      objectUrl: 'blob:remembered-collected',
+      lastModified: collectedFile.lastModified,
+    })
+    const record: RecentProjectRecord = {
+      version: LOCAL_PROJECT_RECORD_VERSION,
+      documentId: 'doc-collected',
+      projectName: 'Collected',
+      fileName: 'Collected.myrelith',
+      lastOpenedAt: 10,
+      handle: projectHandle,
+      projectBindingId: 'local-project:collected',
+    }
+    const recentDeps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      getRecentProject: vi.fn(() => record),
+      requestProjectPermission: vi.fn(async () => 'granted' as const),
+      loadMediaHandle: vi.fn(async () => collectedHandle),
+      queryMediaPermission: vi.fn(async () => 'granted' as const),
+      inspectMedia: vi.fn(async () => readyInspection(analyzed)),
+    })
+
+    await expect(openRecentProject('doc-collected', recentDeps)).resolves.toEqual({
+      status: 'ready',
+    })
+    expect(useProjectSessionStore.getState().candidate?.assets[0]?.status)
+      .toBe('ready')
+    expect(recentDeps.forgetMediaHandle).not.toHaveBeenCalled()
+    await expect(activateResumedProject(recentDeps)).resolves.toEqual({
+      status: 'activated',
+    })
+    expect(useMediaStore.getState().assets.has(original.id)).toBe(true)
+    expect(useMediaStore.getState().assets.get(original.id)?.lastModified)
+      .toBe(original.lastModified)
   })
 
   test('never presents a partial archive as complete', async () => {
