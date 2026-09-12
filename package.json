@@ -31,6 +31,7 @@
     "qa:issue109:stabilization": "node scripts/issue109/run-stabilization.mjs",
     "qa:issue110:tracking": "node scripts/issue110/run-motion-tracking.mjs",
     "qa:issue111:lens-remap": "node scripts/issue111/run-lens-remap.mjs",
+    "qa:issue208:inventory": "node scripts/issue208/run-inventory.mjs",
     "qa:issue194:research": "node scripts/issue194/run-alignment-research.mjs",
     "qa:issue195:research": "node scripts/issue195/run-research.mjs",
     "qa:issue195:check": "tsc -p scripts/issue195/tsconfig.json && node --test scripts/issue195/decision.test.mjs",

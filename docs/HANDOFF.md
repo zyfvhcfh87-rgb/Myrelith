@@ -103,6 +103,17 @@ Malformed, oversized, cyclic, adapter, `.otioz`, and executable-URL documents
 are rejected before mutation. Import is one undoable sequence append; missing
 media uses the existing relink catalog. See [OTIO_INTERCHANGE.md](OTIO_INTERCHANGE.md).
 
+## Post-MVP issue #208 — Firefox/Safari capability inventory (2026-09-12)
+
+The first implementation slice is a disposable evidence inventory, not a
+product-support claim. `dev/issue208/` plus `scripts/issue208/` record
+WebCodecs, workers, audio clock, origin storage, File System Access, OPFS,
+WebGL2, and plugin-isolation facts. File pickers, Recents, live save, and
+unprobed codecs stay optional. Chromium remains the advertised product.
+There is no WebCodecs polyfill, no server fallback, and no README change.
+Run `npm run qa:issue208:inventory -- --channel chromium|firefox`. Safari 26+
+is still a macOS manual pass of the same HTML. See [ISSUE_208_PLAN.md](ISSUE_208_PLAN.md).
+
 ## Myrelith rebrand (2026-08-09)
 
 The current product, package, repository, documentation, UI, benchmark, future
@@ -1116,6 +1127,8 @@ surface; it is not a second zoom and never enters document history.
   offline media identity. No adapters, fetch, or executable URLs.
 - `src/app/otioInterchangeController.ts` + `src/ui/OtioInterchangeDialog.tsx`
   — staged preview/commit and export download; UI reads the controller only.
+- `src/dev/issue208/` + `scripts/issue208/` — Issue #208 capability inventory.
+  Facts only; no public Firefox/Safari claim, polyfill, or server fallback.
 - `src/domain/proxyCache.ts` — Issue #70's browser-free versioned manifest,
   sampled-fingerprint/provenance/profile validation, even 720p geometry, size
   estimate, and shared preview-versus-final-export representation policy.
