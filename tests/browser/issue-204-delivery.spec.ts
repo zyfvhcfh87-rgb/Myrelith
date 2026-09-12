@@ -97,7 +97,17 @@ test('PNG sequence, WAV audio-only, sidecar JSON, and classic MP4 stay honest', 
       wavVideoTrack = false
     }
 
-    const classic = await startExport(exportPresetById('compatibility').profile, { range: { startFrame: 0, endFrame: 2 } })
+    // Headless Chromium in this gate often cannot encode the Compatibility AAC
+    // pair. Use the same MP4/AVC profile with audio explicitly off so the
+    // classic video path is proven without substituting another codec.
+    const classicProfile = {
+      ...exportPresetById('compatibility').profile,
+      audioCodec: null,
+      audioChannelLayout: 'off',
+      audioBitrate: null,
+      audioBitrateMode: null,
+    }
+    const classic = await startExport(classicProfile, { range: { startFrame: 0, endFrame: 2 } })
     if (!classic || classic.destination !== 'download' || !('profile' in classic)) throw new Error('Classic MP4 missing')
     const classicInput = new Input({ formats: ALL_FORMATS, source: new BlobSource(new Blob([classic.buffer])) })
     let classicHasVideo = false
