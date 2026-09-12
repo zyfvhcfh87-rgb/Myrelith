@@ -33,10 +33,10 @@ function missing(name: string): DOMException {
 
 class MemoryFileHandle {
   readonly kind = 'file' as const
-  bytes: Uint8Array
+  bytes: Uint8Array<ArrayBuffer>
   readonly name: string
 
-  constructor(name: string, bytes: Uint8Array = new Uint8Array()) {
+  constructor(name: string, bytes: Uint8Array<ArrayBuffer> = new Uint8Array()) {
     this.name = name
     this.bytes = bytes
   }

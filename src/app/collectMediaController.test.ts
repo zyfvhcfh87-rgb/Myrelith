@@ -52,7 +52,6 @@ class MemoryFileHandle {
 
   async createWritable(): Promise<FileSystemWritableFileStream> {
     let staged = new Uint8Array()
-    const file = this
     return {
       write: async (chunk: FileSystemWriteChunkType) => {
         const bytes = await chunkBytes(chunk)
@@ -62,7 +61,7 @@ class MemoryFileHandle {
         staged = next
       },
       close: async () => {
-        file.bytes = staged
+        this.bytes = staged
       },
       abort: async () => {},
     } as unknown as FileSystemWritableFileStream
