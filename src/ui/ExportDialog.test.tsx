@@ -41,6 +41,10 @@ import {
   type ExportPresetId,
   type ExportProfile,
 } from '../domain/exportProfile'
+import {
+  isAlphaVideoProfile,
+  parseExportSettings,
+} from '../domain/deliveryProduct'
 import type { Clip, MediaAsset, TimelineDoc, Track } from '../domain/schema'
 import { DirectFileAbortError } from '../pipeline/export-file-target'
 import { useDocumentStore } from '../state/documentStore'
@@ -357,17 +361,15 @@ beforeEach(() => {
   }))
   settingsCapabilityMock.mockReset()
   settingsCapabilityMock.mockImplementation(async (settings) => {
-    const kind = settings && typeof settings === 'object' && 'kind' in settings
-      ? (settings as { readonly kind?: string }).kind
-      : undefined
-    if (kind === 'alpha-video') {
+    const parsed = parseExportSettings(settings)
+    if (isAlphaVideoProfile(parsed)) {
       return {
-        settings,
+        settings: parsed,
         supported: false,
         reason: 'Alpha video is offered only after a local encode/decode proof.',
       }
     }
-    return { settings, supported: true, reason: null }
+    return { settings: parsed, supported: true, reason: null }
   })
   pickerAvailabilityMock.mockReset()
   pickerAvailabilityMock.mockReturnValue({ available: true, reason: null })
