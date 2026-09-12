@@ -688,34 +688,34 @@ function collectMarkers(
   log: LossLog,
 ): TimelineMarker[] {
   if (!Array.isArray(value.markers) || value.markers.length === 0) return []
-  const markers: TimelineMarker[] = []
+  const imported: TimelineMarker[] = []
   for (let index = 0; index < value.markers.length; index++) {
     const markerPath = `${path}.markers[${index}]`
-    const marker = value.markers[index]
-    const schema = readSchema(marker)
-    if (!schema || !isRecord(marker) || schema.name !== 'Marker') {
+    const entry: unknown = value.markers[index]
+    const schema = readSchema(entry)
+    if (!schema || !isRecord(entry) || schema.name !== 'Marker') {
       addLoss(log, 'marker', markerPath, 'Unsupported marker was omitted')
       continue
     }
     try {
       assertCoreVersion(schema, markerPath)
       let frame = offset
-      if (schema.version === 1 && marker.time !== undefined) {
-        frame = offset + readRationalTime(marker.time, `${markerPath}.time`, dest).frames
+      if (schema.version === 1 && entry.time !== undefined) {
+        frame = offset + readRationalTime(entry.time, `${markerPath}.time`, dest).frames
       } else {
-        const range = readTimeRange(marker.marked_range, `${markerPath}.marked_range`, dest)
+        const range = readTimeRange(entry.marked_range, `${markerPath}.marked_range`, dest)
         frame = offset + (range?.start ?? 0)
       }
-      const label = boundedName(readOptionalString(marker.name), 'Marker')
-      const colorName = readOptionalString(marker.color).toUpperCase()
+      const label = boundedName(readOptionalString(entry.name), 'Marker')
+      const colorName = readOptionalString(entry.color).toUpperCase()
       const color = MARKER_COLORS[colorName] ?? 'yellow'
       if (!MARKER_COLORS[colorName] && colorName.length > 0) {
         addLoss(log, 'marker', markerPath, `Marker color ${colorName} was mapped to ${color}`)
       }
-      const note = typeof marker.comment === 'string'
-        ? marker.comment
-        : typeof marker.note === 'string' ? marker.note : undefined
-      markers.push({
+      const note = typeof entry.comment === 'string'
+        ? entry.comment
+        : typeof entry.note === 'string' ? entry.note : undefined
+      imported.push({
         id: factory('marker'),
         frame,
         label,
@@ -729,7 +729,7 @@ function collectMarkers(
       addLoss(log, 'marker', markerPath, cause instanceof Error ? cause.message : 'Marker was omitted')
     }
   }
-  return markers
+  return imported
 }
 
 function importTrackChildren(

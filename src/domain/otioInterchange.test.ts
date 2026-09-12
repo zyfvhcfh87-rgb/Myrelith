@@ -34,11 +34,6 @@ const SETTINGS_30: ProjectSettings = {
   frameRate: { num: 30, den: 1 },
 }
 
-const SETTINGS_NTSC: ProjectSettings = {
-  ...SETTINGS_24,
-  frameRate: { num: 30_000, den: 1_001 },
-}
-
 function fixture(name: string): string {
   return readFileSync(resolve('tests/fixtures/otio', name), 'utf8')
 }
