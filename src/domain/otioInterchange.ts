@@ -207,6 +207,7 @@ const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.avif', '.g
 const AUDIO_EXTENSIONS = new Set([
   '.wav', '.mp3', '.aac', '.m4a', '.flac', '.ogg', '.opus', '.aif', '.aiff', '.ac3',
 ])
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.mxf', '.mkv', '.webm', '.m4v'])
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -361,6 +362,16 @@ export function isOtioIncompleteMediaIdentity(descriptor: PortableAssetDescripto
   return descriptor.size === 0 && descriptor.lastModified === 0
 }
 
+/** Video containers on audio tracks still relink from the analyzed video file. */
+export function otioRelinkAcceptsAnalyzedKind(
+  descriptorKind: AssetKind,
+  analyzedKind: AssetKind,
+  analyzedHasAudio: boolean,
+): boolean {
+  if (descriptorKind === analyzedKind) return true
+  return descriptorKind === 'audio' && analyzedKind === 'video' && analyzedHasAudio
+}
+
 function extensionOf(fileName: string): string {
   const base = otioRelinkBaseName(fileName).toLowerCase()
   const index = base.lastIndexOf('.')
@@ -386,8 +397,9 @@ function mimeFromFileName(fileName: string, kind: AssetKind): string {
 function kindFromTrackAndName(trackKind: TrackKind, fileName: string): AssetKind {
   const extension = extensionOf(fileName)
   if (IMAGE_EXTENSIONS.has(extension)) return 'image'
-  if (trackKind === 'audio' || AUDIO_EXTENSIONS.has(extension)) return 'audio'
-  return 'video'
+  if (AUDIO_EXTENSIONS.has(extension)) return 'audio'
+  if (VIDEO_EXTENSIONS.has(extension)) return 'video'
+  return trackKind === 'audio' ? 'audio' : 'video'
 }
 
 function forbiddenTargetUrl(url: string): boolean {
@@ -495,30 +507,44 @@ function readItemDuration(
 }
 
 function compositionDuration(
-  children: readonly unknown[],
+  item: JsonRecord,
   path: string,
   dest: FrameRate,
   log: LossLog,
   depth: number,
 ): number {
+  const ownRange = readItemDuration(item, path, dest, log)
+  if (ownRange !== null) return ownRange
+
+  const schema = readSchema(item)
+  const parallel = schema?.name === 'Stack' || schema?.name === 'Timeline'
+  const childParent = schema?.name === 'Timeline' && isRecord(item.tracks)
+    ? item.tracks
+    : item
+  const childBase = schema?.name === 'Timeline' && isRecord(item.tracks)
+    ? `${path}.tracks`
+    : path
+  const children = childrenOf(childParent)
   let duration = 0
   for (let index = 0; index < children.length; index++) {
-    const childPath = `${path}.children[${index}]`
+    const childPath = `${childBase}.children[${index}]`
     const child = children[index]
-    const schema = readSchema(child)
-    if (!schema || !isRecord(child)) continue
-    if (schema.name === 'Transition') {
-      continue
-    }
-    if (schema.name === 'Gap' || schema.name === 'Clip') {
-      const itemDuration = readItemDuration(child, childPath, dest, log)
+    const childSchema = readSchema(child)
+    if (!childSchema || !isRecord(child)) continue
+    if (childSchema.name === 'Transition') continue
+    let childDuration = 0
+    if (childSchema.name === 'Gap' || childSchema.name === 'Clip') {
+      childDuration = readItemDuration(child, childPath, dest, log)
         ?? mediaRangeDuration(child, childPath, dest, log)
-      if (itemDuration !== null) duration += itemDuration
-      continue
+        ?? 0
+    } else if (
+      childSchema.name === 'Stack'
+      || isTrackSchema(childSchema)
+      || childSchema.name === 'Timeline'
+    ) {
+      childDuration = compositionDuration(child, childPath, dest, log, depth + 1)
     }
-    if (schema.name === 'Stack' || isTrackSchema(schema) || schema.name === 'Timeline') {
-      duration += compositionDuration(childrenOf(child), childPath, dest, log, depth + 1)
-    }
+    duration = parallel ? Math.max(duration, childDuration) : duration + childDuration
   }
   return duration
 }
@@ -589,6 +615,17 @@ function coverAssetFrames(draft: AssetDraft, frames: number, dest: FrameRate): v
   }
 }
 
+function markDraftHasAudio(draft: AssetDraft): void {
+  if (draft.descriptor.hasAudio) return
+  draft.descriptor.hasAudio = true
+  draft.descriptor.audioSampleRate = 48_000
+  draft.descriptor.audioChannels = 2
+  draft.descriptor.sourceBounds = {
+    ...draft.descriptor.sourceBounds,
+    audio: { status: 'unknown' },
+  }
+}
+
 function resolveMedia(
   clip: JsonRecord,
   path: string,
@@ -647,6 +684,9 @@ function resolveMedia(
   const existing = assets.get(identity)
   if (existing) {
     if (available) coverAssetFrames(existing, available.start + available.duration, dest)
+    if (trackKind === 'audio' && existing.descriptor.kind === 'video') {
+      markDraftHasAudio(existing)
+    }
     return existing
   }
   const still = kind === 'image'
@@ -672,6 +712,7 @@ function resolveMedia(
     addLoss(log, 'media', path, `Image "${fileName}" entered offline without proven dimensions; relink the original file`)
   }
   const draft: AssetDraft = { descriptor, targetUrl }
+  if (trackKind === 'audio' && kind === 'video') markDraftHasAudio(draft)
   if (!still && available) {
     coverAssetFrames(draft, available.start + available.duration, dest)
   }
@@ -869,7 +910,7 @@ function importTrackChildren(
       continue
     }
     if (schema.name === 'Stack' || isTrackSchema(schema) || schema.name === 'Timeline') {
-      const nestedDuration = compositionDuration(childrenOf(child), childPath, dest, log, depth + 1)
+      const nestedDuration = compositionDuration(child, childPath, dest, log, depth + 1)
       addLoss(log, 'nested', childPath, `${schema.name} nested composition was replaced with a ${nestedDuration}-frame gap`)
       takePending(null)
       if (nestedDuration > 0) {
@@ -883,6 +924,22 @@ function importTrackChildren(
   }
   takePending(null)
   return { clips, transitions, gaps, markers }
+}
+
+function shiftMarkers(
+  markers: readonly TimelineMarker[],
+  trim: { start: number; duration: number } | null,
+  offset: number,
+): TimelineMarker[] {
+  return markers.flatMap((marker) => {
+    let frame = marker.frame
+    if (trim) {
+      if (frame < trim.start || frame >= trim.start + trim.duration) return []
+      frame -= trim.start
+    }
+    frame += offset
+    return [{ ...marker, frame }]
+  })
 }
 
 function applyTrackTrim(
@@ -915,6 +972,7 @@ function applyTrackTrim(
       const to = remap.get(transition.to)
       return from === undefined || to === undefined ? [] : [{ ...transition, from, to }]
     }),
+    markers: shiftMarkers(placed.markers, trim, 0),
   }
 }
 
@@ -1012,6 +1070,7 @@ function importOneTimeline(
       placed = {
         ...placed,
         clips: placed.clips.map((clip) => ({ ...clip, start: clip.start + offset })),
+        markers: shiftMarkers(placed.markers, null, offset),
       }
     }
     const track = emptyTrack(
@@ -1037,7 +1096,11 @@ function importOneTimeline(
     totalClips += track.clips.length
     totalGaps += placed.gaps
     markers.push(...placed.markers)
-    markers.push(...collectMarkers(trackValue, trackPath, settings.frameRate, offset, factory, log))
+    markers.push(...shiftMarkers(
+      collectMarkers(trackValue, trackPath, settings.frameRate, 0, factory, log),
+      trim,
+      offset,
+    ))
     let trackDoc: TimelineDoc = { ...document, tracks: [track] }
     for (const transition of placed.transitions) {
       const from = track.clips[transition.from]

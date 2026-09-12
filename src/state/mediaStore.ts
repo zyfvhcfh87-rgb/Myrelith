@@ -31,7 +31,10 @@ import {
   mediaSourceBoundsEqual,
 } from '../domain/sourceBounds'
 import { microsecondsDurationToFrames } from '../domain/time'
-import { isOtioIncompleteMediaIdentity } from '../domain/otioInterchange'
+import {
+  isOtioIncompleteMediaIdentity,
+  otioRelinkAcceptsAnalyzedKind,
+} from '../domain/otioInterchange'
 
 /**
  * Precomputed visuals for one connected asset (filmstrip on video clips,
@@ -101,7 +104,8 @@ function connectionMatchesDescriptor(
   asset: MediaAsset,
 ): boolean {
   if (isOtioIncompleteMediaIdentity(descriptor)) {
-    return descriptor.id === asset.id && descriptor.kind === asset.kind
+    return descriptor.id === asset.id
+      && otioRelinkAcceptsAnalyzedKind(descriptor.kind, asset.kind, asset.hasAudio)
   }
   return descriptor.id === asset.id
     && descriptor.fileName === asset.fileName

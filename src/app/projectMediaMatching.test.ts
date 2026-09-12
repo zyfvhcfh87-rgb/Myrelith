@@ -464,6 +464,19 @@ describe('project media matching', () => {
       sourceBounds: { video: { status: 'unknown' }, audio: null },
     })
     expect(descriptorMatches(otio, analyzed)).toBe(true)
+    expect(descriptorMatches(otio, { ...analyzed, fileName: 'other.mov' })).toBe(false)
+    expect(selectDescriptor(
+      [otio],
+      new Set<string>(),
+      file('titles.mov', { type: 'video/quicktime', lastModified: 88 }),
+      inspection(analyzed),
+    ).descriptor.id).toBe('otio-titles')
+    expect(() => selectDescriptor(
+      [otio],
+      new Set<string>(),
+      file('other.mov', { type: 'video/quicktime', lastModified: 88 }),
+      inspection({ ...analyzed, fileName: 'other.mov' }),
+    )).toThrow('"other.mov" does not match any missing project source')
     expect(selectDescriptorByFileIdentity(
       [otio],
       new Set<string>(),
@@ -476,5 +489,39 @@ describe('project media matching', () => {
       lastModified: 88,
       objectUrl: 'blob:analyzed',
     })
+  })
+
+  test('lets a video container relink an OTIO audio-track row of the same basename', () => {
+    const analyzed = makeAsset({
+      id: 'picked',
+      fileName: 'interview.mp4',
+      size: 4096,
+      lastModified: 88,
+    })
+    const otio = descriptorFrom(analyzed, {
+      id: 'otio-audio',
+      fileName: 'interview.mp4',
+      size: 0,
+      lastModified: 0,
+      kind: 'audio',
+      durationMicroseconds: 1,
+      width: null,
+      height: null,
+      nativeFrameRate: null,
+      sourceBounds: { video: null, audio: { status: 'unknown' } },
+      hasAudio: true,
+      audioSampleRate: 48_000,
+      audioChannels: 2,
+    })
+    expect(descriptorMatches(otio, analyzed)).toBe(true)
+    expect(descriptorMatches(otio, { ...analyzed, hasAudio: false })).toBe(false)
+    expect(compatibilityReportMatchesDescriptor(otio, file('interview.mp4'), report())).toBe(true)
+    expect(compatibilityReportMatchesDescriptor(otio, file('other.mp4'), report())).toBe(false)
+    expect(selectDescriptor(
+      [otio],
+      new Set<string>(),
+      file('interview.mp4'),
+      inspection(analyzed),
+    ).descriptor.id).toBe('otio-audio')
   })
 })

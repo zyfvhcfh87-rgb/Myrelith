@@ -879,4 +879,34 @@ describe('mediaStore', () => {
     })
     expect(getState().assets.get('otio-1')?.objectUrl).toBe('blob:otio-relink')
   })
+
+  test('connects an analyzed video file to an incomplete OTIO audio-track row', () => {
+    const incomplete = {
+      ...descriptorFor(makeAsset({
+        id: 'otio-audio',
+        fileName: 'interview.mp4',
+        kind: 'audio',
+        width: null,
+        height: null,
+        frameRate: null,
+        hasAudio: true,
+      })),
+      size: 0,
+      lastModified: 0,
+      sourceBounds: {
+        video: null,
+        audio: { status: 'unknown' as const },
+      },
+    }
+    expect(getState().addOfflineDescriptors([incomplete])).toBe(true)
+
+    const analyzed = makeAsset({
+      id: 'otio-audio',
+      fileName: 'interview.mp4',
+      objectUrl: 'blob:otio-av-relink',
+    })
+    expect(getState().connectAsset(analyzed)).toBe(true)
+    expect(getState().descriptors.get('otio-audio')?.kind).toBe('video')
+    expect(getState().assets.get('otio-audio')?.objectUrl).toBe('blob:otio-av-relink')
+  })
 })

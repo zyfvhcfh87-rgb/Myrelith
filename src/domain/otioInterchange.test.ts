@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import {
   framesFromOtioRational,
   isOtioIncompleteMediaIdentity,
+  otioRelinkAcceptsAnalyzedKind,
   otioRelinkBaseName,
   OtioInterchangeError,
   planOtioImport,
@@ -193,6 +194,16 @@ describe('official OTIO fixtures', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const nested = planOtioImport(fixture('nested_example.otio'), SETTINGS_24, ids())
     expect(nested.preview.losses.some((loss) => loss.code === 'nested')).toBe(true)
+    expect(videoClips(nested).map((clip) => [
+      clip.name,
+      clip.timelineRange.startFrame,
+      clip.timelineRange.durationFrames,
+    ])).toEqual([
+      ['Normal Clip 1', 0, 238],
+      ['Normal Clip 2', 269, 33],
+      ['Normal Clip 3', 331, 63],
+      ['Normal Clip 4', 398, 238],
+    ])
     const generated = planOtioImport(fixture('generator_reference_test.otio'), SETTINGS_24, ids())
     expect(generated.preview.losses.some((loss) => loss.detail.includes('GeneratorReference'))).toBe(true)
     expect(videoClips(generated)).toHaveLength(0)
@@ -219,6 +230,229 @@ describe('official OTIO fixtures', () => {
     })
     expect(plan.preview.losses.some((loss) => loss.code === 'metadata')).toBe(true)
     expect(otioRelinkBaseName('file:///home/editor/interview.mp4')).toBe('interview.mp4')
+  })
+
+  test('replaces a nested stack without source_range by the parallel child maximum', () => {
+    const payload = JSON.stringify({
+      OTIO_SCHEMA: 'Timeline.1',
+      name: 'parallel nest',
+      tracks: {
+        OTIO_SCHEMA: 'Stack.1',
+        children: [{
+          OTIO_SCHEMA: 'Track.1',
+          kind: 'Video',
+          children: [
+            {
+              OTIO_SCHEMA: 'Clip.1',
+              name: 'Before',
+              source_range: {
+                OTIO_SCHEMA: 'TimeRange.1',
+                start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+                duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 10 },
+              },
+              media_reference: {
+                OTIO_SCHEMA: 'ExternalReference.1',
+                target_url: 'file:///before.mov',
+              },
+            },
+            {
+              OTIO_SCHEMA: 'Stack.1',
+              name: 'Nest',
+              children: [
+                {
+                  OTIO_SCHEMA: 'Clip.1',
+                  name: 'Short',
+                  source_range: {
+                    OTIO_SCHEMA: 'TimeRange.1',
+                    start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+                    duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 10 },
+                  },
+                  media_reference: {
+                    OTIO_SCHEMA: 'MissingReference.1',
+                    available_range: null,
+                  },
+                },
+                {
+                  OTIO_SCHEMA: 'Clip.1',
+                  name: 'Long',
+                  source_range: {
+                    OTIO_SCHEMA: 'TimeRange.1',
+                    start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+                    duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 25 },
+                  },
+                  media_reference: {
+                    OTIO_SCHEMA: 'MissingReference.1',
+                    available_range: null,
+                  },
+                },
+              ],
+            },
+            {
+              OTIO_SCHEMA: 'Clip.1',
+              name: 'After',
+              source_range: {
+                OTIO_SCHEMA: 'TimeRange.1',
+                start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+                duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 8 },
+              },
+              media_reference: {
+                OTIO_SCHEMA: 'ExternalReference.1',
+                target_url: 'file:///after.mov',
+              },
+            },
+          ],
+        }],
+      },
+    })
+    const plan = planOtioImport(payload, SETTINGS_24, ids())
+    expect(videoClips(plan).map((clip) => [
+      clip.name,
+      clip.timelineRange.startFrame,
+      clip.timelineRange.durationFrames,
+    ])).toEqual([
+      ['Before', 0, 10],
+      ['After', 35, 8],
+    ])
+  })
+
+  test('keeps one video descriptor when the same container is linked on audio', () => {
+    const payload = JSON.stringify({
+      OTIO_SCHEMA: 'Timeline.1',
+      name: 'linked av',
+      tracks: {
+        OTIO_SCHEMA: 'Stack.1',
+        children: [
+          {
+            OTIO_SCHEMA: 'Track.1',
+            kind: 'Video',
+            children: [{
+              OTIO_SCHEMA: 'Clip.1',
+              name: 'Picture',
+              source_range: {
+                OTIO_SCHEMA: 'TimeRange.1',
+                start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+                duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 24 },
+              },
+              media_reference: {
+                OTIO_SCHEMA: 'ExternalReference.1',
+                target_url: 'file:///home/editor/interview.mp4',
+              },
+            }],
+          },
+          {
+            OTIO_SCHEMA: 'Track.1',
+            kind: 'Audio',
+            children: [{
+              OTIO_SCHEMA: 'Clip.1',
+              name: 'Sound',
+              source_range: {
+                OTIO_SCHEMA: 'TimeRange.1',
+                start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+                duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 24 },
+              },
+              media_reference: {
+                OTIO_SCHEMA: 'ExternalReference.1',
+                target_url: 'file:///home/editor/interview.mp4',
+              },
+            }],
+          },
+        ],
+      },
+    })
+    const plan = planOtioImport(payload, SETTINGS_24, ids())
+    expect(plan.descriptors).toHaveLength(1)
+    expect(plan.descriptors[0]).toMatchObject({
+      fileName: 'interview.mp4',
+      kind: 'video',
+      hasAudio: true,
+    })
+    const video = plan.sequences[0]?.tracks.find((track) => track.kind === 'video')
+    const audio = plan.sequences[0]?.tracks.find((track) => track.kind === 'audio')
+    expect(video?.clips[0]?.assetId).toBe(plan.descriptors[0]?.id)
+    expect(audio?.clips[0]?.assetId).toBe(plan.descriptors[0]?.id)
+  })
+
+  test('shifts promoted clip and track markers by track trim and global start', () => {
+    const payload = JSON.stringify({
+      OTIO_SCHEMA: 'Timeline.1',
+      name: 'marked',
+      global_start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 10 },
+      tracks: {
+        OTIO_SCHEMA: 'Stack.1',
+        children: [{
+          OTIO_SCHEMA: 'Track.1',
+          kind: 'Video',
+          source_range: {
+            OTIO_SCHEMA: 'TimeRange.1',
+            start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 5 },
+            duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 20 },
+          },
+          markers: [
+            {
+              OTIO_SCHEMA: 'Marker.2',
+              name: 'Dropped track',
+              marked_range: {
+                OTIO_SCHEMA: 'TimeRange.1',
+                start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 2 },
+                duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+              },
+            },
+            {
+              OTIO_SCHEMA: 'Marker.2',
+              name: 'Kept track',
+              marked_range: {
+                OTIO_SCHEMA: 'TimeRange.1',
+                start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 6 },
+                duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+              },
+            },
+          ],
+          children: [{
+            OTIO_SCHEMA: 'Clip.1',
+            name: 'A',
+            source_range: {
+              OTIO_SCHEMA: 'TimeRange.1',
+              start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+              duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 30 },
+            },
+            markers: [
+              {
+                OTIO_SCHEMA: 'Marker.2',
+                name: 'Dropped clip',
+                marked_range: {
+                  OTIO_SCHEMA: 'TimeRange.1',
+                  start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 2 },
+                  duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+                },
+              },
+              {
+                OTIO_SCHEMA: 'Marker.2',
+                name: 'Kept clip',
+                marked_range: {
+                  OTIO_SCHEMA: 'TimeRange.1',
+                  start_time: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 8 },
+                  duration: { OTIO_SCHEMA: 'RationalTime.1', rate: 24, value: 0 },
+                },
+              },
+            ],
+            media_reference: {
+              OTIO_SCHEMA: 'ExternalReference.1',
+              target_url: 'file:///titles.mov',
+            },
+          }],
+        }],
+      },
+    })
+    const plan = planOtioImport(payload, SETTINGS_24, ids())
+    const clip = videoClips(plan)[0]
+    expect(clip).toMatchObject({
+      timelineRange: { startFrame: 10, durationFrames: 20 },
+      sourceRange: { startFrame: 5, durationFrames: 20 },
+    })
+    expect(plan.sequences[0]?.markers?.map((marker) => [marker.label, marker.frame])).toEqual([
+      ['Kept track', 11],
+      ['Kept clip', 13],
+    ])
   })
 })
 
@@ -336,5 +570,7 @@ describe('OTIO offline identity', () => {
     }
     expect(isOtioIncompleteMediaIdentity(descriptor)).toBe(true)
     expect(isOtioIncompleteMediaIdentity({ ...descriptor, size: 12 })).toBe(false)
+    expect(otioRelinkAcceptsAnalyzedKind('audio', 'video', true)).toBe(true)
+    expect(otioRelinkAcceptsAnalyzedKind('audio', 'video', false)).toBe(false)
   })
 })

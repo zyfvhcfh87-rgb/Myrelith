@@ -13,6 +13,7 @@ import { microsecondsDurationToFrames, rateEquals } from '../domain/time'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 import {
   isOtioIncompleteMediaIdentity,
+  otioRelinkAcceptsAnalyzedKind,
   otioRelinkBaseName,
 } from '../domain/otioInterchange'
 
@@ -43,7 +44,12 @@ export function descriptorMatches(
   analyzed: MediaAsset,
 ): boolean {
   if (isOtioIncompleteMediaIdentity(descriptor)) {
-    return descriptor.kind === analyzed.kind
+    return otioRelinkBaseName(descriptor.fileName) === analyzed.fileName
+      && otioRelinkAcceptsAnalyzedKind(
+        descriptor.kind,
+        analyzed.kind,
+        analyzed.hasAudio,
+      )
   }
   return descriptor.size === analyzed.size
     && descriptor.kind === analyzed.kind
@@ -109,6 +115,7 @@ export function compatibilityReportMatchesDescriptor(
           : audio?.sourceBounds ?? null,
       }
   if (isOtioIncompleteMediaIdentity(descriptor)) {
+    if (otioRelinkBaseName(descriptor.fileName) !== file.name) return false
     if (descriptor.kind === 'image') return Boolean(report.image)
     if (descriptor.kind === 'video') {
       return report.tracks.some((track) => track.kind === 'video')
@@ -183,13 +190,20 @@ export function selectDescriptor(
   if (matches.length === 0) {
     throw new Error(`"${file.name}" does not match any missing project source`)
   }
-  if (matches.length === 1) return matches[0]
+  const namedMatches = matches.filter((match) =>
+    !isOtioIncompleteMediaIdentity(match.descriptor)
+    || otioRelinkBaseName(match.descriptor.fileName) === file.name,
+  )
+  if (namedMatches.length === 0) {
+    throw new Error(`"${file.name}" does not match any missing project source`)
+  }
+  if (namedMatches.length === 1) return namedMatches[0]
 
-  const nameMatches = matches.filter(
+  const nameMatches = namedMatches.filter(
     (match) => match.descriptor.fileName === file.name,
   )
   if (nameMatches.length === 1) return nameMatches[0]
-  const timestampMatches = (nameMatches.length > 0 ? nameMatches : matches)
+  const timestampMatches = (nameMatches.length > 0 ? nameMatches : namedMatches)
     .filter((match) => match.descriptor.lastModified === file.lastModified)
   if (timestampMatches.length === 1) return timestampMatches[0]
   throw new Error(
