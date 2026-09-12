@@ -1393,6 +1393,8 @@ describe('Export dialog alternative delivery', () => {
     await openDialog()
     await readyStartButton()
     fireEvent.click(screen.getByRole('radio', { name: 'PNG image sequence' }))
+    expect(await screen.findByText('image/png · .zip')).toBeInTheDocument()
+    expect(screen.getByText('Depends on written frames')).toBeInTheDocument()
     fireEvent.click(await readyStartButton())
 
     await waitFor(() => expect(startMock).toHaveBeenCalledOnce())
@@ -1422,6 +1424,7 @@ describe('Export dialog alternative delivery', () => {
     await openDialog()
     await readyStartButton()
     fireEvent.click(screen.getByRole('radio', { name: 'Audio only' }))
+    expect(await screen.findByText('audio/wav · .wav')).toBeInTheDocument()
     fireEvent.click(await readyStartButton())
 
     await waitFor(() => expect(startMock).toHaveBeenCalledOnce())

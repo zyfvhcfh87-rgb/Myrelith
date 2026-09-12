@@ -1227,6 +1227,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
             descriptionId={descriptionId}
             doc={doc}
             displayProfile={displayProfile}
+            outputSettings={exportSettings ?? displayProfile}
             estimatedSize={estimatedSize}
             selectionId={selectionId}
             presetAvailability={presetAvailability}

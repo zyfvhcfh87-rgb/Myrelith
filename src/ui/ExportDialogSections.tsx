@@ -11,17 +11,21 @@ import type { TimelineDoc } from '../domain/schema'
 import { formatProjectCanvas } from '../domain/projectSettings'
 import type { ExportFilePickerAvailability } from '../app/exportFilePicker'
 import type { ExportDirectoryPickerAvailability } from '../app/exportDirectoryPicker'
-import type {
-  AudioOnlyContainer,
-  AlphaVideoCodec,
-  ChapterMode,
-  DeliveryKind,
+import {
+  deliveryFileExtension,
+  isDeliveryProfile,
+  isImageSequenceProfile,
+  type AudioOnlyContainer,
+  type AlphaVideoCodec,
+  type ChapterMode,
+  type DeliveryKind,
+  type ExportSettingsUnion,
 } from '../domain/deliveryProduct'
 import ExportProfilePicker, {
   type ExportPresetAvailability,
 } from './ExportProfilePicker'
 import {
-  exportProfileSummary,
+  exportSettingsLabel,
   type ExportUiSelectionId,
 } from './exportProfileUi'
 
@@ -47,6 +51,38 @@ export interface DownloadReady {
 export interface SavedFileReady {
   fileName: string
   formatLabel: string
+}
+
+function selectedOutputDetail(settings: Readonly<ExportSettingsUnion>): string {
+  if (isImageSequenceProfile(settings)) {
+    return settings.destination === 'directory' ? 'image/png · folder' : 'image/png · .zip'
+  }
+  if (isDeliveryProfile(settings)) {
+    return `${settings.mimeType} · .${deliveryFileExtension(settings)}`
+  }
+  return `${settings.mimeType} · .${settings.fileExtension}`
+}
+
+function selectedOutputSizeHint(
+  settings: Readonly<ExportSettingsUnion>,
+  estimatedSize: string,
+): { readonly strong: string; readonly note: string } {
+  if (isImageSequenceProfile(settings)) {
+    return {
+      strong: 'Depends on written frames',
+      note: 'Each PNG is encoded locally; ZIP or folder size is not a bitrate estimate.',
+    }
+  }
+  if (isDeliveryProfile(settings) && settings.kind === 'audio-only') {
+    return {
+      strong: 'Depends on range and sample rate',
+      note: 'WAV uses the project sample rate and channels. Compressed audio follows the proven bitrate.',
+    }
+  }
+  return {
+    strong: `About ${estimatedSize}`,
+    note: 'Bitrate-based estimate; variable bitrate and container overhead can change the final size.',
+  }
 }
 
 interface ExportDialogHeaderProps {
@@ -86,6 +122,7 @@ interface ExportConfigurationProps {
   descriptionId: string
   doc: TimelineDoc
   displayProfile: Readonly<ExportProfile>
+  outputSettings: Readonly<ExportSettingsUnion>
   estimatedSize: string
   selectionId: ExportUiSelectionId
   presetAvailability: readonly Readonly<ExportPresetAvailability>[]
@@ -131,6 +168,7 @@ export function ExportConfiguration({
   descriptionId,
   doc,
   displayProfile,
+  outputSettings,
   estimatedSize,
   selectionId,
   presetAvailability,
@@ -172,6 +210,7 @@ export function ExportConfiguration({
   directoryPickerAvailability,
 }: ExportConfigurationProps) {
   const alphaOffered = alphaVp9Supported === true || alphaAv1Supported === true
+  const sizeHint = selectedOutputSizeHint(outputSettings, estimatedSize)
   return (
     <>
       <p id={descriptionId} className="export-description">
@@ -304,20 +343,15 @@ export function ExportConfiguration({
         <div className="export-profile-row">
           <dt>Selected output</dt>
           <dd>
-            <strong>{exportProfileSummary(displayProfile)}</strong>
-            <span>
-              {displayProfile.mimeType} · .{displayProfile.fileExtension}
-            </span>
+            <strong>{exportSettingsLabel(outputSettings)}</strong>
+            <span>{selectedOutputDetail(outputSettings)}</span>
           </dd>
         </div>
         <div className="export-profile-row">
           <dt>Estimated size</dt>
           <dd>
-            <strong>About {estimatedSize}</strong>
-            <span>
-              Bitrate-based estimate; variable bitrate and container overhead
-              can change the final size.
-            </span>
+            <strong>{sizeHint.strong}</strong>
+            <span>{sizeHint.note}</span>
           </dd>
         </div>
       </dl>
@@ -369,7 +403,7 @@ export function ExportConfiguration({
           <span>Checking this exact custom profile…</span>
         ) : selectedSupported ? (
           <span>
-            Ready to export exactly {exportProfileSummary(displayProfile)}.
+            Ready to export exactly {exportSettingsLabel(outputSettings)}.
             {selectionId === 'auto' && autoPresetId
               ? ` Auto selected ${EXPORT_PRESETS.find(
                   (preset) => preset.id === autoPresetId,
