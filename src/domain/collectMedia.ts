@@ -144,6 +144,15 @@ const ALLOWED_RETRY_ENTRIES = new Set<string>([
   COLLECT_MEDIA_INCOMPLETE_MARKER,
   ...COLLECT_MEDIA_FOLDERS,
 ])
+const IGNORABLE_DESTINATION_ENTRIES = new Set<string>([
+  '.ds_store',
+  'thumbs.db',
+  'desktop.ini',
+])
+
+function isIgnorableCollectDestinationEntry(name: string): boolean {
+  return IGNORABLE_DESTINATION_ENTRIES.has(name.toLowerCase())
+}
 
 function fail(path: string, problem: string): never {
   throw new CollectMediaError(`${path}: ${problem}`)
@@ -316,15 +325,18 @@ export function collectArchiveDestinationKind(
   manifestStatus: 'complete' | 'partial' | null,
   hasIncompleteMarker: boolean,
 ): CollectArchiveDestinationKind {
-  if (entryNames.length === 0) return 'empty'
-  const unexpected = entryNames.filter((name) => (
+  const relevantNames = entryNames.filter((name) => (
+    !isIgnorableCollectDestinationEntry(name)
+  ))
+  if (relevantNames.length === 0) return 'empty'
+  const unexpected = relevantNames.filter((name) => (
     !ALLOWED_RETRY_ENTRIES.has(name)
     && !isCollectArchiveProjectFileName(name)
   ))
   if (unexpected.length > 0) return 'occupied'
   if (hasIncompleteMarker || manifestStatus === 'partial') return 'incomplete'
   if (manifestStatus === 'complete') return 'complete'
-  return entryNames.length === 0 ? 'empty' : 'occupied'
+  return 'occupied'
 }
 
 export function collectMediaPreflightCounts(

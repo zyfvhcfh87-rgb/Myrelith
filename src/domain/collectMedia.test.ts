@@ -332,6 +332,15 @@ describe('collect-media manifest', () => {
       false,
     )).toBe('complete')
     expect(collectArchiveDestinationKind(['photos'], null, false)).toBe('occupied')
+    expect(collectArchiveDestinationKind(['.DS_Store', 'Thumbs.db'], null, false))
+      .toBe('empty')
+    expect(collectArchiveDestinationKind(
+      ['.DS_Store', COLLECT_MEDIA_INCOMPLETE_MARKER, 'media'],
+      'partial',
+      true,
+    )).toBe('incomplete')
+    expect(collectArchiveDestinationKind(['.DS_Store', 'photos'], null, false))
+      .toBe('occupied')
   })
 
   test('omitted preflight rows cannot keep a collected path', () => {

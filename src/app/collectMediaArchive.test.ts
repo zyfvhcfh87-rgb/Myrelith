@@ -140,6 +140,16 @@ describe('collect-media archive I/O', () => {
     expect(inspection.kind).toBe('incomplete')
   })
 
+  it('treats OS metadata-only folders as empty destinations', async () => {
+    const destination = new MemoryDirectory()
+    destination.files.set('.DS_Store', new MemoryFileHandle('.DS_Store'))
+    destination.files.set('Thumbs.db', new MemoryFileHandle('Thumbs.db'))
+    const inspection = await prepareCollectDestination(
+      destination as unknown as CollectMediaDirectoryHandle,
+    )
+    expect(inspection.kind).toBe('empty')
+  })
+
   it('rejects relative paths that escape the chosen folder', async () => {
     const destination = root()
     await prepareCollectDestination(destination)
