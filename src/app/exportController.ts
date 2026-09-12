@@ -18,7 +18,20 @@ import { ColorGradingCancelledError } from '../pipeline/colorGradingRuntime'
 
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import { mediaResourceAdmission } from './mediaResourceAdmission'
-import { validateExportProfile } from '../domain/exportProfile'
+import {
+  assertChapterDelivery,
+  chapterPolicyOf,
+  exportSettingsIncludesAudio,
+  exportSettingsIncludesVisual,
+  isAudioOnlyProfile,
+  isImageSequenceProfile,
+  parseExportSettings,
+  type ChapterPolicy,
+} from '../domain/deliveryProduct'
+import {
+  chapterSidecarFileName,
+  serializeChapterSidecar,
+} from '../domain/deliveryChapters'
 import {
   createCrossfadeAudioWindowIndex,
   createSourceBoundsCatalog,
@@ -48,6 +61,7 @@ import {
 } from '../domain/selectors'
 import {
   assertExportAdmission,
+  createAlternativeBufferedExportResult,
   exportTimeline,
   type ExportDeps as PipelineExportDeps,
   type ExportMediaSource,
@@ -55,10 +69,19 @@ import {
   type ExportSettings,
 } from '../pipeline/export'
 import {
+  createMediabunnyExportAudioSource,
   createMediabunnyExportDeps,
   createMediabunnyExportMediaSource,
   type ExportAssetResolver,
 } from '../pipeline/export-mediabunny'
+import { exportAudioOnly } from '../pipeline/export-audio-only'
+import type { ExportAudioMediaSource } from '../pipeline/export-audio'
+import { createImageSequenceSink } from '../pipeline/export-image-sequence'
+import { zipStore } from '../pipeline/zipStore'
+import {
+  directoryWriterFromHandle,
+  type ExportDirectoryDestinationCapability,
+} from './exportDirectoryPicker'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import {
@@ -97,6 +120,13 @@ export interface ExportRunOptions {
   onProgress?: (progress: number) => void
   /** Ephemeral one-shot capability; never stored in project/preferences state. */
   fileDestination?: ExportFileDestinationCapability
+  /** Ephemeral one-shot folder capability for PNG sequences. */
+  directoryDestination?: ExportDirectoryDestinationCapability
+  /**
+   * Classic MP4/WebM profiles cannot grow extra keys. Sidecar intent for those
+   * products lives on the run options / render job, not the stored profile.
+   */
+  chapters?: Readonly<ChapterPolicy>
 }
 
 export type ExportCallbacks = ExportRunOptions
@@ -132,6 +162,7 @@ export interface ExportControllerDeps {
     media: ExportMediaSource,
     deps: PipelineExportDeps,
   ): ExportRun
+  createAudioSource?(resolveAsset: ExportAssetResolver): ExportAudioMediaSource
 }
 
 const realDeps: ExportControllerDeps = {
@@ -170,13 +201,14 @@ const realDeps: ExportControllerDeps = {
       projectTarget,
     ),
   runExport: exportTimeline,
+  createAudioSource: createMediabunnyExportAudioSource,
 }
 
 interface ExportSession {
   generator: ExportRun
   cancelRequested: boolean
   generatorDone: boolean
-  returnPromise: Promise<void> | null
+  returnPromise: Promise<ExportResult | undefined> | null
 }
 
 interface ExportLifecycle {
@@ -338,7 +370,18 @@ function freezeRunOptions(callbacks: ExportCallbacks): Readonly<ExportRunOptions
     ...(callbacks.fileDestination
       ? { fileDestination: callbacks.fileDestination }
       : {}),
+    ...(callbacks.directoryDestination
+      ? { directoryDestination: callbacks.directoryDestination }
+      : {}),
+    ...(callbacks.chapters ? { chapters: Object.freeze({ ...callbacks.chapters }) } : {}),
   })
+}
+
+function resolvedChapterPolicy(
+  settings: Readonly<ExportSettings>,
+  options: Readonly<ExportRunOptions>,
+): Readonly<ChapterPolicy> {
+  return options.chapters ?? chapterPolicyOf(settings)
 }
 
 function assertDestinationCapability(
@@ -348,9 +391,65 @@ function assertDestinationCapability(
   if (settings.destination === 'file' && !options.fileDestination) {
     throw new TypeError('Direct file export requires a user-selected file destination')
   }
+  if (settings.destination === 'directory' && !options.directoryDestination) {
+    throw new TypeError('Folder image-sequence export requires a user-selected directory')
+  }
   if (settings.destination === 'download' && options.fileDestination) {
     throw new TypeError('Browser download export cannot use a direct file destination')
   }
+  if (settings.destination !== 'directory' && options.directoryDestination) {
+    throw new TypeError('Only PNG folder export can use a directory destination')
+  }
+  if (settings.destination === 'directory' && options.fileDestination) {
+    throw new TypeError('Folder image-sequence export cannot use a direct file destination')
+  }
+}
+
+function chapterSidecarPayload(
+  doc: TimelineDoc,
+  settings: Readonly<ExportSettings>,
+  range: ExportRange,
+  chapters: Readonly<ChapterPolicy>,
+): { readonly name: string; readonly bytes: Uint8Array } | undefined {
+  if (chapters.mode !== 'sidecar') return undefined
+  const base = isImageSequenceProfile(settings)
+    ? settings.fileNamePrefix
+    : isAudioOnlyProfile(settings)
+      ? `audio`
+      : 'video'
+  return {
+    name: chapterSidecarFileName(base),
+    bytes: new TextEncoder().encode(serializeChapterSidecar(doc, range)),
+  }
+}
+
+function wrapDownloadWithSidecar(
+  result: ExportResult,
+  sidecar: { readonly name: string; readonly bytes: Uint8Array },
+): ExportResult {
+  if (result.destination !== 'download' || !('buffer' in result)) return result
+  const extension = result.fileExtension
+  const audioName = extension === 'wav' || extension === 'm4a' || result.mimeType.startsWith('audio/')
+  const mediaName = `${audioName ? 'audio' : 'video'}.${extension}`
+  const zip = zipStore([
+    { name: mediaName, data: new Uint8Array(result.buffer) },
+    { name: sidecar.name, data: sidecar.bytes },
+  ])
+  const label = 'label' in result
+    ? `${result.label} with chapter sidecar`
+    : 'profile' in result
+      ? `${result.profile.container.toUpperCase()} with chapter sidecar`
+      : 'Export with chapter sidecar'
+  return createAlternativeBufferedExportResult({
+    destination: 'download',
+    kind: 'kind' in result ? result.kind : 'av-media',
+    buffer: (zip.buffer as ArrayBuffer).slice(zip.byteOffset, zip.byteOffset + zip.byteLength),
+    mimeType: 'application/zip',
+    fileExtension: 'zip',
+    label,
+    completion: 'complete',
+    files: [mediaName, sidecar.name],
+  })
 }
 
 interface CapturedExportInputs {
@@ -390,7 +489,8 @@ function captureExportInputs(
   const mediaState = useMediaStore.getState()
   const assets = new Map(mediaState.assets)
   const sourceBounds = createSourceBoundsCatalog(mediaState.descriptors.values())
-  const includeAudio = settings.audioChannelLayout !== 'off'
+  const includeAudio = exportSettingsIncludesAudio(doc, settings)
+  const includeVisual = exportSettingsIncludesVisual(settings)
   const audioMixPlan = createProjectTimelineAudioMixPlan(
     projectTarget.project,
     projectTarget.sequenceId,
@@ -412,7 +512,9 @@ function captureExportInputs(
       sequence,
       includeAudio,
       crossfadeWindows,
+      includeVisual,
     )) retainedAssetIds.add(assetId)
+    if (!includeVisual) continue
     for (const track of sequence.tracks) {
       if (track.kind !== 'video' || track.hidden) continue
       for (const instance of track.multicamInstances ?? []) {
@@ -482,7 +584,7 @@ async function rejectAfterClosingMedia(
  * serialized after any pending next(), rather than queueing competing commands
  * against the async generator while a codec/decode boundary is still running.
  */
-function returnGenerator(session: ExportSession): Promise<void> {
+function returnGenerator(session: ExportSession): Promise<ExportResult | undefined> {
   if (session.returnPromise) return session.returnPromise
 
   session.returnPromise = (async () => {
@@ -491,6 +593,7 @@ function returnGenerator(session: ExportSession): Promise<void> {
       if (!stopped.done) {
         throw new Error('Export generator did not stop after cancellation')
       }
+      return stopped.value
     } finally {
       session.generatorDone = true
     }
@@ -527,16 +630,15 @@ async function drainExport(
       }
 
       if (session.cancelRequested) {
-        await returnGenerator(session)
-        return undefined
+        return await returnGenerator(session)
       }
 
       onProgress?.(step.value)
       // A progress callback may synchronously request cancellation, including
-      // at progress 1. That remains cancellation and must not expose a result.
+      // at progress 1. Classic video still reports cancellation. PNG sequences
+      // may return a partial archive from generator.return().
       if (session.cancelRequested) {
-        await returnGenerator(session)
-        return undefined
+        return await returnGenerator(session)
       }
 
       pendingStep = session.generator.next()
@@ -630,15 +732,21 @@ async function preflightAndRunExport(
   >,
 ): Promise<ExportResult | undefined> {
   if (lifecycle.cancelRequested) return undefined
-  const titleError = projectTitleExportError(projectTarget.project, projectTarget.sequenceId)
-  if (titleError) throw new Error(`Title cannot be exported: ${titleError}`)
-  const captionError = firstCaptionExportBlocker(projectTarget.project, projectTarget.sequenceId)
-  if (captionError) throw new Error(`Caption cannot be exported at frame ${captionError.frame}: ${captionError.reason}`)
+  const chapters = resolvedChapterPolicy(settings, callbacks)
+  assertChapterDelivery(settings.destination, chapters)
+  if (!isAudioOnlyProfile(settings)) {
+    const titleError = projectTitleExportError(projectTarget.project, projectTarget.sequenceId)
+    if (titleError) throw new Error(`Title cannot be exported: ${titleError}`)
+    const captionError = firstCaptionExportBlocker(projectTarget.project, projectTarget.sequenceId)
+    if (captionError) throw new Error(`Caption cannot be exported at frame ${captionError.frame}: ${captionError.reason}`)
+  }
   await deps.preparePlaybackForExport()
   if (lifecycle.cancelRequested) return undefined
   // Reject impossible work before Blob retention, profile probing, or the
   // cooperative per-asset visual schedule owned by createMediaSource().
-  assertExportAdmission(doc, settings, callbacks.range)
+  const admission = assertExportAdmission(doc, settings, callbacks.range)
+  const window = validateExportRange(doc, callbacks.range)
+  const sidecar = chapterSidecarPayload(doc, settings, window, chapters)
   let resolveAsset: ExportAssetResolver | null = null
   if (!pluginExecution) {
     resolveAsset = createAssetResolver(assets, deps.fetchBlob)
@@ -673,6 +781,20 @@ async function preflightAndRunExport(
   }
   if (lifecycle.cancelRequested) return undefined
 
+  if (isAudioOnlyProfile(settings)) {
+    return runAudioOnlyExport(
+      lifecycle,
+      doc,
+      settings,
+      resolveAsset,
+      sourceBounds,
+      audioMixPlan,
+      callbacks,
+      deps,
+      sidecar,
+    )
+  }
+
   let media: ExportMediaSource | null = null
   let generator: ExportRun
   try {
@@ -684,7 +806,37 @@ async function preflightAndRunExport(
       audioMixPlan,
       projectTarget,
     )
-    const pipelineDeps = { ...basePipelineDeps, ...(callbacks.range ? { range: callbacks.range } : {}) }
+    const directoryWriter = isImageSequenceProfile(settings) && callbacks.directoryDestination
+      ? directoryWriterFromHandle(callbacks.directoryDestination.takeDirectoryHandle())
+      : undefined
+    const pipelineDeps: PipelineExportDeps = {
+      ...basePipelineDeps,
+      ...(callbacks.range ? { range: callbacks.range } : {}),
+      ...(isImageSequenceProfile(settings)
+        ? {
+            createVideoSink: async (sinkDoc, sinkSettings, range) => {
+              if (!isImageSequenceProfile(sinkSettings)) {
+                throw new TypeError('Image-sequence export received a non-sequence profile')
+              }
+              const window = range ?? {
+                startFrame: 0,
+                endFrame: admission.frameCount,
+              }
+              return createImageSequenceSink(
+                sinkDoc,
+                sinkSettings,
+                window,
+                directoryWriter,
+                {
+                  sidecarName: sidecar?.name,
+                  sidecarBytes: sidecar?.bytes,
+                  projectTarget,
+                },
+              )
+            },
+          }
+        : {}),
+    }
     media = deps.createMediaSource(
       doc,
       resolveAsset,
@@ -729,7 +881,80 @@ async function preflightAndRunExport(
     returnPromise: null,
   }
   lifecycle.session = session
-  return drainExport(session, firstStep, callbacks.onProgress)
+  const result = await drainExport(session, firstStep, callbacks.onProgress)
+  if (
+    result
+    && sidecar
+    && result.destination === 'download'
+    && !isImageSequenceProfile(settings)
+  ) {
+    return wrapDownloadWithSidecar(result, sidecar)
+  }
+  return result
+}
+
+async function runAudioOnlyExport(
+  lifecycle: ExportLifecycle,
+  doc: TimelineDoc,
+  settings: ExportSettings,
+  resolveAsset: ExportAssetResolver,
+  sourceBounds: SourceBoundsCatalog,
+  audioMixPlan: TimelineAudioMixPlan,
+  callbacks: ExportCallbacks,
+  deps: ExportControllerDeps,
+  sidecar: { readonly name: string; readonly bytes: Uint8Array } | undefined,
+): Promise<ExportResult | undefined> {
+  if (!isAudioOnlyProfile(settings)) {
+    throw new TypeError('Audio-only export requires an audio-only profile')
+  }
+  const createAudioSource = deps.createAudioSource ?? createMediabunnyExportAudioSource
+  const audioSource = createAudioSource(resolveAsset)
+  let generator: ExportRun
+  try {
+    generator = exportAudioOnly(doc, settings, audioSource, {
+      range: callbacks.range,
+      sourceBounds,
+      projectMixPlan: audioMixPlan,
+      fileDestination: callbacks.fileDestination,
+      sidecarName: sidecar?.name,
+      sidecarBytes: sidecar?.bytes,
+    })
+    if (lifecycle.cancelRequested) {
+      await audioSource.close()
+      return undefined
+    }
+  } catch (cause) {
+    try {
+      await audioSource.close()
+    } catch {
+      // Setup failure stays primary.
+    }
+    throw cause
+  }
+
+  let firstStep: Promise<IteratorResult<number, ExportResult | undefined>>
+  try {
+    firstStep = generator.next()
+  } catch (cause) {
+    try {
+      await audioSource.close()
+    } catch {
+      // Setup failure stays primary.
+    }
+    throw cause
+  }
+  const session: ExportSession = {
+    generator,
+    cancelRequested: lifecycle.cancelRequested,
+    generatorDone: false,
+    returnPromise: null,
+  }
+  lifecycle.session = session
+  try {
+    return await drainExport(session, firstStep, callbacks.onProgress)
+  } finally {
+    await audioSource.close()
+  }
 }
 
 /**
@@ -759,11 +984,15 @@ export function startExport(
   let runOptions: Readonly<ExportRunOptions>
   let captured: CapturedExportInputs
   try {
-    runSettings = validateExportProfile(settings)
+    runSettings = parseExportSettings(settings)
     runOptions = freezeRunOptions(callbacks)
     validateExportRange(doc, runOptions.range)
     assertDestinationCapability(runSettings, runOptions)
-    if (reachableSequences(projectTarget).some(documentHasOutputPluginEffects)) {
+    assertChapterDelivery(runSettings.destination, resolvedChapterPolicy(runSettings, runOptions))
+    if (
+      !isAudioOnlyProfile(runSettings)
+      && reachableSequences(projectTarget).some(documentHasOutputPluginEffects)
+    ) {
       throw new Error('Plugin-aware export requires a prepared one-shot attempt')
     }
     captured = captureExportInputs(doc, runSettings, projectTarget)

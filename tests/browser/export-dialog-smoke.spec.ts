@@ -26,7 +26,7 @@ test('export dialog opens on a 96 kHz project and stays blocked only for empty c
   await page.getByRole('button', { name: 'Export' }).click()
   const dialog = page.getByRole('dialog', { name: 'Export video' })
   await expect(dialog).toBeVisible()
-  await expect(page.getByRole('radio', { name: /^Auto/ })).toBeVisible()
+  await expect(page.getByRole('radio', { name: /^Auto(?![a-z])/ })).toBeVisible()
   await expect(page.getByRole('radio', { name: /^Compatibility/ })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Start export' })).toBeDisabled()
   await expect(dialog).not.toContainText(/No export profile supports this project/)

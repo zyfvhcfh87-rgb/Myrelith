@@ -6,11 +6,22 @@
 import {
   AUTO_EXPORT_PRESET_ORDER,
   EXPORT_PRESETS,
+  exportAudioEncoderSampleRate,
   validateExportProfile,
   type ExportPresetId,
   type ExportProfile,
   type ExportSelectionId,
 } from '../domain/exportProfile'
+import {
+  isAlphaVideoProfile,
+  isAudioOnlyProfile,
+  isDeliveryProfile,
+  isImageSequenceProfile,
+  parseExportSettings,
+  type AlphaVideoCodec,
+  type AudioOnlyProfile,
+  type DeliveryProfile,
+} from '../domain/deliveryProduct'
 import type { TimelineDoc } from '../domain/schema'
 import {
   checkExportProfileSupport,
@@ -18,7 +29,13 @@ import {
   type ExportCapabilityResult,
 } from '../pipeline/export-capabilities'
 import { mediabunnyExportCapabilityProbe } from '../pipeline/export-mediabunny-capabilities'
+import {
+  proveAlphaVideoCodec,
+  provePngSequenceSupport,
+  type AlphaCapabilityResult,
+} from '../pipeline/export-alpha-probe'
 import { useDocumentStore } from '../state/documentStore'
+import type { ExportSettings } from '../pipeline/export'
 
 export interface ExportPresetCapability extends ExportCapabilityResult {
   readonly presetId: ExportPresetId
@@ -36,6 +53,12 @@ export interface ResolvedExportSelection {
   readonly reason: string | null
 }
 
+export interface ExportSettingsCapabilityResult {
+  readonly settings: Readonly<ExportSettings>
+  readonly supported: boolean
+  readonly reason: string | null
+}
+
 export interface ExportCapabilitiesControllerDeps {
   getDocument(): TimelineDoc
   checkProfile(
@@ -47,6 +70,23 @@ export interface ExportCapabilitiesControllerDeps {
     profile: ExportProfile,
     signal?: AbortSignal,
   ): Promise<Readonly<ExportCapabilityResult>>
+  provePngSequence?(): Promise<{ readonly supported: boolean; readonly reason: string | null }>
+  proveAlphaVideo?(
+    codec: AlphaVideoCodec,
+    signal?: AbortSignal,
+  ): Promise<Readonly<AlphaCapabilityResult>>
+  proveCompressedAudio?(
+    doc: TimelineDoc,
+    profile: AudioOnlyProfile,
+    signal?: AbortSignal,
+  ): Promise<{ readonly supported: boolean; readonly reason: string | null }>
+}
+
+function throwIfAborted(signal?: AbortSignal, message = 'Export capability check was canceled'): void {
+  if (!signal?.aborted) return
+  if (typeof signal.throwIfAborted === 'function') signal.throwIfAborted()
+  if (signal.reason !== undefined) throw signal.reason
+  throw new DOMException(message, 'AbortError')
 }
 
 const realDeps: ExportCapabilitiesControllerDeps = {
@@ -62,6 +102,74 @@ const realDeps: ExportCapabilitiesControllerDeps = {
     mediabunnyExportCapabilityProbe,
     signal,
   ),
+}
+
+async function defaultCompressedAudioProof(
+  doc: TimelineDoc,
+  profile: AudioOnlyProfile,
+  signal?: AbortSignal,
+): Promise<{ readonly supported: boolean; readonly reason: string | null }> {
+  if (signal?.aborted) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new DOMException('Audio-only proof cancelled', 'AbortError')
+  }
+  const codec = profile.codec
+  if (codec !== 'aac' && codec !== 'opus') {
+    return { supported: false, reason: 'Compressed audio-only requires AAC or Opus' }
+  }
+  const ok = await mediabunnyExportCapabilityProbe.canEncodeAudio(codec, {
+    numberOfChannels: profile.audioChannelLayout === 'mono' ? 1 : 2,
+    sampleRate: exportAudioEncoderSampleRate(doc.audioSampleRate, codec),
+    bitrate: profile.audioBitrate ?? 192_000,
+    bitrateMode: profile.audioBitrateMode ?? 'variable',
+  })
+  return ok
+    ? { supported: true, reason: null }
+    : {
+        supported: false,
+        reason: `${codec.toUpperCase()} audio-only encoding is unavailable on this browser. No codec was substituted.`,
+      }
+}
+
+async function proveDeliverySettings(
+  doc: TimelineDoc,
+  profile: DeliveryProfile,
+  signal: AbortSignal | undefined,
+  deps: ExportCapabilitiesControllerDeps,
+): Promise<ExportSettingsCapabilityResult> {
+  if (isImageSequenceProfile(profile)) {
+    const proof = await (deps.provePngSequence ?? provePngSequenceSupport)()
+    return {
+      settings: profile,
+      supported: proof.supported,
+      reason: proof.reason,
+    }
+  }
+  if (isAudioOnlyProfile(profile)) {
+    if (profile.codec === 'pcm-s16') {
+      return { settings: profile, supported: true, reason: null }
+    }
+    const proof = await (deps.proveCompressedAudio ?? defaultCompressedAudioProof)(
+      doc,
+      profile,
+      signal,
+    )
+    return { settings: profile, supported: proof.supported, reason: proof.reason }
+  }
+  if (isAlphaVideoProfile(profile)) {
+    const proof = await (deps.proveAlphaVideo ?? proveAlphaVideoCodec)(
+      profile.videoCodec,
+      signal,
+    )
+    throwIfAborted(signal, 'Alpha proof cancelled')
+    return { settings: profile, supported: proof.supported, reason: proof.reason }
+  }
+  return {
+    settings: profile,
+    supported: false,
+    reason: 'This delivery product is not supported.',
+  }
 }
 
 /** Probe the documented preset catalog only; capability results are not persisted. */
@@ -128,6 +236,22 @@ export function resolveExportSelection(
   })
 }
 
+export async function checkCurrentExportSettings(
+  settings: unknown,
+  deps: ExportCapabilitiesControllerDeps = realDeps,
+): Promise<Readonly<ExportSettingsCapabilityResult>> {
+  const parsed = parseExportSettings(settings)
+  if (isDeliveryProfile(parsed)) {
+    return proveDeliverySettings(deps.getDocument(), parsed, undefined, deps)
+  }
+  const result = await deps.checkProfile(deps.getDocument(), parsed)
+  return Object.freeze({
+    settings: result.profile,
+    supported: result.supported,
+    reason: result.reason,
+  })
+}
+
 /**
  * Fresh authoritative check used by exportController after reserving a run and
  * before creating decoders or encoder output. The controller separately
@@ -135,12 +259,22 @@ export function resolveExportSelection(
  */
 export async function preflightExportProfile(
   doc: TimelineDoc,
-  profile: ExportProfile,
+  profile: ExportSettings,
   signal?: AbortSignal,
   deps: ExportCapabilitiesControllerDeps = realDeps,
 ): Promise<void> {
-  const validated = validateExportProfile(profile)
-  const result = await deps.verifyProfile(doc, validated, signal)
+  const parsed = parseExportSettings(profile)
+  if (isDeliveryProfile(parsed)) {
+    const result = await proveDeliverySettings(doc, parsed, signal, deps)
+    throwIfAborted(signal)
+    if (!result.supported) {
+      throw new Error(
+        result.reason ?? 'The selected delivery product is unavailable. No codec was substituted.',
+      )
+    }
+    return
+  }
+  const result = await deps.verifyProfile(doc, parsed, signal)
   if (!result.supported) {
     throw new Error(
       result.reason ?? 'The selected export profile is unavailable. No codec was substituted.',

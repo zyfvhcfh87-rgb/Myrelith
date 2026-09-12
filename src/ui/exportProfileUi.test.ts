@@ -166,6 +166,9 @@ describe('export filenames', () => {
     ['  My / Rough: Cut.mp4  ', 'webm', 'My - Rough- Cut.webm'],
     ['CON.txt', 'mp4', 'myrelith-CON.txt.mp4'],
     [' . ', 'webm', 'myrelith-export.webm'],
+    ['Show.mp4', 'zip', 'Show.zip'],
+    ['Show', 'wav', 'Show.wav'],
+    ['Show', 'm4a', 'Show.m4a'],
   ] as const)('creates a safe dynamic %s -> %s filename', (name, extension, expected) => {
     expect(exportFileName(name, extension)).toBe(expected)
   })

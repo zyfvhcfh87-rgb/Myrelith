@@ -1,6 +1,6 @@
 /** App-owned preparation and one-shot ownership for plugin-aware exports. */
 
-import { validateExportProfile, type ExportProfile } from '../domain/exportProfile'
+import { parseExportSettings, type ExportSettingsUnion } from '../domain/deliveryProduct'
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import type { TimelineDoc } from '../domain/schema'
 import { sequenceById, type SequenceProject } from '../domain/projectSequences'
@@ -84,7 +84,7 @@ export interface PluginExportEffectFact {
 
 export interface PluginExportAttemptSnapshot {
   readonly documentGeneration: number
-  readonly settings: Readonly<ExportProfile>
+  readonly settings: Readonly<ExportSettingsUnion>
   readonly catalogGeneration: number
   readonly effects: readonly PluginExportEffectFact[]
   readonly blockers: readonly PluginExportBlocker[]
@@ -113,7 +113,7 @@ export type PluginExportAttemptPrepareResult =
 export interface PluginPreparedExportExecution {
   readonly document: TimelineDoc
   readonly documentGeneration: number
-  readonly settings: Readonly<ExportProfile>
+  readonly settings: Readonly<ExportSettingsUnion>
   readonly pluginSnapshot: PluginVideoEffectContributionSnapshot
   readonly videoEffectStageExecutor: VideoEffectStageExecutor
   readonly projectTarget?: Readonly<{
@@ -138,7 +138,7 @@ export interface PluginExportAttemptControllerDependencies {
 
 export interface PluginExportAttemptController {
   prepare(
-    settings: ExportProfile,
+    settings: ExportSettingsUnion,
     signal?: AbortSignal,
   ): Promise<PluginExportAttemptPrepareResult>
   approveReviewedBlockers(
@@ -169,7 +169,7 @@ interface FrozenPlan {
     project: SequenceProject
     sequenceId: string
   }>
-  readonly settings: Readonly<ExportProfile>
+  readonly settings: Readonly<ExportSettingsUnion>
   readonly catalog: PluginDeclarationCatalogSnapshot
   readonly catalogFingerprint: string
   readonly pluginSnapshot: PluginVideoEffectContributionSnapshot
@@ -373,13 +373,13 @@ function exportDocuments(snapshot: PluginExportDocumentSnapshot): readonly Timel
 
 function freezePlan(
   snapshot: PluginExportDocumentSnapshot,
-  settings: ExportProfile,
+  settings: ExportSettingsUnion,
   catalog: PluginDeclarationCatalogSnapshot,
 ): FrozenPlan {
   if (!Number.isSafeInteger(snapshot.generation) || snapshot.generation < 0) {
     throw new TypeError('Plugin export document generation is invalid')
   }
-  const validatedSettings = validateExportProfile(settings)
+  const validatedSettings = parseExportSettings(settings)
   const pluginSnapshot = declarationSnapshot(catalog)
   const planner = createVideoEffectStagePlanner(pluginSnapshot)
   const declarationsByType = new Map(

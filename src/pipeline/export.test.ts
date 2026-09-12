@@ -729,6 +729,73 @@ describe('exportTimeline ownership and failures', () => {
     expect(h.closeMedia).toHaveBeenCalledOnce()
   })
 
+  test('does not replace mid-export failures with a successful partial', async () => {
+    const partial: ExportResult = {
+      destination: 'download',
+      kind: 'image-sequence',
+      buffer: Uint8Array.from([1]).buffer,
+      mimeType: 'application/zip',
+      fileExtension: 'zip',
+      label: 'Partial PNG image sequence',
+      completion: 'partial',
+      writtenFrames: 1,
+      expectedFrames: 2,
+    }
+    const h = makeHarness({
+      composite: async (frame) => (
+        frame === 1
+          ? { drawn: [], missing: ['clip-a'] }
+          : { drawn: ['clip-a'], missing: [] }
+      ),
+    })
+    const commitPartial = vi.fn(async () => partial)
+    h.sink.preservePartialOnFailure = true
+    h.sink.commitPartial = commitPartial
+
+    await expect(
+      drain(exportTimeline(makeDoc(2), SETTINGS, h.media, h.deps)),
+    ).rejects.toThrow('Missing source media for clips: clip-a')
+
+    expect(h.addFrame).toHaveBeenCalledOnce()
+    expect(commitPartial).not.toHaveBeenCalled()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('quota with preservePartialOnFailure surfaces the partial archive', async () => {
+    const partial: ExportResult = {
+      destination: 'download',
+      kind: 'image-sequence',
+      buffer: Uint8Array.from([1]).buffer,
+      mimeType: 'application/zip',
+      fileExtension: 'zip',
+      label: 'Partial PNG image sequence',
+      completion: 'partial',
+      writtenFrames: 1,
+      expectedFrames: 2,
+    }
+    const h = makeHarness({
+      addFrame: async (_timestamp, _duration, index) => {
+        if (index === 1) {
+          const quota = new Error('Storage exhausted after 1 of 2 PNG frames.')
+          quota.name = 'QuotaExceededError'
+          throw quota
+        }
+      },
+    })
+    const commitPartial = vi.fn(async () => partial)
+    h.sink.preservePartialOnFailure = true
+    h.sink.commitPartial = commitPartial
+
+    const completed = await drain(exportTimeline(makeDoc(2), SETTINGS, h.media, h.deps))
+    expect(completed.result).toBe(partial)
+    expect(commitPartial).toHaveBeenCalledOnce()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).not.toHaveBeenCalled()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
   test('preserves a composite failure over lease and export cleanup failures', async () => {
     const primary = new Error('composite failed')
     const h = makeHarness({
@@ -841,6 +908,39 @@ describe('exportTimeline ownership and failures', () => {
 
     expect(h.finalize).not.toHaveBeenCalled()
     expect(h.cancel).toHaveBeenCalledOnce()
+    expect(h.closeMedia).toHaveBeenCalledOnce()
+  })
+
+  test('early return can surface a committed partial archive', async () => {
+    const partial: ExportResult = {
+      destination: 'download',
+      kind: 'image-sequence',
+      buffer: Uint8Array.from([1]).buffer,
+      mimeType: 'application/zip',
+      fileExtension: 'zip',
+      label: 'Partial PNG image sequence',
+      completion: 'partial',
+      writtenFrames: 1,
+      expectedFrames: 2,
+    }
+    const h = makeHarness()
+    const commitPartial = vi.fn(async () => partial)
+    h.sink.commitPartial = commitPartial
+    const generator = exportTimeline(makeDoc(2), SETTINGS, h.media, h.deps)
+
+    await expect(generator.next()).resolves.toEqual({ value: 0, done: false })
+    await expect(generator.next()).resolves.toEqual({
+      value: 1 / 3,
+      done: false,
+    })
+    await expect(generator.return(undefined)).resolves.toEqual({
+      value: partial,
+      done: true,
+    })
+
+    expect(commitPartial).toHaveBeenCalledOnce()
+    expect(h.finalize).not.toHaveBeenCalled()
+    expect(h.cancel).not.toHaveBeenCalled()
     expect(h.closeMedia).toHaveBeenCalledOnce()
   })
 

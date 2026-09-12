@@ -274,6 +274,8 @@ function orderedPixelSurfaces(
  * lens unavailability and typed video-effect execution failures reject so the
  * owning preview/export policy can respond explicitly.
  */
+export type CompositeBackground = 'opaque' | 'transparent'
+
 export async function compositeFrame(
   doc: TimelineDoc,
   plan: VideoCompositionPlan,
@@ -284,6 +286,7 @@ export async function compositeFrame(
   lensRemapProvider?: LensRemapProvider | null,
   videoEffectStageExecutor?: VideoEffectStageExecutor | null,
   grading?: ColorGradingFrame,
+  background: CompositeBackground = 'opaque',
 ): Promise<CompositeResult> {
   const titleBudgetError = titleCompositionBudgetError(plan)
   if (titleBudgetError) throw new RangeError(titleBudgetError)
@@ -311,7 +314,7 @@ export async function compositeFrame(
   })
   try {
     return await compositeAdmittedFrame(doc, plan, ctx, source, transitionSurfaceProvider,
-      presentation, lensRemapProvider, videoEffectStageExecutor, grading)
+      presentation, lensRemapProvider, videoEffectStageExecutor, grading, background)
   } finally { releaseFrameWork?.() }
 }
 
@@ -325,6 +328,7 @@ async function compositeAdmittedFrame(
   lensRemapProvider?: LensRemapProvider | null,
   videoEffectStageExecutor?: VideoEffectStageExecutor | null,
   grading?: ColorGradingFrame,
+  background: CompositeBackground = 'opaque',
 ): Promise<CompositeResult> {
   const gradingContext = grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT
   const gradingPixels = colorGradingPlanNeedsPixels(plan, gradingContext)
@@ -370,8 +374,12 @@ async function compositeAdmittedFrame(
     }
     ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
-    ctx.fillStyle = '#000000'
-    ctx.fillRect(0, 0, doc.width, doc.height)
+    if (background === 'transparent') {
+      ctx.clearRect(0, 0, doc.width, doc.height)
+    } else {
+      ctx.fillStyle = '#000000'
+      ctx.fillRect(0, 0, doc.width, doc.height)
+    }
 
     for (const item of plan.items) {
       grading?.check()

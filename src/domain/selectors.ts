@@ -263,10 +263,11 @@ export function outputMediaAssetIds(
   doc: TimelineDoc,
   includeAudio = true,
   providedCrossfadeWindows?: CrossfadeAudioWindowIndex,
+  includeVisual = true,
 ): Set<AssetId> {
   const ids = new Set<AssetId>()
   for (const track of doc.tracks) {
-    if (track.kind !== 'video' || track.hidden) continue
+    if (!includeVisual || track.kind !== 'video' || track.hidden) continue
     for (const clip of track.clips) {
       if (clipContributesVisualOutput(clip)) ids.add(clip.assetId)
     }
@@ -295,6 +296,7 @@ export function projectOutputMediaAssetIds(
   project: SequenceProject,
   sequenceId = project.rootSequenceId,
   includeAudio = true,
+  includeVisual = true,
 ): Set<AssetId> {
   const ids = new Set<AssetId>()
   for (const document of projectReachableSequences(project, sequenceId)) {
@@ -305,6 +307,7 @@ export function projectOutputMediaAssetIds(
       document,
       includeAudio,
       crossfadeWindows,
+      includeVisual,
     )) ids.add(assetId)
   }
   return ids

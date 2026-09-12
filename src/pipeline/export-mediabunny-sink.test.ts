@@ -297,6 +297,7 @@ describe('createMediabunnyExportSink selected profiles', () => {
         profile,
       })
       expect(Object.isFrozen(result)).toBe(true)
+      if (!('profile' in result)) throw new Error('expected classic export result')
       expect(Object.isFrozen(result.profile)).toBe(true)
     },
   )
@@ -825,6 +826,8 @@ describe('createMediabunnyExportSink audio behavior', () => {
     expect([...encoded[0].data.slice(exactSamples)].every(
       (value) => value === 0,
     )).toBe(true)
+    expect(result.destination).toBe('download')
+    if (!('profile' in result)) throw new Error('expected classic export result')
     expect(result.profile.audioChannelLayout).toBe('mono')
   })
 

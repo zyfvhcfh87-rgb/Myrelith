@@ -10,22 +10,36 @@ import {
 import type { TimelineDoc } from '../domain/schema'
 import { formatProjectCanvas } from '../domain/projectSettings'
 import type { ExportFilePickerAvailability } from '../app/exportFilePicker'
+import type { ExportDirectoryPickerAvailability } from '../app/exportDirectoryPicker'
+import {
+  deliveryFileExtension,
+  isDeliveryProfile,
+  isImageSequenceProfile,
+  type AudioOnlyContainer,
+  type AlphaVideoCodec,
+  type ChapterMode,
+  type DeliveryKind,
+  type ExportSettingsUnion,
+} from '../domain/deliveryProduct'
 import ExportProfilePicker, {
   type ExportPresetAvailability,
 } from './ExportProfilePicker'
 import {
-  exportProfileSummary,
+  exportSettingsLabel,
   type ExportUiSelectionId,
 } from './exportProfileUi'
 
 export type ExportPhase =
   | 'configure'
   | 'choosing-file'
+  | 'choosing-directory'
   | 'running'
   | 'cancelling'
   | 'download'
   | 'saved'
   | 'cancelled'
+
+export type DeliveryKindUi = 'video' | DeliveryKind
 
 export interface DownloadReady {
   url: string
@@ -37,6 +51,38 @@ export interface DownloadReady {
 export interface SavedFileReady {
   fileName: string
   formatLabel: string
+}
+
+function selectedOutputDetail(settings: Readonly<ExportSettingsUnion>): string {
+  if (isImageSequenceProfile(settings)) {
+    return settings.destination === 'directory' ? 'image/png · folder' : 'image/png · .zip'
+  }
+  if (isDeliveryProfile(settings)) {
+    return `${settings.mimeType} · .${deliveryFileExtension(settings)}`
+  }
+  return `${settings.mimeType} · .${settings.fileExtension}`
+}
+
+function selectedOutputSizeHint(
+  settings: Readonly<ExportSettingsUnion>,
+  estimatedSize: string,
+): { readonly strong: string; readonly note: string } {
+  if (isImageSequenceProfile(settings)) {
+    return {
+      strong: 'Depends on written frames',
+      note: 'Each PNG is encoded locally; ZIP or folder size is not a bitrate estimate.',
+    }
+  }
+  if (isDeliveryProfile(settings) && settings.kind === 'audio-only') {
+    return {
+      strong: 'Depends on range and sample rate',
+      note: 'WAV uses the project sample rate and channels. Compressed audio follows the proven bitrate.',
+    }
+  }
+  return {
+    strong: `About ${estimatedSize}`,
+    note: 'Bitrate-based estimate; variable bitrate and container overhead can change the final size.',
+  }
 }
 
 interface ExportDialogHeaderProps {
@@ -76,6 +122,7 @@ interface ExportConfigurationProps {
   descriptionId: string
   doc: TimelineDoc
   displayProfile: Readonly<ExportProfile>
+  outputSettings: Readonly<ExportSettingsUnion>
   estimatedSize: string
   selectionId: ExportUiSelectionId
   presetAvailability: readonly Readonly<ExportPresetAvailability>[]
@@ -97,12 +144,31 @@ interface ExportConfigurationProps {
   onChangeProfile(profile: Readonly<ExportProfile>): void
   onDraftValidityChange(valid: boolean): void
   onRetryCapabilities(): void
+  deliveryKind: DeliveryKindUi
+  onDeliveryKind(kind: DeliveryKindUi): void
+  chapterMode: ChapterMode
+  onChapterMode(mode: ChapterMode): void
+  pngPrefix: string
+  onPngPrefix(value: string): void
+  pngOverwrite: boolean
+  onPngOverwrite(value: boolean): void
+  pngDestination: 'download' | 'directory'
+  onPngDestination(value: 'download' | 'directory'): void
+  audioContainer: AudioOnlyContainer
+  onAudioContainer(value: AudioOnlyContainer): void
+  alphaCodec: AlphaVideoCodec
+  onAlphaCodec(value: AlphaVideoCodec): void
+  alphaVp9Supported: boolean | null
+  alphaAv1Supported: boolean | null
+  alphaReason: string | null
+  directoryPickerAvailability: ExportDirectoryPickerAvailability
 }
 
 export function ExportConfiguration({
   descriptionId,
   doc,
   displayProfile,
+  outputSettings,
   estimatedSize,
   selectionId,
   presetAvailability,
@@ -124,12 +190,147 @@ export function ExportConfiguration({
   onChangeProfile,
   onDraftValidityChange,
   onRetryCapabilities,
+  deliveryKind,
+  onDeliveryKind,
+  chapterMode,
+  onChapterMode,
+  pngPrefix,
+  onPngPrefix,
+  pngOverwrite,
+  onPngOverwrite,
+  pngDestination,
+  onPngDestination,
+  audioContainer,
+  onAudioContainer,
+  alphaCodec,
+  onAlphaCodec,
+  alphaVp9Supported,
+  alphaAv1Supported,
+  alphaReason,
+  directoryPickerAvailability,
 }: ExportConfigurationProps) {
+  const alphaOffered = alphaVp9Supported === true || alphaAv1Supported === true
+  const sizeHint = selectedOutputSizeHint(outputSettings, estimatedSize)
   return (
     <>
       <p id={descriptionId} className="export-description">
-        Export the full timeline using its current project settings.
+        Export the selected range using the current project settings. Alternative
+        products stay local and are offered only when this browser can produce them.
       </p>
+
+      <fieldset className="export-delivery-kind" disabled={phase !== 'configure'}>
+        <legend>Delivery product</legend>
+        {([
+          ['video', 'MP4 / WebM video'],
+          ['image-sequence', 'PNG image sequence'],
+          ['audio-only', 'Audio only'],
+        ] as const).map(([kind, label]) => (
+          <label key={kind} className="export-delivery-option">
+            <input
+              type="radio"
+              name="export-delivery-kind"
+              value={kind}
+              checked={deliveryKind === kind}
+              onChange={() => onDeliveryKind(kind)}
+            />
+            {label}
+          </label>
+        ))}
+        <label className="export-delivery-option">
+          <input
+            type="radio"
+            name="export-delivery-kind"
+            value="alpha-video"
+            checked={deliveryKind === 'alpha-video'}
+            disabled={!alphaOffered}
+            onChange={() => onDeliveryKind('alpha-video')}
+          />
+          Alpha video
+          {!alphaOffered && (
+            <span>
+              {' '}
+              {alphaReason ?? 'Offered only after a local encode/decode proof.'}
+            </span>
+          )}
+        </label>
+      </fieldset>
+
+      <label className="export-delivery-option">
+        <input
+          type="checkbox"
+          checked={chapterMode === 'sidecar'}
+          disabled={phase !== 'configure'}
+          onChange={(event) => onChapterMode(event.target.checked ? 'sidecar' : 'off')}
+        />
+        Include chapter sidecar JSON
+        <span className="export-description">
+          Markers in the selected range are written as integer frames and microseconds.
+          This encoder cannot store chapters inside MP4 or WebM.
+        </span>
+      </label>
+
+      {deliveryKind === 'image-sequence' && (
+        <div className="export-delivery-options">
+          <label htmlFor="export-png-prefix">PNG file prefix
+            <input
+              id="export-png-prefix"
+              value={pngPrefix}
+              maxLength={80}
+              disabled={phase !== 'configure'}
+              onChange={(event) => onPngPrefix(event.target.value)}
+            />
+          </label>
+          <label htmlFor="export-png-destination">PNG destination
+            <select
+              id="export-png-destination"
+              value={pngDestination}
+              disabled={phase !== 'configure'}
+              onChange={(event) => onPngDestination(event.target.value as 'download' | 'directory')}
+            >
+              <option value="download">Browser download ZIP</option>
+              <option value="directory">Chosen folder</option>
+            </select>
+          </label>
+          <label className="export-delivery-option">
+            <input
+              type="checkbox"
+              checked={pngOverwrite}
+              disabled={phase !== 'configure'}
+              onChange={(event) => onPngOverwrite(event.target.checked)}
+            />
+            Overwrite existing PNG files in the chosen folder
+          </label>
+        </div>
+      )}
+
+      {deliveryKind === 'audio-only' && (
+        <label htmlFor="export-audio-container">Audio-only format
+          <select
+            id="export-audio-container"
+            value={audioContainer}
+            disabled={phase !== 'configure'}
+            onChange={(event) => onAudioContainer(event.target.value as AudioOnlyContainer)}
+          >
+            <option value="wav">WAV PCM (project sample rate)</option>
+            <option value="mp4">AAC in M4A (if this browser can encode it)</option>
+            <option value="webm">Opus in WebM (if this browser can encode it)</option>
+          </select>
+        </label>
+      )}
+
+      {deliveryKind === 'alpha-video' && alphaOffered && (
+        <label htmlFor="export-alpha-codec">Alpha codec
+          <select
+            id="export-alpha-codec"
+            value={alphaCodec}
+            disabled={phase !== 'configure'}
+            onChange={(event) => onAlphaCodec(event.target.value as AlphaVideoCodec)}
+          >
+            {alphaVp9Supported && <option value="vp9">VP9 in WebM</option>}
+            {alphaAv1Supported && <option value="av1">AV1 in WebM</option>}
+          </select>
+        </label>
+      )}
 
       <dl className="export-profile">
         <div className="export-profile-row">
@@ -142,37 +343,36 @@ export function ExportConfiguration({
         <div className="export-profile-row">
           <dt>Selected output</dt>
           <dd>
-            <strong>{exportProfileSummary(displayProfile)}</strong>
-            <span>
-              {displayProfile.mimeType} · .{displayProfile.fileExtension}
-            </span>
+            <strong>{exportSettingsLabel(outputSettings)}</strong>
+            <span>{selectedOutputDetail(outputSettings)}</span>
           </dd>
         </div>
         <div className="export-profile-row">
           <dt>Estimated size</dt>
           <dd>
-            <strong>About {estimatedSize}</strong>
-            <span>
-              Bitrate-based estimate; variable bitrate and container overhead
-              can change the final size.
-            </span>
+            <strong>{sizeHint.strong}</strong>
+            <span>{sizeHint.note}</span>
           </dd>
         </div>
       </dl>
 
-      <ExportProfilePicker
-        selectionId={selectionId}
-        profile={displayProfile}
-        availability={presetAvailability}
-        selectedSupported={selectedSupported}
-        selectedReason={selectedReason}
-        fileDestinationAvailability={filePickerAvailability}
-        disabled={phase !== 'configure'}
-        selectedInputRef={selectedProfileRef}
-        onSelect={onSelect}
-        onChangeProfile={onChangeProfile}
-        onDraftValidityChange={onDraftValidityChange}
-      />
+      {deliveryKind === 'video' ? (
+        <ExportProfilePicker
+          selectionId={selectionId}
+          profile={displayProfile}
+          availability={presetAvailability}
+          selectedSupported={selectedSupported}
+          selectedReason={selectedReason}
+          fileDestinationAvailability={filePickerAvailability}
+          disabled={phase !== 'configure'}
+          selectedInputRef={selectedProfileRef}
+          onSelect={onSelect}
+          onChangeProfile={onChangeProfile}
+          onDraftValidityChange={onDraftValidityChange}
+        />
+      ) : pngDestination === 'directory' && deliveryKind === 'image-sequence' && !directoryPickerAvailability.available ? (
+        <p className="export-error" role="alert">{directoryPickerAvailability.reason}</p>
+      ) : null}
 
       <div
         ref={capabilityStatusRef}
@@ -203,7 +403,7 @@ export function ExportConfiguration({
           <span>Checking this exact custom profile…</span>
         ) : selectedSupported ? (
           <span>
-            Ready to export exactly {exportProfileSummary(displayProfile)}.
+            Ready to export exactly {exportSettingsLabel(outputSettings)}.
             {selectionId === 'auto' && autoPresetId
               ? ` Auto selected ${EXPORT_PRESETS.find(
                   (preset) => preset.id === autoPresetId,
@@ -251,7 +451,7 @@ interface ExportPhaseContentProps {
   percent: number
   download: DownloadReady | null
   savedFile: SavedFileReady | null
-  runDestination: 'download' | 'file'
+  runDestination: 'download' | 'file' | 'directory'
 }
 
 export function ExportPhaseContent({
@@ -275,6 +475,20 @@ export function ExportPhaseContent({
             tabIndex={-1}
           >
             Choose the export file in your browser…
+          </span>
+          <p>Myrelith will begin encoding after you approve the destination.</p>
+        </section>
+      )}
+
+      {phase === 'choosing-directory' && (
+        <section className="export-progress-panel">
+          <span
+            ref={phaseStatusRef}
+            role="status"
+            aria-live="polite"
+            tabIndex={-1}
+          >
+            Choose the export folder in your browser…
           </span>
           <p>Myrelith will begin encoding after you approve the destination.</p>
         </section>
@@ -328,7 +542,9 @@ export function ExportPhaseContent({
           <span>
             {runDestination === 'file'
               ? 'No video was completed; the selected file may remain empty.'
-              : 'No download file was created.'}
+              : runDestination === 'directory'
+                ? 'Already-written PNG files were kept. Later frames were not encoded.'
+                : 'No download file was created.'}
           </span>
         </section>
       )}
@@ -348,7 +564,7 @@ interface ExportDialogActionsProps {
   selectedSupported: boolean | null
   advancedDraftsValid: boolean
   error: string | null
-  displayProfile: Readonly<ExportProfile>
+  outputDestination: 'download' | 'file' | 'directory'
   download: DownloadReady | null
   savedFile: SavedFileReady | null
   onClose(): void
@@ -369,7 +585,7 @@ export function ExportDialogActions({
   selectedSupported,
   advancedDraftsValid,
   error,
-  displayProfile,
+  outputDestination,
   download,
   savedFile,
   onClose,
@@ -398,9 +614,11 @@ export function ExportDialogActions({
                 : selectedSupported === false || !advancedDraftsValid
                   ? 'Profile unavailable'
                   : error ? 'Retry export'
-                    : displayProfile.destination === 'file'
+                    : outputDestination === 'file'
                       ? 'Choose file and export'
-                      : 'Start export'}
+                      : outputDestination === 'directory'
+                        ? 'Choose folder and export'
+                        : 'Start export'}
           </button>
         </>
       )}
@@ -419,6 +637,12 @@ export function ExportDialogActions({
       {phase === 'choosing-file' && (
         <button type="button" className="export-primary" disabled>
           Waiting for file selection…
+        </button>
+      )}
+
+      {phase === 'choosing-directory' && (
+        <button type="button" className="export-primary" disabled>
+          Waiting for folder selection…
         </button>
       )}
 
