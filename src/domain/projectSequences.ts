@@ -941,6 +941,39 @@ export function chooseProjectRootSequence(
   return accepted({ ...project, rootSequenceId: sequenceId }, sequenceId)
 }
 
+/**
+ * Append already-conformed sequences, reminting every timeline identity.
+ * Asset ids stay unchanged so the caller can attach offline descriptors first.
+ */
+export function appendProjectSequences(
+  project: SequenceProject,
+  sequences: readonly TimelineDoc[],
+  factory: SequenceIdFactory,
+): SequenceProjectEditResult {
+  if (sequences.length === 0) return unchanged(project, 'sequence-not-found')
+  if (project.sequences.length + sequences.length > SEQUENCE_PROJECT_LIMITS.maxSequences) {
+    return unchanged(project, 'sequence-limit')
+  }
+  const root = rootSequence(project)
+  const used = collectUsedIds(project)
+  const appended: TimelineDoc[] = []
+  for (const document of sequences) {
+    if (!sequenceSettingsEqual(root, document)) {
+      return unchanged(project, 'project-budget')
+    }
+    const remapped = remapDuplicateIds(document, used, factory)
+    if (!remapped) return unchanged(project, 'id-generation-failed')
+    appended.push(remapped)
+  }
+  const candidate = {
+    ...project,
+    sequences: [...project.sequences, ...appended],
+  }
+  return sequenceProjectWithinEditBudget(candidate)
+    ? accepted(candidate, appended[0].id)
+    : unchanged(project, 'project-budget')
+}
+
 /** Replace only one definition while preserving project/root identity. */
 export function replaceProjectSequence(
   project: SequenceProject,

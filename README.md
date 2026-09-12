@@ -50,6 +50,7 @@ Projects created before the rename with a `.webcut` filename or
 | Media | Video, audio, PNG, JPEG, WebP, and AVIF; byte-level container inspection; searchable virtualized pool; collections; thumbnails, filmstrips, and waveforms; offline relink; optional local editing proxies |
 | Timeline | Four video and four audio tracks by default; select, razor, trim, ripple trim, slip, slide, linked editing, track controls, markers, snapping, caption tracks with SRT/VTT, and undo/redo |
 | Captions | SRT/VTT/semantic ASS interchange, batch editing, and optional local English/French transcription with editable text/timing review and one-step Apply/Undo |
+| Interchange | Bounded OpenTimelineIO JSON 0.17.0 import/export with a staged loss report; missing media stays offline for relink. No adapters, packages, or remote URL fetch |
 | Effects | Text overlays, transforms, crop, blend modes, opacity, volume, color correction, masks and chroma key, keyframed animation, dynamic zoom presets, visual crossfades, and synchronized audio fades when valid handles exist |
 | Motion | Constant-speed retiming and speed ramps; video stabilization; point and box tracking; manual lens correction when WebGL2 is available |
 | Preview | Direct Program Monitor manipulation; Auto/Full/Half/Quarter quality; histogram, waveform, and vectorscope; playback audio meters; command palette |

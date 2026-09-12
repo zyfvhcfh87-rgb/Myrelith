@@ -444,4 +444,37 @@ describe('project media matching', () => {
       decoderConfigB64: '{"codec":"fresh"}',
     })
   })
+
+  test('matches incomplete OTIO identity by basename and kind, then keeps analyzed bytes', () => {
+    const analyzed = makeAsset({
+      id: 'picked',
+      fileName: 'titles.mov',
+      size: 4096,
+      lastModified: 88,
+    })
+    const otio = descriptorFrom(analyzed, {
+      id: 'otio-titles',
+      fileName: 'titles.mov',
+      size: 0,
+      lastModified: 0,
+      durationMicroseconds: 1,
+      width: null,
+      height: null,
+      nativeFrameRate: { num: 24, den: 1 },
+      sourceBounds: { video: { status: 'unknown' }, audio: null },
+    })
+    expect(descriptorMatches(otio, analyzed)).toBe(true)
+    expect(selectDescriptorByFileIdentity(
+      [otio],
+      new Set<string>(),
+      file('titles.mov', { type: 'video/quicktime', lastModified: 88 }),
+    )).toBe(otio)
+    expect(relinkedAsset(otio, analyzed, { num: 30, den: 1 })).toMatchObject({
+      id: 'otio-titles',
+      fileName: 'titles.mov',
+      size: 4096,
+      lastModified: 88,
+      objectUrl: 'blob:analyzed',
+    })
+  })
 })

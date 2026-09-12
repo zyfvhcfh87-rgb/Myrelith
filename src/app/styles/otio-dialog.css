@@ -1,0 +1,176 @@
+.otio-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(6 9 16 / 72%);
+  backdrop-filter: blur(8px);
+}
+
+.otio-dialog {
+  box-sizing: border-box;
+  width: min(680px, 100%);
+  max-height: min(760px, 94vh);
+  overflow: auto;
+  padding: 0;
+  color: #eef2ff;
+  background: #121722;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 16px;
+  box-shadow: 0 28px 90px rgb(0 0 0 / 55%);
+}
+
+.otio-dialog:focus {
+  outline: none;
+}
+
+.otio-dialog:focus-visible {
+  outline: 2px solid #76a8ea;
+  outline-offset: 2px;
+}
+
+.otio-dialog-header,
+.otio-dialog-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.otio-dialog-header {
+  padding: 20px 22px 12px;
+  border-bottom: 1px solid #2c3139;
+}
+
+.otio-dialog h2,
+.otio-dialog p {
+  margin: 0;
+}
+
+.otio-dialog-kicker {
+  color: #78a9e8;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.otio-dialog h2 {
+  margin-top: 4px;
+  color: #f3f6fb;
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.otio-dialog-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  color: #8f98a6;
+  font-size: 20px;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.otio-dialog-close:hover:not(:disabled) {
+  color: #eef2f7;
+  background: #262a31;
+  border-color: #393f49;
+}
+
+.otio-dialog-lede,
+.otio-dialog-error,
+.otio-dialog-preview,
+.otio-dialog-ok {
+  padding: 0 22px;
+}
+
+.otio-dialog-lede {
+  margin: 14px 0 10px;
+  color: #aab6c6;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.otio-dialog-error {
+  margin: 0 22px 12px;
+  padding: 10px 12px;
+  color: #f08383;
+  background: #2a1b1d;
+  border: 1px solid #5a3338;
+  border-radius: 8px;
+}
+
+.otio-dialog-preview {
+  display: grid;
+  gap: 8px;
+  margin: 0 22px 14px;
+  padding: 12px;
+  color: #dce2ea;
+  font-size: 13px;
+  background: #181c22;
+  border: 1px solid #2c3139;
+  border-radius: 10px;
+}
+
+.otio-dialog-media,
+.otio-dialog-losses {
+  margin: 0;
+  padding-left: 18px;
+  color: #c5ced9;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.otio-dialog-ok {
+  color: #9ec49a;
+}
+
+.otio-dialog-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: 14px 22px 18px;
+  border-top: 1px solid #2c3139;
+}
+
+.otio-dialog-actions button {
+  min-height: 32px;
+  padding: 0 12px;
+  color: #eef2f7;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  background: #1a2130;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.otio-dialog-actions button:hover:not(:disabled) {
+  border-color: #68a0df;
+}
+
+.otio-dialog-primary {
+  background: #315b96;
+  border-color: #4c7dbc;
+}
+
+.otio-dialog-actions button:focus-visible,
+.otio-dialog-close:focus-visible {
+  outline: 2px solid #76a8ea;
+  outline-offset: 2px;
+}
+
+.otio-dialog-actions button:disabled,
+.otio-dialog-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}

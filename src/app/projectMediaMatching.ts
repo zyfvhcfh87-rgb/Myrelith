@@ -11,6 +11,10 @@ import type {
 import { mediaSourceBoundsAcceptAnalyzed } from '../domain/sourceBounds'
 import { microsecondsDurationToFrames, rateEquals } from '../domain/time'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
+import {
+  isOtioIncompleteMediaIdentity,
+  otioRelinkBaseName,
+} from '../domain/otioInterchange'
 
 interface ConnectedAssetLookup {
   has(assetId: string): boolean
@@ -38,6 +42,9 @@ export function descriptorMatches(
   descriptor: PortableAssetDescriptor,
   analyzed: MediaAsset,
 ): boolean {
+  if (isOtioIncompleteMediaIdentity(descriptor)) {
+    return descriptor.kind === analyzed.kind
+  }
   return descriptor.size === analyzed.size
     && descriptor.kind === analyzed.kind
     && descriptor.partialTrackSelection === analyzed.partialTrackSelection
@@ -101,6 +108,13 @@ export function compatibilityReportMatchesDescriptor(
           ? null
           : audio?.sourceBounds ?? null,
       }
+  if (isOtioIncompleteMediaIdentity(descriptor)) {
+    if (descriptor.kind === 'image') return Boolean(report.image)
+    if (descriptor.kind === 'video') {
+      return report.tracks.some((track) => track.kind === 'video')
+    }
+    return report.tracks.some((track) => track.kind === 'audio')
+  }
   if (
     file.size !== descriptor.size
     || (descriptor.kind !== 'image'
@@ -195,7 +209,13 @@ export function selectDescriptorByFileIdentity(
     && descriptor.lastModified === file.lastModified
     && (!file.type || descriptor.mimeType === file.type),
   )
-  return exact.length === 1 ? exact[0] : null
+  if (exact.length === 1) return exact[0]
+  const otio = descriptors.filter((descriptor) =>
+    !connectedAssets.has(descriptor.id)
+    && isOtioIncompleteMediaIdentity(descriptor)
+    && otioRelinkBaseName(descriptor.fileName) === file.name
+  )
+  return otio.length === 1 ? otio[0] : null
 }
 
 export function selectDescriptorByCompatibilityReport(
@@ -252,6 +272,16 @@ export function relinkedAsset(
   analyzed: MediaAsset,
   documentRate: FrameRate,
 ): MediaAsset {
+  if (isOtioIncompleteMediaIdentity(descriptor)) {
+    return {
+      ...analyzed,
+      id: descriptor.id,
+      durationFrames: microsecondsDurationToFrames(
+        analyzed.durationMicroseconds,
+        documentRate,
+      ),
+    }
+  }
   return {
     ...analyzed,
     id: descriptor.id,

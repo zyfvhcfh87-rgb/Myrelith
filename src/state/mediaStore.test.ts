@@ -847,4 +847,36 @@ describe('mediaStore', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1)
     expect(URL.revokeObjectURL).toHaveBeenCalledWith(asset.objectUrl)
   })
+
+  test('offline OTIO descriptors skip duplicates and upgrade identity on connect', () => {
+    const first = descriptorFor(makeAsset({ id: 'otio-1', fileName: 'titles.mov' }))
+    const incomplete = {
+      ...first,
+      size: 0,
+      lastModified: 0,
+      sourceBounds: {
+        video: { status: 'unknown' as const },
+        audio: null,
+      },
+    }
+    const duplicate = descriptorFor(makeAsset({ id: 'otio-2', fileName: 'wind-up.mov' }))
+    expect(getState().addOfflineDescriptors([incomplete, duplicate, incomplete])).toBe(true)
+    expect(getState().descriptors.size).toBe(2)
+    expect(getState().addOfflineDescriptors([incomplete])).toBe(false)
+
+    const analyzed = makeAsset({
+      id: 'otio-1',
+      fileName: 'titles.mov',
+      size: 4096,
+      lastModified: 99,
+      objectUrl: 'blob:otio-relink',
+    })
+    expect(getState().connectAsset(analyzed)).toBe(true)
+    expect(getState().descriptors.get('otio-1')).toMatchObject({
+      size: 4096,
+      lastModified: 99,
+      fileName: 'titles.mov',
+    })
+    expect(getState().assets.get('otio-1')?.objectUrl).toBe('blob:otio-relink')
+  })
 })

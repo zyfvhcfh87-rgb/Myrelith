@@ -21,6 +21,7 @@ import { useOptionalPluginUi } from './plugins/PluginUiHooks'
 
 const ExportDialog = lazy(() => import('./ExportDialog'))
 const CaptionEditor = lazy(() => import('./CaptionEditor'))
+const OtioInterchangeDialog = lazy(() => import('./OtioInterchangeDialog'))
 
 function saveStatus(
   phase: 'idle' | 'saving' | 'error',
@@ -56,11 +57,13 @@ export default function Toolbar() {
   const pluginUi = useOptionalPluginUi()
   const [exportOpen, setExportOpen] = useState(false)
   const [captionsOpen, setCaptionsOpen] = useState(false)
+  const [otioOpen, setOtioOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [leaveError, setLeaveError] = useState<string | null>(null)
   const exportButtonRef = useRef<HTMLButtonElement | null>(null)
   const captionsButtonRef = useRef<HTMLButtonElement | null>(null)
+  const otioButtonRef = useRef<HTMLButtonElement | null>(null)
   const commandButtonRef = useRef<HTMLButtonElement | null>(null)
   const commandReturnFocusRef = useRef<HTMLElement | null>(null)
   const projectName = useProjectSessionStore((state) => state.activeProjectName)
@@ -112,6 +115,11 @@ export default function Toolbar() {
   const closeCaptions = (): void => {
     setCaptionsOpen(false)
     requestAnimationFrame(() => captionsButtonRef.current?.focus())
+  }
+
+  const closeOtio = (): void => {
+    setOtioOpen(false)
+    requestAnimationFrame(() => otioButtonRef.current?.focus())
   }
 
   const openProjects = async (): Promise<void> => {
@@ -217,6 +225,18 @@ export default function Toolbar() {
         >
           Captions
         </button>
+        <button
+          ref={otioButtonRef}
+          type="button"
+          className="toolbar-button"
+          aria-haspopup="dialog"
+          aria-expanded={otioOpen}
+          disabled={closing}
+          title="Import or export OpenTimelineIO JSON"
+          onClick={() => setOtioOpen(true)}
+        >
+          OTIO
+        </button>
         {pluginUi && (
           <button
             type="button"
@@ -250,6 +270,16 @@ export default function Toolbar() {
           onClose={closeCaptions}
         >
           <CaptionEditor onClose={closeCaptions} />
+        </LazySurfaceBoundary>
+      )}
+      {otioOpen && (
+        <LazySurfaceBoundary
+          variant="dialog"
+          loadingLabel="Loading OTIO interchange…"
+          failureTitle="OTIO interchange could not load"
+          onClose={closeOtio}
+        >
+          <OtioInterchangeDialog onClose={closeOtio} />
         </LazySurfaceBoundary>
       )}
       {exportOpen && (
