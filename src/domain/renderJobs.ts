@@ -1,4 +1,4 @@
-import { validateExportProfile, type ExportProfile } from './exportProfile'
+import { parseExportSettings, parseChapterPolicy, DEFAULT_CHAPTER_POLICY, type ChapterPolicy, type ExportSettingsUnion } from './deliveryProduct'
 import type { ExportRange } from './exportRange'
 
 export const MAX_RENDER_RECORDS = 100
@@ -13,13 +13,14 @@ export interface RenderJob {
   readonly binding: string
   readonly revision: string
   readonly range: ExportRange
-  readonly profile: Readonly<ExportProfile>
+  readonly profile: Readonly<ExportSettingsUnion>
+  readonly chapters: Readonly<ChapterPolicy>
   readonly status: RenderJobStatus
   readonly delivery: RenderDelivery
   readonly attempts: number
   readonly message: string
 }
-export interface CustomExportPreset { readonly id: string; readonly name: string; readonly profile: Readonly<ExportProfile> }
+export interface CustomExportPreset { readonly id: string; readonly name: string; readonly profile: Readonly<ExportSettingsUnion> }
 export interface RenderLibrary<T> { readonly version: 1; readonly revision: number; readonly records: readonly T[] }
 const statuses: readonly string[] = ['queued','needs-project','needs-media','needs-destination','needs-review','preparing','rendering','cancelling','interrupted','cancelled','failed','completed']
 const deliveries: readonly string[] = ['none','unverified','aborted','uncertain','file','download','download-lost','download-requested','discarded']
@@ -36,17 +37,22 @@ function string(value: unknown, limit: number, empty = false): string {
 }
 export function parseCustomExportPreset(value: unknown): CustomExportPreset {
   const v = record(value); keys(v, ['id','name','profile'])
-  return Object.freeze({ id: string(v.id,128), name: string(v.name,128), profile: validateExportProfile(v.profile) })
+  return Object.freeze({ id: string(v.id,128), name: string(v.name,128), profile: parseExportSettings(v.profile) })
 }
 export function parseRenderJob(value: unknown): RenderJob {
-  const v = record(value); keys(v, ['id','name','sequenceId','binding','revision','range','profile','status','delivery','attempts','message'])
+  const v = record(value)
+  const hasChapters = Object.hasOwn(v, 'chapters')
+  keys(v, hasChapters
+    ? ['id','name','sequenceId','binding','revision','range','profile','chapters','status','delivery','attempts','message']
+    : ['id','name','sequenceId','binding','revision','range','profile','status','delivery','attempts','message'])
   const range = record(v.range); keys(range,['startFrame','endFrame'])
   if (!Number.isSafeInteger(range.startFrame) || !Number.isSafeInteger(range.endFrame) || (range.startFrame as number) < 0 || (range.endFrame as number) <= (range.startFrame as number)
     || !Number.isSafeInteger(v.attempts) || (v.attempts as number) < 0 || (v.attempts as number) > 1_000_000
     || !statuses.includes(v.status as string) || !deliveries.includes(v.delivery as string)
     || typeof v.revision !== 'string' || !/^[a-f0-9]{64}$/.test(v.revision)) throw new TypeError('Invalid render job facts.')
   return Object.freeze({ id:string(v.id,128), name:string(v.name,128), sequenceId:string(v.sequenceId,256), binding:string(v.binding,512), revision:v.revision,
-    range:Object.freeze({startFrame:range.startFrame as number,endFrame:range.endFrame as number}), profile:validateExportProfile(v.profile),
+    range:Object.freeze({startFrame:range.startFrame as number,endFrame:range.endFrame as number}), profile:parseExportSettings(v.profile),
+    chapters: hasChapters ? parseChapterPolicy(v.chapters) : DEFAULT_CHAPTER_POLICY,
     status:v.status as RenderJobStatus, delivery:v.delivery as RenderDelivery, attempts:v.attempts as number,message:string(v.message,512,true) })
 }
 export function parseRenderLibrary<T>(raw: unknown, parse: (value: unknown) => T): RenderLibrary<T> {
