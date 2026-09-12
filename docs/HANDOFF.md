@@ -83,6 +83,15 @@ very short files; browser acceptance therefore asserts no audio truncation,
 while the exact sample count is locked by the focused sink test. No GitHub PR,
 merge, or issue closure has been performed.
 
+## Post-MVP issue #206 — OpenTimelineIO JSON interchange (2026-09-12)
+
+Bounded in-browser OTIO JSON 0.17.0 import/export. Sequences, video/audio
+tracks, clips, gaps, integer-frame ranges, markers, simple video dissolves, and
+offline media references round-trip through a staged preview/loss report.
+Malformed, oversized, cyclic, adapter, `.otioz`, and executable-URL documents
+are rejected before mutation. Import is one undoable sequence append; missing
+media uses the existing relink catalog. See [OTIO_INTERCHANGE.md](OTIO_INTERCHANGE.md).
+
 ## Myrelith rebrand (2026-08-09)
 
 The current product, package, repository, documentation, UI, benchmark, future
@@ -1091,6 +1100,11 @@ surface; it is not a second zoom and never enters document history.
   6 for canonical scalar animation tracks. Older
   snapshots migrate conservatively; Issue #18's image-media migration still
   produces `still` `[0, 1)` without changing timed media or text semantics.
+- `src/domain/otioInterchange.ts` — Issue #206 pinned OTIO JSON 0.17.0
+  parse/export: integer-frame timing, bounded graph, loss report, incomplete
+  offline media identity. No adapters, fetch, or executable URLs.
+- `src/app/otioInterchangeController.ts` + `src/ui/OtioInterchangeDialog.tsx`
+  — staged preview/commit and export download; UI reads the controller only.
 - `src/domain/proxyCache.ts` — Issue #70's browser-free versioned manifest,
   sampled-fingerprint/provenance/profile validation, even 720p geometry, size
   estimate, and shared preview-versus-final-export representation policy.
@@ -1682,6 +1696,8 @@ surface; it is not a second zoom and never enters document history.
 
 ## Open items and recent closeouts (beyond PLAN.md phases)
 
+- Issue #206 adds bounded OTIO JSON 0.17.0 interchange. Pin, subset, losses, and
+  relink identity are documented in [OTIO_INTERCHANGE.md](OTIO_INTERCHANGE.md).
 - Issue #189 merged through PR #215 as `138db35`. Schema 18 carries bounded clip/track/master audio-
   effect descriptors; live playback and export share the automated mix order,
   EQ, compressor, limiter, and stereo-linked noise-gate DSP. Loudness is a

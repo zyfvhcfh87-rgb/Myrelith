@@ -26,6 +26,10 @@ vi.mock('./ExportDialog', () => ({
   default: () => <div role="dialog" aria-label="Export project" />,
 }))
 
+vi.mock('./OtioInterchangeDialog', () => ({
+  default: () => <div role="dialog" aria-label="OTIO interchange" />,
+}))
+
 beforeEach(() => {
   vi.restoreAllMocks()
   vi.clearAllMocks()
@@ -57,6 +61,10 @@ describe('Toolbar project persistence', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Export' }))
     expect(await screen.findByRole('dialog', { name: 'Export project' }))
+      .toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'OTIO' }))
+    expect(await screen.findByRole('dialog', { name: 'OTIO interchange' }))
       .toBeInTheDocument()
   })
 

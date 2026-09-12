@@ -11,6 +11,11 @@ import type {
 import { mediaSourceBoundsAcceptAnalyzed } from '../domain/sourceBounds'
 import { microsecondsDurationToFrames, rateEquals } from '../domain/time'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
+import {
+  isOtioIncompleteMediaIdentity,
+  otioRelinkAcceptsAnalyzedKind,
+  otioRelinkBaseName,
+} from '../domain/otioInterchange'
 
 interface ConnectedAssetLookup {
   has(assetId: string): boolean
@@ -38,6 +43,14 @@ export function descriptorMatches(
   descriptor: PortableAssetDescriptor,
   analyzed: MediaAsset,
 ): boolean {
+  if (isOtioIncompleteMediaIdentity(descriptor)) {
+    return otioRelinkBaseName(descriptor.fileName) === analyzed.fileName
+      && otioRelinkAcceptsAnalyzedKind(
+        descriptor.kind,
+        analyzed.kind,
+        analyzed.hasAudio,
+      )
+  }
   return descriptor.size === analyzed.size
     && descriptor.kind === analyzed.kind
     && descriptor.partialTrackSelection === analyzed.partialTrackSelection
@@ -101,6 +114,14 @@ export function compatibilityReportMatchesDescriptor(
           ? null
           : audio?.sourceBounds ?? null,
       }
+  if (isOtioIncompleteMediaIdentity(descriptor)) {
+    if (otioRelinkBaseName(descriptor.fileName) !== file.name) return false
+    if (descriptor.kind === 'image') return Boolean(report.image)
+    if (descriptor.kind === 'video') {
+      return report.tracks.some((track) => track.kind === 'video')
+    }
+    return report.tracks.some((track) => track.kind === 'audio')
+  }
   if (
     file.size !== descriptor.size
     || (descriptor.kind !== 'image'
@@ -169,13 +190,20 @@ export function selectDescriptor(
   if (matches.length === 0) {
     throw new Error(`"${file.name}" does not match any missing project source`)
   }
-  if (matches.length === 1) return matches[0]
+  const namedMatches = matches.filter((match) =>
+    !isOtioIncompleteMediaIdentity(match.descriptor)
+    || otioRelinkBaseName(match.descriptor.fileName) === file.name,
+  )
+  if (namedMatches.length === 0) {
+    throw new Error(`"${file.name}" does not match any missing project source`)
+  }
+  if (namedMatches.length === 1) return namedMatches[0]
 
-  const nameMatches = matches.filter(
+  const nameMatches = namedMatches.filter(
     (match) => match.descriptor.fileName === file.name,
   )
   if (nameMatches.length === 1) return nameMatches[0]
-  const timestampMatches = (nameMatches.length > 0 ? nameMatches : matches)
+  const timestampMatches = (nameMatches.length > 0 ? nameMatches : namedMatches)
     .filter((match) => match.descriptor.lastModified === file.lastModified)
   if (timestampMatches.length === 1) return timestampMatches[0]
   throw new Error(
@@ -195,7 +223,13 @@ export function selectDescriptorByFileIdentity(
     && descriptor.lastModified === file.lastModified
     && (!file.type || descriptor.mimeType === file.type),
   )
-  return exact.length === 1 ? exact[0] : null
+  if (exact.length === 1) return exact[0]
+  const otio = descriptors.filter((descriptor) =>
+    !connectedAssets.has(descriptor.id)
+    && isOtioIncompleteMediaIdentity(descriptor)
+    && otioRelinkBaseName(descriptor.fileName) === file.name
+  )
+  return otio.length === 1 ? otio[0] : null
 }
 
 export function selectDescriptorByCompatibilityReport(
@@ -252,6 +286,16 @@ export function relinkedAsset(
   analyzed: MediaAsset,
   documentRate: FrameRate,
 ): MediaAsset {
+  if (isOtioIncompleteMediaIdentity(descriptor)) {
+    return {
+      ...analyzed,
+      id: descriptor.id,
+      durationFrames: microsecondsDurationToFrames(
+        analyzed.durationMicroseconds,
+        documentRate,
+      ),
+    }
+  }
   return {
     ...analyzed,
     id: descriptor.id,

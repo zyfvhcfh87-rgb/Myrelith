@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { defaultClipAnimation } from './clipAnimation'
 import { defaultClipAudioSettings, defaultClipVisualSettings } from './clipInspector'
 import {
+  appendProjectSequences,
   chooseProjectRootSequence,
   createProjectSequence,
   deleteProjectSequence,
@@ -399,5 +400,31 @@ describe('project-level sequence authority', () => {
       project,
       failure: 'project-budget',
     })
+  })
+
+  test('appends conformed sequences with reminted ids', () => {
+    const root = createTimelineDoc('Main', DEFAULT_PROJECT_SETTINGS, 'root')
+    const extra = JSON.parse(JSON.stringify(createTimelineDoc(
+      'Imported',
+      DEFAULT_PROJECT_SETTINGS,
+      'imported',
+    ))) as TimelineDoc
+    extra.tracks[0]!.clips.push(clip('clip-shared'))
+    const project = {
+      id: 'project',
+      name: 'Show',
+      rootSequenceId: root.id,
+      sequences: [root],
+    }
+    const result = appendProjectSequences(project, [extra], factory())
+    expect(result.failure).toBeNull()
+    expect(result.project.sequences).toHaveLength(2)
+    expect(result.project.sequences[1]?.id).toBe('sequence_1')
+    expect(result.project.sequences[1]?.tracks[0]?.clips[0]?.id).not.toBe('clip-shared')
+    expect(result.project.sequences[1]?.tracks[0]?.clips[0]?.assetId).toBe('media-1')
+    expect(appendProjectSequences(project, [{
+      ...extra,
+      frameRate: { num: 24, den: 1 },
+    }], factory()).failure).toBe('project-budget')
   })
 })

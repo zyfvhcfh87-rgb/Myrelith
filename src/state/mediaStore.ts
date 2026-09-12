@@ -31,6 +31,10 @@ import {
   mediaSourceBoundsEqual,
 } from '../domain/sourceBounds'
 import { microsecondsDurationToFrames } from '../domain/time'
+import {
+  isOtioIncompleteMediaIdentity,
+  otioRelinkAcceptsAnalyzedKind,
+} from '../domain/otioInterchange'
 
 /**
  * Precomputed visuals for one connected asset (filmstrip on video clips,
@@ -99,6 +103,10 @@ function connectionMatchesDescriptor(
   descriptor: PortableAssetDescriptor,
   asset: MediaAsset,
 ): boolean {
+  if (isOtioIncompleteMediaIdentity(descriptor)) {
+    return descriptor.id === asset.id
+      && otioRelinkAcceptsAnalyzedKind(descriptor.kind, asset.kind, asset.hasAudio)
+  }
   return descriptor.id === asset.id
     && descriptor.fileName === asset.fileName
     && descriptor.mimeType === asset.mimeType
@@ -150,6 +158,14 @@ function compatibilityMatchesDescriptor(
   item: MediaCompatibilityItem,
   descriptor: PortableAssetDescriptor,
 ): boolean {
+  if (isOtioIncompleteMediaIdentity(descriptor)) {
+    return item.id === descriptor.id
+      && (
+        item.status === 'checking'
+          ? item.report === null || item.report.status !== 'ready'
+          : item.report?.status === item.status
+      )
+  }
   const readySelectionMatches = item.status !== 'ready'
     || item.report?.partialImport?.selection === descriptor.partialTrackSelection
   return readySelectionMatches
@@ -270,6 +286,8 @@ export interface MediaState {
     asset: MediaAsset,
     compatibility?: MediaCompatibilityItem,
   ) => boolean
+  /** Append offline portable descriptors without touching connected sources. */
+  addOfflineDescriptors: (descriptors: Iterable<PortableAssetDescriptor>) => boolean
   /**
    * Connect an analyzed source to an existing descriptor. Legacy unknown source
    * bounds are atomically upgraded from the analyzed asset on success.
@@ -444,6 +462,30 @@ export const useMediaStore = create<MediaState>()((set) => ({
     return added
   },
 
+  addOfflineDescriptors: (incoming) => {
+    let added = false
+    set((state) => {
+      const extras: PortableAssetDescriptor[] = []
+      for (const descriptor of incoming) {
+        if (
+          state.descriptors.has(descriptor.id)
+          || extras.some((item) => item.id === descriptor.id)
+        ) {
+          continue
+        }
+        extras.push(descriptor)
+      }
+      if (extras.length === 0) {
+        return state
+      }
+      const descriptors = new Map(state.descriptors)
+      for (const descriptor of extras) descriptors.set(descriptor.id, descriptor)
+      added = true
+      return { descriptors }
+    })
+    return added
+  },
+
   connectAsset: (asset, readyCompatibility) => {
     let connected = false
     set((state) => {
@@ -464,12 +506,10 @@ export const useMediaStore = create<MediaState>()((set) => ({
       }
       const assets = new Map(state.assets)
       assets.set(asset.id, asset)
-      const descriptors = mediaSourceBoundsEqual(
-        descriptor.sourceBounds,
-        asset.sourceBounds,
-      )
-        ? state.descriptors
-        : new Map(state.descriptors).set(asset.id, descriptorFromAsset(asset))
+      const descriptors = isOtioIncompleteMediaIdentity(descriptor)
+        || !mediaSourceBoundsEqual(descriptor.sourceBounds, asset.sourceBounds)
+        ? new Map(state.descriptors).set(asset.id, descriptorFromAsset(asset))
+        : state.descriptors
       const compatibility = readyCompatibility === undefined
         ? state.compatibility
         : new Map(state.compatibility).set(asset.id, readyCompatibility)
