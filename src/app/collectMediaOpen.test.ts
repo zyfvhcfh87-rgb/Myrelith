@@ -20,12 +20,36 @@ import {
 } from '../state/projectSessionStore'
 import {
   activateResumedProject,
+  openCollectedProject,
   openLoadedCollectedArchive,
+  openProjectFile,
   resetProjectController,
   type ProjectControllerDeps,
 } from './projectController'
 import type { LoadedCollectedArchive } from './collectMediaArchive'
 import type { CollectMediaDirectoryHandle } from './collectMediaArchive'
+
+const archivePicker = vi.hoisted(() => ({
+  load: vi.fn<typeof import('./collectMediaArchive').loadCollectedArchiveFromPicker>(),
+}))
+
+vi.mock('./collectMediaArchive', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./collectMediaArchive')>()
+  return {
+    ...actual,
+    loadCollectedArchiveFromPicker: archivePicker.load,
+  }
+})
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
 
 function missing(name: string): DOMException {
   return new DOMException(`${name} was not found`, 'NotFoundError')
@@ -221,6 +245,7 @@ function makeDeps(overrides: Partial<ProjectControllerDeps> = {}): ProjectContro
 }
 
 beforeEach(async () => {
+  archivePicker.load.mockReset()
   await resetProjectController()
   useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE, screen: 'resume' })
   useMediaStore.getState().clearAssets()
@@ -325,5 +350,44 @@ describe('collected archive reopen', () => {
     expect(session.candidate?.collectedArchiveStatus).toBe('partial')
     expect(session.error).toMatch(/incomplete/)
     expect(session.candidate?.assets[0]?.status).toBe('missing')
+  })
+
+  test('a failed collected-folder picker cannot republish a prior resume', async () => {
+    const serialized = serializeProjectFile(makeProject([descriptorFor(makeAsset())]))
+    const lookup = deferred<null>()
+    const picker = deferred<never>()
+    archivePicker.load.mockReturnValue(picker.promise)
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(() => lookup.promise),
+    })
+
+    const opening = openProjectFile(new File([serialized], 'prior.myrelith'), deps)
+    await vi.waitFor(() => {
+      expect(useProjectSessionStore.getState().phase).toBe('relinking')
+    })
+    expect(useProjectSessionStore.getState().candidate?.projectFileName)
+      .toBe('prior.myrelith')
+
+    const collected = openCollectedProject(deps)
+    await vi.waitFor(() => {
+      expect(useProjectSessionStore.getState().phase).toBe('reading-project')
+    })
+
+    picker.reject(new Error('This folder is not a collect-media archive.'))
+    await expect(collected).resolves.toEqual({
+      status: 'failed',
+      message: 'Could not open the collected project: This folder is not a collect-media archive.',
+    })
+
+    lookup.resolve(null)
+    await expect(opening).resolves.toEqual({ status: 'cancelled' })
+
+    const session = useProjectSessionStore.getState()
+    expect(session.phase).toBe('error')
+    expect(session.candidate).toBeNull()
+    expect(session.error).toBe(
+      'Could not open the collected project: This folder is not a collect-media archive.',
+    )
   })
 })

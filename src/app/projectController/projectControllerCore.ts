@@ -672,11 +672,15 @@ export function openProjectFile(
 export async function openCollectedProject(
   deps: ProjectControllerDeps = realDeps,
 ): Promise<ProjectActionResult> {
+  const generation = beginProjectRead(deps)
   try {
     const archive = await loadCollectedArchiveFromPicker()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
     return openLoadedCollectedArchive(archive, deps)
   } catch (cause) {
+    if (generation !== operationGeneration) return { status: 'cancelled' }
     if (isCollectMediaAbort(cause) || isLocalProjectPickerCancellation(cause)) {
+      useProjectSessionStore.setState({ phase: 'idle', error: null })
       return { status: 'cancelled' }
     }
     const message = `Could not open the collected project: ${messageFrom(cause)}`
