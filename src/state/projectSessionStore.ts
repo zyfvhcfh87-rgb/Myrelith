@@ -32,7 +32,7 @@ export interface RelinkAssetSummary {
 }
 
 export interface ResumeProjectSummary {
-  origin: 'file' | 'recent' | 'recovery'
+  origin: 'file' | 'recent' | 'recovery' | 'collected-archive'
   projectFileName: string
   projectName: string
   width: number
@@ -40,6 +40,7 @@ export interface ResumeProjectSummary {
   frameRate: FrameRate
   audioSampleRate: number
   assets: RelinkAssetSummary[]
+  collectedArchiveStatus?: 'complete' | 'partial'
 }
 
 export type ActiveMediaRelinkPhase =

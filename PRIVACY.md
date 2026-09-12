@@ -47,7 +47,9 @@ Browser storage is bound to the exact site origin. The move to
 `myrelith.pages.dev` cannot automatically transfer preferences, recent-file
 shortcuts, recovery copies, or remembered permissions from the previous public
 hostname. A portable project file can be saved there and opened in Myrelith;
-source media still stays on your device and may need permission again.
+source media still stays on your device and may need permission again. Collect
+media copies only the sources you already authorized into a folder you choose;
+nothing is uploaded or indexed remotely.
 
 This storage is necessary to provide the local editing, preference, resume,
 and crash-recovery features you request. It remains on your device until you

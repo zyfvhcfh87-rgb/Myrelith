@@ -34,8 +34,9 @@ Projects created before the rename with a `.webcut` filename or
   slide/razor tools, markers, snapping, captions, constant-speed retiming, and
   speed ramps.
 - **Portable projects:** `.myrelith` files contain the edit, not bundled source
-  media. Chrome can remember browser-managed file permissions and reconnect
-  sources when allowed.
+  media. Collect media copies referenced sources into a chosen local folder with
+  a versioned manifest. Chrome can remember browser-managed file permissions and
+  reconnect sources when allowed.
 - **Honest compatibility:** Myrelith inspects media bytes and probes real decoder
   and encoder configurations. Unsupported explicit export choices stay blocked
   with a reason; the app never quietly swaps in another format.
@@ -46,7 +47,7 @@ Projects created before the rename with a `.webcut` filename or
 
 | Area | Highlights |
 |---|---|
-| Projects | Horizontal 16:9, vertical 9:16, square 1:1, and 4:5 canvases from 720p to 4K; exact common frame and audio rates; Save, Save As, live save, Resume, Recent, recovery, and workspace presets |
+| Projects | Horizontal 16:9, vertical 9:16, square 1:1, and 4:5 canvases from 720p to 4K; exact common frame and audio rates; Save, Save As, live save, Resume, Recent, recovery, collect-media archives, and workspace presets |
 | Media | Video, audio, PNG, JPEG, WebP, and AVIF; byte-level container inspection; searchable virtualized pool; collections; thumbnails, filmstrips, and waveforms; offline relink; optional local editing proxies |
 | Timeline | Four video and four audio tracks by default; select, razor, trim, ripple trim, slip, slide, linked editing, track controls, markers, snapping, caption tracks with SRT/VTT, and undo/redo |
 | Captions | SRT/VTT/semantic ASS interchange, batch editing, and optional local English/French transcription with editable text/timing review and one-step Apply/Undo |

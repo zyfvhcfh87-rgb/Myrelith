@@ -1450,6 +1450,19 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   `MediaState` takes its object URL. Remembering its handle happens only after
   that transfer, so cancellation or project replacement must never revoke a
   store-owned source.
+- Collect-media archives — `src/domain/collectMedia.ts` plans collision-safe
+  relative paths, completeness, and a versioned `myrelith-collect-media`
+  manifest without touching Save/Save As. `src/app/collectMediaArchive.ts`
+  streams copies into a user-authorized folder and refuses path escape,
+  occupied destinations, and complete-vs-partial confusion. The incomplete
+  marker stays until a validated complete manifest is written.
+  `src/app/collectMediaController.ts` preflights included/excluded/offline/
+  unresolved items from the current session, then writes a project copy plus
+  manifest. Reopen uses `openCollectedProject` / `openLoadedCollectedArchive`
+  so collected originals resolve through the existing relink matching without
+  the original locations. Directory handles and file bytes stay app-local.
+  The UI reads only session summaries and controller facades.
+
 - Legacy worker messages — `src/workers/decode-protocol.ts` (compatibility):
   `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
   (`configured`/`frameReady`/`error`). Shared structural types live in
