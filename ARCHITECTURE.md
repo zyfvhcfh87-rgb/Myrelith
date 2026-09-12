@@ -1122,6 +1122,20 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   discards its encoded prefix so stateful effects keep their full-timeline
   history. Range admission charges pre-roll work separately from output-size
   estimates and preserves integer/rational frame and sample boundaries.
+- `domain/deliveryProduct.ts` is the tagged-union authority for PNG sequences,
+  audio-only masters, and proven alpha WebM. Classic `ExportProfile` keys stay
+  exact. Image-sequence names use `{prefix}_{zeroPad(absoluteFrame)}.png` over
+  `[startFrame, endFrame)` with pad width `max(5, String(endFrame-1).length)`.
+  WAV/PCM is the first audio-only product and keeps the document sample rate
+  and channel layout with no video track. Compressed AAC-in-M4A / Opus-in-WebM
+  and VP9/AV1 alpha WebM are offered only after an exact capability proof;
+  Mediabunny `canEncodeVideo` cannot prove alpha (`alpha:'discard'`), so alpha
+  requires an encode/decode round-trip. Muxers do not write chapter atoms;
+  marker timing is a JSON sidecar with integer frames plus microseconds.
+  File destination + sidecar is rejected. Download + sidecar is a ZIP.
+  PNG folder export may write `{name}.chapters.json`. Cancel/quota keep already
+  written PNG files and report partial completion. Directory handles stay
+  one-shot in `app/exportDirectoryPicker.ts` and never enter Zustand.
 - `domain/renderJobs.ts`, `app/localRenderStorage.ts`, and
   `app/renderQueueController.ts` own the browser-local render library. IndexedDB
   stores bounded metadata, concrete profiles, ranges, revision/source facts and

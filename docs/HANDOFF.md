@@ -51,6 +51,17 @@ Keep the documented lossy-codec limits, staged title coverage, headless Mac
 font-popup limitation and unqualified physical HDR display explicit. These
 focused results do not assert that the broader browser suite is green.
 
+## Post-MVP issue #204 — image-sequence, audio-only, alpha, and chapter delivery (2026-09-12)
+
+The implementation plan is [ISSUE_204_PLAN.md](ISSUE_204_PLAN.md). Alternative
+delivery products sit beside unchanged MP4/WebM profiles: PNG sequences with
+deterministic zero-padded names and partial-safe cancel/quota, WAV/PCM
+audio-only at the document sample rate with no hidden video track, compressed
+audio and alpha WebM only after exact capability proofs, and chapter sidecar
+JSON because this muxer cannot write container chapters. File destination plus
+sidecar is rejected. Render jobs persist tagged profiles and optional chapter
+policy; classic records without `chapters` still parse.
+
 ## Post-MVP issue #203 — persistent render jobs, custom presets, and range exports (2026-09-10)
 
 The approved implementation plan is [ISSUE_203_PLAN.md](ISSUE_203_PLAN.md).

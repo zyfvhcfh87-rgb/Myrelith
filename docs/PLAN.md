@@ -6,6 +6,13 @@ how the codebase actually evolved. This completed roadmap remains the MVP gate
 record; new post-MVP work needs a new user-approved plan. Companion context:
 [HANDOFF.md](HANDOFF.md).
 
+## Post-MVP issue #204 — image-sequence, audio-only, alpha, and chapter delivery
+
+The implementation record is [ISSUE_204_PLAN.md](ISSUE_204_PLAN.md). Tagged
+delivery products add PNG sequences, WAV/PCM then proven compressed audio-only,
+round-trip-proven alpha WebM, and integer-frame chapter sidecars without
+changing classic `ExportProfile` keys or fabricating container chapter support.
+
 ## Post-MVP issue #203 — persistent render jobs, custom presets, and range exports
 
 The approved plan and implementation record are in
