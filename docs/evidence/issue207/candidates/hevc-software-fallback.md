@@ -16,6 +16,11 @@ new payload, must not substitute a different export codec, and is not
 justified by demand evidence (no analytics). Native `canDecode()` already
 gates import. Auto never selects HEVC on export.
 
+On this research host (HeadlessChrome 151, Linux), HEVC `canDecode` was
+**false** and the HEVC encoder probe was unsupported. AAC in the same file
+still decoded. That is the existing capability model, not a reason to bundle
+WASM HEVC.
+
 ## Reopen
 
 Proven demand on hosts whose native HEVC `canDecode` is false; a pinned,

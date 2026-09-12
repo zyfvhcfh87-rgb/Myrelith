@@ -92,7 +92,9 @@ async function packetSeek(track) {
 }
 
 function avSync(video, audio) {
-  if (!video || !audio) return { applicable: false }
+  if (!video?.frames || !audio?.frames || video.skipped || audio.skipped) {
+    return { applicable: false, reason: video?.skipped || audio.skipped || 'missing-leg' }
+  }
   const pairs = []
   for (const frame of SEEK_FRAMES) {
     const requested = frame / FRAME_RATE

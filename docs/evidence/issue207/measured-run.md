@@ -38,8 +38,45 @@ Firefox and Safari cells are **U** (Issue #208). This run does not ship formats.
 | `playlist.m3u8` | fail-closed | none | n/a |
 | `not-media.braw` | unread | none | n/a |
 
-Browser lab skipped (`--node-only`). Chromium cells remain **U** until `npm run qa:issue207:research`.
+## Chromium decode / encode
 
+Host: `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36`. Isolated: false. HEVC observation: false. AV1 observation: true. Firefox/Safari: **U**.
+
+| Fixture | Direct decode | Notes |
+|---|---|---|
+| `pcm-s16.wav` | ready | WAVE |
+| `mp3.mp3` | ready | MP3 |
+| `flac.flac` | ready | FLAC |
+| `vorbis.ogg` | limited (audio-seek) | Ogg |
+| `avc-aac.mp4` | ready | MP4 |
+| `avc-aac.mov` | ready | QuickTime File Format |
+| `avc-aac.ts` | limited (video-seek, audio-seek) | MPEG Transport Stream |
+| `vp9-opus.webm` | ready | WebM |
+| `vp8-opus.webm` | ready | WebM |
+| `av1-opus.webm` | ready | WebM |
+| `hevc-aac.mp4` | limited (video-undecodable) | MP4 |
+| `avc-ac3.mkv` | limited (audio-undecodable) | Matroska |
+| `prores.mov` | limited (video-undecodable) | QuickTime File Format |
+| `mpeg2-aac.ts` | limited (audio-seek) | MPEG Transport Stream |
+| `avc-dts.mkv` | limited (audio-undecodable) | Matroska |
+| `playlist.m3u8` | unsupported | TypeError: HLS inputs require `InputOptions.source` to be a PathedSource or a ref to one. |
+
+### Existing fallback path (already shipped, not a new format)
+
+- ProRes direct `canDecode`: false; after `registerProresDecoder`: true; sample seek: true
+- AC-3 direct `canDecode`: false; after `registerAc3Decoder`: true; sample seek: false
+- Encoder registration attempted: false
+
+### Native encoder probes
+
+- video `avc`: supported
+- video `vp9`: supported
+- video `av1`: supported
+- video `hevc`: unsupported
+- video `prores`: unsupported
+- audio `aac`: unsupported
+- audio `opus`: supported
+- audio `ac3`: unsupported
 
 ## Payload sizes
 

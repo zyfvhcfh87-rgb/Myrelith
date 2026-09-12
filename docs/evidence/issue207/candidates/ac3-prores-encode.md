@@ -14,7 +14,11 @@ packages.
 `ARCHITECTURE.md`: "no local encoder fallback are permitted." Issue #16
 already researched and rejected optional local AAC / Opus / VP9 / AV1 /
 AVC / HEVC encoders. The unused AC-3 encoder does not license a product encode
-path. Product source must not import `registerAc3Encoder`.
+path. Product source does not import `registerAc3Encoder`.
+
+On this research host, native encoder probes were: AVC/VP9/AV1/Opus
+supported; HEVC, ProRes, AAC, and `ac-3` unsupported. No local encoder
+fallback was attempted.
 
 ## Reopen
 

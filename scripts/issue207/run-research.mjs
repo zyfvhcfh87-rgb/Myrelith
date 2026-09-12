@@ -140,6 +140,20 @@ async function measureBrowser(fixtures) {
   }
 }
 
+function decodeCell(cell) {
+  if (cell.canRead === false) return cell.failClosed || cell.error ? 'unsupported' : 'unsupported'
+  const video = cell.decode?.video
+  const audio = cell.decode?.audio
+  const issues = []
+  if (video?.skipped === 'not-decodable') issues.push('video-undecodable')
+  if (audio?.skipped === 'not-decodable') issues.push('audio-undecodable')
+  if (video && !video.skipped && video.ok !== true) issues.push('video-seek')
+  if (audio && !audio.skipped && audio.ok !== true) issues.push('audio-seek')
+  if (issues.length) return `limited (${issues.join(', ')})`
+  if (cell.decode?.ok) return 'ready'
+  return 'limited'
+}
+
 function renderMarkdown(result) {
   const lines = [
     '# Issue #207 measured run',
@@ -162,10 +176,22 @@ function renderMarkdown(result) {
     lines.push(`| \`${name}\` | ${probe.format?.name ?? (probe.failClosed ? 'fail-closed' : 'unread')} | ${codecs} | ${decode} |`)
   }
   if (result.browser) {
-    lines.push('', '## Chromium decode / encode', '', '| Fixture | Direct decode | Notes |', '|---|---|---|')
+    lines.push('', `## Chromium decode / encode`, '')
+    lines.push(`Host: \`${result.browser.host?.userAgent ?? 'unknown'}\`. Isolated: ${result.browser.host?.crossOriginIsolated}. HEVC observation: ${result.browser.host?.hevcHardwareObservation}. AV1 observation: ${result.browser.host?.av1HardwareObservation}. Firefox/Safari: **U**.`)
+    lines.push('', '| Fixture | Direct decode | Notes |', '|---|---|---|')
     for (const [name, cell] of Object.entries(result.browser.fixtures ?? {})) {
-      const ok = cell.decode?.ok === true ? 'ready' : cell.canRead === false ? 'unsupported' : 'limited'
-      lines.push(`| \`${name}\` | ${ok} | ${cell.format?.name ?? cell.error ?? ''} |`)
+      lines.push(`| \`${name}\` | ${decodeCell(cell)} | ${cell.format?.name ?? cell.error ?? ''} |`)
+    }
+    lines.push('', '### Existing fallback path (already shipped, not a new format)', '')
+    const fallbacks = result.browser.fallbacks
+    if (fallbacks) {
+      const proresDirect = fallbacks.direct?.prores?.tracks?.find((track) => track.kind === 'video')
+      const proresAfter = fallbacks.fallback?.prores?.tracks?.find((track) => track.kind === 'video')
+      const ac3Direct = fallbacks.direct?.ac3?.tracks?.find((track) => track.kind === 'audio')
+      const ac3After = fallbacks.fallback?.ac3?.tracks?.find((track) => track.kind === 'audio')
+      lines.push(`- ProRes direct \`canDecode\`: ${proresDirect?.nativeCanDecode}; after \`registerProresDecoder\`: ${proresAfter?.nativeCanDecode}; sample seek: ${fallbacks.fallback?.prores?.decode?.video?.ok}`)
+      lines.push(`- AC-3 direct \`canDecode\`: ${ac3Direct?.nativeCanDecode}; after \`registerAc3Decoder\`: ${ac3After?.nativeCanDecode}; sample seek: ${fallbacks.fallback?.ac3?.decode?.audio?.ok}`)
+      lines.push(`- Encoder registration attempted: ${fallbacks.encoderRegistration === true}`)
     }
     lines.push('', '### Native encoder probes', '')
     for (const row of result.browser.encoders?.video ?? []) {

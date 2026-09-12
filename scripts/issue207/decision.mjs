@@ -3,8 +3,6 @@
 import { CANDIDATES, candidateById } from './ranking.mjs'
 import { FORBIDDEN_VOCABULARY, MEDIABUNNY_AUDIO_CODECS, MEDIABUNNY_VIDEO_CODECS } from './protocol.mjs'
 
-const NAMED_AUDIO = new Set(['pcm-s16', 'mp3', 'flac', 'vorbis'])
-
 function codecsNamed(probe, names) {
   const found = new Set((probe?.tracks ?? []).map((track) => track.codec).filter(Boolean))
   return names.filter((name) => found.has(name))
