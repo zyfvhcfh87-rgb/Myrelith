@@ -1,0 +1,3669 @@
+{
+  "schema": "myrelith-issue207-v1",
+  "startedAt": "2026-09-12T23:36:28.252Z",
+  "commit": "027c0ff78733c145e4a3f03ee52f29d7236f4c7d",
+  "ranking": {
+    "recordedAt": "2026-09-12T00:00:00Z",
+    "authority": [
+      "docs/OPEN_SOURCE_VIDEO_EDITOR_FEATURE_COMPARISON_RESEARCH.md",
+      "docs/decisions/ISSUE_19_CODEC_CLOSEOUT.md",
+      "docs/decisions/ISSUE_19_PROXY_CONVERSION.md",
+      "README.md known limitations",
+      "PRIVACY.md (no analytics)",
+      "pinned mediabunny 1.50.9 codec/format vocabulary"
+    ],
+    "rubric": [
+      {
+        "id": "pro-interchange",
+        "weight": 1,
+        "title": "Professional camera / finishing interchange still failing after ProRes and AC-3",
+        "examples": "DNx, MXF, MPEG-2 camera/TS, DTS"
+      },
+      {
+        "id": "everyday-audio",
+        "weight": 2,
+        "title": "Everyday audio files that Mediabunny already names but the product language under-describes",
+        "examples": "WAVE PCM, MP3, FLAC, OGG Vorbis"
+      },
+      {
+        "id": "phone-native",
+        "weight": 3,
+        "title": "Phone/screen-capture families that are already native-gated",
+        "examples": "HEVC, AAC — documentation, not new WASM"
+      },
+      {
+        "id": "nle-checkbox",
+        "weight": 4,
+        "title": "Desktop-NLE checkbox codecs with no Mediabunny codec or container name",
+        "examples": "BRAW, R3D, HAP"
+      }
+    ],
+    "candidates": [
+      {
+        "id": "honesty-audio",
+        "rank": 1,
+        "rubric": "everyday-audio",
+        "title": "Honesty pass on already-demuxable audio (WAVE PCM, MP3, FLAC, OGG Vorbis)",
+        "demand": "Users bringing .wav / .mp3 / .flac / .ogg hit README language that names video/audio generically while Mediabunny already demuxes those containers. WAVE PCM is already a first-party playback fixture.",
+        "fixtures": [
+          "pcm-s16.wav",
+          "mp3.mp3",
+          "flac.flac",
+          "vorbis.ogg"
+        ],
+        "paperVocabularyBlock": false,
+        "browserLab": true,
+        "defaultRecommendation": "bounded-child",
+        "childShape": "docs-fixtures-media-pool-copy"
+      },
+      {
+        "id": "mpeg-ts-mov",
+        "rank": 2,
+        "rubric": "pro-interchange",
+        "title": "MOV / MPEG-TS wrapping codecs Myrelith already names",
+        "demand": "Camera and broadcast files often arrive as MOV or MPEG-TS around AVC/AAC. Advertised support is MP4/WebM. MPEG-TS silently omits unrecognized stream types instead of reporting them.",
+        "fixtures": [
+          "avc-aac.mov",
+          "avc-aac.ts",
+          "mpeg2-aac.ts"
+        ],
+        "paperVocabularyBlock": false,
+        "browserLab": true,
+        "defaultRecommendation": "bounded-child",
+        "childShape": "docs-and-mpegts-omission-diagnostics"
+      },
+      {
+        "id": "mpeg2-dts",
+        "rank": 3,
+        "rubric": "pro-interchange",
+        "title": "MPEG-2 video and DTS audio",
+        "demand": "Issue #19 already saw MPEG-2 as Limited. Broadcast/camera TS and DTS interchange remain high-friction on desktop NLEs.",
+        "fixtures": [
+          "mpeg2-aac.ts",
+          "avc-dts.mkv"
+        ],
+        "paperVocabularyBlock": true,
+        "blockedNames": [
+          "mpeg2",
+          "dts"
+        ],
+        "browserLab": true,
+        "defaultRecommendation": "no-go",
+        "childShape": null
+      },
+      {
+        "id": "mxf-dnx",
+        "rank": 4,
+        "rubric": "pro-interchange",
+        "title": "MXF container and DNxHD/HR",
+        "demand": "Finishing interchange after ProRes still names DNx in MXF. Mediabunny 1.50.9 has no MXF format and no dnx codec id.",
+        "fixtures": [
+          "dnx-or-mpeg2.mxf"
+        ],
+        "paperVocabularyBlock": true,
+        "blockedNames": [
+          "mxf",
+          "dnxhd",
+          "dnxhr"
+        ],
+        "browserLab": false,
+        "defaultRecommendation": "no-go",
+        "childShape": null
+      },
+      {
+        "id": "hevc-software-fallback",
+        "rank": 5,
+        "rubric": "phone-native",
+        "title": "Software decode fallback for native-but-spotty HEVC",
+        "demand": "Phone capture is often HEVC. Hosts without a hardware decoder report unsupported. A WASM HEVC decoder is a new payload, not a named Mediabunny fallback family.",
+        "fixtures": [
+          "hevc-aac.mp4"
+        ],
+        "paperVocabularyBlock": false,
+        "browserLab": true,
+        "defaultRecommendation": "no-go",
+        "childShape": null
+      },
+      {
+        "id": "ac3-prores-encode",
+        "rank": 6,
+        "rubric": "pro-interchange",
+        "title": "AC-3 or ProRes encode",
+        "demand": "@mediabunny/ac3 ships an unused encoder. ProRes remains decode-only. Architecture and Issue #16 ban local encoder fallbacks.",
+        "fixtures": [],
+        "paperVocabularyBlock": false,
+        "browserLab": true,
+        "defaultRecommendation": "no-go",
+        "childShape": null
+      },
+      {
+        "id": "braw-r3d-hap",
+        "rank": 7,
+        "rubric": "nle-checkbox",
+        "title": "BRAW, R3D, and HAP",
+        "demand": "Desktop NLE format checkboxes. None appear in Mediabunny 1.50.9 VIDEO_CODECS or ALL_FORMATS.",
+        "fixtures": [
+          "not-media.braw"
+        ],
+        "paperVocabularyBlock": true,
+        "blockedNames": [
+          "braw",
+          "r3d",
+          "hap"
+        ],
+        "browserLab": false,
+        "defaultRecommendation": "no-go",
+        "childShape": null
+      }
+    ]
+  },
+  "vocabulary": {
+    "mediabunny": "1.50.9",
+    "formats": [
+      {
+        "token": "HLS",
+        "name": "HTTP Live Streaming (HLS)",
+        "mimeType": "application/vnd.apple.mpegurl"
+      },
+      {
+        "token": "MP4",
+        "name": "MP4",
+        "mimeType": "video/mp4"
+      },
+      {
+        "token": "QTFF",
+        "name": "QuickTime File Format",
+        "mimeType": "video/quicktime"
+      },
+      {
+        "token": "MATROSKA",
+        "name": "Matroska",
+        "mimeType": "video/x-matroska"
+      },
+      {
+        "token": "WEBM",
+        "name": "WebM",
+        "mimeType": "video/webm"
+      },
+      {
+        "token": "WAVE",
+        "name": "WAVE",
+        "mimeType": "audio/wav"
+      },
+      {
+        "token": "OGG",
+        "name": "Ogg",
+        "mimeType": "application/ogg"
+      },
+      {
+        "token": "FLAC",
+        "name": "FLAC",
+        "mimeType": "audio/flac"
+      },
+      {
+        "token": "MP3",
+        "name": "MP3",
+        "mimeType": "audio/mpeg"
+      },
+      {
+        "token": "ADTS",
+        "name": "ADTS",
+        "mimeType": "audio/aac"
+      },
+      {
+        "token": "MPEG_TS",
+        "name": "MPEG Transport Stream",
+        "mimeType": "video/MP2T"
+      }
+    ],
+    "formatTokens": [
+      "HLS",
+      "MP4",
+      "QTFF",
+      "MATROSKA",
+      "WEBM",
+      "WAVE",
+      "OGG",
+      "FLAC",
+      "MP3",
+      "ADTS",
+      "MPEG_TS"
+    ],
+    "videoCodecs": [
+      "avc",
+      "hevc",
+      "vp9",
+      "av1",
+      "vp8",
+      "prores"
+    ],
+    "audioCodecs": [
+      "aac",
+      "opus",
+      "mp3",
+      "vorbis",
+      "flac",
+      "ac3",
+      "eac3",
+      "pcm-s16",
+      "pcm-s16be",
+      "pcm-s24",
+      "pcm-s24be",
+      "pcm-s32",
+      "pcm-s32be",
+      "pcm-f32",
+      "pcm-f32be",
+      "pcm-f64",
+      "pcm-f64be",
+      "pcm-u8",
+      "pcm-s8",
+      "ulaw",
+      "alaw"
+    ],
+    "pcmAudioCodecs": [
+      "pcm-s16",
+      "pcm-s16be",
+      "pcm-s24",
+      "pcm-s24be",
+      "pcm-s32",
+      "pcm-s32be",
+      "pcm-f32",
+      "pcm-f32be",
+      "pcm-f64",
+      "pcm-f64be",
+      "pcm-u8",
+      "pcm-s8",
+      "ulaw",
+      "alaw"
+    ]
+  },
+  "inventory": [
+    {
+      "id": "avc",
+      "kind": "video",
+      "demux": "MP4 / MOV / MPEG-TS / MKV",
+      "decode": "native canDecode",
+      "encode": "allow-listed MP4+AVC+AAC"
+    },
+    {
+      "id": "hevc",
+      "kind": "video",
+      "demux": "MP4 / MOV / MPEG-TS",
+      "decode": "native canDecode; never Auto",
+      "encode": "explicit MP4+HEVC+AAC only"
+    },
+    {
+      "id": "vp8",
+      "kind": "video",
+      "demux": "WebM / MKV",
+      "decode": "native canDecode",
+      "encode": "not an export pair"
+    },
+    {
+      "id": "vp9",
+      "kind": "video",
+      "demux": "WebM / MKV",
+      "decode": "native canDecode",
+      "encode": "allow-listed WebM+VP9+Opus"
+    },
+    {
+      "id": "av1",
+      "kind": "video",
+      "demux": "WebM / MKV",
+      "decode": "native canDecode",
+      "encode": "allow-listed WebM+AV1+Opus; Auto may select"
+    },
+    {
+      "id": "prores",
+      "kind": "video",
+      "demux": "MOV / MP4",
+      "decode": "local-prores fallback after native miss",
+      "encode": "no encoder fallback"
+    },
+    {
+      "id": "aac",
+      "kind": "audio",
+      "demux": "MP4 / MOV / MPEG-TS / ADTS",
+      "decode": "native canDecode",
+      "encode": "allow-listed with AVC/HEVC"
+    },
+    {
+      "id": "ac3",
+      "kind": "audio",
+      "demux": "MKV / MPEG-TS",
+      "decode": "local-ac3 fallback after native miss",
+      "encode": "encoder exists in package, not wired"
+    },
+    {
+      "id": "eac3",
+      "kind": "audio",
+      "demux": "MKV / MPEG-TS",
+      "decode": "shared local-ac3 family",
+      "encode": "no encoder path"
+    },
+    {
+      "id": "mp3",
+      "kind": "audio",
+      "demux": "MP3 / MPEG-TS",
+      "decode": "native canDecode if browser supports",
+      "encode": "not a classic export pair"
+    },
+    {
+      "id": "opus",
+      "kind": "audio",
+      "demux": "WebM / MKV / OGG",
+      "decode": "native canDecode",
+      "encode": "allow-listed with VP9/AV1"
+    },
+    {
+      "id": "vorbis",
+      "kind": "audio",
+      "demux": "OGG / MKV",
+      "decode": "native canDecode if browser supports",
+      "encode": "not an export pair"
+    },
+    {
+      "id": "flac",
+      "kind": "audio",
+      "demux": "FLAC / MKV",
+      "decode": "native canDecode if browser supports",
+      "encode": "not a classic export pair"
+    },
+    {
+      "id": "pcm-s16",
+      "kind": "audio",
+      "demux": "WAVE",
+      "decode": "Mediabunny PCM path; no AudioDecoder required",
+      "encode": "Issue #204 WAV delivery is export-only PCM"
+    },
+    {
+      "id": "mpeg-ts-unnamed",
+      "kind": "container",
+      "demux": "MPEG-TS",
+      "decode": "named AVC/AAC/MP3/AC-3 only; others omitted",
+      "encode": "n/a"
+    },
+    {
+      "id": "hls-blob",
+      "kind": "container",
+      "demux": "HLS",
+      "decode": "BlobSource is not a PathedSource; fail closed",
+      "encode": "not an export source"
+    },
+    {
+      "id": "mxf",
+      "kind": "container",
+      "demux": "MXF",
+      "decode": "not in ALL_FORMATS",
+      "encode": "n/a"
+    },
+    {
+      "id": "mpeg2",
+      "kind": "video",
+      "demux": "MPEG-TS / MXF / MKV",
+      "decode": "not in VIDEO_CODECS; TS omits the stream",
+      "encode": "n/a"
+    },
+    {
+      "id": "dts",
+      "kind": "audio",
+      "demux": "MKV / TS",
+      "decode": "not in AUDIO_CODECS",
+      "encode": "n/a"
+    },
+    {
+      "id": "dnx",
+      "kind": "video",
+      "demux": "MXF / MOV",
+      "decode": "not in VIDEO_CODECS",
+      "encode": "n/a"
+    }
+  ],
+  "product": {
+    "decoderPaths": [
+      "native",
+      "local-prores",
+      "local-ac3"
+    ],
+    "exportPairs": [
+      {
+        "container": "mp4",
+        "videoCodec": "avc",
+        "audioCodec": "aac"
+      },
+      {
+        "container": "webm",
+        "videoCodec": "vp9",
+        "audioCodec": "opus"
+      },
+      {
+        "container": "webm",
+        "videoCodec": "av1",
+        "audioCodec": "opus"
+      },
+      {
+        "container": "mp4",
+        "videoCodec": "hevc",
+        "audioCodec": "aac"
+      }
+    ],
+    "localEncoderFallback": false,
+    "silentSubstitution": false,
+    "runtimeCdn": false,
+    "unrestrictedFfmpeg": false,
+    "registersAc3Encoder": false,
+    "registersProresEncoder": false,
+    "ffmpegWasm": false,
+    "hits": []
+  },
+  "machine": {
+    "platform": "linux",
+    "release": "6.12.94+",
+    "arch": "x64",
+    "cpus": [
+      "Intel(R) Xeon(R) Processor",
+      "Intel(R) Xeon(R) Processor",
+      "Intel(R) Xeon(R) Processor",
+      "Intel(R) Xeon(R) Processor"
+    ],
+    "logicalCpus": 4,
+    "totalMemoryBytes": 16791945216,
+    "node": "v24.19.0"
+  },
+  "fixtures": [
+    {
+      "name": "pcm-s16.wav",
+      "bytes": 96078,
+      "sha256": "668e35400b6a7fdd946579aa2407925991d49ace0fb2066a3b0c48c5fac36f4b"
+    },
+    {
+      "name": "mp3.mp3",
+      "bytes": 8493,
+      "sha256": "f84312e502e93f2acb5755814f00502af777c26ff0f45b2cfea436e718092408"
+    },
+    {
+      "name": "flac.flac",
+      "bytes": 8411,
+      "sha256": "c403a7e2776d95831c4c843dd2e23d3c447cdbed8799ff7b3c7c95003aa526b7"
+    },
+    {
+      "name": "vorbis.ogg",
+      "bytes": 3293,
+      "sha256": "3d17a0e89bab1b662068ca13d805ee6ed6bf24f9face0f37aa5f93f911b203f2"
+    },
+    {
+      "name": "avc-aac.mp4",
+      "bytes": 3615,
+      "sha256": "80ac4f0270e185fa1ff982410aeb2800b4b03b5b2ed29a014f5e0826ef5d4163"
+    },
+    {
+      "name": "avc-aac.mov",
+      "bytes": 3666,
+      "sha256": "0ff1ffbd164b039c32080809da7d80a2c17ac87942bcabf34a86bde83678e25c"
+    },
+    {
+      "name": "avc-aac.ts",
+      "bytes": 11468,
+      "sha256": "516142da75a1dac24eba21441130b7544e365740414eb54855dd6b7f8c08411c"
+    },
+    {
+      "name": "vp9-opus.webm",
+      "bytes": 1994,
+      "sha256": "fd7e648db52e99674a96e1ec5864f96ecc6ca605fad8ebab57b16c23649238e0"
+    },
+    {
+      "name": "vp8-opus.webm",
+      "bytes": 2837,
+      "sha256": "8613316d7e170f8e6a23ac8026d62b0f088f37b330c43b1de5ed3284a626c70b"
+    },
+    {
+      "name": "av1-opus.webm",
+      "bytes": 2418,
+      "sha256": "ada38606d3ffa22ef6d198ceb0481e4b24a24719e00c3697eccf76a4dd75b4ec"
+    },
+    {
+      "name": "hevc-aac.mp4",
+      "bytes": 6045,
+      "sha256": "47799f9eb4858a3c8165e5f6573b77804dace864bb7143349385c2f824586908"
+    },
+    {
+      "name": "avc-ac3.mkv",
+      "bytes": 14612,
+      "sha256": "948ca3a6d0ac76435e117e3bacb01ab341459b181e3eb24dc0462189074553d4"
+    },
+    {
+      "name": "prores.mov",
+      "bytes": 125015,
+      "sha256": "283caa47834f95ce13b75df76409738b6a336a7ac8fed955eea0274edeb677da"
+    },
+    {
+      "name": "mpeg2-aac.ts",
+      "bytes": 13536,
+      "sha256": "6895c98976e0bd203cf523629d7420b61384bac3b786bf5ce0cfb23bea0f6ece"
+    },
+    {
+      "name": "avc-dts.mkv",
+      "bytes": 26802,
+      "sha256": "e0a013fd9f06e4bc3004526f048c586a29d00fa509fa3236a0a493c23c491445"
+    },
+    {
+      "name": "dnx-or-mpeg2.mxf",
+      "bytes": 5689389,
+      "sha256": "e2925b61acef130babad92511d98d64e3c2d0c186c8a736d78e5c8f95a19ee6c"
+    },
+    {
+      "name": "playlist.m3u8",
+      "bytes": 88,
+      "sha256": "75b0b7e0d0f59cf57a2d99e9a5a0104e03dd36f7bff3fa800afa13a59e0c1ed3"
+    },
+    {
+      "name": "not-media.braw",
+      "bytes": 52,
+      "sha256": "9cfae8c4935d4096df063cd19bf03de949c4adc20feee58911b0fbe5bf7c952f"
+    }
+  ],
+  "ffmpegVersion": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+  "demux": {
+    "pcm-s16.wav": {
+      "canRead": true,
+      "format": {
+        "name": "WAVE",
+        "mimeType": "audio/wav"
+      },
+      "trackCount": 1,
+      "tracks": [
+        {
+          "kind": "audio",
+          "codec": "pcm-s16",
+          "codecParameter": "pcm-s16",
+          "canDecode": true,
+          "durationSec": 1,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.042666666666666665,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 4096
+          },
+          "packetAt500ms": {
+            "timestamp": 0.4693333333333333,
+            "duration": 0.042666666666666665,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 4096
+          }
+        }
+      ],
+      "durationMs": 2,
+      "sha256": "668e35400b6a7fdd946579aa2407925991d49ace0fb2066a3b0c48c5fac36f4b",
+      "bytes": 96078
+    },
+    "mp3.mp3": {
+      "canRead": true,
+      "format": {
+        "name": "MP3",
+        "mimeType": "audio/mpeg"
+      },
+      "trackCount": 1,
+      "tracks": [
+        {
+          "kind": "audio",
+          "codec": "mp3",
+          "codecParameter": "mp3",
+          "canDecode": false,
+          "durationSec": 1.032,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.024,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 192
+          },
+          "packetAt500ms": {
+            "timestamp": 0.48,
+            "duration": 0.024,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 192
+          }
+        }
+      ],
+      "durationMs": 1,
+      "sha256": "f84312e502e93f2acb5755814f00502af777c26ff0f45b2cfea436e718092408",
+      "bytes": 8493
+    },
+    "flac.flac": {
+      "canRead": true,
+      "format": {
+        "name": "FLAC",
+        "mimeType": "audio/flac"
+      },
+      "trackCount": 1,
+      "tracks": [
+        {
+          "kind": "audio",
+          "codec": "flac",
+          "codecParameter": "flac",
+          "canDecode": false,
+          "durationSec": 0.96,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.096,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 11
+          },
+          "packetAt500ms": {
+            "timestamp": 0.48,
+            "duration": 0.096,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 11
+          }
+        }
+      ],
+      "durationMs": 2,
+      "sha256": "c403a7e2776d95831c4c843dd2e23d3c447cdbed8799ff7b3c7c95003aa526b7",
+      "bytes": 8411
+    },
+    "vorbis.ogg": {
+      "canRead": true,
+      "format": {
+        "name": "Ogg",
+        "mimeType": "application/ogg"
+      },
+      "trackCount": 1,
+      "tracks": [
+        {
+          "kind": "audio",
+          "codec": "vorbis",
+          "codecParameter": "vorbis",
+          "canDecode": false,
+          "durationSec": 1.0146666666666666,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 1
+          },
+          "packetAt500ms": {
+            "timestamp": 0.48133333333333334,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 1
+          }
+        }
+      ],
+      "durationMs": 3,
+      "sha256": "3d17a0e89bab1b662068ca13d805ee6ed6bf24f9face0f37aa5f93f911b203f2",
+      "bytes": 3293
+    },
+    "avc-aac.mp4": {
+      "canRead": true,
+      "format": {
+        "name": "MP4",
+        "mimeType": "video/mp4"
+      },
+      "trackCount": 2,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "avc",
+          "codecParameter": "avc1.42c00d",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": 320,
+          "codedHeight": 180,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.03333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 807
+          },
+          "packetAt500ms": {
+            "timestamp": 0.5,
+            "duration": 0.03333333333333333,
+            "type": "delta",
+            "isKey": false,
+            "byteLength": 11
+          }
+        },
+        {
+          "kind": "audio",
+          "codec": "aac",
+          "codecParameter": "mp4a.40.2",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": -0.021333333333333333,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 21
+          },
+          "packetAt500ms": {
+            "timestamp": 0.49066666666666664,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 4
+          }
+        }
+      ],
+      "durationMs": 3,
+      "sha256": "80ac4f0270e185fa1ff982410aeb2800b4b03b5b2ed29a014f5e0826ef5d4163",
+      "bytes": 3615
+    },
+    "avc-aac.mov": {
+      "canRead": true,
+      "format": {
+        "name": "QuickTime File Format",
+        "mimeType": "video/quicktime"
+      },
+      "trackCount": 2,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "avc",
+          "codecParameter": "avc1.42c00d",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": 320,
+          "codedHeight": 180,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.03333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 807
+          },
+          "packetAt500ms": {
+            "timestamp": 0.5,
+            "duration": 0.03333333333333333,
+            "type": "delta",
+            "isKey": false,
+            "byteLength": 11
+          }
+        },
+        {
+          "kind": "audio",
+          "codec": "aac",
+          "codecParameter": "mp4a.40.2",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": -0.021333333333333333,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 21
+          },
+          "packetAt500ms": {
+            "timestamp": 0.49066666666666664,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 4
+          }
+        }
+      ],
+      "durationMs": 1,
+      "sha256": "0ff1ffbd164b039c32080809da7d80a2c17ac87942bcabf34a86bde83678e25c",
+      "bytes": 3666
+    },
+    "avc-aac.ts": {
+      "canRead": true,
+      "format": {
+        "name": "MPEG Transport Stream",
+        "mimeType": "video/MP2T"
+      },
+      "trackCount": 2,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "avc",
+          "codecParameter": "avc1.42c00d",
+          "canDecode": false,
+          "durationSec": 2.421333333333333,
+          "codedWidth": 320,
+          "codedHeight": 180,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 1.4213333333333333,
+            "duration": 0.03333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 846
+          },
+          "packetAt500ms": null
+        },
+        {
+          "kind": "audio",
+          "codec": "aac",
+          "codecParameter": "mp4a.40.2",
+          "canDecode": false,
+          "durationSec": 2.424,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": 1.4,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 28
+          },
+          "packetAt500ms": null
+        }
+      ],
+      "durationMs": 4,
+      "sha256": "516142da75a1dac24eba21441130b7544e365740414eb54855dd6b7f8c08411c",
+      "bytes": 11468
+    },
+    "vp9-opus.webm": {
+      "canRead": true,
+      "format": {
+        "name": "WebM",
+        "mimeType": "video/webm"
+      },
+      "trackCount": 2,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "vp9",
+          "codecParameter": "vp09.00.11.08.01.02.02.02.00",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": 320,
+          "codedHeight": 180,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.033,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 118
+          },
+          "packetAt500ms": {
+            "timestamp": 0.5,
+            "duration": 0.033,
+            "type": "delta",
+            "isKey": false,
+            "byteLength": 17
+          }
+        },
+        {
+          "kind": "audio",
+          "codec": "opus",
+          "codecParameter": "opus",
+          "canDecode": false,
+          "durationSec": 1.001,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": -0.0065,
+            "duration": 0.021,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 3
+          },
+          "packetAt500ms": {
+            "timestamp": 0.4945,
+            "duration": 0.02,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 3
+          }
+        }
+      ],
+      "durationMs": 3,
+      "sha256": "fd7e648db52e99674a96e1ec5864f96ecc6ca605fad8ebab57b16c23649238e0",
+      "bytes": 1994
+    },
+    "vp8-opus.webm": {
+      "canRead": true,
+      "format": {
+        "name": "WebM",
+        "mimeType": "video/webm"
+      },
+      "trackCount": 2,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "vp8",
+          "codecParameter": "vp8",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": 320,
+          "codedHeight": 180,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.033,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 156
+          },
+          "packetAt500ms": {
+            "timestamp": 0.5,
+            "duration": 0.033,
+            "type": "delta",
+            "isKey": false,
+            "byteLength": 36
+          }
+        },
+        {
+          "kind": "audio",
+          "codec": "opus",
+          "codecParameter": "opus",
+          "canDecode": false,
+          "durationSec": 1.001,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": -0.0065,
+            "duration": 0.021,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 3
+          },
+          "packetAt500ms": {
+            "timestamp": 0.4945,
+            "duration": 0.02,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 3
+          }
+        }
+      ],
+      "durationMs": 0,
+      "sha256": "8613316d7e170f8e6a23ac8026d62b0f088f37b330c43b1de5ed3284a626c70b",
+      "bytes": 2837
+    },
+    "av1-opus.webm": {
+      "canRead": true,
+      "format": {
+        "name": "WebM",
+        "mimeType": "video/webm"
+      },
+      "trackCount": 2,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "av1",
+          "codecParameter": "av01.0.00M.08",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": 320,
+          "codedHeight": 180,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.033,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 43
+          },
+          "packetAt500ms": {
+            "timestamp": 0.5,
+            "duration": 0.033,
+            "type": "delta",
+            "isKey": false,
+            "byteLength": 18
+          }
+        },
+        {
+          "kind": "audio",
+          "codec": "opus",
+          "codecParameter": "opus",
+          "canDecode": false,
+          "durationSec": 1.001,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": -0.0065,
+            "duration": 0.021,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 3
+          },
+          "packetAt500ms": {
+            "timestamp": 0.4945,
+            "duration": 0.02,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 3
+          }
+        }
+      ],
+      "durationMs": 1,
+      "sha256": "ada38606d3ffa22ef6d198ceb0481e4b24a24719e00c3697eccf76a4dd75b4ec",
+      "bytes": 2418
+    },
+    "hevc-aac.mp4": {
+      "canRead": true,
+      "format": {
+        "name": "MP4",
+        "mimeType": "video/mp4"
+      },
+      "trackCount": 2,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "hevc",
+          "codecParameter": "hev1.1.6.L60.90",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": 320,
+          "codedHeight": 180,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.03333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 57
+          },
+          "packetAt500ms": {
+            "timestamp": 0.5,
+            "duration": 0.03333333333333333,
+            "type": "delta",
+            "isKey": false,
+            "byteLength": 28
+          }
+        },
+        {
+          "kind": "audio",
+          "codec": "aac",
+          "codecParameter": "mp4a.40.2",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": -0.021333333333333333,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 21
+          },
+          "packetAt500ms": {
+            "timestamp": 0.49066666666666664,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 4
+          }
+        }
+      ],
+      "durationMs": 1,
+      "sha256": "47799f9eb4858a3c8165e5f6573b77804dace864bb7143349385c2f824586908",
+      "bytes": 6045
+    },
+    "avc-ac3.mkv": {
+      "canRead": true,
+      "format": {
+        "name": "Matroska",
+        "mimeType": "video/x-matroska"
+      },
+      "trackCount": 2,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "avc",
+          "codecParameter": "avc1.42c00d",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": 320,
+          "codedHeight": 180,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.033,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 807
+          },
+          "packetAt500ms": {
+            "timestamp": 0.5,
+            "duration": 0.033,
+            "type": "delta",
+            "isKey": false,
+            "byteLength": 11
+          }
+        },
+        {
+          "kind": "audio",
+          "codec": "ac3",
+          "codecParameter": "ac-3",
+          "canDecode": false,
+          "durationSec": 0.995,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": -0.005333333,
+            "duration": 0.032,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 384
+          },
+          "packetAt500ms": {
+            "timestamp": 0.47466666700000004,
+            "duration": 0.032,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 384
+          }
+        }
+      ],
+      "durationMs": 0,
+      "sha256": "948ca3a6d0ac76435e117e3bacb01ab341459b181e3eb24dc0462189074553d4",
+      "bytes": 14612
+    },
+    "prores.mov": {
+      "canRead": true,
+      "format": {
+        "name": "QuickTime File Format",
+        "mimeType": "video/quicktime"
+      },
+      "trackCount": 2,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "prores",
+          "codecParameter": "apco",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": 320,
+          "codedHeight": 180,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.03333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 908
+          },
+          "packetAt500ms": {
+            "timestamp": 0.5,
+            "duration": 0.03333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 908
+          }
+        },
+        {
+          "kind": "audio",
+          "codec": "pcm-s16",
+          "codecParameter": "pcm-s16",
+          "canDecode": true,
+          "durationSec": 1,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.042666666666666665,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 4096
+          },
+          "packetAt500ms": {
+            "timestamp": 0.4693333333333333,
+            "duration": 0.042666666666666665,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 4096
+          }
+        }
+      ],
+      "durationMs": 1,
+      "sha256": "283caa47834f95ce13b75df76409738b6a336a7ac8fed955eea0274edeb677da",
+      "bytes": 125015
+    },
+    "mpeg2-aac.ts": {
+      "canRead": true,
+      "format": {
+        "name": "MPEG Transport Stream",
+        "mimeType": "video/MP2T"
+      },
+      "trackCount": 1,
+      "tracks": [
+        {
+          "kind": "audio",
+          "codec": "aac",
+          "codecParameter": "mp4a.40.2",
+          "canDecode": false,
+          "durationSec": 2.436,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": 48000,
+          "numberOfChannels": 1,
+          "firstPacket": {
+            "timestamp": 1.412,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 28
+          },
+          "packetAt500ms": null
+        }
+      ],
+      "durationMs": 1,
+      "sha256": "6895c98976e0bd203cf523629d7420b61384bac3b786bf5ce0cfb23bea0f6ece",
+      "bytes": 13536
+    },
+    "avc-dts.mkv": {
+      "canRead": true,
+      "format": {
+        "name": "Matroska",
+        "mimeType": "video/x-matroska"
+      },
+      "trackCount": 2,
+      "tracks": [
+        {
+          "kind": "video",
+          "codec": "avc",
+          "codecParameter": "avc1.42c00d",
+          "canDecode": false,
+          "durationSec": 1,
+          "codedWidth": 320,
+          "codedHeight": 180,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.033,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 807
+          },
+          "packetAt500ms": {
+            "timestamp": 0.5,
+            "duration": 0.033,
+            "type": "delta",
+            "isKey": false,
+            "byteLength": 11
+          }
+        },
+        {
+          "kind": "audio",
+          "codec": null,
+          "codecParameter": null,
+          "canDecode": false,
+          "durationSec": 0.992,
+          "codedWidth": null,
+          "codedHeight": null,
+          "sampleRate": null,
+          "numberOfChannels": null,
+          "firstPacket": {
+            "timestamp": 0,
+            "duration": 0.011,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 256
+          },
+          "packetAt500ms": {
+            "timestamp": 0.491,
+            "duration": 0.01,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 256
+          }
+        }
+      ],
+      "durationMs": 0,
+      "sha256": "e0a013fd9f06e4bc3004526f048c586a29d00fa509fa3236a0a493c23c491445",
+      "bytes": 26802
+    },
+    "dnx-or-mpeg2.mxf": {
+      "canRead": false,
+      "format": null,
+      "tracks": [],
+      "durationMs": 0,
+      "sha256": "e2925b61acef130babad92511d98d64e3c2d0c186c8a736d78e5c8f95a19ee6c",
+      "bytes": 5689389
+    },
+    "playlist.m3u8": {
+      "canRead": false,
+      "failClosed": true,
+      "error": "TypeError: HLS inputs require `InputOptions.source` to be a PathedSource or a ref to one.",
+      "tracks": [],
+      "durationMs": 0,
+      "sha256": "75b0b7e0d0f59cf57a2d99e9a5a0104e03dd36f7bff3fa800afa13a59e0c1ed3",
+      "bytes": 88
+    },
+    "not-media.braw": {
+      "canRead": false,
+      "format": null,
+      "tracks": [],
+      "durationMs": 0,
+      "sha256": "9cfae8c4935d4096df063cd19bf03de949c4adc20feee58911b0fbe5bf7c952f",
+      "bytes": 52
+    }
+  },
+  "sizes": {
+    "reference": {
+      "acceptableLazyAudioFallbackBytes": 1200000,
+      "rejectedConverterCoreBytes": 32232419
+    },
+    "payloads": [
+      {
+        "id": "ac3",
+        "packageName": "@mediabunny/ac3",
+        "license": "MPL-2.0 wrapper; inlined FFmpeg LGPL 2.1+ WASM",
+        "notes": "Decode is wired. Encoder exists in the package and must stay unwired.",
+        "directory": "node_modules/@mediabunny/ac3",
+        "totalBytes": 5431637,
+        "primaryBundle": {
+          "path": "node_modules/@mediabunny/ac3/dist/bundles/mediabunny-ac3.js",
+          "bytes": 1154782
+        }
+      },
+      {
+        "id": "prores",
+        "packageName": "@mediabunny/prores",
+        "license": "MPL-2.0",
+        "notes": "Decode-only. TurboRes is a separate MPL-2.0 payload.",
+        "directory": "node_modules/@mediabunny/prores",
+        "totalBytes": 1145083,
+        "primaryBundle": {
+          "path": "node_modules/@mediabunny/prores/dist/bundles/mediabunny-prores.js",
+          "bytes": 275151
+        }
+      },
+      {
+        "id": "turbores",
+        "packageName": "turbores",
+        "license": "MPL-2.0",
+        "notes": "ProRes WASM helper. Shared-memory threads need COOP/COEP; product uses the slower path.",
+        "directory": "node_modules/turbores",
+        "totalBytes": 436204,
+        "primaryBundle": null
+      }
+    ]
+  },
+  "browser": {
+    "host": {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+      "platform": "Linux x86_64",
+      "hardwareConcurrency": 4,
+      "deviceMemory": 16,
+      "crossOriginIsolated": false,
+      "webCodecs": {
+        "VideoDecoder": true,
+        "AudioDecoder": true,
+        "VideoEncoder": true,
+        "AudioEncoder": true
+      },
+      "hevcHardwareObservation": false,
+      "av1HardwareObservation": true
+    },
+    "browserVersion": "151.0.7922.34",
+    "browserFacts": {
+      "protocolVersion": "1.3",
+      "product": "HeadlessChrome/151.0.7922.34",
+      "revision": "@782af9cb30a53f54487e5d2e44738645a8ec457c",
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+      "jsVersion": "15.1.206.8"
+    },
+    "gpu": {
+      "gpu": {
+        "devices": [
+          {
+            "vendorId": 65535,
+            "deviceId": 65535,
+            "vendorString": "Google Inc. (Google)",
+            "deviceString": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+            "driverVendor": "SwANGLE",
+            "driverVersion": "5.0.0"
+          }
+        ],
+        "auxAttributes": {
+          "amdSwitchable": false,
+          "canSupportThreadedTextureMailbox": false,
+          "directRenderingVersion": "",
+          "displayType": "ANGLE_SWIFTSHADER",
+          "glExtensions": "GL_AMD_performance_monitor GL_ANGLE_base_vertex_base_instance_shader_builtin GL_ANGLE_blob_cache GL_ANGLE_client_arrays GL_ANGLE_clip_cull_distance GL_ANGLE_compressed_texture_etc GL_ANGLE_copy_texture_3d GL_ANGLE_depth_texture GL_ANGLE_framebuffer_blit GL_ANGLE_framebuffer_multisample GL_ANGLE_get_image GL_ANGLE_get_serialized_context_string GL_ANGLE_get_tex_level_parameter GL_ANGLE_instanced_arrays GL_ANGLE_memory_object_flags GL_ANGLE_memory_size GL_ANGLE_multi_draw GL_ANGLE_pack_reverse_row_order GL_ANGLE_polygon_mode GL_ANGLE_program_binary_readiness_query GL_ANGLE_program_cache_control GL_ANGLE_read_only_depth_stencil_feedback_loops GL_ANGLE_relaxed_vertex_attribute_type GL_ANGLE_renderability_validation GL_ANGLE_request_extension GL_ANGLE_rgbx_internal_format GL_ANGLE_robust_client_memory GL_ANGLE_robust_fragment_shader_output GL_ANGLE_robust_resource_initialization GL_ANGLE_shader_pixel_local_storage GL_ANGLE_shader_pixel_local_storage_coherent GL_ANGLE_stencil_texturing GL_ANGLE_texture_compression_dxt3 GL_ANGLE_texture_compression_dxt5 GL_ANGLE_texture_multisample GL_ANGLE_texture_usage GL_ANGLE_translated_shader_source GL_ANGLE_vulkan_image GL_ANGLE_yuv_internal_format GL_APPLE_clip_distance GL_ARM_rgba8 GL_ARM_shader_framebuffer_fetch GL_ARM_shader_framebuffer_fetch_depth_stencil GL_CHROMIUM_bind_generates_resource GL_CHROMIUM_bind_uniform_location GL_CHROMIUM_copy_compressed_texture GL_CHROMIUM_copy_texture GL_CHROMIUM_lose_context GL_EXT_EGL_image_array GL_EXT_EGL_image_external_wrap_modes GL_EXT_EGL_image_storage GL_EXT_base_instance GL_EXT_blend_minmax GL_EXT_buffer_storage GL_EXT_clear_texture GL_EXT_clip_control GL_EXT_clip_cull_distance GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_compressed_ETC1_RGB8_sub_texture GL_EXT_conservative_depth GL_EXT_copy_image GL_EXT_debug_label GL_EXT_debug_marker GL_EXT_depth_clamp GL_EXT_discard_framebuffer GL_EXT_disjoint_timer_query GL_EXT_draw_buffers GL_EXT_draw_buffers_indexed GL_EXT_draw_elements_base_vertex GL_EXT_float_blend GL_EXT_frag_depth GL_EXT_instanced_arrays GL_EXT_map_buffer_range GL_EXT_memory_object GL_EXT_memory_object_fd GL_EXT_occlusion_query_boolean GL_EXT_polygon_offset_clamp GL_EXT_read_format_bgra GL_EXT_robustness GL_EXT_sRGB GL_EXT_sRGB_write_control GL_EXT_semaphore GL_EXT_semaphore_fd GL_EXT_separate_shader_objects GL_EXT_shader_framebuffer_fetch GL_EXT_shader_framebuffer_fetch_non_coherent GL_EXT_shader_non_constant_global_initializers GL_EXT_shader_texture_lod GL_EXT_shadow_samplers GL_EXT_texture_border_clamp GL_EXT_texture_compression_bptc GL_EXT_texture_compression_dxt1 GL_EXT_texture_compression_rgtc GL_EXT_texture_compression_s3tc_srgb GL_EXT_texture_cube_map_array GL_EXT_texture_filter_anisotropic GL_EXT_texture_format_BGRA8888 GL_EXT_texture_lod_bias GL_EXT_texture_mirror_clamp_to_edge GL_EXT_texture_rg GL_EXT_texture_sRGB_R8 GL_EXT_texture_sRGB_RG8 GL_EXT_texture_sRGB_decode GL_EXT_texture_shadow_lod GL_EXT_texture_storage GL_EXT_texture_type_2_10_10_10_REV GL_EXT_unpack_subimage GL_KHR_blend_equation_advanced GL_KHR_debug GL_KHR_robust_buffer_access_behavior GL_KHR_robustness GL_KHR_texture_compression_astc_ldr GL_NV_fence GL_NV_framebuffer_blit GL_NV_pack_subimage GL_NV_pixel_buffer_object GL_NV_polygon_mode GL_NV_read_depth GL_NV_read_depth_stencil GL_NV_read_stencil GL_NV_shader_noperspective_interpolation GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_EGL_image_external_essl3 GL_OES_EGL_sync GL_OES_compressed_EAC_R11_signed_texture GL_OES_compressed_EAC_R11_unsigned_texture GL_OES_compressed_EAC_RG11_signed_texture GL_OES_compressed_EAC_RG11_unsigned_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_compressed_ETC2_RGB8_texture GL_OES_compressed_ETC2_RGBA8_texture GL_OES_compressed_ETC2_punchthroughA_RGBA8_texture GL_OES_compressed_ETC2_punchthroughA_sRGB8_alpha_texture GL_OES_compressed_ETC2_sRGB8_alpha8_texture GL_OES_compressed_ETC2_sRGB8_texture GL_OES_compressed_paletted_texture GL_OES_copy_image GL_OES_depth24 GL_OES_depth32 GL_OES_depth_texture GL_OES_depth_texture_cube_map GL_OES_draw_buffers_indexed GL_OES_draw_elements_base_vertex GL_OES_element_index_uint GL_OES_fbo_render_mipmap GL_OES_get_program_binary GL_OES_mapbuffer GL_OES_packed_depth_stencil GL_OES_required_internalformat GL_OES_rgb8_rgba8 GL_OES_sample_shading GL_OES_sample_variables GL_OES_shader_multisample_interpolation GL_OES_standard_derivatives GL_OES_surfaceless_context GL_OES_texture_3D GL_OES_texture_border_clamp GL_OES_texture_cube_map_array GL_OES_texture_float GL_OES_texture_float_linear GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_texture_npot GL_OES_texture_stencil8 GL_OES_texture_storage_multisample_2d_array GL_OES_vertex_array_object GL_OES_vertex_half_float GL_OES_vertex_type_10_10_10_2 GL_OVR_multiview GL_OVR_multiview2 GL_QCOM_texture_lod_bias ",
+          "glImplementationParts": "(gl=egl-angle,angle=swiftshader)",
+          "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+          "glResetNotificationStrategy": 33362,
+          "glVendor": "Google Inc. (Google)",
+          "glVersion": "OpenGL ES 3.0 (ANGLE 2.1.28222 git hash: 6dab7c7e742b)",
+          "glWsExtensions": "EGL_EXT_create_context_robustness EGL_ANGLE_surface_orientation EGL_KHR_create_context EGL_KHR_image EGL_KHR_image_base EGL_EXT_image_gl_colorspace EGL_KHR_gl_colorspace EGL_KHR_gl_texture_2D_image EGL_KHR_gl_texture_cubemap_image EGL_KHR_gl_renderbuffer_image EGL_KHR_get_all_proc_addresses EGL_KHR_fence_sync EGL_KHR_wait_sync EGL_ANGLE_create_context_webgl_compatibility EGL_CHROMIUM_create_context_bind_generates_resource EGL_KHR_swap_buffers_with_damage EGL_EXT_pixel_format_float EGL_KHR_surfaceless_context EGL_ANGLE_display_texture_share_group EGL_ANGLE_display_semaphore_share_group EGL_ANGLE_create_context_client_arrays EGL_ANGLE_program_cache_control EGL_ANGLE_robust_resource_initialization EGL_ANGLE_create_context_extensions_enabled EGL_ANDROID_blob_cache EGL_ANDROID_recordable EGL_ANGLE_create_context_backwards_compatible EGL_KHR_no_config_context EGL_IMG_context_priority EGL_KHR_create_context_no_error EGL_KHR_reusable_sync EGL_EXT_buffer_age EGL_ANGLE_create_surface_swap_interval EGL_ANGLE_vulkan_image EGL_KHR_partial_update EGL_ANGLE_global_fence_sync EGL_ANGLE_memory_usage_report ",
+          "glWsVendor": "Google Inc. (Google)",
+          "glWsVersion": "1.5 (ANGLE 2.1.28222 git hash: 6dab7c7e742b)",
+          "hardwareSupportsVulkan": false,
+          "inProcessGpu": false,
+          "initializationTime": 0.011659,
+          "isAsan": false,
+          "isClangCoverage": false,
+          "jpegDecodeAcceleratorSupported": false,
+          "maxMsaaSamples": "4",
+          "optimus": false,
+          "passthroughCmdDecoder": true,
+          "pixelShaderVersion": "3.00",
+          "processCrashCount": 0,
+          "sandboxed": false,
+          "skiaBackendType": "None",
+          "subpixelFontRendering": true,
+          "targetCpuBits": 64,
+          "vertexShaderVersion": "3.00",
+          "visibilityCallbackCallCount": 0
+        },
+        "featureStatus": {
+          "2d_canvas": "unavailable_software",
+          "direct_rendering_display_compositor": "disabled_off_ok",
+          "gpu_compositing": "disabled_software",
+          "multiple_raster_threads": "enabled_on",
+          "opengl": "disabled_off",
+          "rasterization": "disabled_software",
+          "raw_draw": "disabled_off_ok",
+          "skia_graphite": "disabled_off",
+          "trees_in_viz": "disabled_off",
+          "video_decode": "disabled_software",
+          "video_encode": "disabled_software",
+          "vulkan": "disabled_off",
+          "webgl": "unavailable_software",
+          "webgpu": "unavailable_software",
+          "webgpu_on_vk_via_gl_interop": "disabled_off",
+          "webnn": "unavailable_software"
+        },
+        "driverBugWorkarounds": [],
+        "videoDecoding": [],
+        "videoEncoding": []
+      },
+      "modelName": "",
+      "modelVersion": "",
+      "commandLine": "/home/ubuntu/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --autoplay-policy=no-user-gesture-required --user-data-dir=/tmp/playwright_chromiumdev_profile-IWff6C --remote-debugging-pipe --no-startup-window --use-gl=angle --use-angle=swiftshader-webgl --ozone-platform=headless --allow-pre-commit-input"
+    },
+    "fixtures": {
+      "pcm-s16.wav": {
+        "canRead": true,
+        "format": {
+          "name": "WAVE",
+          "mimeType": "audio/wav"
+        },
+        "tracks": [
+          {
+            "kind": "audio",
+            "codec": "pcm-s16",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": null,
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.4693333333333333,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": false,
+            "skipped": "no-video"
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.042666666666666665,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.4693333333333333,
+                "duration": 0.042666666666666665,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": false,
+          "reason": "no-video"
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 3.199999999953434,
+        "crossOriginIsolated": false
+      },
+      "mp3.mp3": {
+        "canRead": true,
+        "format": {
+          "name": "MP3",
+          "mimeType": "audio/mpeg"
+        },
+        "tracks": [
+          {
+            "kind": "audio",
+            "codec": "mp3",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": null,
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.48,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": false,
+            "skipped": "no-video"
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.024,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.48,
+                "duration": 0.024,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": false,
+          "reason": "no-video"
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 2.300000000046566,
+        "crossOriginIsolated": false
+      },
+      "flac.flac": {
+        "canRead": true,
+        "format": {
+          "name": "FLAC",
+          "mimeType": "audio/flac"
+        },
+        "tracks": [
+          {
+            "kind": "audio",
+            "codec": "flac",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": null,
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.48,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": false,
+            "skipped": "no-video"
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.096,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.48,
+                "duration": 0.096,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": false,
+          "reason": "no-video"
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 1.900000000023283,
+        "crossOriginIsolated": false
+      },
+      "vorbis.ogg": {
+        "canRead": true,
+        "format": {
+          "name": "Ogg",
+          "mimeType": "application/ogg"
+        },
+        "tracks": [
+          {
+            "kind": "audio",
+            "codec": "vorbis",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": null,
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.48133333333333334,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": false,
+            "skipped": "no-video"
+          },
+          "audio": {
+            "ok": false,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": null,
+                "duration": null,
+                "closed": false
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": null,
+                "duration": null,
+                "closed": false
+              }
+            ],
+            "ownedAfter": 0
+          }
+        },
+        "avSync": {
+          "applicable": false,
+          "reason": "no-video"
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 3,
+        "crossOriginIsolated": false
+      },
+      "avc-aac.mp4": {
+        "canRead": true,
+        "format": {
+          "name": "MP4",
+          "mimeType": "video/mp4"
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "codec": "avc",
+            "nativeCanDecode": true
+          },
+          {
+            "kind": "audio",
+            "codec": "aac",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.5,
+              "type": "delta"
+            }
+          ],
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.49066666666666664,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.03333333333333333,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "duration": 0.03333333333333333,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.021333333333333333,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.49066666666666664,
+                "duration": 0.021333333333333333,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": true,
+          "withinOneFrame": true,
+          "pairs": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "videoTimestamp": 0,
+              "audioTimestamp": 0,
+              "deltaSeconds": 0,
+              "ok": true
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "videoTimestamp": 0.5,
+              "audioTimestamp": 0.49066666666666664,
+              "deltaSeconds": 0.00933333333333336,
+              "ok": true
+            }
+          ]
+        },
+        "cancel": {
+          "rejected": true,
+          "disposed": true,
+          "error": "InputDisposedError: Input has been disposed."
+        },
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 9.29999999993015,
+        "crossOriginIsolated": false
+      },
+      "avc-aac.mov": {
+        "canRead": true,
+        "format": {
+          "name": "QuickTime File Format",
+          "mimeType": "video/quicktime"
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "codec": "avc",
+            "nativeCanDecode": true
+          },
+          {
+            "kind": "audio",
+            "codec": "aac",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.5,
+              "type": "delta"
+            }
+          ],
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.49066666666666664,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.03333333333333333,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "duration": 0.03333333333333333,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.021333333333333333,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.49066666666666664,
+                "duration": 0.021333333333333333,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": true,
+          "withinOneFrame": true,
+          "pairs": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "videoTimestamp": 0,
+              "audioTimestamp": 0,
+              "deltaSeconds": 0,
+              "ok": true
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "videoTimestamp": 0.5,
+              "audioTimestamp": 0.49066666666666664,
+              "deltaSeconds": 0.00933333333333336,
+              "ok": true
+            }
+          ]
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 3.799999999930151,
+        "crossOriginIsolated": false
+      },
+      "avc-aac.ts": {
+        "canRead": true,
+        "format": {
+          "name": "MPEG Transport Stream",
+          "mimeType": "video/MP2T"
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "codec": "avc",
+            "nativeCanDecode": true
+          },
+          {
+            "kind": "audio",
+            "codec": "aac",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": null,
+              "type": null
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": null,
+              "type": null
+            }
+          ],
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": null,
+              "type": null
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": null,
+              "type": null
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": false,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": null,
+                "duration": null,
+                "closed": false
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": null,
+                "duration": null,
+                "closed": false
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "audio": {
+            "ok": false,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": null,
+                "duration": null,
+                "closed": false
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": null,
+                "duration": null,
+                "closed": false
+              }
+            ],
+            "ownedAfter": 0
+          }
+        },
+        "avSync": {
+          "applicable": true,
+          "withinOneFrame": false,
+          "pairs": [
+            {
+              "frame": 0,
+              "ok": false,
+              "reason": "missing-sample"
+            },
+            {
+              "frame": 15,
+              "ok": false,
+              "reason": "missing-sample"
+            }
+          ]
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 2.800000000046566,
+        "crossOriginIsolated": false
+      },
+      "vp9-opus.webm": {
+        "canRead": true,
+        "format": {
+          "name": "WebM",
+          "mimeType": "video/webm"
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "codec": "vp9",
+            "nativeCanDecode": true
+          },
+          {
+            "kind": "audio",
+            "codec": "opus",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.5,
+              "type": "delta"
+            }
+          ],
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": -0.0065,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.4945,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.033,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "duration": 0.033,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": -0.0065,
+                "duration": 0.0135,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.4945,
+                "duration": 0.0135,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": true,
+          "withinOneFrame": true,
+          "pairs": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "videoTimestamp": 0,
+              "audioTimestamp": -0.0065,
+              "deltaSeconds": 0.0065,
+              "ok": true
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "videoTimestamp": 0.5,
+              "audioTimestamp": 0.4945,
+              "deltaSeconds": 0.005500000000000005,
+              "ok": true
+            }
+          ]
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 11.70000000006985,
+        "crossOriginIsolated": false
+      },
+      "vp8-opus.webm": {
+        "canRead": true,
+        "format": {
+          "name": "WebM",
+          "mimeType": "video/webm"
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "codec": "vp8",
+            "nativeCanDecode": true
+          },
+          {
+            "kind": "audio",
+            "codec": "opus",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.5,
+              "type": "delta"
+            }
+          ],
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": -0.0065,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.4945,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.033,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "duration": 0.033,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": -0.0065,
+                "duration": 0.0135,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.4945,
+                "duration": 0.0135,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": true,
+          "withinOneFrame": true,
+          "pairs": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "videoTimestamp": 0,
+              "audioTimestamp": -0.0065,
+              "deltaSeconds": 0.0065,
+              "ok": true
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "videoTimestamp": 0.5,
+              "audioTimestamp": 0.4945,
+              "deltaSeconds": 0.005500000000000005,
+              "ok": true
+            }
+          ]
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 4.200000000069849,
+        "crossOriginIsolated": false
+      },
+      "av1-opus.webm": {
+        "canRead": true,
+        "format": {
+          "name": "WebM",
+          "mimeType": "video/webm"
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "codec": "av1",
+            "nativeCanDecode": true
+          },
+          {
+            "kind": "audio",
+            "codec": "opus",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.5,
+              "type": "delta"
+            }
+          ],
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": -0.0065,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.4945,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.033,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "duration": 0.033,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": -0.0065,
+                "duration": 0.0135,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.4945,
+                "duration": 0.0135,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": true,
+          "withinOneFrame": true,
+          "pairs": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "videoTimestamp": 0,
+              "audioTimestamp": -0.0065,
+              "deltaSeconds": 0.0065,
+              "ok": true
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "videoTimestamp": 0.5,
+              "audioTimestamp": 0.4945,
+              "deltaSeconds": 0.005500000000000005,
+              "ok": true
+            }
+          ]
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 7.099999999976717,
+        "crossOriginIsolated": false
+      },
+      "hevc-aac.mp4": {
+        "canRead": true,
+        "format": {
+          "name": "MP4",
+          "mimeType": "video/mp4"
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "codec": "hevc",
+            "nativeCanDecode": false
+          },
+          {
+            "kind": "audio",
+            "codec": "aac",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.5,
+              "type": "delta"
+            }
+          ],
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.49066666666666664,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": false,
+            "skipped": "not-decodable"
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.021333333333333333,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.49066666666666664,
+                "duration": 0.021333333333333333,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": false,
+          "reason": "not-decodable"
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 1.7000000000698492,
+        "crossOriginIsolated": false
+      },
+      "avc-ac3.mkv": {
+        "canRead": true,
+        "format": {
+          "name": "Matroska",
+          "mimeType": "video/x-matroska"
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "codec": "avc",
+            "nativeCanDecode": true
+          },
+          {
+            "kind": "audio",
+            "codec": "ac3",
+            "nativeCanDecode": false
+          }
+        ],
+        "packetSeek": {
+          "video": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.5,
+              "type": "delta"
+            }
+          ],
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": -0.005333333,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.47466666700000004,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.033,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "duration": 0.033,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "audio": {
+            "ok": false,
+            "skipped": "not-decodable"
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": false,
+          "reason": "not-decodable"
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 3.300000000046566,
+        "crossOriginIsolated": false
+      },
+      "prores.mov": {
+        "canRead": true,
+        "format": {
+          "name": "QuickTime File Format",
+          "mimeType": "video/quicktime"
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "codec": "prores",
+            "nativeCanDecode": false
+          },
+          {
+            "kind": "audio",
+            "codec": "pcm-s16",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.5,
+              "type": "key"
+            }
+          ],
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.4693333333333333,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": false,
+            "skipped": "not-decodable"
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.042666666666666665,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.4693333333333333,
+                "duration": 0.042666666666666665,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": false,
+          "reason": "not-decodable"
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 0.5999999999767169,
+        "crossOriginIsolated": false
+      },
+      "mpeg2-aac.ts": {
+        "canRead": true,
+        "format": {
+          "name": "MPEG Transport Stream",
+          "mimeType": "video/MP2T"
+        },
+        "tracks": [
+          {
+            "kind": "audio",
+            "codec": "aac",
+            "nativeCanDecode": true
+          }
+        ],
+        "packetSeek": {
+          "video": null,
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": null,
+              "type": null
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": null,
+              "type": null
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": false,
+            "skipped": "no-video"
+          },
+          "audio": {
+            "ok": false,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": null,
+                "duration": null,
+                "closed": false
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": null,
+                "duration": null,
+                "closed": false
+              }
+            ],
+            "ownedAfter": 0
+          }
+        },
+        "avSync": {
+          "applicable": false,
+          "reason": "no-video"
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 1.3000000000465661,
+        "crossOriginIsolated": false
+      },
+      "avc-dts.mkv": {
+        "canRead": true,
+        "format": {
+          "name": "Matroska",
+          "mimeType": "video/x-matroska"
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "codec": "avc",
+            "nativeCanDecode": true
+          },
+          {
+            "kind": "audio",
+            "codec": null,
+            "nativeCanDecode": false
+          }
+        ],
+        "packetSeek": {
+          "video": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.5,
+              "type": "delta"
+            }
+          ],
+          "audio": [
+            {
+              "frame": 0,
+              "requestedSeconds": 0,
+              "timestamp": 0,
+              "type": "key"
+            },
+            {
+              "frame": 15,
+              "requestedSeconds": 0.5,
+              "timestamp": 0.491,
+              "type": "key"
+            }
+          ]
+        },
+        "decode": {
+          "video": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.033,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "duration": 0.033,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "audio": {
+            "ok": false,
+            "skipped": "not-decodable"
+          },
+          "ok": true
+        },
+        "avSync": {
+          "applicable": false,
+          "reason": "not-decodable"
+        },
+        "cancel": null,
+        "ownedAfter": {
+          "video": 0,
+          "audio": 0
+        },
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "durationMs": 2.800000000046566,
+        "crossOriginIsolated": false
+      },
+      "playlist.m3u8": {
+        "canRead": false,
+        "failClosed": true,
+        "error": "TypeError: HLS inputs require `InputOptions.source` to be a PathedSource or a ref to one.",
+        "durationMs": 0.30000000004656613
+      }
+    },
+    "encoders": {
+      "video": [
+        {
+          "id": "avc",
+          "codec": "avc1.42001e",
+          "supported": true
+        },
+        {
+          "id": "vp9",
+          "codec": "vp09.00.10.08",
+          "supported": true
+        },
+        {
+          "id": "av1",
+          "codec": "av01.0.04M.08",
+          "supported": true
+        },
+        {
+          "id": "hevc",
+          "codec": "hvc1.1.6.L93.B0",
+          "supported": false
+        },
+        {
+          "id": "prores",
+          "codec": "apcn",
+          "supported": false
+        }
+      ],
+      "audio": [
+        {
+          "id": "aac",
+          "codec": "mp4a.40.2",
+          "supported": false
+        },
+        {
+          "id": "opus",
+          "codec": "opus",
+          "supported": true
+        },
+        {
+          "id": "ac3",
+          "codec": "ac-3",
+          "supported": false
+        }
+      ],
+      "localEncoderFallbackAttempted": false
+    },
+    "fallbacks": {
+      "compileMs": 0,
+      "direct": {
+        "prores": {
+          "canRead": true,
+          "format": {
+            "name": "QuickTime File Format",
+            "mimeType": "video/quicktime"
+          },
+          "tracks": [
+            {
+              "kind": "video",
+              "codec": "prores",
+              "nativeCanDecode": false
+            },
+            {
+              "kind": "audio",
+              "codec": "pcm-s16",
+              "nativeCanDecode": true
+            }
+          ],
+          "packetSeek": {
+            "video": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "type": "key"
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "type": "key"
+              }
+            ],
+            "audio": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "type": "key"
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.4693333333333333,
+                "type": "key"
+              }
+            ]
+          },
+          "decode": {
+            "video": {
+              "ok": false,
+              "skipped": "not-decodable"
+            },
+            "audio": {
+              "ok": true,
+              "frames": [
+                {
+                  "frame": 0,
+                  "requestedSeconds": 0,
+                  "timestamp": 0,
+                  "duration": 0.042666666666666665,
+                  "closed": true
+                },
+                {
+                  "frame": 15,
+                  "requestedSeconds": 0.5,
+                  "timestamp": 0.4693333333333333,
+                  "duration": 0.042666666666666665,
+                  "closed": true
+                }
+              ],
+              "ownedAfter": 0
+            },
+            "ok": true
+          },
+          "avSync": {
+            "applicable": false,
+            "reason": "not-decodable"
+          },
+          "cancel": null,
+          "ownedAfter": {
+            "video": 0,
+            "audio": 0
+          },
+          "heapBefore": 24500000,
+          "heapAfter": 24500000,
+          "durationMs": 0.5,
+          "crossOriginIsolated": false
+        },
+        "ac3": {
+          "canRead": true,
+          "format": {
+            "name": "Matroska",
+            "mimeType": "video/x-matroska"
+          },
+          "tracks": [
+            {
+              "kind": "video",
+              "codec": "avc",
+              "nativeCanDecode": true
+            },
+            {
+              "kind": "audio",
+              "codec": "ac3",
+              "nativeCanDecode": false
+            }
+          ],
+          "packetSeek": {
+            "video": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "type": "key"
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "type": "delta"
+              }
+            ],
+            "audio": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": -0.005333333,
+                "type": "key"
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.47466666700000004,
+                "type": "key"
+              }
+            ]
+          },
+          "decode": {
+            "video": {
+              "ok": true,
+              "frames": [
+                {
+                  "frame": 0,
+                  "requestedSeconds": 0,
+                  "timestamp": 0,
+                  "duration": 0.033,
+                  "closed": true
+                },
+                {
+                  "frame": 15,
+                  "requestedSeconds": 0.5,
+                  "timestamp": 0.5,
+                  "duration": 0.033,
+                  "closed": true
+                }
+              ],
+              "ownedAfter": 0
+            },
+            "audio": {
+              "ok": false,
+              "skipped": "not-decodable"
+            },
+            "ok": true
+          },
+          "avSync": {
+            "applicable": false,
+            "reason": "not-decodable"
+          },
+          "cancel": null,
+          "ownedAfter": {
+            "video": 0,
+            "audio": 0
+          },
+          "heapBefore": 24500000,
+          "heapAfter": 24500000,
+          "durationMs": 2.799999999930151,
+          "crossOriginIsolated": false
+        }
+      },
+      "fallback": {
+        "prores": {
+          "canRead": true,
+          "format": {
+            "name": "QuickTime File Format",
+            "mimeType": "video/quicktime"
+          },
+          "tracks": [
+            {
+              "kind": "video",
+              "codec": "prores",
+              "nativeCanDecode": true
+            },
+            {
+              "kind": "audio",
+              "codec": "pcm-s16",
+              "nativeCanDecode": true
+            }
+          ],
+          "packetSeek": {
+            "video": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "type": "key"
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "type": "key"
+              }
+            ],
+            "audio": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "type": "key"
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.4693333333333333,
+                "type": "key"
+              }
+            ]
+          },
+          "decode": {
+            "video": {
+              "ok": true,
+              "frames": [
+                {
+                  "frame": 0,
+                  "requestedSeconds": 0,
+                  "timestamp": 0,
+                  "duration": 0.03333333333333333,
+                  "closed": true
+                },
+                {
+                  "frame": 15,
+                  "requestedSeconds": 0.5,
+                  "timestamp": 0.5,
+                  "duration": 0.03333333333333333,
+                  "closed": true
+                }
+              ],
+              "ownedAfter": 0
+            },
+            "audio": {
+              "ok": true,
+              "frames": [
+                {
+                  "frame": 0,
+                  "requestedSeconds": 0,
+                  "timestamp": 0,
+                  "duration": 0.042666666666666665,
+                  "closed": true
+                },
+                {
+                  "frame": 15,
+                  "requestedSeconds": 0.5,
+                  "timestamp": 0.4693333333333333,
+                  "duration": 0.042666666666666665,
+                  "closed": true
+                }
+              ],
+              "ownedAfter": 0
+            },
+            "ok": true
+          },
+          "avSync": {
+            "applicable": true,
+            "withinOneFrame": true,
+            "pairs": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "videoTimestamp": 0,
+                "audioTimestamp": 0,
+                "deltaSeconds": 0,
+                "ok": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "videoTimestamp": 0.5,
+                "audioTimestamp": 0.4693333333333333,
+                "deltaSeconds": 0.030666666666666675,
+                "ok": true
+              }
+            ]
+          },
+          "cancel": null,
+          "ownedAfter": {
+            "video": 0,
+            "audio": 0
+          },
+          "heapBefore": 24500000,
+          "heapAfter": 24500000,
+          "durationMs": 16,
+          "crossOriginIsolated": false
+        },
+        "ac3": {
+          "canRead": true,
+          "format": {
+            "name": "Matroska",
+            "mimeType": "video/x-matroska"
+          },
+          "tracks": [
+            {
+              "kind": "video",
+              "codec": "avc",
+              "nativeCanDecode": true
+            },
+            {
+              "kind": "audio",
+              "codec": "ac3",
+              "nativeCanDecode": true
+            }
+          ],
+          "packetSeek": {
+            "video": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "type": "key"
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.5,
+                "type": "delta"
+              }
+            ],
+            "audio": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": -0.005333333,
+                "type": "key"
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.47466666700000004,
+                "type": "key"
+              }
+            ]
+          },
+          "decode": {
+            "video": {
+              "ok": true,
+              "frames": [
+                {
+                  "frame": 0,
+                  "requestedSeconds": 0,
+                  "timestamp": 0,
+                  "duration": 0.033,
+                  "closed": true
+                },
+                {
+                  "frame": 15,
+                  "requestedSeconds": 0.5,
+                  "timestamp": 0.5,
+                  "duration": 0.033,
+                  "closed": true
+                }
+              ],
+              "ownedAfter": 0
+            },
+            "audio": {
+              "ok": false,
+              "frames": [
+                {
+                  "frame": 0,
+                  "requestedSeconds": 0,
+                  "timestamp": null,
+                  "duration": null,
+                  "closed": false
+                },
+                {
+                  "frame": 15,
+                  "requestedSeconds": 0.5,
+                  "timestamp": null,
+                  "duration": null,
+                  "closed": false
+                }
+              ],
+              "ownedAfter": 0
+            }
+          },
+          "avSync": {
+            "applicable": true,
+            "withinOneFrame": false,
+            "pairs": [
+              {
+                "frame": 0,
+                "ok": false,
+                "reason": "missing-sample"
+              },
+              {
+                "frame": 15,
+                "ok": false,
+                "reason": "missing-sample"
+              }
+            ]
+          },
+          "cancel": null,
+          "ownedAfter": {
+            "video": 0,
+            "audio": 0
+          },
+          "heapBefore": 24500000,
+          "heapAfter": 24500000,
+          "durationMs": 46,
+          "crossOriginIsolated": false
+        }
+      },
+      "encoderRegistration": false
+    }
+  },
+  "decisions": [
+    {
+      "id": "honesty-audio",
+      "recommendation": "bounded-child",
+      "reason": "Mediabunny already names WAVE PCM, MP3, FLAC, and OGG Vorbis. The child issue is documentation, fixtures, and Media Pool copy only — no new decoder, README claim, or export pair. Native decode remains a per-host matrix cell.",
+      "reopen": [
+        "Do not ship a format claim until a child issue adds fixtures plus browser evidence and copy.",
+        "Keep import and export independent: WAV delivery (#204) is not an import-support claim."
+      ],
+      "observations": {
+        "named": [
+          "pcm-s16",
+          "mp3",
+          "flac",
+          "vorbis"
+        ],
+        "decoded": [
+          "pcm-s16.wav",
+          "mp3.mp3",
+          "flac.flac"
+        ]
+      },
+      "childShape": "docs-fixtures-media-pool-copy"
+    },
+    {
+      "id": "mpeg-ts-mov",
+      "recommendation": "bounded-child",
+      "reason": "QTFF/MOV already names AVC+AAC. MPEG-TS already names AVC+AAC. MPEG-2 video was omitted from MPEG-TS tracks rather than reported. Do not advertise MPEG-TS generally.",
+      "reopen": [
+        "A child may document MOV/MPEG-TS wrapping of already-named codecs and optionally report omitted TS streams.",
+        "A child must not add MPEG-2, remote HLS, or a second demuxer."
+      ],
+      "observations": {
+        "movOk": true,
+        "tsOk": true,
+        "mpeg2VideoNamed": false,
+        "mpeg2VideoPresent": false,
+        "mpeg2TrackCodecs": [
+          "aac"
+        ]
+      },
+      "childShape": "docs-and-mpegts-omission-diagnostics"
+    },
+    {
+      "id": "mpeg2-dts",
+      "recommendation": "no-go",
+      "reason": "Blocked at Mediabunny 1.50.9 vocabulary (mpeg2, dts). CustomVideoDecoder.supports() only receives the closed VideoCodec union, so a Myrelith-only decoder cannot hook these ids. No WASM spike was run.",
+      "reopen": [
+        "A reviewed Mediabunny upgrade that names the codec and maps demux packets.",
+        "Decoder-only, locally bundled, lazy, realm-registered, budgeted, cancellable, license-reviewed.",
+        "Independent import vs export; no encoder fallback; no unrestricted FFmpeg."
+      ],
+      "observations": {
+        "vocabularyLeak": [],
+        "probeLeak": []
+      },
+      "childShape": null
+    },
+    {
+      "id": "mxf-dnx",
+      "recommendation": "no-go",
+      "reason": "Blocked at Mediabunny 1.50.9 vocabulary (mxf, dnxhd, dnxhr). CustomVideoDecoder.supports() only receives the closed VideoCodec union, so a Myrelith-only decoder cannot hook these ids. No WASM spike was run.",
+      "reopen": [
+        "A reviewed Mediabunny upgrade that names the codec and maps demux packets.",
+        "Decoder-only, locally bundled, lazy, realm-registered, budgeted, cancellable, license-reviewed.",
+        "Independent import vs export; no encoder fallback; no unrestricted FFmpeg."
+      ],
+      "observations": {
+        "vocabularyLeak": [],
+        "probeLeak": []
+      },
+      "childShape": null
+    },
+    {
+      "id": "hevc-software-fallback",
+      "recommendation": "no-go",
+      "reason": "HEVC is already native-gated. There is no reviewed Mediabunny HEVC fallback family. A software WASM decoder would be a new payload, must not substitute a different export codec, and is not justified by demand evidence (no analytics).",
+      "reopen": [
+        "Proven demand on hosts whose native HEVC canDecode is false.",
+        "A pinned, license-reviewed, lazy decoder module under the AC-3 size neighborhood unless a new budget is accepted.",
+        "Export remains native-only; no HEVC substitution."
+      ],
+      "observations": {
+        "nativeDecode": {
+          "video": {
+            "ok": false,
+            "skipped": "not-decodable"
+          },
+          "audio": {
+            "ok": true,
+            "frames": [
+              {
+                "frame": 0,
+                "requestedSeconds": 0,
+                "timestamp": 0,
+                "duration": 0.021333333333333333,
+                "closed": true
+              },
+              {
+                "frame": 15,
+                "requestedSeconds": 0.5,
+                "timestamp": 0.49066666666666664,
+                "duration": 0.021333333333333333,
+                "closed": true
+              }
+            ],
+            "ownedAfter": 0
+          },
+          "ok": true
+        }
+      },
+      "childShape": null
+    },
+    {
+      "id": "ac3-prores-encode",
+      "recommendation": "no-go",
+      "reason": "ARCHITECTURE.md and Issue #16 forbid local encoder fallbacks. @mediabunny/ac3 encoder registration is not a product encode path. ProRes has no encoder in the pinned package set.",
+      "reopen": [
+        "A separate architecture decision that revises the native-only export contract.",
+        "License, size, lifecycle, and semantic gates from Issue #16."
+      ],
+      "observations": {
+        "encode": {
+          "video": [
+            {
+              "id": "avc",
+              "codec": "avc1.42001e",
+              "supported": true
+            },
+            {
+              "id": "vp9",
+              "codec": "vp09.00.10.08",
+              "supported": true
+            },
+            {
+              "id": "av1",
+              "codec": "av01.0.04M.08",
+              "supported": true
+            },
+            {
+              "id": "hevc",
+              "codec": "hvc1.1.6.L93.B0",
+              "supported": false
+            },
+            {
+              "id": "prores",
+              "codec": "apcn",
+              "supported": false
+            }
+          ],
+          "audio": [
+            {
+              "id": "aac",
+              "codec": "mp4a.40.2",
+              "supported": false
+            },
+            {
+              "id": "opus",
+              "codec": "opus",
+              "supported": true
+            },
+            {
+              "id": "ac3",
+              "codec": "ac-3",
+              "supported": false
+            }
+          ],
+          "localEncoderFallbackAttempted": false
+        },
+        "productImportsEncoder": false
+      },
+      "childShape": null
+    },
+    {
+      "id": "braw-r3d-hap",
+      "recommendation": "no-go",
+      "reason": "Blocked at Mediabunny 1.50.9 vocabulary (braw, r3d, hap). CustomVideoDecoder.supports() only receives the closed VideoCodec union, so a Myrelith-only decoder cannot hook these ids. No WASM spike was run.",
+      "reopen": [
+        "A reviewed Mediabunny upgrade that names the codec and maps demux packets.",
+        "Decoder-only, locally bundled, lazy, realm-registered, budgeted, cancellable, license-reviewed.",
+        "Independent import vs export; no encoder fallback; no unrestricted FFmpeg."
+      ],
+      "observations": {
+        "vocabularyLeak": [],
+        "probeLeak": []
+      },
+      "childShape": null
+    }
+  ],
+  "sourceDigests": {
+    "scripts/issue207/protocol.mjs": "11c555e25bed227d62fc34f84d3ec3b8eb31c71fbc4b943f82dc1943b30a39ba",
+    "scripts/issue207/ranking.mjs": "822dd38c3c468b365896c7b2ad4820861e17c434e120d096fb1a57a1446cb4db",
+    "scripts/issue207/inventory.mjs": "1df43fa8a037691b744ab10076fb12b84bc78500b286c7ef18e03df487ea3b49",
+    "scripts/issue207/fixtures.mjs": "f04b88f68e03e80d369d8319bcef127101bc50958091c59b8da1489974567094",
+    "scripts/issue207/demux.mjs": "26d21df8bcf8bb38612801069836aa6dd998070dbc55b7e9c1aeb5be1d6a508b",
+    "scripts/issue207/sizes.mjs": "52cfb814562decb2cb57847813cd6ab6bcfa3ee1015b6acccbb51ace876edd04",
+    "scripts/issue207/decision.mjs": "c1f45ef6e64ae58a656cc19272babc7cd8018d730396adcf4571c080f70750c4",
+    "scripts/issue207/lab.mjs": "c7face8f09c38f3733d8a4fc2c7d5f6dbc022b4af52e039e80700c4b38041278",
+    "scripts/issue207/run-research.mjs": "e41e59581d9d670c20beb2e1b84664c2f0f6c1a6b471cab4e0d5e2359bb6dfda"
+  },
+  "wasmSpikes": [
+    {
+      "id": "mpeg2-dts",
+      "ran": false
+    },
+    {
+      "id": "mxf-dnx",
+      "ran": false
+    },
+    {
+      "id": "braw-r3d-hap",
+      "ran": false
+    }
+  ]
+}

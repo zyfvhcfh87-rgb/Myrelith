@@ -62,6 +62,17 @@ JSON because this muxer cannot write container chapters. File destination plus
 sidecar is rejected. Render jobs persist tagged profiles and optional chapter
 policy; classic records without `chapters` still parse.
 
+## Post-MVP issue #207 — browser-local codec/container evidence gate (2026-09-12)
+
+Research program only. The plan is [ISSUE_207_PLAN.md](ISSUE_207_PLAN.md).
+This is not FFmpeg-parity and does not ship MPEG-2, DTS, DNx, MXF, or any
+codec Mediabunny 1.50.9 does not already name. There is no WASM encoder
+fallback and no unrestricted FFmpeg. Ranking, matrix, licensing, and per-
+candidate go/no-go records live under [evidence/issue207](evidence/issue207).
+Run `npm run qa:issue207:check` and `npm run qa:issue207:research`. Firefox and
+Safari remain **U** (Issue #208). README/export-profile/decoder-path claims
+wait for an accepted child issue.
+
 ## Post-MVP issue #203 — persistent render jobs, custom presets, and range exports (2026-09-10)
 
 The approved implementation plan is [ISSUE_203_PLAN.md](ISSUE_203_PLAN.md).
@@ -1681,6 +1692,11 @@ surface; it is not a second zoom and never enters document history.
   fallback, unknown, malformed, truncated, spoofed, empty, and random-byte
   matrix plus a hash/ffprobe manifest under `.tmp/issue-19-codec-fixtures/`;
   it exits nonzero when the expected container/codec/damage matrix drifts.
+- `npm run qa:issue207:research` generates ignored Issue #207 fixtures under
+  `.tmp/issue207/fixtures/`, demuxes them with pinned Mediabunny, optionally
+  measures headed-off Chromium decode/encode, and writes hashes-only evidence
+  to `docs/evidence/issue207/measured-run.json`. `npm run qa:issue207:check`
+  locks ranking, vocabulary, and go/no-go rules without Playwright.
 - Generate a labeled test MP4 IN THE BROWSER:
   import mediabunny via `/@fs/E:/ClaudeSpace/Myrelith/node_modules/mediabunny/dist/modules/src/index.js`,
   `Output` + `Mp4OutputFormat` + `BufferTarget` + `CanvasSource`, draw

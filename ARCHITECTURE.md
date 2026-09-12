@@ -433,6 +433,14 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   import this laboratory, including through dynamic imports or re-exports.
   It introduces no product decoder admission policy or angle-wall UI. Research
   decisions and limitations live in `docs/MULTICAM_MONITOR_RESEARCH.md`.
+- Issue #207's codec/container evidence program lives only under
+  `scripts/issue207/` and `docs/evidence/issue207/`. The runner may open
+  Mediabunny `ALL_FORMATS` on local fixture bytes and, in Chromium, register
+  the already-shipped ProRes/AC-3 decoder packages to measure the existing
+  fallback path. It must not import production UI/state/pipeline, add a
+  decoder path, encoder fallback, README format claim, or unrestricted
+  FFmpeg surface. No production source may import this laboratory. Decisions
+  live in `docs/ISSUE_207_PLAN.md`.
 - `domain/pluginManifest.ts` is the pure, non-executing structural validator and
   compatibility negotiator for the proposed plugin manifest. It reuses the
   durable effect-number/key bounds, requires one package-unique render export per
