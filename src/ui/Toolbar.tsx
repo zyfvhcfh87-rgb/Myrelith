@@ -20,6 +20,7 @@ import EditorCommandPalette from './EditorCommandPalette'
 import { useOptionalPluginUi } from './plugins/PluginUiHooks'
 
 const ExportDialog = lazy(() => import('./ExportDialog'))
+const CollectMediaDialog = lazy(() => import('./CollectMediaDialog'))
 const CaptionEditor = lazy(() => import('./CaptionEditor'))
 const OtioInterchangeDialog = lazy(() => import('./OtioInterchangeDialog'))
 
@@ -56,12 +57,14 @@ function recoveryStatus(
 export default function Toolbar() {
   const pluginUi = useOptionalPluginUi()
   const [exportOpen, setExportOpen] = useState(false)
+  const [collectOpen, setCollectOpen] = useState(false)
   const [captionsOpen, setCaptionsOpen] = useState(false)
   const [otioOpen, setOtioOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [leaveError, setLeaveError] = useState<string | null>(null)
   const exportButtonRef = useRef<HTMLButtonElement | null>(null)
+  const collectButtonRef = useRef<HTMLButtonElement | null>(null)
   const captionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const otioButtonRef = useRef<HTMLButtonElement | null>(null)
   const commandButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -110,6 +113,11 @@ export default function Toolbar() {
   const closeExport = (): void => {
     setExportOpen(false)
     requestAnimationFrame(() => exportButtonRef.current?.focus())
+  }
+
+  const closeCollect = (): void => {
+    setCollectOpen(false)
+    requestAnimationFrame(() => collectButtonRef.current?.focus())
   }
 
   const closeCaptions = (): void => {
@@ -215,6 +223,18 @@ export default function Toolbar() {
           Save As
         </button>
         <button
+          ref={collectButtonRef}
+          type="button"
+          className="toolbar-button"
+          aria-haspopup="dialog"
+          aria-expanded={collectOpen}
+          disabled={closing}
+          title="Copy referenced media into a local archive folder without changing Save"
+          onClick={() => setCollectOpen(true)}
+        >
+          Collect media
+        </button>
+        <button
           ref={captionsButtonRef}
           type="button"
           className="toolbar-button"
@@ -280,6 +300,16 @@ export default function Toolbar() {
           onClose={closeOtio}
         >
           <OtioInterchangeDialog onClose={closeOtio} />
+        </LazySurfaceBoundary>
+      )}
+      {collectOpen && (
+        <LazySurfaceBoundary
+          variant="dialog"
+          loadingLabel="Loading collect media…"
+          failureTitle="Collect media could not load"
+          onClose={closeCollect}
+        >
+          <CollectMediaDialog onClose={closeCollect} />
         </LazySurfaceBoundary>
       )}
       {exportOpen && (

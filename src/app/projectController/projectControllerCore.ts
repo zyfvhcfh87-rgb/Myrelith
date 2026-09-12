@@ -24,6 +24,15 @@ import { suspendProjectPersistenceSession, type ProjectPersistenceSession } from
 import { isLocalMediaPickerCancellation, localMediaFolderSelectionsFromFiles, supportsLocalMediaFolders, supportsLocalMediaHandles, type LocalMediaFileHandle, type LocalMediaFolderSelection, type LocalMediaPermission } from '../localMediaHandles';
 import { isLocalProjectPickerCancellation, supportsLocalProjectFiles, type LocalProjectFileHandle, type LocalProjectPermission, type RecentProjectRecord } from '../localProjectStorage';
 import { clearActiveLocalProjectBindingId, getActiveLocalProjectBindingId, legacyLocalProjectBindingId, setActiveLocalProjectBindingId } from '../localProjectProvenance';
+import {
+  isCollectMediaAbort,
+  loadCollectedArchiveFromPicker,
+  readFileAtRelativePath,
+  type CollectMediaDirectoryHandle,
+  type LoadedCollectedArchive,
+} from '../collectMediaArchive';
+import type { CollectMediaManifest } from '../../domain/collectMedia';
+import { fingerprintLocalMediaSource } from '../sourceFingerprint';
 import type { ProjectActionResult, ProjectControllerDeps } from './contracts';
 import { projectControllerRealDeps as realDeps } from './dependencies';
 import {
@@ -70,6 +79,7 @@ interface PendingResume {
   rememberedHandles: Map<string, LocalMediaFileHandle>
   abortController: AbortController
   projectBindingId: string
+  collectedArchiveStatus?: 'complete' | 'partial'
 }
 
 let pendingResume: PendingResume | null = null
@@ -256,6 +266,9 @@ function resumeSummary(pending: PendingResume): ResumeProjectSummary {
           ? 'remembered'
           : 'missing',
     })),
+    ...(pending.collectedArchiveStatus
+      ? { collectedArchiveStatus: pending.collectedArchiveStatus }
+      : {}),
   }
 }
 
@@ -460,6 +473,11 @@ interface ProjectCandidateSource {
   recoveryJournalId?: string
   recoveryCapturedAt?: number
   projectBindingId?: string
+  collectedRestore?: {
+    root: CollectMediaDirectoryHandle
+    manifest: CollectMediaManifest
+    complete: boolean
+  }
 }
 
 async function sameProjectEntry(
@@ -552,6 +570,9 @@ async function prepareProjectCandidate(
     rememberedHandles: new Map(),
     abortController: new AbortController(),
     projectBindingId: binding.projectBindingId,
+    ...(source.collectedRestore
+      ? { collectedArchiveStatus: source.collectedRestore.complete ? 'complete' : 'partial' }
+      : {}),
   }
   pendingResume = pending
 
@@ -575,11 +596,28 @@ async function prepareProjectCandidate(
       error: null,
     })
   }
+  const collectedErrors: string[] = []
+  if (source.collectedRestore) {
+    const collected = await restoreCollectedMedia(
+      pending,
+      source.collectedRestore,
+      generation,
+      deps,
+    )
+    if (collected.status === 'cancelled') return collected
+    collectedErrors.push(...collected.errors)
+    if (!source.collectedRestore.complete) {
+      collectedErrors.unshift(
+        'This collected archive is incomplete and is not a finished package.',
+      )
+    }
+  }
   const restored = await restoreRememberedMedia(pending, generation, deps)
   if (restored.status === 'cancelled') return restored
+  const errors = [...collectedErrors, ...restored.errors]
   publishResumeCandidate(
     pending,
-    restored.errors.length > 0 ? restored.errors.join(' ') : null,
+    errors.length > 0 ? errors.join(' ') : null,
   )
   return { status: 'ready' }
 }
@@ -627,6 +665,47 @@ export function openProjectFile(
     displayFileName: file.name,
     projectFileName: file.name,
     persisted: true,
+  }, generation, deps)
+}
+
+/** Open a collect-media folder and resolve media from archive-relative paths. */
+export async function openCollectedProject(
+  deps: ProjectControllerDeps = realDeps,
+): Promise<ProjectActionResult> {
+  try {
+    const archive = await loadCollectedArchiveFromPicker()
+    return openLoadedCollectedArchive(archive, deps)
+  } catch (cause) {
+    if (isCollectMediaAbort(cause) || isLocalProjectPickerCancellation(cause)) {
+      return { status: 'cancelled' }
+    }
+    const message = `Could not open the collected project: ${messageFrom(cause)}`
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      phase: 'error',
+      candidate: null,
+      error: message,
+    })
+    return { status: 'failed', message }
+  }
+}
+
+export async function openLoadedCollectedArchive(
+  archive: LoadedCollectedArchive,
+  deps: ProjectControllerDeps = realDeps,
+): Promise<ProjectActionResult> {
+  const generation = beginProjectRead(deps)
+  return readProjectCandidateFile(archive.projectFile, {
+    origin: 'collected-archive',
+    displayFileName: archive.projectFile.name,
+    projectFileName: archive.projectFile.name,
+    persisted: true,
+    handle: archive.projectHandle as unknown as LocalProjectFileHandle,
+    collectedRestore: {
+      root: archive.root,
+      manifest: archive.manifest,
+      complete: archive.complete,
+    },
   }, generation, deps)
 }
 
@@ -1246,6 +1325,111 @@ async function restoreRememberedDescriptor(
   }
 }
 
+/** Analyze selected source files once and attach only exact relink matches. */
+async function restoreCollectedMedia(
+  pending: PendingResume,
+  archive: {
+    root: CollectMediaDirectoryHandle
+    manifest: CollectMediaManifest
+    complete: boolean
+  },
+  generation: number,
+  deps: ProjectControllerDeps,
+): Promise<{ status: 'ready'; errors: string[] } | { status: 'cancelled' }> {
+  const errors: string[] = []
+  const descriptors = new Map(
+    pending.project.assets.map((descriptor) => [descriptor.id, descriptor]),
+  )
+  for (const item of archive.manifest.items) {
+    if (!pendingIsCurrent(pending, generation)) return { status: 'cancelled' }
+    if (
+      item.kind !== 'asset'
+      || item.disposition !== 'included'
+      || !item.collectedRelativePath
+    ) continue
+    const descriptor = descriptors.get(item.id)
+    if (!descriptor || pending.assets.has(descriptor.id)) continue
+    let analyzed: MediaAsset | null = null
+    try {
+      const { file, handle } = await readFileAtRelativePath(
+        archive.root,
+        item.collectedRelativePath,
+      )
+      if (!pendingIsCurrent(pending, generation)) {
+        return { status: 'cancelled' }
+      }
+      if (file.size !== descriptor.size) {
+        throw new Error('the collected file size does not match the project source')
+      }
+      if (item.fingerprint) {
+        const fingerprint = await fingerprintLocalMediaSource(file, {
+          fileName: descriptor.fileName,
+          size: descriptor.size,
+          lastModified: descriptor.lastModified,
+        })
+        if (fingerprint.digest !== item.fingerprint.digest) {
+          throw new Error('the collected file fingerprint does not match the archive manifest')
+        }
+      }
+      const requestId = deps.createCompatibilityRequestId()
+      const inspection = await deps.inspectMedia(
+        file,
+        rootSequence(pending.project).frameRate,
+        descriptor.id,
+        pending.abortController.signal,
+      )
+      if (inspection.asset) analyzed = inspection.asset
+      if (!pendingIsCurrent(pending, generation)) {
+        if (analyzed) deps.revokeObjectURL(analyzed.objectUrl)
+        return { status: 'cancelled' }
+      }
+      const candidate = inspectionCandidateForDescriptor(descriptor, inspection)
+      if (!candidate) {
+        if (analyzed) {
+          deps.revokeObjectURL(analyzed.objectUrl)
+          analyzed = null
+        }
+        throw new Error(
+          inspection.compatibility.detail
+            ?? `"${descriptor.fileName}" is not compatible in this browser.`,
+        )
+      }
+      const connected = relinkedAsset(
+        descriptor,
+        candidate.asset,
+        rootSequence(pending.project).frameRate,
+      )
+      pending.assets.set(descriptor.id, connected)
+      pending.compatibility.set(
+        descriptor.id,
+        compatibilityItemForAsset(
+          connected,
+          requestId,
+          'ready',
+          candidate.compatibility,
+        ),
+      )
+      analyzed = null
+      void deps.rememberMediaHandle(
+        pending.projectBindingId,
+        descriptor.id,
+        handle as unknown as LocalMediaFileHandle,
+      ).catch((cause) => {
+        console.warn('Could not remember a collected media file', cause)
+      })
+      useProjectSessionStore.setState({ candidate: resumeSummary(pending) })
+    } catch (cause) {
+      if (analyzed) deps.revokeObjectURL(analyzed.objectUrl)
+      if (!pendingIsCurrent(pending, generation)) return { status: 'cancelled' }
+      if (isMediaProbeCancellation(cause)) return { status: 'cancelled' }
+      errors.push(
+        `Could not reopen collected "${descriptor.fileName}": ${messageFrom(cause)}.`,
+      )
+    }
+  }
+  return { status: 'ready', errors }
+}
+
 async function restoreRememberedMedia(
   pending: PendingResume,
   generation: number,
@@ -1268,6 +1452,10 @@ async function restoreRememberedMedia(
       const index = nextIndex++
       if (index >= descriptors.length) return
       const descriptor = descriptors[index]
+      if (pending.assets.has(descriptor.id)) {
+        loaded[index] = { descriptor, handle: null, error: null }
+        continue
+      }
       try {
         loaded[index] = {
           descriptor,

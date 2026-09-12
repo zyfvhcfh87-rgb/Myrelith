@@ -21,6 +21,7 @@ const controller = vi.hoisted(() => ({
   connectProjectMedia: vi.fn(async () => ({ status: 'ready' })),
   createNewProject: vi.fn(async () => ({ status: 'activated' })),
   openProjectFile: vi.fn(async () => ({ status: 'ready' })),
+  openCollectedProject: vi.fn(async () => ({ status: 'ready' })),
   openRecentProject: vi.fn(async () => ({ status: 'ready' })),
   openRecoveryProject: vi.fn(async () => ({ status: 'ready' })),
   returnToProjectHome: vi.fn(),
@@ -681,11 +682,62 @@ describe('ProjectLaunch', () => {
     }))
 
     expect(controller.chooseProjectFile).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Open a collected project folder',
+    }))
+    expect(controller.openCollectedProject).toHaveBeenCalledOnce()
     const project = new File(['{}'], 'quick-open.myrelith')
     fireEvent.change(screen.getByLabelText('Open a Myrelith project file once'), {
       target: { files: [project] },
     })
     expect(controller.openProjectFile).toHaveBeenCalledWith(project)
+  })
+
+  test('labels collected archives complete or incomplete without claiming a partial copy is finished', () => {
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      candidate: {
+        origin: 'collected-archive',
+        projectFileName: 'Collected.myrelith',
+        projectName: 'Collected',
+        width: 1920,
+        height: 1080,
+        frameRate: { num: 30, den: 1 },
+        audioSampleRate: 48_000,
+        collectedArchiveStatus: 'complete',
+        assets: [{
+          id: 'asset-1',
+          fileName: 'source.mp4',
+          kind: 'video',
+          status: 'ready',
+        }],
+      },
+    })
+    const { rerender } = render(<ProjectLaunch />)
+    expect(screen.getByText('Collected archive')).toBeInTheDocument()
+
+    useProjectSessionStore.setState({
+      screen: 'resume',
+      candidate: {
+        origin: 'collected-archive',
+        projectFileName: 'Collected.myrelith',
+        projectName: 'Collected',
+        width: 1920,
+        height: 1080,
+        frameRate: { num: 30, den: 1 },
+        audioSampleRate: 48_000,
+        collectedArchiveStatus: 'partial',
+        assets: [{
+          id: 'asset-1',
+          fileName: 'source.mp4',
+          kind: 'video',
+          status: 'missing',
+        }],
+      },
+    })
+    rerender(<ProjectLaunch />)
+    expect(screen.getByText('Incomplete archive')).toBeInTheDocument()
+    expect(screen.queryByText('Collected archive')).not.toBeInTheDocument()
   })
 
   test('summarizes the chosen setup in the compact confirmation strip', () => {

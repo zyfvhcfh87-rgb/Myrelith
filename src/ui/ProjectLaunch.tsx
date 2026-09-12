@@ -30,6 +30,7 @@ import {
   chooseProjectMedia,
   connectProjectMedia,
   createNewProject,
+  openCollectedProject,
   openProjectFile,
   openRecentProject,
   openRecoveryProject,
@@ -1008,6 +1009,18 @@ function ResumeProjectScreen({
               </span>
             </button>
           ) : null}
+          <button
+            className={`project-file-choice${busy ? ' is-disabled' : ''}`}
+            aria-label="Open a collected project folder"
+            type="button"
+            disabled={busy}
+            onClick={() => void openCollectedProject()}
+          >
+            <strong>Open a collected project</strong>
+            <span>
+              Choose a collect-media folder. Complete archives reconnect copied sources without the original locations.
+            </span>
+          </button>
           <label
             className={`project-file-choice${projectHandlePickerAvailable
               ? ' project-file-choice-quick'
@@ -1053,7 +1066,11 @@ function ResumeProjectScreen({
                   ? 'Recovery ready'
                   : candidate.origin === 'recent'
                     ? 'Recent'
-                    : 'Validated'}
+                    : candidate.origin === 'collected-archive'
+                      ? candidate.collectedArchiveStatus === 'partial'
+                        ? 'Incomplete archive'
+                        : 'Collected archive'
+                      : 'Validated'}
               </strong>
             </div>
             <dl className="project-profile">

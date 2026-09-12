@@ -30,6 +30,10 @@ vi.mock('./OtioInterchangeDialog', () => ({
   default: () => <div role="dialog" aria-label="OTIO interchange" />,
 }))
 
+vi.mock('./CollectMediaDialog', () => ({
+  default: () => <div role="dialog" aria-label="Collect media" />,
+}))
+
 beforeEach(() => {
   vi.restoreAllMocks()
   vi.clearAllMocks()
@@ -58,6 +62,10 @@ describe('Toolbar project persistence', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save As' }))
     expect(saveActiveProject).toHaveBeenCalledOnce()
     expect(saveActiveProjectAs).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collect media' }))
+    expect(await screen.findByRole('dialog', { name: 'Collect media' }))
+      .toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Export' }))
     expect(await screen.findByRole('dialog', { name: 'Export project' }))
