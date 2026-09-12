@@ -6,9 +6,11 @@
  */
 
 import {
-  validateExportProfile,
-  type ExportProfile,
-} from '../domain/exportProfile'
+  isAudioOnlyProfile,
+  isDeliveryProfile,
+  parseExportSettings,
+  type ExportSettingsUnion,
+} from '../domain/deliveryProduct'
 
 export interface ExportSaveFilePickerOptions {
   readonly suggestedName: string
@@ -118,11 +120,11 @@ function pickerFailure(cause: unknown): ExportFilePickerResult | never {
  * invoke it directly inside the Start button's transient user activation.
  */
 export function requestExportFileDestination(
-  profile: Readonly<ExportProfile>,
+  profile: Readonly<ExportSettingsUnion>,
   suggestedName: string,
   host: ExportFilePickerHost = browserHost(),
 ): Promise<ExportFilePickerResult> {
-  const validatedProfile = validateExportProfile(profile)
+  const validatedProfile = parseExportSettings(profile)
   if (validatedProfile.destination !== 'file') {
     throw new TypeError('Direct file picker requires the file destination')
   }
@@ -142,15 +144,25 @@ export function requestExportFileDestination(
     })
   }
 
+  if (!('mimeType' in validatedProfile) || !('fileExtension' in validatedProfile)) {
+    throw new TypeError('Direct file picker requires a file-backed delivery product')
+  }
+
+  const description = isAudioOnlyProfile(validatedProfile)
+    ? (validatedProfile.container === 'wav' ? 'WAV audio' : validatedProfile.container === 'mp4' ? 'M4A audio' : 'WebM audio')
+    : isDeliveryProfile(validatedProfile) || validatedProfile.container === 'webm'
+      ? 'WebM video'
+      : 'MP4 video'
+  const mimeType = validatedProfile.mimeType
+  const fileExtension = validatedProfile.fileExtension
+
   const options: ExportSaveFilePickerOptions = {
     suggestedName,
     excludeAcceptAllOption: true,
     types: [{
-      description: validatedProfile.container === 'mp4'
-        ? 'MP4 video'
-        : 'WebM video',
+      description,
       accept: {
-        [validatedProfile.mimeType]: [`.${validatedProfile.fileExtension}`],
+        [mimeType]: [`.${fileExtension}`],
       },
     }],
   }

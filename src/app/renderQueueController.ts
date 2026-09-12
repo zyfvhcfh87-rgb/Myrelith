@@ -1,6 +1,6 @@
 import { parseCustomExportPreset,parseRenderJob,recoverRenderJob,activeRenderJob,moveRenderJob,MAX_RENDER_SNAPSHOT_BYTES,type RenderJob } from '../domain/renderJobs'
 import { validateExportRange,type ExportRange } from '../domain/exportRange'
-import { validateExportProfile,type ExportProfile } from '../domain/exportProfile'
+import { parseExportSettings,exportSettingsIncludesAudio,exportSettingsIncludesVisual,type ChapterPolicy,type ExportSettingsUnion } from '../domain/deliveryProduct'
 import { sequenceById } from '../domain/projectSequences'
 import { projectOutputMediaAssetIds,projectHasOutputPluginEffects } from '../domain/selectors'
 import { useMediaStore } from '../state/mediaStore'
@@ -10,6 +10,7 @@ import { captureRenderSnapshot,renderSourcesMatch,type RenderSnapshot } from './
 import { startExport,cancelExport,type ExportResult } from './exportController'
 import { ExportCleanupIntegrityError } from '../pipeline/export'
 import { requestExportFileDestination,type ExportFileDestinationCapability } from './exportFilePicker'
+import { requestExportDirectoryDestination,type ExportDirectoryDestinationCapability } from './exportDirectoryPicker'
 import { registerLoadedExportDisposer } from './exportLifecycle'
 import { createPluginPreparedExportController,type PluginPreparedExportController } from './pluginPreparedExportController'
 import { getPluginAppControllerOwner } from './pluginAppController'
@@ -56,7 +57,7 @@ export function initializeRenderQueue(): Promise<void>{
   return initialized
 }
 export async function refreshRenderQueue(): Promise<void>{ await jobs() }
-export async function saveExportPreset(name:string,profile:ExportProfile,id?:string): Promise<void>{
+export async function saveExportPreset(name:string,profile:ExportSettingsUnion,id?:string): Promise<void>{
   const preset=parseCustomExportPreset({id:id??crypto.randomUUID(),name,profile})
   const library=await renderTransaction('presets',parseCustomExportPreset,rows=>{
     if(id && !rows.some(row=>row.id===id))throw new Error('This preset was removed in another tab.')
@@ -68,7 +69,7 @@ export async function removeExportPreset(id:string): Promise<void>{
   const library=await renderTransaction('presets',parseCustomExportPreset,rows=>rows.filter(row=>row.id!==id))
   useRenderQueueStore.setState({presets:library.records})
 }
-export async function enqueueRenderJob(name:string,profile:ExportProfile,range:ExportRange): Promise<void>{
+export async function enqueueRenderJob(name:string,profile:ExportSettingsUnion,range:ExportRange,chapters?:ChapterPolicy): Promise<void>{
   await initializeRenderQueue()
   const snapshot=await captureRenderSnapshot()
   if(disposed)throw new Error('The project closed before queueing finished.')
@@ -78,7 +79,8 @@ export async function enqueueRenderJob(name:string,profile:ExportProfile,range:E
   const retained=new Map([...snapshots.values()].map(value=>[value.revision,value.bytes]))
   retained.set(snapshot.revision,snapshot.bytes)
   if([...retained.values()].reduce((sum,bytes)=>sum+bytes,0)>MAX_RENDER_SNAPSHOT_BYTES)throw new Error('Queued snapshots exceed 64 MiB. Remove inactive jobs before adding another revision.')
-  const row=parseRenderJob({id:crypto.randomUUID(),name,sequenceId:snapshot.sequenceId,binding:snapshot.binding,revision:snapshot.revision,range:validatedRange,profile:validateExportProfile(profile),status:'queued',delivery:'none',attempts:0,message:''})
+  const parsed=parseExportSettings(profile)
+  const row=parseRenderJob({id:crypto.randomUUID(),name,sequenceId:snapshot.sequenceId,binding:snapshot.binding,revision:snapshot.revision,range:validatedRange,profile:parsed,chapters:chapters??('chapters' in parsed?parsed.chapters:{mode:'off'}),status:'queued',delivery:'none',attempts:0,message:''})
   await jobs(rows=>[...rows,row])
   if(!disposed) {
     const shared=[...snapshots.values()].find(value=>value.revision===snapshot.revision)
@@ -109,7 +111,7 @@ async function resolveSnapshot(job:RenderJob):Promise<RenderSnapshot>{
   return snapshot
 }
 function checkCancelled():void{if(cancelRequested||disposed)throw new DOMException('Render cancelled','AbortError')}
-async function executeNext(destination?:ExportFileDestinationCapability, expectedId?:string):Promise<void>{
+async function executeNext(destination?:ExportFileDestinationCapability, expectedId?:string, directory?:ExportDirectoryDestinationCapability):Promise<void>{
   const rows=await jobs()
   checkCancelled()
   const job=rows.find(row=>['queued','needs-project','needs-media','needs-destination','needs-review'].includes(row.status))
@@ -120,20 +122,22 @@ async function executeNext(destination?:ExportFileDestinationCapability, expecte
   try{snapshot=await resolveSnapshot(job)}catch(cause){await update(job.id,{status:'needs-project',message:message(cause)});return}
   checkCancelled()
   if(!renderSourcesMatch(snapshot)){await update(job.id,{status:'needs-media',message:'Sources changed. Reconnect the original media for this job.'});return}
-  const missing=[...projectOutputMediaAssetIds(snapshot.project,job.sequenceId,job.profile.audioChannelLayout!=='off')].filter(id=>!useMediaStore.getState().assets.has(id))
+  const queuedDoc=sequenceById(snapshot.project,job.sequenceId)
+  if(!queuedDoc){await update(job.id,{status:'needs-project',message:'The queued sequence no longer exists.'});return}
+  const missing=[...projectOutputMediaAssetIds(snapshot.project,job.sequenceId,exportSettingsIncludesAudio(queuedDoc,job.profile),exportSettingsIncludesVisual(job.profile))].filter(id=>!useMediaStore.getState().assets.has(id))
   if(missing.length){await update(job.id,{status:'needs-media',message:`Reconnect ${missing.length} original source(s) before running this job.`});return}
   if(job.profile.destination==='file'&&!destination){await update(job.id,{status:'needs-destination',message:'Choose an output file to start this job.'});return}
+  if(job.profile.destination==='directory'&&!directory){await update(job.id,{status:'needs-destination',message:'Choose an output folder to start this job.'});return}
   useRenderQueueStore.setState({activeId:job.id,progress:0,error:null})
   await update(job.id,{status:'preparing',attempts:job.attempts+1,delivery:'unverified',message:'Preparing a fresh export attempt.'})
   try{
     checkCancelled()
-    const doc=sequenceById(snapshot.project,job.sequenceId)
-    if(!doc)throw new Error('The queued sequence no longer exists.')
-    const callbacks={range:job.range,snapshot:{project:snapshot.project,sequenceId:job.sequenceId},fileDestination:destination,onProgress:(progress:number)=>{
+    const doc=queuedDoc
+    const callbacks={range:job.range,snapshot:{project:snapshot.project,sequenceId:job.sequenceId},fileDestination:destination,directoryDestination:directory,chapters:job.chapters,onProgress:(progress:number)=>{
       useRenderQueueStore.setState({progress})
     }}
     let readyToken:string|null=null
-    if(projectHasOutputPluginEffects(snapshot.project,job.sequenceId)){
+    if(exportSettingsIncludesVisual(job.profile)&&projectHasOutputPluginEffects(snapshot.project,job.sequenceId)){
       prepared=createPluginPreparedExportController({appOwner:getPluginAppControllerOwner(),getDocumentSnapshot:()=>({document:doc,generation:0,project:snapshot.project,sequenceId:job.sequenceId})})
       const preparation=await prepared.prepare(job.profile)
       checkCancelled()
@@ -154,8 +158,17 @@ async function executeNext(destination?:ExportFileDestinationCapability, expecte
         result={id:job.id,value:output}
         useRenderQueueStore.setState({downloadId:job.id})
       }
-      await update(job.id,{status:'completed',delivery:output.destination==='file'?'file':'download',message:output.destination==='file'?`Committed ${output.fileName}`:'Download available in this session. It has not been verified as saved.'})
-    }else await update(job.id,{status:interrupted?'interrupted':'cancelled',delivery:'aborted',message:'Attempt stopped. Retry starts at the beginning; the selected file may remain empty.'})
+      const partial='completion' in output && output.completion==='partial'
+      const delivery=output.destination==='download'?'download':'file'
+      const doneMessage=output.destination==='file'
+        ?`Committed ${output.fileName}`
+        :output.destination==='directory'
+          ?`${partial?'Partial: ':''}Wrote ${output.files.length} file(s) to ${output.directoryName}`
+          :partial
+            ?`Partial download available in this session. It has not been verified as saved.`
+            :'Download available in this session. It has not been verified as saved.'
+      await update(job.id,{status:'completed',delivery,message:doneMessage})
+    }else await update(job.id,{status:interrupted?'interrupted':'cancelled',delivery:'aborted',message:'Attempt stopped. Retry starts at the beginning; written files may be partial.'})
   }catch(cause){
     const integrity=cause instanceof ExportCleanupIntegrityError
     integrityBlocked ||= integrity
@@ -167,20 +180,28 @@ async function executeNext(destination?:ExportFileDestinationCapability, expecte
     }finally{prepared=null;useRenderQueueStore.setState({activeId:null,progress:0})}
   }
 }
-export function runRenderQueue(destination?:ExportFileDestinationCapability,expectedId?:string):Promise<void>{
+export function runRenderQueue(destination?:ExportFileDestinationCapability,expectedId?:string,directory?:ExportDirectoryDestinationCapability):Promise<void>{
   if(running)return Promise.reject(new Error('The render queue is already active.'))
   if(result)return Promise.reject(new Error('Download or discard the completed result before continuing.'))
   if(document.visibilityState==='hidden')return Promise.reject(new Error('Return to this tab before starting the queue.'))
   if(integrityBlocked)return Promise.reject(new Error('Output cleanup is uncertain. Reload before another attempt.'))
   cancelRequested=false;interrupted=false;disposed=false
-  running=exclusive(()=>executeNext(destination,expectedId)).catch(cause=>{publishError(cause);throw cause}).finally(()=>{running=null;useRenderQueueStore.setState({activeId:null})})
+  running=exclusive(()=>executeNext(destination,expectedId,directory)).catch(cause=>{publishError(cause);throw cause}).finally(()=>{running=null;useRenderQueueStore.setState({activeId:null})})
   return running
 }
 /** Invoke directly from the click: do not await a storage read before the picker. */
 export async function chooseRenderDestination():Promise<void>{
   const job=useRenderQueueStore.getState().jobs.find(row=>['queued','needs-destination','needs-project','needs-media','needs-review'].includes(row.status))
-  if(!job||job.profile.destination!=='file')throw new Error('The next job does not need a direct file.')
-  const selected=await requestExportFileDestination(job.profile,`${job.name}.${job.profile.fileExtension}`)
+  if(!job)throw new Error('The next job does not need a destination.')
+  if(job.profile.destination==='directory'){
+    const selected=await requestExportDirectoryDestination()
+    if(selected.status==='selected')await runRenderQueue(undefined,job.id,selected.destination)
+    else if(selected.status!=='cancelled')throw new Error(selected.reason)
+    return
+  }
+  if(job.profile.destination!=='file')throw new Error('The next job does not need a direct file.')
+  const extension='fileExtension' in job.profile ? job.profile.fileExtension : 'zip'
+  const selected=await requestExportFileDestination(job.profile,`${job.name}.${extension}`)
   if(selected.status==='selected')await runRenderQueue(selected.destination,job.id)
   else if(selected.status!=='cancelled')throw new Error(selected.reason)
 }
@@ -195,10 +216,11 @@ export async function cancelRenderQueue(asInterruption=false):Promise<void>{
 export async function consumeRenderDownload(download:boolean):Promise<void>{
   if(!result||result.value.destination!=='download')throw new Error('The download was lost. Retry this job.')
   const current=result
-  const output=result.value
+  const output=current.value
+  if(output.destination!=='download')throw new Error('The download was lost. Retry this job.')
   if(download){
-    const url=URL.createObjectURL(new Blob([output.buffer],{type:current.value.mimeType}))
-    try{const link=document.createElement('a');link.href=url;link.download=`render-${current.id}.${current.value.fileExtension}`;link.click()}finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}
+    const url=URL.createObjectURL(new Blob([output.buffer],{type:output.mimeType}))
+    try{const link=document.createElement('a');link.href=url;link.download=`render-${current.id}.${output.fileExtension}`;link.click()}finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}
   }
   await update(current.id,{delivery:download?'download-requested':'discarded',message:download?'Download requested; disk save is not verifiable.':'Encoded download discarded.'})
   result=null;useRenderQueueStore.setState({downloadId:null})

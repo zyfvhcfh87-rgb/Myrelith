@@ -10,10 +10,8 @@ import { expandedTitleProject, replaceFirstTitleClip } from '../test/titleOwnerF
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import {
-  DEFAULT_EXPORT_PROFILE,
-  updateExportProfile,
-} from '../domain/exportProfile'
+import { DEFAULT_EXPORT_PROFILE, updateExportProfile } from '../domain/exportProfile'
+import { DEFAULT_IMAGE_SEQUENCE_PROFILE } from '../domain/deliveryProduct'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { createTimelineAudioMixPlan } from '../domain/audioMixPlan'
@@ -1973,5 +1971,27 @@ describe('exportController failures and ownership', () => {
     returnGate.reject(cleanupFailure)
     await Promise.all([completionCheck, cancellationCheck])
     expect(observed.returnRun).toHaveBeenCalledOnce()
+  })
+})
+
+describe('alternative delivery admission', () => {
+  test('rejects chapter sidecars for a single-file destination', async () => {
+    const h = makeHarness()
+    await expect(startExport(
+      FILE_SETTINGS,
+      { chapters: { mode: 'sidecar' }, fileDestination: fileDestination('out.mp4') },
+      h.deps,
+    )).rejects.toThrow(/cannot be stored inside a single media file/i)
+    expect(h.runExport).not.toHaveBeenCalled()
+  })
+
+  test('rejects PNG folder export without a directory capability', async () => {
+    const h = makeHarness()
+    await expect(startExport(
+      { ...DEFAULT_IMAGE_SEQUENCE_PROFILE, destination: 'directory' },
+      {},
+      h.deps,
+    )).rejects.toThrow(/directory/i)
+    expect(h.runExport).not.toHaveBeenCalled()
   })
 })

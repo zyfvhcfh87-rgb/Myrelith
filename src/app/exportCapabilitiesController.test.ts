@@ -9,6 +9,7 @@ import type { TimelineDoc } from '../domain/schema'
 import type { ExportCapabilityResult } from '../pipeline/export-capabilities'
 import {
   checkCurrentExportProfile,
+  checkCurrentExportSettings,
   getExportPresetCapabilities,
   preflightExportProfile,
   resolveExportSelection,
@@ -176,5 +177,33 @@ describe('advanced and pre-start capability facade', () => {
       'Compatibility became unavailable. No codec was substituted.',
     )
     expect(deps.verifyProfile).toHaveBeenCalledTimes(1)
+  })
+
+  test('WAV audio-only is admitted without a video encoder probe', async () => {
+    const deps = makeDeps()
+    const { DEFAULT_AUDIO_ONLY_PROFILE } = await import('../domain/deliveryProduct')
+    await expect(checkCurrentExportSettings(DEFAULT_AUDIO_ONLY_PROFILE, deps)).resolves.toMatchObject({
+      supported: true,
+      settings: { kind: 'audio-only', codec: 'pcm-s16' },
+    })
+    expect(deps.checkProfile).not.toHaveBeenCalled()
+    expect(deps.verifyProfile).not.toHaveBeenCalled()
+  })
+
+  test('alpha video uses the encode/decode proof, not a classic video profile probe', async () => {
+    const deps = makeDeps()
+    deps.proveAlphaVideo = vi.fn(async () => ({
+      codec: 'vp9' as const,
+      supported: false,
+      reason: 'Alpha round-trip did not preserve transparency.',
+    }))
+    const { DEFAULT_ALPHA_VIDEO_PROFILE } = await import('../domain/deliveryProduct')
+    await expect(checkCurrentExportSettings(DEFAULT_ALPHA_VIDEO_PROFILE, deps)).resolves.toMatchObject({
+      supported: false,
+      reason: 'Alpha round-trip did not preserve transparency.',
+    })
+    expect(deps.proveAlphaVideo).toHaveBeenCalledWith('vp9', undefined)
+    expect(deps.checkProfile).not.toHaveBeenCalled()
+    expect(deps.verifyProfile).not.toHaveBeenCalled()
   })
 })

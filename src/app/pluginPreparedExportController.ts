@@ -1,6 +1,6 @@
 /** App-private string-token facade for one prepared plugin-aware export. */
 
-import type { ExportProfile } from '../domain/exportProfile'
+import type { ExportSettings } from '../pipeline/export'
 import {
   cancelExport,
   startPreparedExport,
@@ -60,7 +60,7 @@ export type PluginPreparedExportSnapshot =
 
 export interface PluginPreparedExportController {
   getSnapshot(): PluginPreparedExportSnapshot
-  prepare(settings: ExportProfile, signal?: AbortSignal): Promise<PluginPreparedExportSnapshot>
+  prepare(settings: ExportSettings, signal?: AbortSignal): Promise<PluginPreparedExportSnapshot>
   approveReviewedBlockers(
     reviewToken: string,
     signal?: AbortSignal,
