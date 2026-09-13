@@ -193,6 +193,7 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     ['dev/issue111/lensRemapCore.ts', new Set(['domain'])],
     ['dev/issue111/lensRemapWebgl.ts', new Set(['pipeline'])],
     ['dev/issue111/lens-remap.worker.ts', new Set(['domain'])],
+    ['dev/issue208/compatibilityInventoryGate.ts', new Set(['app', 'domain', 'pipeline'])],
     ['dev/performance/fixture.ts', new Set(['domain'])],
     ['dev/performance/framePlanningBenchmark.ts', new Set(['domain'])],
     ['dev/performance/runtime.ts', new Set(['app', 'domain', 'state'])],
@@ -417,6 +418,14 @@ describe('architecture guard', () => {
       .map(edgeLabel)).toEqual([])
   })
 
+  test('keeps the Issue 208 compatibility inventory closed to other modules', () => {
+    expect(edges.filter((edge) => (
+      edge.to
+      && moduleName(edge.to).startsWith('dev/issue208/')
+      && !moduleName(edge.from).startsWith('dev/issue208/')
+    )).map(edgeLabel)).toEqual([])
+  })
+
   test('keeps the title pixel proof and archived baseline outside production imports', () => {
     expect(edges.filter((edge) => /titleRenderProof|issue200-baseline|diagnostics\/issue200/.test(edge.specifier)).map(edgeLabel)).toEqual([])
   })
@@ -450,6 +459,7 @@ describe('architecture guard', () => {
       'dev/issue108/motionAnalysisFoundation.ts',
       'dev/issue109/videoStabilizationGate.ts',
       'dev/issue110/motionTrackingGate.ts',
+      'dev/issue208/compatibilityInventoryGate.ts',
       'dev/performance/PerformanceBenchmarkApp.tsx',
       'dev/performance/runtime.ts',
     ])
