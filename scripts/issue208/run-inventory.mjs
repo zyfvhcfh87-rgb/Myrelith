@@ -179,15 +179,36 @@ async function main() {
       `http://127.0.0.1:${selected.port}/scripts/issue208/compatibility-inventory-gate.html`,
       { waitUntil: 'domcontentloaded' },
     )
-    await page.getByRole('button', { name: 'Run inventory' }).click()
     await page.waitForFunction(() => {
       const text = document.querySelector('[role="status"]')?.textContent ?? ''
-      return text === 'Passed' || text.startsWith('Failed:')
-    }, undefined, { timeout: 180_000 })
+      return text === 'Ready' || text.startsWith('Failed:')
+    }, undefined, { timeout: 120_000 })
+    const readyText = await page.locator('[role="status"]').textContent()
+    if (readyText !== 'Ready') {
+      const gateError = await page.evaluate(() => globalThis.__issue208InventoryError)
+      throw new Error(gateError || readyText || 'Issue #208 inventory failed to load')
+    }
+    await page.getByRole('button', { name: 'Run inventory' }).click()
+    try {
+      await page.waitForFunction(() => {
+        const text = document.querySelector('[role="status"]')?.textContent ?? ''
+        return text === 'Passed' || text.startsWith('Failed:')
+      }, undefined, { timeout: 120_000 })
+    } catch (error) {
+      const statusText = await page.locator('[role="status"]').textContent()
+      const progress = await page.evaluate(() => globalThis.__issue208InventoryProgress)
+      const gateError = await page.evaluate(() => globalThis.__issue208InventoryError)
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)} status=${statusText} progress=${progress ?? 'none'} error=${gateError ?? 'none'}`,
+      )
+    }
     const statusText = await page.locator('[role="status"]').textContent()
     if (statusText !== 'Passed') {
       const gateError = await page.evaluate(() => globalThis.__issue208InventoryError)
-      throw new Error(gateError || statusText || 'Issue #208 inventory failed')
+      const progress = await page.evaluate(() => globalThis.__issue208InventoryProgress)
+      throw new Error(
+        `${gateError || statusText || 'Issue #208 inventory failed'} (progress: ${progress ?? 'none'})`,
+      )
     }
     const result = await page.evaluate(() => globalThis.__issue208InventoryResult)
     validateInventory(result)

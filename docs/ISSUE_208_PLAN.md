@@ -47,6 +47,14 @@ npm run qa:issue208:inventory -- --channel firefox
 Safari 26+ is a macOS manual run of the same HTML. Playwright Linux WebKit is
 not Safari and the runner refuses that channel.
 
+Headless Firefox can stall if the runner clicks before the gate module is
+Ready, if `AudioContext.resume()` never settles after the click, or if a
+native encode probe hangs. The runner waits for Ready. The gate bounds
+resume/close, skips round-trips when `isConfigSupported` is false, aborts
+stuck encoders, drains a timed-out probe before the next codec starts, and
+does not post a transferred OffscreenCanvas into the worker. Those bounds
+are for evidence collection. They are not a Firefox product claim.
+
 ## Not in this slice
 
 - Portable-core workflow gate (import/edit/preview/save/export) in live Firefox

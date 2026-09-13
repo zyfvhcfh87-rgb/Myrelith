@@ -48,6 +48,13 @@ import { decideCompatibilityInventory } from './compatibilityInventoryDecision'
 
 const WORKER_TIMEOUT_MS = 20_000
 const PLUGIN_PROBE_TIMEOUT_MS = 8_000
+const NATIVE_ROUNDTRIP_ABORT_MS = 4_000
+const NATIVE_ROUNDTRIP_BUDGET_MS = 6_000
+const EXPORT_CAN_ENCODE_BUDGET_MS = 8_000
+const EXPORT_FRESH_ENCODE_BUDGET_MS = 12_000
+const AUDIO_CONTEXT_RESUME_MS = 2_000
+const AUDIO_CONTEXT_CLOSE_MS = 2_000
+const PROBE_DRAIN_MS = 3_000
 const NATIVE_VIDEO_WIDTH = 320
 const NATIVE_VIDEO_HEIGHT = 180
 const INVENTORY_OPFS_PROBE_NAME = 'myrelith-issue208-inventory-probe'
@@ -98,8 +105,59 @@ function failed(reason: string): SupportProbe {
   return Object.freeze({ supported: false, reason })
 }
 
+function closeQuietly(closable: { close(): void } | null | undefined): void {
+  if (!closable) return
+  try {
+    closable.close()
+  } catch {
+    // Already closed by an abort timer or by the encoder/decoder itself.
+  }
+}
+
+/**
+ * Bound a probe without abandoning it. If the budget expires, wait briefly for
+ * the in-flight work to close VideoFrames / AudioData before the next probe.
+ */
+export async function raceInventoryProbe(
+  label: string,
+  ms: number,
+  work: () => Promise<SupportProbe>,
+): Promise<SupportProbe> {
+  const workPromise = work().then(
+    (value) => value,
+    (cause): SupportProbe => failed(errorMessage(cause)),
+  )
+  let timedOut = false
+  let timeoutId = 0
+  const timeoutPromise = new Promise<SupportProbe>((resolve) => {
+    timeoutId = window.setTimeout(() => {
+      timedOut = true
+      resolve(failed(`${label}-timeout`))
+    }, ms)
+  })
+  const first = await Promise.race([workPromise, timeoutPromise])
+  window.clearTimeout(timeoutId)
+  if (!timedOut) return first
+  let drainExpired = false
+  let drainId = 0
+  const drainPromise = new Promise<SupportProbe>((resolve) => {
+    drainId = window.setTimeout(() => {
+      drainExpired = true
+      resolve(failed(`${label}-drain-timeout`))
+    }, PROBE_DRAIN_MS)
+  })
+  const drained = await Promise.race([workPromise, drainPromise])
+  window.clearTimeout(drainId)
+  return drainExpired ? first : drained
+}
+
 function succeeded(): SupportProbe {
   return Object.freeze({ supported: true, reason: null })
+}
+
+function markProgress(step: string): void {
+  ;(globalThis as unknown as { __issue208InventoryProgress?: string })
+    .__issue208InventoryProgress = step
 }
 
 function probeDocument(): TimelineDoc {
@@ -193,6 +251,7 @@ async function nativeVideoRoundTrip(
     encoder: null as VideoEncoder | null,
     decoder: null as VideoDecoder | null,
   }
+  let abortTimer = 0
   try {
     const encoderSupport = await VideoEncoder.isConfigSupported({
       codec,
@@ -206,12 +265,19 @@ async function nativeVideoRoundTrip(
     ledger.videoFramesCreated += 1
     const chunks: EncodedVideoChunk[] = []
     let decoderConfig: VideoDecoderConfig | undefined
+    let encodeError: string | null = null
+    abortTimer = window.setTimeout(() => {
+      closeQuietly(ownedVideo.encoder)
+      closeQuietly(ownedVideo.decoder)
+    }, NATIVE_ROUNDTRIP_ABORT_MS)
     ownedVideo.encoder = new VideoEncoder({
       output(chunk, metadata) {
         if (metadata?.decoderConfig) decoderConfig = metadata.decoderConfig
         chunks.push(chunk)
       },
-      error() {},
+      error(cause) {
+        encodeError = errorMessage(cause)
+      },
     })
     ownedVideo.encoder.configure({
       codec,
@@ -222,6 +288,7 @@ async function nativeVideoRoundTrip(
     })
     ownedVideo.encoder.encode(ownedVideo.frame, { keyFrame: true })
     await ownedVideo.encoder.flush()
+    if (encodeError) return failed(encodeError)
     if (!decoderConfig || chunks.length === 0) return failed('encoder-produced-no-config')
     const decoderSupport = await VideoDecoder.isConfigSupported(decoderConfig)
     if (decoderSupport.supported !== true) return failed('decoder-config-unsupported')
@@ -232,25 +299,29 @@ async function nativeVideoRoundTrip(
         ownedVideo.decoded = outputFrame
         ledger.videoFramesCreated += 1
       },
-      error() {},
+      error(cause) {
+        encodeError = errorMessage(cause)
+      },
     })
     ownedVideo.decoder.configure(decoderConfig)
     ownedVideo.decoder.decode(chunks[0]!)
     await ownedVideo.decoder.flush()
+    if (encodeError) return failed(encodeError)
     return gotFrame ? succeeded() : failed('decoder-produced-no-frame')
   } catch (cause) {
     return failed(errorMessage(cause))
   } finally {
+    window.clearTimeout(abortTimer)
     if (ownedVideo.decoded) {
-      ownedVideo.decoded.close()
+      closeQuietly(ownedVideo.decoded)
       ledger.videoFramesClosed += 1
     }
     if (ownedVideo.frame) {
-      ownedVideo.frame.close()
+      closeQuietly(ownedVideo.frame)
       ledger.videoFramesClosed += 1
     }
-    ownedVideo.encoder?.close()
-    ownedVideo.decoder?.close()
+    closeQuietly(ownedVideo.encoder)
+    closeQuietly(ownedVideo.decoder)
   }
 }
 
@@ -270,6 +341,7 @@ async function nativeAudioRoundTrip(
     encoder: null as AudioEncoder | null,
     decoder: null as AudioDecoder | null,
   }
+  let abortTimer = 0
   try {
     const encoderSupport = await AudioEncoder.isConfigSupported({
       codec,
@@ -289,12 +361,19 @@ async function nativeAudioRoundTrip(
     ledger.audioDataCreated += 1
     const chunks: EncodedAudioChunk[] = []
     let decoderConfig: AudioDecoderConfig | undefined
+    let encodeError: string | null = null
+    abortTimer = window.setTimeout(() => {
+      closeQuietly(ownedAudio.encoder)
+      closeQuietly(ownedAudio.decoder)
+    }, NATIVE_ROUNDTRIP_ABORT_MS)
     ownedAudio.encoder = new AudioEncoder({
       output(chunk, metadata) {
         if (metadata?.decoderConfig) decoderConfig = metadata.decoderConfig
         chunks.push(chunk)
       },
-      error() {},
+      error(cause) {
+        encodeError = errorMessage(cause)
+      },
     })
     ownedAudio.encoder.configure({
       codec,
@@ -304,6 +383,7 @@ async function nativeAudioRoundTrip(
     })
     ownedAudio.encoder.encode(ownedAudio.data)
     await ownedAudio.encoder.flush()
+    if (encodeError) return failed(encodeError)
     if (!decoderConfig || chunks.length === 0) return failed('encoder-produced-no-config')
     const decoderSupport = await AudioDecoder.isConfigSupported(decoderConfig)
     if (decoderSupport.supported !== true) return failed('decoder-config-unsupported')
@@ -314,25 +394,29 @@ async function nativeAudioRoundTrip(
         ownedAudio.decoded = outputData
         ledger.audioDataCreated += 1
       },
-      error() {},
+      error(cause) {
+        encodeError = errorMessage(cause)
+      },
     })
     ownedAudio.decoder.configure(decoderConfig)
     ownedAudio.decoder.decode(chunks[0]!)
     await ownedAudio.decoder.flush()
+    if (encodeError) return failed(encodeError)
     return gotFrame ? succeeded() : failed('decoder-produced-no-frame')
   } catch (cause) {
     return failed(errorMessage(cause))
   } finally {
+    window.clearTimeout(abortTimer)
     if (ownedAudio.decoded) {
-      ownedAudio.decoded.close()
+      closeQuietly(ownedAudio.decoded)
       ledger.audioDataClosed += 1
     }
     if (ownedAudio.data) {
-      ownedAudio.data.close()
+      closeQuietly(ownedAudio.data)
       ledger.audioDataClosed += 1
     }
-    ownedAudio.encoder?.close()
-    ownedAudio.decoder?.close()
+    closeQuietly(ownedAudio.encoder)
+    closeQuietly(ownedAudio.decoder)
   }
 }
 
@@ -342,20 +426,36 @@ async function probeNativeCodecs(ledger: InventoryLedger): Promise<{
 }> {
   const videoCodecs: NativeCodecProbe[] = []
   for (const entry of VIDEO_CODEC_PROBES) {
+    markProgress(`native-video-${entry.id}`)
+    const isConfigSupported = await probeVideoIsConfigSupported(entry.codec)
     videoCodecs.push(Object.freeze({
       id: entry.id,
       codec: entry.codec,
-      isConfigSupported: await probeVideoIsConfigSupported(entry.codec),
-      roundTrip: await nativeVideoRoundTrip(entry.codec, ledger),
+      isConfigSupported,
+      roundTrip: isConfigSupported.supported
+        ? await raceInventoryProbe(
+          `${entry.id}-video-roundtrip`,
+          NATIVE_ROUNDTRIP_BUDGET_MS,
+          () => nativeVideoRoundTrip(entry.codec, ledger),
+        )
+        : failed('skipped-config-unsupported'),
     }))
   }
   const audioCodecs: NativeCodecProbe[] = []
   for (const entry of AUDIO_CODEC_PROBES) {
+    markProgress(`native-audio-${entry.id}`)
+    const isConfigSupported = await probeAudioIsConfigSupported(entry.codec)
     audioCodecs.push(Object.freeze({
       id: entry.id,
       codec: entry.codec,
-      isConfigSupported: await probeAudioIsConfigSupported(entry.codec),
-      roundTrip: await nativeAudioRoundTrip(entry.codec, ledger),
+      isConfigSupported,
+      roundTrip: isConfigSupported.supported
+        ? await raceInventoryProbe(
+          `${entry.id}-audio-roundtrip`,
+          NATIVE_ROUNDTRIP_BUDGET_MS,
+          () => nativeAudioRoundTrip(entry.codec, ledger),
+        )
+        : failed('skipped-config-unsupported'),
     }))
   }
   return {
@@ -422,32 +522,41 @@ async function probeExportProfiles(): Promise<readonly ExportProfileInventory[]>
   const doc = probeDocument()
   const results: ExportProfileInventory[] = []
   for (const preset of EXPORT_PRESETS) {
+    markProgress(`export-${preset.id}`)
     const selected = exportPresetById(preset.id)
     let canEncode: SupportProbe
     try {
-      const result = await checkExportProfileSupport(
-        doc,
-        selected.profile,
-        mediabunnyExportCapabilityProbe,
-      )
-      canEncode = result.supported
-        ? succeeded()
-        : failed(result.reason ?? 'can-encode-unsupported')
+      canEncode = await raceInventoryProbe(`${preset.id}-can-encode`, EXPORT_CAN_ENCODE_BUDGET_MS, async () => {
+        const result = await checkExportProfileSupport(
+          doc,
+          selected.profile,
+          mediabunnyExportCapabilityProbe,
+        )
+        return result.supported
+          ? succeeded()
+          : failed(result.reason ?? 'can-encode-unsupported')
+      })
     } catch (cause) {
       canEncode = failed(errorMessage(cause))
     }
     let freshEncode: SupportProbe
-    try {
-      const result = await verifyExportProfileSupportFresh(
-        doc,
-        selected.profile,
-        mediabunnyExportCapabilityProbe,
-      )
-      freshEncode = result.supported
-        ? succeeded()
-        : failed(result.reason ?? 'fresh-encode-unsupported')
-    } catch (cause) {
-      freshEncode = failed(errorMessage(cause))
+    if (!canEncode.supported) {
+      freshEncode = failed('skipped-can-encode-unsupported')
+    } else {
+      try {
+        freshEncode = await raceInventoryProbe(`${preset.id}-fresh-encode`, EXPORT_FRESH_ENCODE_BUDGET_MS, async () => {
+          const result = await verifyExportProfileSupportFresh(
+            doc,
+            selected.profile,
+            mediabunnyExportCapabilityProbe,
+          )
+          return result.supported
+            ? succeeded()
+            : failed(result.reason ?? 'fresh-encode-unsupported')
+        })
+      } catch (cause) {
+        freshEncode = failed(errorMessage(cause))
+      }
     }
     results.push(Object.freeze({
       id: preset.id,
@@ -567,16 +676,39 @@ async function probeAudioContext(): Promise<CompatibilityInventoryFacts['audioCo
   try {
     context = new AudioContext()
     const initialState = context.state
-    await context.resume()
+    const resumeOutcome = await Promise.race([
+      context.resume().then(() => 'resumed' as const),
+      new Promise<'timeout'>((resolve) => {
+        window.setTimeout(() => resolve('timeout'), AUDIO_CONTEXT_RESUME_MS)
+      }),
+    ])
     const stateAfterResume = context.state
-    await context.close()
+    try {
+      await Promise.race([
+        context.close(),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => reject(new Error('audio-context-close-timeout')), AUDIO_CONTEXT_CLOSE_MS)
+        }),
+      ])
+    } catch (cause) {
+      return Object.freeze({
+        constructed: true,
+        initialState,
+        resumeAttempted: true,
+        stateAfterResume,
+        closed: false,
+        reason: resumeOutcome === 'timeout'
+          ? 'audio-context-resume-timeout'
+          : errorMessage(cause),
+      })
+    }
     return Object.freeze({
       constructed: true,
       initialState,
       resumeAttempted: true,
       stateAfterResume,
       closed: true,
-      reason: null,
+      reason: resumeOutcome === 'timeout' ? 'audio-context-resume-timeout' : null,
     })
   } catch (cause) {
     if (context) {
@@ -597,10 +729,7 @@ async function probeAudioContext(): Promise<CompatibilityInventoryFacts['audioCo
   }
 }
 
-function readGraphicsFacts(): {
-  readonly graphics: CompatibilityInventoryFacts['graphics']
-  readonly transferred: OffscreenCanvas | null
-} {
+function readGraphicsFacts(): CompatibilityInventoryFacts['graphics'] {
   const offscreenCanvas = typeof OffscreenCanvas !== 'undefined'
   let offscreenCanvas2d = false
   if (offscreenCanvas) {
@@ -611,22 +740,20 @@ function readGraphicsFacts(): {
   pageCanvas.width = 16
   pageCanvas.height = 16
   const canTransfer = typeof pageCanvas.transferControlToOffscreen === 'function'
-  let transferred: OffscreenCanvas | null = null
+  let transferred = false
   if (canTransfer) {
     try {
-      transferred = pageCanvas.transferControlToOffscreen()
+      pageCanvas.transferControlToOffscreen()
+      transferred = true
     } catch {
-      transferred = null
+      transferred = false
     }
   }
-  return {
-    graphics: Object.freeze({
-      offscreenCanvas,
-      offscreenCanvas2d,
-      transferControlToOffscreen: transferred !== null,
-    }),
-    transferred,
-  }
+  return Object.freeze({
+    offscreenCanvas,
+    offscreenCanvas2d,
+    transferControlToOffscreen: transferred,
+  })
 }
 
 function workerFailure(prefix: string, event: ErrorEvent | MessageEvent): Error {
@@ -634,9 +761,7 @@ function workerFailure(prefix: string, event: ErrorEvent | MessageEvent): Error 
   return new Error(`${prefix}: worker response could not be deserialized`)
 }
 
-export async function runInventoryWorkerProbe(
-  transferred: OffscreenCanvas | null,
-): Promise<{
+export async function runInventoryWorkerProbe(): Promise<{
   readonly worker: WorkerProbeEvidence
   readonly lifecycle: WorkerLifecycleEvidence
 }> {
@@ -680,15 +805,14 @@ export async function runInventoryWorkerProbe(
       finish(null, workerFailure('Issue 208 inventory worker failed', event))
     }
     const timeout = setTimeout(() => {
-      finish(null, new Error('Issue 208 inventory worker exceeded its 20 second deadline'))
+      finish(null, new Error(`Issue 208 inventory worker exceeded its ${WORKER_TIMEOUT_MS / 1000} second deadline`))
     }, WORKER_TIMEOUT_MS)
     worker.addEventListener('message', onMessage)
     worker.addEventListener('error', onError)
     worker.addEventListener('messageerror', onMessageError)
     try {
-      const request: InventoryWorkerRequest = { type: 'run', canvas: transferred }
-      if (transferred) worker.postMessage(request, [transferred])
-      else worker.postMessage(request)
+      const request: InventoryWorkerRequest = { type: 'run', canvas: null }
+      worker.postMessage(request)
     } catch (cause) {
       finish(null, cause)
     }
@@ -719,16 +843,24 @@ async function runProbe() {
     request.timeout=1500;request.open('GET',networkTarget);request.send();
   });
   const networkWebSocketBlocked=typeof WebSocket==='undefined'||await blockedRequest((finish)=>{
-    const socket=new WebSocket(webSocketTarget);
-    socket.onerror=()=>finish(true);socket.onopen=()=>{socket.close();finish(false)};
+    try {
+      const socket=new WebSocket(webSocketTarget);
+      socket.onerror=()=>finish(true);socket.onopen=()=>{socket.close();finish(false)};
+    } catch { finish(true) }
   });
-  const sendBeaconBlocked=typeof navigator==='undefined'||typeof navigator.sendBeacon!=='function'||navigator.sendBeacon(networkTarget,new Uint8Array([1]))===false;
+  let sendBeaconBlocked=true;
+  try {
+    sendBeaconBlocked=typeof navigator==='undefined'||typeof navigator.sendBeacon!=='function'||navigator.sendBeacon(networkTarget,new Uint8Array([1]))===false;
+  } catch { sendBeaconBlocked=true }
   const indexedDbBlocked=typeof indexedDB==='undefined'||await blockedRequest((finish)=>{
     const request=indexedDB.open('myrelith-issue208-plugin-probe');
     request.onerror=()=>finish(true);request.onblocked=()=>finish(true);request.onsuccess=()=>{request.result.close();indexedDB.deleteDatabase('myrelith-issue208-plugin-probe');finish(false)};
   });
   const cacheStorageBlocked=typeof caches==='undefined'||await caches.open('myrelith-issue208-plugin-probe').then(async()=>{await caches.delete('myrelith-issue208-plugin-probe');return false},()=>true);
-  const opfsBlocked=typeof navigator==='undefined'||typeof navigator.storage?.getDirectory!=='function'||await navigator.storage.getDirectory().then(()=>false,()=>true);
+  let opfsBlocked=true;
+  try {
+    opfsBlocked=typeof navigator==='undefined'||typeof navigator.storage?.getDirectory!=='function'||await navigator.storage.getDirectory().then(()=>false,()=>true);
+  } catch { opfsBlocked=true }
   return {
     opaqueOrigin:self.origin==='null'||location.origin==='null',
     parentDomUnavailable:typeof document==='undefined',
@@ -847,15 +979,25 @@ async function probePluginIsolation(): Promise<PluginIsolationFacts> {
 
 export async function runCompatibilityInventoryBrowserGate(): Promise<CompatibilityInventoryEvidence> {
   const ledger = new InventoryLedger()
-  const fileSystem = readFileSystemFacts()
-  const graphics = readGraphicsFacts()
-  const workerRun = await runInventoryWorkerProbe(graphics.transferred)
-  const storage = await probeOriginStorage()
+  markProgress('audio-context')
   const audioContext = await probeAudioContext()
+  markProgress('filesystem')
+  const fileSystem = readFileSystemFacts()
+  markProgress('graphics')
+  const graphics = readGraphicsFacts()
+  markProgress('worker')
+  const workerRun = await runInventoryWorkerProbe()
+  markProgress('storage')
+  const storage = await probeOriginStorage()
+  markProgress('native-codecs')
   const nativeCodecs = await probeNativeCodecs(ledger)
+  markProgress('still-images')
   const stillImages = await probeStillImages(ledger)
+  markProgress('export-profiles')
   const exportProfiles = await probeExportProfiles()
+  markProgress('plugins')
   const plugins = await probePluginIsolation()
+  markProgress('assemble')
   const facts: CompatibilityInventoryFacts = Object.freeze({
     secureContext: window.isSecureContext === true,
     webCodecs: Object.freeze({
@@ -874,7 +1016,7 @@ export async function runCompatibilityInventoryBrowserGate(): Promise<Compatibil
     fileSystem,
     storage,
     audioContext,
-    graphics: graphics.graphics,
+    graphics,
     worker: workerRun.worker,
     plugins,
   })

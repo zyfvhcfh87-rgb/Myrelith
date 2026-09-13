@@ -4,7 +4,10 @@ import type {
   InventoryWorkerResponse,
   WorkerProbeEvidence,
 } from './compatibilityInventoryContract'
-import { runInventoryWorkerProbe } from './compatibilityInventoryGate'
+import {
+  raceInventoryProbe,
+  runInventoryWorkerProbe,
+} from './compatibilityInventoryGate'
 
 const workerEvidence: WorkerProbeEvidence = Object.freeze({
   moduleWorker: true,
@@ -48,7 +51,7 @@ afterEach(() => {
 describe('Issue #208 inventory worker ownership', () => {
   test('terminates the inventory worker after it records facts', async () => {
     vi.stubGlobal('Worker', SuccessfulWorker)
-    const result = await runInventoryWorkerProbe(null)
+    const result = await runInventoryWorkerProbe()
 
     expect(result.worker).toEqual(workerEvidence)
     expect(result.lifecycle).toEqual({
@@ -72,7 +75,7 @@ describe('Issue #208 inventory worker ownership', () => {
     }
     vi.stubGlobal('Worker', MessageErrorWorker)
 
-    await expect(runInventoryWorkerProbe(null)).rejects.toThrow(/could not be deserialized/)
+    await expect(runInventoryWorkerProbe()).rejects.toThrow(/could not be deserialized/)
     expect(SuccessfulWorker.instances).toHaveLength(1)
     expect(SuccessfulWorker.instances[0]?.terminateCalls).toBe(1)
   })
@@ -86,11 +89,38 @@ describe('Issue #208 inventory worker ownership', () => {
     }
     vi.stubGlobal('Worker', ThrowingWorker)
 
-    await expect(runInventoryWorkerProbe(null)).rejects.toMatchObject({
+    await expect(runInventoryWorkerProbe()).rejects.toMatchObject({
       name: 'InvalidStateError',
       message: 'worker startup failed',
     })
     expect(SuccessfulWorker.instances).toHaveLength(1)
     expect(SuccessfulWorker.instances[0]?.terminateCalls).toBe(1)
   })
+})
+
+describe('Issue #208 inventory probe budget', () => {
+  test('returns the work result when it settles inside the budget', async () => {
+    await expect(
+      raceInventoryProbe('demo', 50, async () => (
+        Object.freeze({ supported: true, reason: null })
+      )),
+    ).resolves.toEqual({ supported: true, reason: null })
+  })
+
+  test('prefers a late work result that arrives during drain', async () => {
+    await expect(
+      raceInventoryProbe('demo', 20, async () => {
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, 40)
+        })
+        return Object.freeze({ supported: true, reason: null })
+      }),
+    ).resolves.toEqual({ supported: true, reason: null })
+  })
+
+  test('keeps the timeout when work never settles', async () => {
+    await expect(
+      raceInventoryProbe('demo', 20, () => new Promise(() => {})),
+    ).resolves.toEqual({ supported: false, reason: 'demo-timeout' })
+  }, 10_000)
 })
