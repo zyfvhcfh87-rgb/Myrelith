@@ -111,8 +111,10 @@ WebCodecs, workers, audio clock, origin storage, File System Access, OPFS,
 WebGL2, and plugin-isolation facts. File pickers, Recents, live save, and
 unprobed codecs stay optional. Chromium remains the advertised product.
 There is no WebCodecs polyfill, no server fallback, and no README change.
-Run `npm run qa:issue208:inventory -- --channel chromium|firefox`. Safari 26+
-is still a macOS manual pass of the same HTML. See [ISSUE_208_PLAN.md](ISSUE_208_PLAN.md).
+Run `npm run qa:issue208:inventory -- --channel chromium|firefox`. The Firefox
+runner waits for the gate to be Ready and bounds resume/codec probes so the
+inventory can finish; that is not a support claim. Safari 26+ is still a
+macOS manual pass of the same HTML. See [ISSUE_208_PLAN.md](ISSUE_208_PLAN.md).
 
 ## Myrelith rebrand (2026-08-09)
 

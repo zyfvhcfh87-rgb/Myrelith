@@ -254,4 +254,21 @@ describe('decideCompatibilityInventory', () => {
       'audio-context-construct-failed',
     ])
   })
+
+  test('stays a core go when AudioContext constructs but resume times out', () => {
+    const facts = coreFacts({
+      audioContext: {
+        constructed: true,
+        initialState: 'suspended',
+        resumeAttempted: true,
+        stateAfterResume: 'suspended',
+        closed: true,
+        reason: 'audio-context-resume-timeout',
+      },
+    })
+    expect(decideCompatibilityInventory(facts)).toMatchObject({
+      core: 'go',
+      reasons: [],
+    })
+  })
 })
