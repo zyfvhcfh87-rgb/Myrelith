@@ -1,9 +1,9 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; execution is paused until
-the user starts Step 0 of the staged plan below.
-Prepared 2026-09-21 on `codex/209`, based on `5b7a458` plus the local #203
-commit `f738172`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
+Status: scope approved in principle on 2026-09-21; Step 0 complete; Step 1
+is next and starts only on the user's request.
+Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
+`master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
 
 ## Outcome and approval boundary
 
@@ -158,6 +158,12 @@ place to stop when usage is low.
 Steps 1 and 2 are the **voiceover go/no-go gate**. Record the result before
 starting Step 3. If either fails, stop at its evidence report and revise the
 plan instead of building the dependent product path.
+
+**Step 0 checkpoint (2026-09-21):** Fetched `origin/master`, fast-forwarded
+local `master` to `29d4071`, and created `.worktrees/issue209` on
+`codex/issue209`. Carried the two plan-only commits as `5db180f` and `93edc4b`.
+The current issue branch differs from its base only in this plan and its
+`docs/PLAN.md` link; the unrelated local #203 commit is not in its ancestry.
 
 ### Voiceover implementation
 
