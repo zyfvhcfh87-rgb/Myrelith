@@ -1,7 +1,8 @@
 {
   "schema": "myrelith-issue207-v1",
-  "startedAt": "2026-09-12T23:36:28.252Z",
-  "commit": "027c0ff78733c145e4a3f03ee52f29d7236f4c7d",
+  "publicSupportClaim": false,
+  "startedAt": "2026-09-21T17:22:27.796Z",
+  "commit": "65102d5e3e2629dcbdba94f47005dfd906dfe154",
   "ranking": {
     "recordedAt": "2026-09-12T00:00:00Z",
     "authority": [
@@ -489,7 +490,7 @@
     {
       "name": "vorbis.ogg",
       "bytes": 3293,
-      "sha256": "3d17a0e89bab1b662068ca13d805ee6ed6bf24f9face0f37aa5f93f911b203f2"
+      "sha256": "a026f063ebd5d991e2eb076cba272d83168ee9fbfe1f648d7db68173c2d163d1"
     },
     {
       "name": "avc-aac.mp4",
@@ -509,17 +510,17 @@
     {
       "name": "vp9-opus.webm",
       "bytes": 1994,
-      "sha256": "fd7e648db52e99674a96e1ec5864f96ecc6ca605fad8ebab57b16c23649238e0"
+      "sha256": "228dc256d9f37bb31c082f1e668c6dccf40fee13bc4b27202aa2480b401197d9"
     },
     {
       "name": "vp8-opus.webm",
       "bytes": 2837,
-      "sha256": "8613316d7e170f8e6a23ac8026d62b0f088f37b330c43b1de5ed3284a626c70b"
+      "sha256": "ddbc8a3a44013e79592fcc84ee2f13b139db17176b48af29add201761ff5bee8"
     },
     {
       "name": "av1-opus.webm",
       "bytes": 2418,
-      "sha256": "ada38606d3ffa22ef6d198ceb0481e4b24a24719e00c3697eccf76a4dd75b4ec"
+      "sha256": "d2dcf033756a4298e681b0565640f73c0d751e552e1d95abb6f841a7fa41567d"
     },
     {
       "name": "hevc-aac.mp4",
@@ -529,7 +530,7 @@
     {
       "name": "avc-ac3.mkv",
       "bytes": 14612,
-      "sha256": "948ca3a6d0ac76435e117e3bacb01ab341459b181e3eb24dc0462189074553d4"
+      "sha256": "44d982e3f6d5257ff56837869f2b7f0979b5792d40cd6b3cfcabfcc1caf19693"
     },
     {
       "name": "prores.mov",
@@ -544,12 +545,12 @@
     {
       "name": "avc-dts.mkv",
       "bytes": 26802,
-      "sha256": "e0a013fd9f06e4bc3004526f048c586a29d00fa509fa3236a0a493c23c491445"
+      "sha256": "39af728646b8fc69c1445abab99e7fb64b75e586bdd35f219bf94377ed7ba5dc"
     },
     {
       "name": "dnx-or-mpeg2.mxf",
       "bytes": 5689389,
-      "sha256": "e2925b61acef130babad92511d98d64e3c2d0c186c8a736d78e5c8f95a19ee6c"
+      "sha256": "5bfb323e0868133e3ef3f64e61bfd64d3ae6a6a9fcfed7e3b320c8b3b427dc72"
     },
     {
       "name": "playlist.m3u8",
@@ -712,8 +713,8 @@
           }
         }
       ],
-      "durationMs": 3,
-      "sha256": "3d17a0e89bab1b662068ca13d805ee6ed6bf24f9face0f37aa5f93f911b203f2",
+      "durationMs": 2,
+      "sha256": "a026f063ebd5d991e2eb076cba272d83168ee9fbfe1f648d7db68173c2d163d1",
       "bytes": 3293
     },
     "avc-aac.mp4": {
@@ -952,8 +953,8 @@
           }
         }
       ],
-      "durationMs": 3,
-      "sha256": "fd7e648db52e99674a96e1ec5864f96ecc6ca605fad8ebab57b16c23649238e0",
+      "durationMs": 2,
+      "sha256": "228dc256d9f37bb31c082f1e668c6dccf40fee13bc4b27202aa2480b401197d9",
       "bytes": 1994
     },
     "vp8-opus.webm": {
@@ -1015,8 +1016,8 @@
           }
         }
       ],
-      "durationMs": 0,
-      "sha256": "8613316d7e170f8e6a23ac8026d62b0f088f37b330c43b1de5ed3284a626c70b",
+      "durationMs": 1,
+      "sha256": "ddbc8a3a44013e79592fcc84ee2f13b139db17176b48af29add201761ff5bee8",
       "bytes": 2837
     },
     "av1-opus.webm": {
@@ -1079,7 +1080,7 @@
         }
       ],
       "durationMs": 1,
-      "sha256": "ada38606d3ffa22ef6d198ceb0481e4b24a24719e00c3697eccf76a4dd75b4ec",
+      "sha256": "d2dcf033756a4298e681b0565640f73c0d751e552e1d95abb6f841a7fa41567d",
       "bytes": 2418
     },
     "hevc-aac.mp4": {
@@ -1141,7 +1142,7 @@
           }
         }
       ],
-      "durationMs": 1,
+      "durationMs": 0,
       "sha256": "47799f9eb4858a3c8165e5f6573b77804dace864bb7143349385c2f824586908",
       "bytes": 6045
     },
@@ -1204,8 +1205,8 @@
           }
         }
       ],
-      "durationMs": 0,
-      "sha256": "948ca3a6d0ac76435e117e3bacb01ab341459b181e3eb24dc0462189074553d4",
+      "durationMs": 1,
+      "sha256": "44d982e3f6d5257ff56837869f2b7f0979b5792d40cd6b3cfcabfcc1caf19693",
       "bytes": 14612
     },
     "prores.mov": {
@@ -1267,7 +1268,7 @@
           }
         }
       ],
-      "durationMs": 1,
+      "durationMs": 0,
       "sha256": "283caa47834f95ce13b75df76409738b6a336a7ac8fed955eea0274edeb677da",
       "bytes": 125015
     },
@@ -1362,8 +1363,8 @@
           }
         }
       ],
-      "durationMs": 0,
-      "sha256": "e0a013fd9f06e4bc3004526f048c586a29d00fa509fa3236a0a493c23c491445",
+      "durationMs": 1,
+      "sha256": "39af728646b8fc69c1445abab99e7fb64b75e586bdd35f219bf94377ed7ba5dc",
       "bytes": 26802
     },
     "dnx-or-mpeg2.mxf": {
@@ -1371,7 +1372,7 @@
       "format": null,
       "tracks": [],
       "durationMs": 0,
-      "sha256": "e2925b61acef130babad92511d98d64e3c2d0c186c8a736d78e5c8f95a19ee6c",
+      "sha256": "5bfb323e0868133e3ef3f64e61bfd64d3ae6a6a9fcfed7e3b320c8b3b427dc72",
       "bytes": 5689389
     },
     "playlist.m3u8": {
@@ -1429,7 +1430,10 @@
         "notes": "ProRes WASM helper. Shared-memory threads need COOP/COEP; product uses the slower path.",
         "directory": "node_modules/turbores",
         "totalBytes": 436204,
-        "primaryBundle": null
+        "primaryBundle": {
+          "path": "node_modules/turbores/dist/turbores.js",
+          "bytes": 200453
+        }
       }
     ]
   },
@@ -1485,7 +1489,7 @@
           "glWsVersion": "1.5 (ANGLE 2.1.28222 git hash: 6dab7c7e742b)",
           "hardwareSupportsVulkan": false,
           "inProcessGpu": false,
-          "initializationTime": 0.011659,
+          "initializationTime": 0.010298,
           "isAsan": false,
           "isClangCoverage": false,
           "jpegDecodeAcceleratorSupported": false,
@@ -1525,7 +1529,7 @@
       },
       "modelName": "",
       "modelVersion": "",
-      "commandLine": "/home/ubuntu/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --autoplay-policy=no-user-gesture-required --user-data-dir=/tmp/playwright_chromiumdev_profile-IWff6C --remote-debugging-pipe --no-startup-window --use-gl=angle --use-angle=swiftshader-webgl --ozone-platform=headless --allow-pre-commit-input"
+      "commandLine": "/home/ubuntu/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --autoplay-policy=no-user-gesture-required --user-data-dir=/tmp/playwright_chromiumdev_profile-XWb5LZ --remote-debugging-pipe --no-startup-window --use-gl=angle --use-angle=swiftshader-webgl --ozone-platform=headless --allow-pre-commit-input"
     },
     "fixtures": {
       "pcm-s16.wav": {
@@ -1585,19 +1589,79 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": false,
+            "skipped": "no-video"
+          },
+          "audio": {
+            "ok": true,
+            "count": 24,
+            "audioFrames": 48000,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.9813333333333331,
+            "durationMs": 2,
+            "samplesPerSecond": 12000,
+            "audioFramesPerSecond": 24000000,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 192000,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": null,
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 0,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": null,
+          "audioSamplesPerSecond": 12000,
+          "audioFramesPerSecond": 24000000,
+          "videoDurationMs": null,
+          "audioDurationMs": 2
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 0,
+          "closedRgbaBytes": 0,
+          "closedPcmBytes": 192000,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": false,
           "reason": "no-video"
+        },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
         },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 3.199999999953434,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 5,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 11512568,
+        "cdpJsHeapAfter": 13696240
       },
       "mp3.mp3": {
         "canRead": true,
@@ -1656,19 +1720,79 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": false,
+            "skipped": "no-video"
+          },
+          "audio": {
+            "ok": true,
+            "count": 42,
+            "audioFrames": 48384,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.984,
+            "durationMs": 2.599999999976717,
+            "samplesPerSecond": 16153.846153990811,
+            "audioFramesPerSecond": 18609230.769397415,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 193536,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": null,
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 0,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": null,
+          "audioSamplesPerSecond": 16153.846153990811,
+          "audioFramesPerSecond": 18609230.769397415,
+          "videoDurationMs": null,
+          "audioDurationMs": 2.599999999976717
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 0,
+          "closedRgbaBytes": 0,
+          "closedPcmBytes": 193536,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": false,
           "reason": "no-video"
+        },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
         },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 2.300000000046566,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 5.200000000069849,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 13696240,
+        "cdpJsHeapAfter": 14498912
       },
       "flac.flac": {
         "canRead": true,
@@ -1727,19 +1851,79 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": false,
+            "skipped": "no-video"
+          },
+          "audio": {
+            "ok": true,
+            "count": 10,
+            "audioFrames": 46080,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.864,
+            "durationMs": 1.2999999999301508,
+            "samplesPerSecond": 7692.307692721001,
+            "audioFramesPerSecond": 35446153.84805837,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 184320,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": null,
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 0,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": null,
+          "audioSamplesPerSecond": 7692.307692721001,
+          "audioFramesPerSecond": 35446153.84805837,
+          "videoDurationMs": null,
+          "audioDurationMs": 1.2999999999301508
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 0,
+          "closedRgbaBytes": 0,
+          "closedPcmBytes": 184320,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": false,
           "reason": "no-video"
+        },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
         },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 1.900000000023283,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 3.900000000023283,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 14498912,
+        "cdpJsHeapAfter": 12629428
       },
       "vorbis.ogg": {
         "canRead": true,
@@ -1797,19 +1981,79 @@
             "ownedAfter": 0
           }
         },
+        "sequential": {
+          "video": {
+            "ok": false,
+            "skipped": "no-video"
+          },
+          "audio": {
+            "ok": true,
+            "count": 48,
+            "audioFrames": 48704,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.9933333333333333,
+            "durationMs": 2.700000000069849,
+            "samplesPerSecond": 17777.777777317864,
+            "audioFramesPerSecond": 18038518.51805186,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 194816,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": null,
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 0,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": null,
+          "audioSamplesPerSecond": 17777.777777317864,
+          "audioFramesPerSecond": 18038518.51805186,
+          "videoDurationMs": null,
+          "audioDurationMs": 2.700000000069849
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 0,
+          "closedRgbaBytes": 0,
+          "closedPcmBytes": 194816,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": false,
           "reason": "no-video"
+        },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
         },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 3,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 5.900000000023283,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 12629428,
+        "cdpJsHeapAfter": 13293904
       },
       "avc-aac.mp4": {
         "canRead": true,
@@ -1902,6 +2146,91 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": true,
+            "count": 30,
+            "audioFrames": 0,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.9666666666666667,
+            "durationMs": 3.900000000023283,
+            "samplesPerSecond": 7692.307692261769,
+            "audioFramesPerSecond": 0,
+            "closedRgbaBytes": 6912000,
+            "closedPcmBytes": 0,
+            "peakOwnedRgbaBytes": 230400,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "video",
+              "rgb": [
+                45,
+                89,
+                125
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 4
+            }
+          },
+          "audio": {
+            "ok": true,
+            "count": 47,
+            "audioFrames": 48128,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.9813333333333333,
+            "durationMs": 2.3999999999068677,
+            "samplesPerSecond": 19583.333334093266,
+            "audioFramesPerSecond": 20053333.334111504,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 192512,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": {
+            "kind": "video",
+            "rgb": [
+              45,
+              89,
+              125
+            ],
+            "alpha": 255,
+            "matchesFixtureColor": true,
+            "maxChannelDelta": 4
+          },
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 0,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": 7692.307692261769,
+          "audioSamplesPerSecond": 19583.333334093266,
+          "audioFramesPerSecond": 20053333.334111504,
+          "videoDurationMs": 3.900000000023283,
+          "audioDurationMs": 2.3999999999068677
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 230400,
+          "closedRgbaBytes": 6912000,
+          "closedPcmBytes": 192512,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": true,
           "withinOneFrame": true,
@@ -1924,6 +2253,17 @@
             }
           ]
         },
+        "audioClock": {
+          "applicable": true,
+          "productPlayback": false,
+          "clockAdvanced": true,
+          "audioContextState": "running",
+          "elapsedSeconds": 0.11029478458049886,
+          "derivedFrame": 3,
+          "requestedSeconds": 0.1,
+          "videoTimestamp": 0.1,
+          "withinOneFrame": true
+        },
         "cancel": {
           "rejected": true,
           "disposed": true,
@@ -1933,10 +2273,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 9.29999999993015,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 136,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 13293904,
+        "cdpJsHeapAfter": 13050632
       },
       "avc-aac.mov": {
         "canRead": true,
@@ -2029,6 +2372,91 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": true,
+            "count": 30,
+            "audioFrames": 0,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.9666666666666667,
+            "durationMs": 2.6000000000931323,
+            "samplesPerSecond": 11538.46153804823,
+            "audioFramesPerSecond": 0,
+            "closedRgbaBytes": 6912000,
+            "closedPcmBytes": 0,
+            "peakOwnedRgbaBytes": 230400,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "video",
+              "rgb": [
+                45,
+                89,
+                125
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 4
+            }
+          },
+          "audio": {
+            "ok": true,
+            "count": 47,
+            "audioFrames": 48128,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.9813333333333333,
+            "durationMs": 2.299999999930151,
+            "samplesPerSecond": 20434.78260931624,
+            "audioFramesPerSecond": 20925217.39193983,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 192512,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": {
+            "kind": "video",
+            "rgb": [
+              45,
+              89,
+              125
+            ],
+            "alpha": 255,
+            "matchesFixtureColor": true,
+            "maxChannelDelta": 4
+          },
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 0,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": 11538.46153804823,
+          "audioSamplesPerSecond": 20434.78260931624,
+          "audioFramesPerSecond": 20925217.39193983,
+          "videoDurationMs": 2.6000000000931323,
+          "audioDurationMs": 2.299999999930151
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 230400,
+          "closedRgbaBytes": 6912000,
+          "closedPcmBytes": 192512,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": true,
           "withinOneFrame": true,
@@ -2051,15 +2479,29 @@
             }
           ]
         },
+        "audioClock": {
+          "applicable": true,
+          "productPlayback": false,
+          "clockAdvanced": true,
+          "audioContextState": "running",
+          "elapsedSeconds": 0.11029478458049886,
+          "derivedFrame": 3,
+          "requestedSeconds": 0.1,
+          "videoTimestamp": 0.1,
+          "withinOneFrame": true
+        },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 3.799999999930151,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 111,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 13050632,
+        "cdpJsHeapAfter": 13857408
       },
       "avc-aac.ts": {
         "canRead": true,
@@ -2151,6 +2593,59 @@
             "ownedAfter": 0
           }
         },
+        "sequential": {
+          "video": {
+            "ok": false,
+            "count": 0,
+            "audioFrames": 0,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": null,
+            "lastTimestamp": null,
+            "durationMs": 2.900000000023283,
+            "samplesPerSecond": 0,
+            "audioFramesPerSecond": 0,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 0,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": null
+          },
+          "audio": {
+            "ok": false,
+            "count": 0,
+            "audioFrames": 0,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": null,
+            "lastTimestamp": null,
+            "durationMs": 2.099999999976717,
+            "samplesPerSecond": 0,
+            "audioFramesPerSecond": 0,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 0,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": null
+          }
+        },
+        "correctness": {
+          "video": null,
+          "audio": null
+        },
+        "throughput": {
+          "videoSamplesPerSecond": 0,
+          "audioSamplesPerSecond": 0,
+          "audioFramesPerSecond": 0,
+          "videoDurationMs": 2.900000000023283,
+          "audioDurationMs": 2.099999999976717
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 0,
+          "closedRgbaBytes": 0,
+          "closedPcmBytes": 0,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": true,
           "withinOneFrame": false,
@@ -2167,15 +2662,23 @@
             }
           ]
         },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
+        },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 2.800000000046566,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 7.799999999930151,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 13857408,
+        "cdpJsHeapAfter": 13814428
       },
       "vp9-opus.webm": {
         "canRead": true,
@@ -2268,6 +2771,91 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": true,
+            "count": 30,
+            "audioFrames": 0,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.967,
+            "durationMs": 3.099999999976717,
+            "samplesPerSecond": 9677.419354911393,
+            "audioFramesPerSecond": 0,
+            "closedRgbaBytes": 6912000,
+            "closedPcmBytes": 0,
+            "peakOwnedRgbaBytes": 230400,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "video",
+              "rgb": [
+                49,
+                92,
+                125
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 1
+            }
+          },
+          "audio": {
+            "ok": true,
+            "count": 51,
+            "audioFrames": 48648,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": -0.0065,
+            "lastTimestamp": 0.987,
+            "durationMs": 2.300000000046566,
+            "samplesPerSecond": 22173.913043029326,
+            "audioFramesPerSecond": 21151304.347397856,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 194592,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 2.0345869483764863e-34,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": {
+            "kind": "video",
+            "rgb": [
+              49,
+              92,
+              125
+            ],
+            "alpha": 255,
+            "matchesFixtureColor": true,
+            "maxChannelDelta": 1
+          },
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 2.0345869483764863e-34,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": 9677.419354911393,
+          "audioSamplesPerSecond": 22173.913043029326,
+          "audioFramesPerSecond": 21151304.347397856,
+          "videoDurationMs": 3.099999999976717,
+          "audioDurationMs": 2.300000000046566
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 230400,
+          "closedRgbaBytes": 6912000,
+          "closedPcmBytes": 194592,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": true,
           "withinOneFrame": true,
@@ -2290,15 +2878,29 @@
             }
           ]
         },
+        "audioClock": {
+          "applicable": true,
+          "productPlayback": false,
+          "clockAdvanced": true,
+          "audioContextState": "running",
+          "elapsedSeconds": 0.11029478458049886,
+          "derivedFrame": 3,
+          "requestedSeconds": 0.1,
+          "videoTimestamp": 0.1,
+          "withinOneFrame": true
+        },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 11.70000000006985,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 113,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 13814428,
+        "cdpJsHeapAfter": 14827612
       },
       "vp8-opus.webm": {
         "canRead": true,
@@ -2391,6 +2993,91 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": true,
+            "count": 30,
+            "audioFrames": 0,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.967,
+            "durationMs": 3.5,
+            "samplesPerSecond": 8571.42857142857,
+            "audioFramesPerSecond": 0,
+            "closedRgbaBytes": 6912000,
+            "closedPcmBytes": 0,
+            "peakOwnedRgbaBytes": 230400,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "video",
+              "rgb": [
+                45,
+                89,
+                125
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 4
+            }
+          },
+          "audio": {
+            "ok": true,
+            "count": 51,
+            "audioFrames": 48648,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": -0.0065,
+            "lastTimestamp": 0.987,
+            "durationMs": 2.300000000046566,
+            "samplesPerSecond": 22173.913043029326,
+            "audioFramesPerSecond": 21151304.347397856,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 194592,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 2.0345869483764863e-34,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": {
+            "kind": "video",
+            "rgb": [
+              45,
+              89,
+              125
+            ],
+            "alpha": 255,
+            "matchesFixtureColor": true,
+            "maxChannelDelta": 4
+          },
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 2.0345869483764863e-34,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": 8571.42857142857,
+          "audioSamplesPerSecond": 22173.913043029326,
+          "audioFramesPerSecond": 21151304.347397856,
+          "videoDurationMs": 3.5,
+          "audioDurationMs": 2.300000000046566
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 230400,
+          "closedRgbaBytes": 6912000,
+          "closedPcmBytes": 194592,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": true,
           "withinOneFrame": true,
@@ -2413,15 +3100,23 @@
             }
           ]
         },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
+        },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 4.200000000069849,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 8.70000000006985,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 14827612,
+        "cdpJsHeapAfter": 14157608
       },
       "av1-opus.webm": {
         "canRead": true,
@@ -2514,6 +3209,91 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": true,
+            "count": 30,
+            "audioFrames": 0,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.967,
+            "durationMs": 3.6000000000931323,
+            "samplesPerSecond": 8333.33333311775,
+            "audioFramesPerSecond": 0,
+            "closedRgbaBytes": 6912000,
+            "closedPcmBytes": 0,
+            "peakOwnedRgbaBytes": 230400,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "video",
+              "rgb": [
+                45,
+                89,
+                125
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 4
+            }
+          },
+          "audio": {
+            "ok": true,
+            "count": 51,
+            "audioFrames": 48648,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": -0.0065,
+            "lastTimestamp": 0.987,
+            "durationMs": 2.299999999930151,
+            "samplesPerSecond": 22173.913044151665,
+            "audioFramesPerSecond": 21151304.348468434,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 194592,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 2.0345869483764863e-34,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": {
+            "kind": "video",
+            "rgb": [
+              45,
+              89,
+              125
+            ],
+            "alpha": 255,
+            "matchesFixtureColor": true,
+            "maxChannelDelta": 4
+          },
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 2.0345869483764863e-34,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": 8333.33333311775,
+          "audioSamplesPerSecond": 22173.913044151665,
+          "audioFramesPerSecond": 21151304.348468434,
+          "videoDurationMs": 3.6000000000931323,
+          "audioDurationMs": 2.299999999930151
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 230400,
+          "closedRgbaBytes": 6912000,
+          "closedPcmBytes": 194592,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": true,
           "withinOneFrame": true,
@@ -2536,15 +3316,23 @@
             }
           ]
         },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
+        },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 7.099999999976717,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 10.5,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 14157608,
+        "cdpJsHeapAfter": 14996884
       },
       "hevc-aac.mp4": {
         "canRead": true,
@@ -2621,19 +3409,79 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": false,
+            "skipped": "not-decodable"
+          },
+          "audio": {
+            "ok": true,
+            "count": 47,
+            "audioFrames": 48128,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.9813333333333333,
+            "durationMs": 2.699999999953434,
+            "samplesPerSecond": 17407.40740770763,
+            "audioFramesPerSecond": 17825185.185492612,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 192512,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": null,
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 0,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": null,
+          "audioSamplesPerSecond": 17407.40740770763,
+          "audioFramesPerSecond": 17825185.185492612,
+          "videoDurationMs": null,
+          "audioDurationMs": 2.699999999953434
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 0,
+          "closedRgbaBytes": 0,
+          "closedPcmBytes": 192512,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": false,
           "reason": "not-decodable"
+        },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
         },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 1.7000000000698492,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 4.100000000093132,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 14996884,
+        "cdpJsHeapAfter": 14050544
       },
       "avc-ac3.mkv": {
         "canRead": true,
@@ -2710,19 +3558,87 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": true,
+            "count": 30,
+            "audioFrames": 0,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.967,
+            "durationMs": 2.800000000046566,
+            "samplesPerSecond": 10714.285714107527,
+            "audioFramesPerSecond": 0,
+            "closedRgbaBytes": 6912000,
+            "closedPcmBytes": 0,
+            "peakOwnedRgbaBytes": 230400,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "video",
+              "rgb": [
+                45,
+                89,
+                125
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 4
+            }
+          },
+          "audio": {
+            "ok": false,
+            "skipped": "not-decodable"
+          }
+        },
+        "correctness": {
+          "video": {
+            "kind": "video",
+            "rgb": [
+              45,
+              89,
+              125
+            ],
+            "alpha": 255,
+            "matchesFixtureColor": true,
+            "maxChannelDelta": 4
+          },
+          "audio": null
+        },
+        "throughput": {
+          "videoSamplesPerSecond": 10714.285714107527,
+          "audioSamplesPerSecond": null,
+          "audioFramesPerSecond": null,
+          "videoDurationMs": 2.800000000046566,
+          "audioDurationMs": null
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 230400,
+          "closedRgbaBytes": 6912000,
+          "closedPcmBytes": 0,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": false,
           "reason": "not-decodable"
+        },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
         },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 3.300000000046566,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 4.900000000023283,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 14050544,
+        "cdpJsHeapAfter": 15148356
       },
       "prores.mov": {
         "canRead": true,
@@ -2799,19 +3715,79 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": false,
+            "skipped": "not-decodable"
+          },
+          "audio": {
+            "ok": true,
+            "count": 30,
+            "audioFrames": 48000,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.981333333333333,
+            "durationMs": 1.2000000000698492,
+            "samplesPerSecond": 24999.99999854481,
+            "audioFramesPerSecond": 39999999.99767169,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 192000,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            }
+          }
+        },
+        "correctness": {
+          "video": null,
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 0,
+            "frames": 256,
+            "nearSilence": true
+          }
+        },
+        "throughput": {
+          "videoSamplesPerSecond": null,
+          "audioSamplesPerSecond": 24999.99999854481,
+          "audioFramesPerSecond": 39999999.99767169,
+          "videoDurationMs": null,
+          "audioDurationMs": 1.2000000000698492
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 0,
+          "closedRgbaBytes": 0,
+          "closedPcmBytes": 192000,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": false,
           "reason": "not-decodable"
+        },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
         },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 0.5999999999767169,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 1.7000000000698492,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 15148356,
+        "cdpJsHeapAfter": 16000800
       },
       "mpeg2-aac.ts": {
         "canRead": true,
@@ -2869,19 +3845,67 @@
             "ownedAfter": 0
           }
         },
+        "sequential": {
+          "video": {
+            "ok": false,
+            "skipped": "no-video"
+          },
+          "audio": {
+            "ok": false,
+            "count": 0,
+            "audioFrames": 0,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": null,
+            "lastTimestamp": null,
+            "durationMs": 2.199999999953434,
+            "samplesPerSecond": 0,
+            "audioFramesPerSecond": 0,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 0,
+            "peakOwnedRgbaBytes": 0,
+            "heapPeak": 26000000,
+            "correctness": null
+          }
+        },
+        "correctness": {
+          "video": null,
+          "audio": null
+        },
+        "throughput": {
+          "videoSamplesPerSecond": null,
+          "audioSamplesPerSecond": 0,
+          "audioFramesPerSecond": 0,
+          "videoDurationMs": null,
+          "audioDurationMs": 2.199999999953434
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 0,
+          "closedRgbaBytes": 0,
+          "closedPcmBytes": 0,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": false,
           "reason": "no-video"
+        },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
         },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 1.3000000000465661,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 3.299999999930151,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 16000800,
+        "cdpJsHeapAfter": 16978816
       },
       "avc-dts.mkv": {
         "canRead": true,
@@ -2958,25 +3982,95 @@
           },
           "ok": true
         },
+        "sequential": {
+          "video": {
+            "ok": true,
+            "count": 30,
+            "audioFrames": 0,
+            "capped": false,
+            "ownedAfter": 0,
+            "firstTimestamp": 0,
+            "lastTimestamp": 0.967,
+            "durationMs": 2.599999999976717,
+            "samplesPerSecond": 11538.461538564865,
+            "audioFramesPerSecond": 0,
+            "closedRgbaBytes": 6912000,
+            "closedPcmBytes": 0,
+            "peakOwnedRgbaBytes": 230400,
+            "heapPeak": 26000000,
+            "correctness": {
+              "kind": "video",
+              "rgb": [
+                45,
+                89,
+                125
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 4
+            }
+          },
+          "audio": {
+            "ok": false,
+            "skipped": "not-decodable"
+          }
+        },
+        "correctness": {
+          "video": {
+            "kind": "video",
+            "rgb": [
+              45,
+              89,
+              125
+            ],
+            "alpha": 255,
+            "matchesFixtureColor": true,
+            "maxChannelDelta": 4
+          },
+          "audio": null
+        },
+        "throughput": {
+          "videoSamplesPerSecond": 11538.461538564865,
+          "audioSamplesPerSecond": null,
+          "audioFramesPerSecond": null,
+          "videoDurationMs": 2.599999999976717,
+          "audioDurationMs": null
+        },
+        "knownResources": {
+          "peakOwnedRgbaBytes": 230400,
+          "closedRgbaBytes": 6912000,
+          "closedPcmBytes": 0,
+          "nativeRss": "unmeasured"
+        },
         "avSync": {
           "applicable": false,
           "reason": "not-decodable"
+        },
+        "audioClock": {
+          "applicable": false,
+          "reason": "not-requested",
+          "productPlayback": false
         },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 24500000,
-        "heapAfter": 24500000,
-        "durationMs": 2.800000000046566,
-        "crossOriginIsolated": false
+        "heapBefore": 26000000,
+        "heapAfter": 26000000,
+        "heapPeak": 26000000,
+        "durationMs": 4.699999999953434,
+        "crossOriginIsolated": false,
+        "cdpJsHeapBefore": 16978816,
+        "cdpJsHeapAfter": 16109168
       },
       "playlist.m3u8": {
         "canRead": false,
         "failClosed": true,
         "error": "TypeError: HLS inputs require `InputOptions.source` to be a PathedSource or a ref to one.",
-        "durationMs": 0.30000000004656613
+        "durationMs": 0.2000000000698492,
+        "cdpJsHeapBefore": 16109168,
+        "cdpJsHeapAfter": 16126680
       }
     },
     "encoders": {
@@ -3027,7 +4121,8 @@
       "localEncoderFallbackAttempted": false
     },
     "fallbacks": {
-      "compileMs": 0,
+      "registerMs": 0.2000000000698492,
+      "compileMs": 0.2000000000698492,
       "direct": {
         "prores": {
           "canRead": true,
@@ -3104,18 +4199,76 @@
             },
             "ok": true
           },
+          "sequential": {
+            "video": {
+              "ok": false,
+              "skipped": "not-decodable"
+            },
+            "audio": {
+              "ok": true,
+              "count": 30,
+              "audioFrames": 48000,
+              "capped": false,
+              "ownedAfter": 0,
+              "firstTimestamp": 0,
+              "lastTimestamp": 0.981333333333333,
+              "durationMs": 0.39999999990686774,
+              "samplesPerSecond": 75000.0000174623,
+              "audioFramesPerSecond": 120000000.02793968,
+              "closedRgbaBytes": 0,
+              "closedPcmBytes": 192000,
+              "peakOwnedRgbaBytes": 0,
+              "heapPeak": 26000000,
+              "correctness": {
+                "kind": "audio",
+                "finite": true,
+                "peak": 0,
+                "frames": 256,
+                "nearSilence": true
+              }
+            }
+          },
+          "correctness": {
+            "video": null,
+            "audio": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            }
+          },
+          "throughput": {
+            "videoSamplesPerSecond": null,
+            "audioSamplesPerSecond": 75000.0000174623,
+            "audioFramesPerSecond": 120000000.02793968,
+            "videoDurationMs": null,
+            "audioDurationMs": 0.39999999990686774
+          },
+          "knownResources": {
+            "peakOwnedRgbaBytes": 0,
+            "closedRgbaBytes": 0,
+            "closedPcmBytes": 192000,
+            "nativeRss": "unmeasured"
+          },
           "avSync": {
             "applicable": false,
             "reason": "not-decodable"
+          },
+          "audioClock": {
+            "applicable": false,
+            "reason": "not-requested",
+            "productPlayback": false
           },
           "cancel": null,
           "ownedAfter": {
             "video": 0,
             "audio": 0
           },
-          "heapBefore": 24500000,
-          "heapAfter": 24500000,
-          "durationMs": 0.5,
+          "heapBefore": 26000000,
+          "heapAfter": 26000000,
+          "heapPeak": 26000000,
+          "durationMs": 0.8000000000465661,
           "crossOriginIsolated": false
         },
         "ac3": {
@@ -3193,18 +4346,84 @@
             },
             "ok": true
           },
+          "sequential": {
+            "video": {
+              "ok": true,
+              "count": 30,
+              "audioFrames": 0,
+              "capped": false,
+              "ownedAfter": 0,
+              "firstTimestamp": 0,
+              "lastTimestamp": 0.967,
+              "durationMs": 2.900000000023283,
+              "samplesPerSecond": 10344.827586123842,
+              "audioFramesPerSecond": 0,
+              "closedRgbaBytes": 6912000,
+              "closedPcmBytes": 0,
+              "peakOwnedRgbaBytes": 230400,
+              "heapPeak": 26000000,
+              "correctness": {
+                "kind": "video",
+                "rgb": [
+                  45,
+                  89,
+                  125
+                ],
+                "alpha": 255,
+                "matchesFixtureColor": true,
+                "maxChannelDelta": 4
+              }
+            },
+            "audio": {
+              "ok": false,
+              "skipped": "not-decodable"
+            }
+          },
+          "correctness": {
+            "video": {
+              "kind": "video",
+              "rgb": [
+                45,
+                89,
+                125
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 4
+            },
+            "audio": null
+          },
+          "throughput": {
+            "videoSamplesPerSecond": 10344.827586123842,
+            "audioSamplesPerSecond": null,
+            "audioFramesPerSecond": null,
+            "videoDurationMs": 2.900000000023283,
+            "audioDurationMs": null
+          },
+          "knownResources": {
+            "peakOwnedRgbaBytes": 230400,
+            "closedRgbaBytes": 6912000,
+            "closedPcmBytes": 0,
+            "nativeRss": "unmeasured"
+          },
           "avSync": {
             "applicable": false,
             "reason": "not-decodable"
+          },
+          "audioClock": {
+            "applicable": false,
+            "reason": "not-requested",
+            "productPlayback": false
           },
           "cancel": null,
           "ownedAfter": {
             "video": 0,
             "audio": 0
           },
-          "heapBefore": 24500000,
-          "heapAfter": 24500000,
-          "durationMs": 2.799999999930151,
+          "heapBefore": 26000000,
+          "heapAfter": 26000000,
+          "heapPeak": 26000000,
+          "durationMs": 8.099999999976717,
           "crossOriginIsolated": false
         }
       },
@@ -3300,6 +4519,91 @@
             },
             "ok": true
           },
+          "sequential": {
+            "video": {
+              "ok": true,
+              "count": 30,
+              "audioFrames": 0,
+              "capped": false,
+              "ownedAfter": 0,
+              "firstTimestamp": 0,
+              "lastTimestamp": 0.9666666666666667,
+              "durationMs": 8.5,
+              "samplesPerSecond": 3529.4117647058824,
+              "audioFramesPerSecond": 0,
+              "closedRgbaBytes": 6912000,
+              "closedPcmBytes": 0,
+              "peakOwnedRgbaBytes": 230400,
+              "heapPeak": 26000000,
+              "correctness": {
+                "kind": "video",
+                "rgb": [
+                  49,
+                  91,
+                  124
+                ],
+                "alpha": 255,
+                "matchesFixtureColor": true,
+                "maxChannelDelta": 1
+              }
+            },
+            "audio": {
+              "ok": true,
+              "count": 30,
+              "audioFrames": 48000,
+              "capped": false,
+              "ownedAfter": 0,
+              "firstTimestamp": 0,
+              "lastTimestamp": 0.981333333333333,
+              "durationMs": 0.5999999999767169,
+              "samplesPerSecond": 50000.00000194026,
+              "audioFramesPerSecond": 80000000.0031044,
+              "closedRgbaBytes": 0,
+              "closedPcmBytes": 192000,
+              "peakOwnedRgbaBytes": 0,
+              "heapPeak": 26000000,
+              "correctness": {
+                "kind": "audio",
+                "finite": true,
+                "peak": 0,
+                "frames": 256,
+                "nearSilence": true
+              }
+            }
+          },
+          "correctness": {
+            "video": {
+              "kind": "video",
+              "rgb": [
+                49,
+                91,
+                124
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 1
+            },
+            "audio": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            }
+          },
+          "throughput": {
+            "videoSamplesPerSecond": 3529.4117647058824,
+            "audioSamplesPerSecond": 50000.00000194026,
+            "audioFramesPerSecond": 80000000.0031044,
+            "videoDurationMs": 8.5,
+            "audioDurationMs": 0.5999999999767169
+          },
+          "knownResources": {
+            "peakOwnedRgbaBytes": 230400,
+            "closedRgbaBytes": 6912000,
+            "closedPcmBytes": 192000,
+            "nativeRss": "unmeasured"
+          },
           "avSync": {
             "applicable": true,
             "withinOneFrame": true,
@@ -3322,14 +4626,20 @@
               }
             ]
           },
+          "audioClock": {
+            "applicable": false,
+            "reason": "not-requested",
+            "productPlayback": false
+          },
           "cancel": null,
           "ownedAfter": {
             "video": 0,
             "audio": 0
           },
-          "heapBefore": 24500000,
-          "heapAfter": 24500000,
-          "durationMs": 16,
+          "heapBefore": 26000000,
+          "heapAfter": 26000000,
+          "heapPeak": 26000000,
+          "durationMs": 25.199999999953434,
           "crossOriginIsolated": false
         },
         "ac3": {
@@ -3422,6 +4732,91 @@
               "ownedAfter": 0
             }
           },
+          "sequential": {
+            "video": {
+              "ok": true,
+              "count": 30,
+              "audioFrames": 0,
+              "capped": false,
+              "ownedAfter": 0,
+              "firstTimestamp": 0,
+              "lastTimestamp": 0.967,
+              "durationMs": 2.6000000000931323,
+              "samplesPerSecond": 11538.46153804823,
+              "audioFramesPerSecond": 0,
+              "closedRgbaBytes": 6912000,
+              "closedPcmBytes": 0,
+              "peakOwnedRgbaBytes": 230400,
+              "heapPeak": 26000000,
+              "correctness": {
+                "kind": "video",
+                "rgb": [
+                  45,
+                  89,
+                  125
+                ],
+                "alpha": 255,
+                "matchesFixtureColor": true,
+                "maxChannelDelta": 4
+              }
+            },
+            "audio": {
+              "ok": true,
+              "count": 32,
+              "audioFrames": 49152,
+              "capped": false,
+              "ownedAfter": 0,
+              "firstTimestamp": -0.005333333333333333,
+              "lastTimestamp": 0.9866666666666667,
+              "durationMs": 2.799999999930151,
+              "samplesPerSecond": 11428.571428856527,
+              "audioFramesPerSecond": 17554285.714723624,
+              "closedRgbaBytes": 0,
+              "closedPcmBytes": 196608,
+              "peakOwnedRgbaBytes": 0,
+              "heapPeak": 26000000,
+              "correctness": {
+                "kind": "audio",
+                "finite": true,
+                "peak": 0.000001942074050020892,
+                "frames": 256,
+                "nearSilence": true
+              }
+            }
+          },
+          "correctness": {
+            "video": {
+              "kind": "video",
+              "rgb": [
+                45,
+                89,
+                125
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 4
+            },
+            "audio": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0.000001942074050020892,
+              "frames": 256,
+              "nearSilence": true
+            }
+          },
+          "throughput": {
+            "videoSamplesPerSecond": 11538.46153804823,
+            "audioSamplesPerSecond": 11428.571428856527,
+            "audioFramesPerSecond": 17554285.714723624,
+            "videoDurationMs": 2.6000000000931323,
+            "audioDurationMs": 2.799999999930151
+          },
+          "knownResources": {
+            "peakOwnedRgbaBytes": 230400,
+            "closedRgbaBytes": 6912000,
+            "closedPcmBytes": 196608,
+            "nativeRss": "unmeasured"
+          },
           "avSync": {
             "applicable": true,
             "withinOneFrame": false,
@@ -3438,18 +4833,42 @@
               }
             ]
           },
+          "audioClock": {
+            "applicable": false,
+            "reason": "not-requested",
+            "productPlayback": false
+          },
           "cancel": null,
           "ownedAfter": {
             "video": 0,
             "audio": 0
           },
-          "heapBefore": 24500000,
-          "heapAfter": 24500000,
-          "durationMs": 46,
+          "heapBefore": 26000000,
+          "heapAfter": 26000000,
+          "heapPeak": 26000000,
+          "durationMs": 50.09999999997672,
           "crossOriginIsolated": false
         }
       },
       "encoderRegistration": false
+    },
+    "recovery": {
+      "decodeCancel": {
+        "avc-aac.mp4": {
+          "rejected": true,
+          "disposed": true,
+          "ownedAfter": 0,
+          "error": "InputDisposedError: Input has been disposed.",
+          "started": true
+        },
+        "pcm-s16.wav": {
+          "rejected": true,
+          "disposed": true,
+          "ownedAfter": 0,
+          "error": "InputDisposedError: Input has been disposed.",
+          "started": true
+        }
+      }
     }
   },
   "decisions": [
@@ -3642,15 +5061,16 @@
     }
   ],
   "sourceDigests": {
-    "scripts/issue207/protocol.mjs": "11c555e25bed227d62fc34f84d3ec3b8eb31c71fbc4b943f82dc1943b30a39ba",
+    "scripts/issue207/protocol.mjs": "1c40e7715f81713fb34da1331193500c702301020bfc54eb16bf4ae3d49a9fd6",
     "scripts/issue207/ranking.mjs": "822dd38c3c468b365896c7b2ad4820861e17c434e120d096fb1a57a1446cb4db",
     "scripts/issue207/inventory.mjs": "1df43fa8a037691b744ab10076fb12b84bc78500b286c7ef18e03df487ea3b49",
     "scripts/issue207/fixtures.mjs": "f04b88f68e03e80d369d8319bcef127101bc50958091c59b8da1489974567094",
     "scripts/issue207/demux.mjs": "26d21df8bcf8bb38612801069836aa6dd998070dbc55b7e9c1aeb5be1d6a508b",
-    "scripts/issue207/sizes.mjs": "52cfb814562decb2cb57847813cd6ab6bcfa3ee1015b6acccbb51ace876edd04",
+    "scripts/issue207/sizes.mjs": "f3454ce1d4b74d8fd949714cd7251639364b04b49d4a642973f0584861b55428",
     "scripts/issue207/decision.mjs": "c1f45ef6e64ae58a656cc19272babc7cd8018d730396adcf4571c080f70750c4",
-    "scripts/issue207/lab.mjs": "c7face8f09c38f3733d8a4fc2c7d5f6dbc022b4af52e039e80700c4b38041278",
-    "scripts/issue207/run-research.mjs": "e41e59581d9d670c20beb2e1b84664c2f0f6c1a6b471cab4e0d5e2359bb6dfda"
+    "scripts/issue207/lab.mjs": "5c79f169c19aaf150bffd5599646878345483249e1a68fe2b8d94af76f6f7158",
+    "scripts/issue207/summary.mjs": "ea7ab68e780108f5cee66afc731df766bb50c9f171c7cefb62af87bb772736e3",
+    "scripts/issue207/run-research.mjs": "78a803afd61015fa7af4f514da6e76e8352cc6b2453189c4ff119a0caad100e2"
   },
   "wasmSpikes": [
     {

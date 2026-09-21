@@ -21,7 +21,7 @@ unnamed MPEG-2 video).
 | Container | Direct decode of named codecs | Fallback | Export |
 |---|---|---|---|
 | QTFF/MOV + AVC/AAC | native decode, integer-frame seek, A/V within one frame, samples closed | none | still MP4/WebM pairs; import ≠ export |
-| MPEG-TS + AVC/AAC | named and `canDecode` true; **sample seek returned no samples** on the 1s fixture | none | do not advertise MPEG-TS playback |
+| MPEG-TS + AVC/AAC | named and `canDecode` true; **random-access and sequential decode both returned no samples** on the 1s fixture | none | do not advertise MPEG-TS playback |
 | MPEG-TS + MPEG-2 | video omitted, not `unsupported-codec` | none | n/a |
 
 HLS playlists on `BlobSource` remain fail-closed (local-first). That is a

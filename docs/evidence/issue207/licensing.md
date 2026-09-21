@@ -8,7 +8,7 @@ Recorded before any proposal to bundle additional codec code.
 |---|---|---|---|
 | Mediabunny 1.50.9 | Demux/mux + WebCodecs bridge | `mediabunny` | MPL-2.0 |
 | `@mediabunny/prores` 1.50.9 | ProRes decode only | ~250 KiB bundle | MPL-2.0. Decode-only. |
-| TurboRes | ProRes WASM helper | ~196 KiB | MPL-2.0. Shared-memory threads need COOP/COEP; product uses the slower path. |
+| TurboRes | ProRes WASM helper | 200453 bytes at `dist/turbores.js` (~196 KiB) | MPL-2.0. Shared-memory threads need COOP/COEP; product uses the slower path. |
 | `@mediabunny/ac3` 1.50.9 | AC-3 / E-AC-3 decode | ~1.1 MiB inlined FFmpeg WASM | MPL-2.0 wrapper; FFmpeg LGPL 2.1+. Encoder exists and is **not wired**. Dolby patent review remains an open public-distribution caveat. |
 
 Issue #19 closeout is implementation-complete, not a public-distribution legal

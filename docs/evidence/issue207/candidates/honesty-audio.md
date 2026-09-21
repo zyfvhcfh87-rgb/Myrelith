@@ -19,7 +19,7 @@ bytes not in git): `pcm-s16.wav`, `mp3.mp3`, `flac.flac`, `vorbis.ogg`.
 
 | Path | Import | Export |
 |---|---|---|
-| Direct | WAVE/MP3/FLAC decoded with closed samples on HeadlessChrome 151. Vorbis `canDecode` was true but sample seek on the silent 1s fixture returned no samples. | Independent. Classic pairs unchanged. #204 WAV is delivery, not this claim. |
+| Direct | WAVE/MP3/FLAC decoded with closed near-silent samples on HeadlessChrome 151. Vorbis `canDecode` was true and sequential decode closed near-silent samples, but random-access `getSample` returned none on the 1s fixture. | Independent. Classic pairs unchanged. #204 WAV is delivery, not this claim. |
 | Fallback | none | none |
 
 Firefox / Safari: **U**.

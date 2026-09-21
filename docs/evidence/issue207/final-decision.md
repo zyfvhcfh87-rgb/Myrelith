@@ -26,7 +26,7 @@ if that is easier to review. They still must not add a decoder.
 
 - Ranking: [ranking.md](ranking.md), frozen in `scripts/issue207/ranking.mjs`.
 - Matrix: [capability-matrix.md](capability-matrix.md) plus the measured run.
-- Measurements: `npm run qa:issue207:research` → [measured-run.md](measured-run.md).
+- Measurements: `npm run qa:issue207:research` → [measured-run.md](measured-run.md). The Chromium pass covers fixture color and silence, integer-frame seek, sequential decode, a muted audio-clock frame derivation, JS heap delta, closed-sample size, module size, and cancel. `publicSupportClaim` stays false.
 - Licensing: [licensing.md](licensing.md).
 - Go/no-go: this page and `scripts/issue207/decision.mjs`.
 - No shipping format claim in this issue.

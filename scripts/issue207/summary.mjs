@@ -44,8 +44,11 @@ function sequentialText(entry) {
   return `${count} closed${entry.capped ? ', capped' : ''}${extra}`
 }
 
-function rate(value) {
-  return typeof value === 'number' ? value.toFixed(1) : 'n/a'
+function throughputText(entry, unit) {
+  if (!entry || entry.skipped) return entry?.skipped ?? 'n/a'
+  if (typeof entry.count !== 'number') return 'n/a'
+  const duration = typeof entry.durationMs === 'number' ? `${entry.durationMs.toFixed(1)} ms` : 'n/a'
+  return `${entry.count} ${unit} in ${duration}`
 }
 
 function heapDelta(cell) {
@@ -99,7 +102,7 @@ export function renderMarkdown(result) {
         .join(' / ')
       const sequential = `v ${sequentialText(cell.sequential?.video)}; a ${sequentialText(cell.sequential?.audio)}`
       const correctness = `v ${correctnessText(cell.correctness?.video)}; a ${correctnessText(cell.correctness?.audio)}`
-      const throughput = `v ${rate(cell.throughput?.videoSamplesPerSecond)}/s; a ${rate(cell.throughput?.audioFramesPerSecond)} frames/s`
+      const throughput = `v ${throughputText(cell.sequential?.video, 'frames')}; a ${throughputText(cell.sequential?.audio, 'packets')}`
       const rgba = cell.knownResources?.peakOwnedRgbaBytes ?? 'n/a'
       lines.push(`| \`${name}\` | ${seek} | ${sequential} | ${correctness} | ${throughput} | ${heapDelta(cell)} | ${rgba} |`)
     }
@@ -138,8 +141,8 @@ export function renderMarkdown(result) {
       const proresAfter = fallbacks.fallback?.prores?.tracks?.find((track) => track.kind === 'video')
       const ac3Direct = fallbacks.direct?.ac3?.tracks?.find((track) => track.kind === 'audio')
       const ac3After = fallbacks.fallback?.ac3?.tracks?.find((track) => track.kind === 'audio')
-      lines.push(`- ProRes direct \`canDecode\`: ${proresDirect?.nativeCanDecode}; after \`registerProresDecoder\`: ${proresAfter?.nativeCanDecode}; random-access seek: ${fallbacks.fallback?.prores?.decode?.video?.ok}; sequential: ${sequentialText(fallbacks.fallback?.prores?.sequential?.video)}`)
-      lines.push(`- AC-3 direct \`canDecode\`: ${ac3Direct?.nativeCanDecode}; after \`registerAc3Decoder\`: ${ac3After?.nativeCanDecode}; random-access seek: ${fallbacks.fallback?.ac3?.decode?.audio?.ok}; sequential: ${sequentialText(fallbacks.fallback?.ac3?.sequential?.audio)}`)
+      lines.push(`- ProRes direct \`canDecode\`: ${proresDirect?.nativeCanDecode}; after \`registerProresDecoder\`: ${proresAfter?.nativeCanDecode}; random-access seek: ${fallbacks.fallback?.prores?.decode?.video?.ok}; sequential: ${sequentialText(fallbacks.fallback?.prores?.sequential?.video)}; color: ${correctnessText(fallbacks.fallback?.prores?.correctness?.video)}`)
+      lines.push(`- AC-3 direct \`canDecode\`: ${ac3Direct?.nativeCanDecode}; after \`registerAc3Decoder\`: ${ac3After?.nativeCanDecode}; random-access seek: ${fallbacks.fallback?.ac3?.decode?.audio?.ok}; sequential: ${sequentialText(fallbacks.fallback?.ac3?.sequential?.audio)}; audio: ${correctnessText(fallbacks.fallback?.ac3?.correctness?.audio)}`)
       lines.push(`- Encoder registration attempted: ${fallbacks.encoderRegistration === true}`)
       lines.push(`- Register call: ${fallbacks.registerMs ?? fallbacks.compileMs} ms. First ProRes fallback measure: ${fallbacks.fallback?.prores?.durationMs ?? 'n/a'} ms. First AC-3 fallback measure: ${fallbacks.fallback?.ac3?.durationMs ?? 'n/a'} ms. Those durations include demux and decode, not a separate WASM compile timer.`)
     }
