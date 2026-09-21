@@ -151,7 +151,7 @@ place to stop when usage is low.
 
 | Step | Bounded deliverable | Done when |
 | --- | --- | --- |
-| **0. Isolate #209** | Create a clean issue branch/worktree from current `master` and carry only this plan. The present `codex/209` branch also contains local #203 work. | The #209 diff has no #203 product commits or source changes; base/head and clean tree are recorded. |
+| **0. Isolate #209** | Create a clean issue branch/worktree from current `master` and carry only this plan. The original `codex/209` started on an older base. | The #209 diff contains only its plan files, with no extra product commits or source changes; base/head and clean tree are recorded. |
 | **1. Prove the voiceover clock** | Disposable Chromium probe for microphone worklet sample positions, shared playback/count-in anchor, track ending, and input/output latency on a real device. | Evidence names browser/device, observed jitter and latency, and the candidate compensation policy. No production capture code. |
 | **2. Prove the recording store** | Disposable OPFS worker probe for bounded batches, backpressure, short writes, quota, periodic valid WAV checkpoints, crash/reopen, and cleanup. | A partially flushed take reopens and decodes within a measured memory/write bound; otherwise voiceover is a no-go pending redesign. Lock the recovery format and actual limits. |
 
@@ -163,7 +163,8 @@ plan instead of building the dependent product path.
 local `master` to `29d4071`, and created `.worktrees/issue209` on
 `codex/issue209`. Carried the two plan-only commits as `5db180f` and `93edc4b`.
 The current issue branch differs from its base only in this plan and its
-`docs/PLAN.md` link; the unrelated local #203 commit is not in its ancestry.
+`docs/PLAN.md` link. The #203 product commit was merged into `master` by PR
+#228 before this worktree was created; it adds no separate #209 branch diff.
 
 ### Voiceover implementation
 
