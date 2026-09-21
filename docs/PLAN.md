@@ -6,10 +6,12 @@ how the codebase actually evolved. This completed roadmap remains the MVP gate
 record; new post-MVP work needs a new user-approved plan. Companion context:
 [HANDOFF.md](HANDOFF.md).
 
-## Post-MVP issue #209 — local capture (plan pending approval)
+## Post-MVP issue #209 — local capture (staged plan)
 
-The proposed voiceover-first plan and camera/screen feasibility gates are in
-[ISSUE_209_PLAN.md](ISSUE_209_PLAN.md). Product implementation has not begun.
+The user accepted the voiceover-first scope and requested small, resumable
+steps before implementation. The [Issue #209 plan](ISSUE_209_PLAN.md) lists
+those steps and their separate clock, storage, and A/V feasibility gates.
+Product implementation has not begun.
 
 ## Post-MVP issue #204 — image-sequence, audio-only, alpha, and chapter delivery
 

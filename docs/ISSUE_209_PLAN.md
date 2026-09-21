@@ -1,6 +1,7 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: proposed; awaiting user approval before product implementation.
+Status: scope approved in principle on 2026-09-21; execution is paused until
+the user starts Step 0 of the staged plan below.
 Prepared 2026-09-21 on `codex/209`, based on `5b7a458` plus the local #203
 commit `f738172`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
 
@@ -14,10 +15,10 @@ pass. The later slices must prove their own A/V timestamp and storage contracts
 before product UI is enabled. A failed gate is a documented no-go, not a reason
 to silently accept drift or unbounded buffering.
 
-This is the post-MVP plan gate required by `docs/PLAN.md`. Approval authorizes
-the scoped implementation and validation below. A change to the product
-boundaries or an unproven browser path requires a new decision. Publication,
-merge, and issue closure are separate decisions.
+This is the post-MVP plan gate required by `docs/PLAN.md`. The user accepted
+the scope and requested smaller execution steps to manage usage. A change to
+the product boundaries or an unproven browser path requires a new decision.
+Publication, merge, and issue closure are separate decisions.
 
 ## Existing seams
 
@@ -130,49 +131,72 @@ If the browser lacks a provable streaming path, leave that mode unavailable and
 record the no-go evidence. No cloud, live stream, remote guest, unattended
 recording, auto-upload, or implicit system-audio capture.
 
-## Implementation and acceptance gates
+## Staged execution and usage checkpoints
 
-1. **Feasibility proof.** Build disposable real-Chromium probes for worklet
-   sample position, shared playback/count-in anchor, input/output latency,
-   OPFS checkpoint/reopen/quota, and microphone permission/track ending. Measure
-   main-thread suspension and writer backpressure. Record device/browser and
-   exact thresholds. Resolve the voiceover default compensation and recovery
-   format before production code. Stop if a bounded, decodable partial cannot
-   be recovered.
-2. **Pure contracts.** Add a browser-free capture state machine, exact rational
-   sample-to-frame placement and signed compensation, pinned-destination
-   validation, and size/duration limits. Test fractional rates, one-sample
-   boundaries, count-in cancellation, source loss, stale project/lane,
-   collisions, and keep/cancel idempotence.
-3. **Voiceover runtime and storage.** Add app-owned session and worker writer
-   with bounded ownership, flush acknowledgements, draft recovery, explicit
-   failure classes, and complete cleanup. Connect to transport without a
-   second timeline clock or a digital microphone monitor. Fault-inject denied
-   permission, writer quota/short write, queue overrun, device ending,
-   visibility loss, import refusal, and failed cleanup.
-4. **Voiceover UI and import.** Add accessible source/destination/count-in,
-   record/stop/cancel/keep/compensation controls with live status. Import via
-   the existing compatibility/provenance path; place through the shared
-   planner, leaving an unplaceable kept take in the Pool. Verify keyboard,
-   focus, 720px layout, undo/redo, save/reload/relink, and no feedback route.
-5. **Camera and screen go/no-go.** Research available Chromium track timestamp,
-   encoding, muxing, and streaming APIs with bounded prototypes. Lock an
-   explicit drift tolerance and discontinuity report from measurements before
-   implementation. Prove source-ended, missing audio, permission denial,
-   storage exhaustion, and partial-file behavior for both modes separately.
-6. **Expanded runtime and final acceptance.** Implement only modes that pass
-   Gate 5, using the same import/provenance and lifecycle owners. Run focused
-   state/clock/storage tests, full Vitest, runner checks, production build,
-   lint, and `git diff --check`. Run genuine headed Chromium microphone,
-   camera, and screen permission/capture where available, reopen the produced
-   files, inspect A/V alignment and storage behavior, and clearly label any
-   host/device limitation. Fake-device automation is supplemental evidence,
-   not a substitute for native chooser and physical latency checks.
+**One numbered step per user-requested work turn.** Finish its stated proof,
+record the result, and stop with a concise handoff naming the next step. Do not
+automatically continue into the next numbered step, even when usage remains.
+Each implementation step ends with focused tests, production build/typecheck,
+lint, `git diff --check`, and browser verification when its behavior is
+observable. Commit a passing step with the Aryel author, message-file, and
+Codex co-author convention. Research-only steps end with a committed evidence
+note. The full suite is reserved for the integrated voiceover and final gates;
+the focused suite stays small within each step. If a step becomes larger than
+its described seam, split it into two numbered checkpoints *before* adding
+more code. Each handoff records what changed, exact commands/results, remaining
+risk, commit, and the next step's entry condition. This gives the user a clean
+place to stop when usage is low.
 
-Update ARCHITECTURE/HANDOFF/PLAN with the accepted ownership and actual gate
-results. Commit accepted implementation with the Aryel author, message-file,
-and Codex co-author convention. No product implementation occurs before this
-plan is approved.
+### Preparation and voiceover proof
+
+| Step | Bounded deliverable | Done when |
+| --- | --- | --- |
+| **0. Isolate #209** | Create a clean issue branch/worktree from current `master` and carry only this plan. The present `codex/209` branch also contains local #203 work. | The #209 diff has no #203 product commits or source changes; base/head and clean tree are recorded. |
+| **1. Prove the voiceover clock** | Disposable Chromium probe for microphone worklet sample positions, shared playback/count-in anchor, track ending, and input/output latency on a real device. | Evidence names browser/device, observed jitter and latency, and the candidate compensation policy. No production capture code. |
+| **2. Prove the recording store** | Disposable OPFS worker probe for bounded batches, backpressure, short writes, quota, periodic valid WAV checkpoints, crash/reopen, and cleanup. | A partially flushed take reopens and decodes within a measured memory/write bound; otherwise voiceover is a no-go pending redesign. Lock the recovery format and actual limits. |
+
+Steps 1 and 2 are the **voiceover go/no-go gate**. Record the result before
+starting Step 3. If either fails, stop at its evidence report and revise the
+plan instead of building the dependent product path.
+
+### Voiceover implementation
+
+| Step | Bounded deliverable | Done when |
+| --- | --- | --- |
+| **3. Clock math** | Pure sample/frame anchor, count-in window, trim/pad, and signed compensation functions. | Fractional frame rates, one-sample edges, and offset bounds pass focused tests. |
+| **4. Session rules** | Pure state transitions and pinned project/sequence/lane destination validation. | Cancel/keep, source loss, stale destination, collisions, and repeat actions have deterministic tested outcomes. |
+| **5. WAV writer** | Production worker-owned OPFS draft writer and checkpoint/recovery reader behind injected I/O. | Short write, quota, crash, discard, close, and final-file length tests pass; a bounded in-flight limit is enforced. |
+| **6. Microphone bridge** | Worklet capture batches and acknowledgements into the writer with silence at the output. | Real Chromium proves bounded transfer, exact sample numbering, overrun stop, and no digital monitor signal. |
+| **7. Capture owner** | App-owned permission, track, writer, cancellation, visibility, and project-teardown lifecycle with serializable UI status. | Denial, device ending, hidden/frozen page, cleanup failure, and late callbacks are fault-tested; every terminal path stops tracks. |
+| **8. Transport join** | Schedule count-in and recording against the existing audio-master playback anchor; lock/stop conflicting seeks and edits. | A real take aligns with the selected integer frame under the measured compensation policy; cancel and under-run behavior is explicit. |
+| **9. Keep and place** | Verify finalized WAV, import through `mediaImportController`, remember the OPFS original, and optionally place through `mediaPlacementController`. | Pool-only fallback, stale destination, collision, and one-history undo/redo pass. |
+| **10. Drafts and reconnect** | Add explicit draft recovery/discard and safe kept-original removal/reconnect rules. | Crash/reload, missing-file relink, project save/reload, and local-project forget behavior pass without deleting referenced media. |
+| **11. Voiceover controls** | Accessible source, lane, count-in, monitoring advice, compensation, record/stop/cancel/keep, and recovery controls. | Keyboard/focus, 720px layout, active-capture indicator, and in-app browser flows pass. |
+| **12. Voiceover acceptance** | Run real-device capture/reopen/latency and interruption matrix, focused tests plus full Vitest/runner checks, build and lint; update ownership/evidence docs. | Voiceover acceptance is recorded with measured limits and any native-device qualification. Camera/screen remain disabled. |
+
+Each row is a stopping point, including Step 12. A passing voiceover gate is
+required before the A/V expansion below.
+
+### Camera and screen expansion
+
+| Step | Bounded deliverable | Done when |
+| --- | --- | --- |
+| **13. Prove common A/V timing** | Disposable Chromium probe for track timestamps, encode/mux order, writer backpressure, discontinuity, drift, and final-file reopen. | Evidence locks a candidate clock rule, drift tolerance/report, and memory bound; no product mode is enabled. |
+| **14. Camera feasibility** | Real camera+mic probe for permission, source ending, suspension, storage failure, and partial-file behavior using the candidate path. | A separate camera go/no-go and measured A/V evidence are recorded. |
+| **15. Screen feasibility** | Real display chooser probe for screen/window/tab frames, available audio, optional mic, self-capture, source ending, and partial output. | A separate screen go/no-go records which audio combinations and surfaces can be supported without unbounded storage or hidden drift. |
+| **16. Shared A/V writer** | Implement only the encoded-stream/mux/storage substrate proven by Steps 13–15, reusing capture ownership rules. | Timestamp discontinuity, quota, bounded queue, partial-file, and final-file tests pass. Skip if both modes are no-go. |
+| **17. Camera session** | Add camera+mic acquisition, lifecycle, finalization, ordinary import, and accessible camera controls. | Real permission, source loss, A/V sync, keep/cancel, and recoverable failure pass. Only attempt if camera passed Step 14. |
+| **18. Camera acceptance** | Reopen real camera takes, measure drift, exercise storage/suspension/recovery, and run focused plus build/lint/browser gates. | Camera evidence records pass/no-go and device/browser limits. |
+| **19. Screen session** | Add gesture-bound display acquisition, only the proven optional audio combinations, lifecycle, ordinary import, and accessible controls. | Source-ended, permission denial, no-audio, storage failure, keep/cancel, and track cleanup pass with real chooser evidence. Only attempt if screen passed Step 15. |
+| **20. Screen acceptance** | Reopen real screen/window/tab takes and measure A/V relationship, partial recovery, and browser UI behavior. | Evidence records each available display mode and qualification; failed modes remain unavailable. |
+| **21. Final integration** | Run full Vitest, runner checks, build, lint, exact browser capture matrix, and update ARCHITECTURE/HANDOFF/PLAN. Review the complete issue diff. | Every enabled mode has proven acceptance, limitations are explicit, and the clean committed branch is ready for a separate publication decision. |
+
+Steps 16–20 depend on the relevant go/no-go result. A no-go for one mode does not silently
+waive its acceptance criterion; report the reason and ask for a scoped issue
+decision before calling #209 complete. Fake-device automation supplements
+genuine headed Chromium permission/capture; it cannot substitute for a native
+chooser or physical latency check. Publication, PR review, merge, and issue
+closure are outside Step 21 and require their own requested delivery action.
 
 ## Browser references checked during planning
 
