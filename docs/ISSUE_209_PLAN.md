@@ -1,6 +1,6 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Step 0 complete; Step 1
+Status: scope approved in principle on 2026-09-21; Steps 0–1 complete; Step 2
 is next and starts only on the user's request.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
@@ -165,6 +165,14 @@ local `master` to `29d4071`, and created `.worktrees/issue209` on
 The current issue branch differs from its base only in this plan and its
 `docs/PLAN.md` link. The #203 product commit was merged into `master` by PR
 #228 before this worktree was created; it adds no separate #209 branch diff.
+
+**Step 1 checkpoint (2026-09-21):** A disposable headed Chromium probe on the
+real USB microphone proved continuous worklet sample frames and shared-context
+reference starts under a main-thread stall. Temporary permission revocation
+ended the track. Acoustic round-trip delay varied, so the candidate automatic
+physical offset is zero until the user calibrates it. The measurements and
+limits are in [the Step 1 clock proof](evidence/issue209/STEP_1_CLOCK_PROOF.md).
+This is a clock-only GO; the voiceover gate still needs Step 2 storage proof.
 
 ### Voiceover implementation
 
