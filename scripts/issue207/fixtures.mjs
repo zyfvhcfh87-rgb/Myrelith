@@ -77,6 +77,8 @@ export function generateFixtures(outputDirectory = fixtureDirectory()) {
     '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '64k',
   ])
+  // ffmpeg MPEG-TS PTS often starts near 1.4s. The lab samples from the first
+  // packet. Do not treat a zero-based window as a decode failure.
   commonAv(path('avc-aac.ts'), [
     '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '64k', '-f', 'mpegts',

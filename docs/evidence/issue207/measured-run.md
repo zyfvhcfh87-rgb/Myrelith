@@ -50,14 +50,14 @@ Host: `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) He
 | `vorbis.ogg` | limited (audio-seek) | Ogg |
 | `avc-aac.mp4` | ready | MP4 |
 | `avc-aac.mov` | ready | QuickTime File Format |
-| `avc-aac.ts` | limited (video-seek, audio-seek) | MPEG Transport Stream |
+| `avc-aac.ts` | ready | MPEG Transport Stream |
 | `vp9-opus.webm` | ready | WebM |
 | `vp8-opus.webm` | ready | WebM |
 | `av1-opus.webm` | ready | WebM |
 | `hevc-aac.mp4` | limited (video-undecodable) | MP4 |
 | `avc-ac3.mkv` | limited (audio-undecodable) | Matroska |
 | `prores.mov` | limited (video-undecodable) | QuickTime File Format |
-| `mpeg2-aac.ts` | limited (audio-seek) | MPEG Transport Stream |
+| `mpeg2-aac.ts` | ready | MPEG Transport Stream |
 | `avc-dts.mkv` | limited (audio-undecodable) | Matroska |
 | `playlist.m3u8` | unsupported | TypeError: HLS inputs require `InputOptions.source` to be a PathedSource or a ref to one. |
 
@@ -67,22 +67,22 @@ Correctness checks the first closed sequential sample against the fixture: solid
 
 | Fixture | Random seek | Sequential | Correctness | Throughput | JS heap delta | Peak owned RGBA |
 |---|---|---|---|---|---:|---:|
-| `pcm-s16.wav` | no-video / ok | v no-video; a 24 closed | v n/a; a near silence (peak 0) | v no-video; a 24 packets in 2.0 ms | 2183672 | 0 |
-| `mp3.mp3` | no-video / ok | v no-video; a 42 closed | v n/a; a near silence (peak 0) | v no-video; a 42 packets in 2.6 ms | 802672 | 0 |
-| `flac.flac` | no-video / ok | v no-video; a 10 closed | v n/a; a near silence (peak 0) | v no-video; a 10 packets in 1.3 ms | -1869484 | 0 |
-| `vorbis.ogg` | no-video / miss | v no-video; a 48 closed | v n/a; a near silence (peak 0) | v no-video; a 48 packets in 2.7 ms | 664476 | 0 |
-| `avc-aac.mp4` | ok / ok | v 30 closed; a 47 closed | v color 45,89,125 matches fixture; a near silence (peak 0) | v 30 frames in 3.9 ms; a 47 packets in 2.4 ms | -243272 | 230400 |
-| `avc-aac.mov` | ok / ok | v 30 closed; a 47 closed | v color 45,89,125 matches fixture; a near silence (peak 0) | v 30 frames in 2.6 ms; a 47 packets in 2.3 ms | 806776 | 230400 |
-| `avc-aac.ts` | miss / miss | v 0 closed; a 0 closed | v n/a; a n/a | v 0 frames in 2.9 ms; a 0 packets in 2.1 ms | -42980 | 0 |
-| `vp9-opus.webm` | ok / ok | v 30 closed; a 51 closed | v color 49,92,125 matches fixture; a near silence (peak 2.0345869483764863e-34) | v 30 frames in 3.1 ms; a 51 packets in 2.3 ms | 1013184 | 230400 |
-| `vp8-opus.webm` | ok / ok | v 30 closed; a 51 closed | v color 45,89,125 matches fixture; a near silence (peak 2.0345869483764863e-34) | v 30 frames in 3.5 ms; a 51 packets in 2.3 ms | -670004 | 230400 |
-| `av1-opus.webm` | ok / ok | v 30 closed; a 51 closed | v color 45,89,125 matches fixture; a near silence (peak 2.0345869483764863e-34) | v 30 frames in 3.6 ms; a 51 packets in 2.3 ms | 839276 | 230400 |
-| `hevc-aac.mp4` | not-decodable / ok | v not-decodable; a 47 closed | v n/a; a near silence (peak 0) | v not-decodable; a 47 packets in 2.7 ms | -946340 | 0 |
-| `avc-ac3.mkv` | ok / not-decodable | v 30 closed; a not-decodable | v color 45,89,125 matches fixture; a n/a | v 30 frames in 2.8 ms; a not-decodable | 1097812 | 230400 |
-| `prores.mov` | not-decodable / ok | v not-decodable; a 30 closed | v n/a; a near silence (peak 0) | v not-decodable; a 30 packets in 1.2 ms | 852444 | 0 |
-| `mpeg2-aac.ts` | no-video / miss | v no-video; a 0 closed | v n/a; a n/a | v no-video; a 0 packets in 2.2 ms | 978016 | 0 |
-| `avc-dts.mkv` | ok / not-decodable | v 30 closed; a not-decodable | v color 45,89,125 matches fixture; a n/a | v 30 frames in 2.6 ms; a not-decodable | -869648 | 230400 |
-| `playlist.m3u8` | miss / miss | v n/a; a n/a | v n/a; a n/a | v n/a; a n/a | 17512 | n/a |
+| `pcm-s16.wav` | no-video / ok | v no-video; a 24 closed | v n/a; a near silence (peak 0) | v no-video; a 24 packets in 2.5 ms | 1841780 | 0 |
+| `mp3.mp3` | no-video / ok | v no-video; a 42 closed | v n/a; a near silence (peak 0) | v no-video; a 42 packets in 3.1 ms | 807992 | 0 |
+| `flac.flac` | no-video / ok | v no-video; a 10 closed | v n/a; a near silence (peak 0) | v no-video; a 10 packets in 1.5 ms | -1424108 | 0 |
+| `vorbis.ogg` | no-video / miss | v no-video; a 48 closed | v n/a; a near silence (peak 0) | v no-video; a 48 packets in 4.0 ms | 673152 | 0 |
+| `avc-aac.mp4` | ok / ok | v 30 closed; a 47 closed | v color 45,89,125 matches fixture; a near silence (peak 0) | v 30 frames in 5.6 ms; a 47 packets in 2.8 ms | -215364 | 230400 |
+| `avc-aac.mov` | ok / ok | v 30 closed; a 47 closed | v color 45,89,125 matches fixture; a near silence (peak 0) | v 30 frames in 3.0 ms; a 47 packets in 2.4 ms | 807292 | 230400 |
+| `avc-aac.ts` | ok / ok from 1.421/1.400s | v 30 closed; a 47 closed | v color 49,92,125 matches fixture; a near silence (peak 0) | v 30 frames in 4.3 ms; a 47 packets in 2.5 ms | -328512 | 230400 |
+| `vp9-opus.webm` | ok / ok | v 30 closed; a 51 closed | v color 49,92,125 matches fixture; a near silence (peak 2.0345869483764863e-34) | v 30 frames in 3.2 ms; a 51 packets in 2.4 ms | 1026260 | 230400 |
+| `vp8-opus.webm` | ok / ok | v 30 closed; a 51 closed | v color 45,89,125 matches fixture; a near silence (peak 2.0345869483764863e-34) | v 30 frames in 3.3 ms; a 51 packets in 2.4 ms | -711444 | 230400 |
+| `av1-opus.webm` | ok / ok | v 30 closed; a 51 closed | v color 45,89,125 matches fixture; a near silence (peak 2.0345869483764863e-34) | v 30 frames in 4.7 ms; a 51 packets in 2.5 ms | 835128 | 230400 |
+| `hevc-aac.mp4` | not-decodable / ok | v not-decodable; a 47 closed | v n/a; a near silence (peak 0) | v not-decodable; a 47 packets in 2.8 ms | 567612 | 0 |
+| `avc-ac3.mkv` | ok / not-decodable | v 30 closed; a not-decodable | v color 45,89,125 matches fixture; a n/a | v 30 frames in 2.9 ms; a not-decodable | -625660 | 230400 |
+| `prores.mov` | not-decodable / ok | v not-decodable; a 30 closed | v n/a; a near silence (peak 0) | v not-decodable; a 30 packets in 1.4 ms | 75388 | 0 |
+| `mpeg2-aac.ts` | no-video / ok from 1.412s | v no-video; a 47 closed | v n/a; a near silence (peak 0) | v no-video; a 47 packets in 2.8 ms | 1385724 | 0 |
+| `avc-dts.mkv` | ok / not-decodable | v 30 closed; a not-decodable | v color 45,89,125 matches fixture; a n/a | v 30 frames in 2.8 ms; a not-decodable | -280368 | 230400 |
+| `playlist.m3u8` | miss / miss | v n/a; a n/a | v n/a; a n/a | v n/a; a n/a | 17064 | n/a |
 
 ## A/V sync
 
@@ -96,7 +96,7 @@ Timestamp pairs compare independently decoded samples. The audio-clock rows star
 | `vorbis.ogg` | n/a (no-video) | not requested |
 | `avc-aac.mp4` | within one frame | frame 3 within one frame |
 | `avc-aac.mov` | within one frame | frame 3 within one frame |
-| `avc-aac.ts` | outside one frame | not requested |
+| `avc-aac.ts` | within one frame | frame 3 within one frame |
 | `vp9-opus.webm` | within one frame | frame 3 within one frame |
 | `vp8-opus.webm` | within one frame | not requested |
 | `av1-opus.webm` | within one frame | not requested |
@@ -119,7 +119,7 @@ Open-cancel disposes the Input while `getTracks()` is still pending. Decode-canc
 - ProRes direct `canDecode`: false; after `registerProresDecoder`: true; random-access seek: true; sequential: 30 closed; color: color 49,91,124 matches fixture
 - AC-3 direct `canDecode`: false; after `registerAc3Decoder`: true; random-access seek: false; sequential: 32 closed; audio: near silence (peak 0.000001942074050020892)
 - Encoder registration attempted: false
-- Register call: 0.2000000000698492 ms. First ProRes fallback measure: 25.199999999953434 ms. First AC-3 fallback measure: 50.09999999997672 ms. Those durations include demux and decode, not a separate WASM compile timer.
+- Register call: 0.09999999962747097 ms. First ProRes fallback measure: 26.5 ms. First AC-3 fallback measure: 53.700000000186265 ms. Those durations include demux and decode, not a separate WASM compile timer.
 
 ### Native encoder probes
 

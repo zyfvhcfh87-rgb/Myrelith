@@ -115,7 +115,7 @@ async function measureBrowser(fixtures) {
       'mpeg2-aac.ts', 'avc-dts.mkv', 'playlist.m3u8',
     ]
     const measured = {}
-    const audioClockNames = new Set(['avc-aac.mp4', 'avc-aac.mov', 'vp9-opus.webm'])
+    const audioClockNames = new Set(['avc-aac.mp4', 'avc-aac.mov', 'avc-aac.ts', 'vp9-opus.webm'])
     for (const name of names) {
       process.stdout.write(`Browser measure ${name}\n`)
       const cdpJsHeapBefore = await jsHeap(page)

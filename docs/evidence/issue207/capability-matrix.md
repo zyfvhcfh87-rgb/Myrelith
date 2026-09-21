@@ -23,7 +23,7 @@ Legend: `ready` / `limited` / `unsupported` / `error` / `n/a` / `U`.
 | FLAC | ready; samples closed | none | not a classic pair |
 | OGG Vorbis | `canDecode` true; sequential samples closed; random-access `getSample` returned none on the 1s fixture | none | not an export pair |
 | AVC+AAC in MP4/MOV | ready; A/V timestamps within one frame; cancel disposed the Input | none | MP4+AVC+AAC; this host's AAC *encoder* probe was unsupported |
-| AVC+AAC in MPEG-TS | named and `canDecode` true; **random-access and sequential decode returned no samples** on this 1s fixture | none | do not advertise MPEG-TS playback |
+| AVC+AAC in MPEG-TS | ready on this host when the window starts at the first packet (~1.4s). A 0s sample is an empty window, not a decode failure. | none | not an export pair; not a support claim |
 | VP8/VP9/AV1 + Opus | ready; A/V within one frame | none | VP9/AV1 allow-listed; VP8 is not an export pair |
 | HEVC | **false** on this Linux headless host; AAC audio still decoded | **no** software fallback ships | explicit HEVC profile; encoder unsupported here |
 | ProRes | direct `canDecode` false | after `registerProresDecoder`, `canDecode` true and sample seek ready | none |

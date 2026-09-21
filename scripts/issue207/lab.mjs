@@ -12,6 +12,7 @@ import {
   Input,
   VideoSampleSink,
 } from 'mediabunny'
+import { playbackWindowStart } from './protocol.mjs'
 
 const FRAME_RATE = 30
 const SEEK_FRAMES = Object.freeze([0, 15])
@@ -98,9 +99,18 @@ function knownBytes(sample) {
   return { rgba: 0, pcm: frames * channels * 4 }
 }
 
-async function sequentialDecode(sink) {
+async function trackWindowStart(track) {
+  try {
+    const first = await new EncodedPacketSink(track).getFirstPacket({ metadataOnly: true })
+    return playbackWindowStart(first?.timestamp)
+  } catch {
+    return 0
+  }
+}
+
+async function sequentialDecode(sink, windowStart) {
   const started = typeof performance !== 'undefined' ? performance.now() : Date.now()
-  const iterator = sink.samples(0, 1)
+  const iterator = sink.samples(windowStart, windowStart + 1)
   let count = 0
   let owned = 0
   let audioFrames = 0
@@ -155,6 +165,7 @@ async function sequentialDecode(sink) {
       peakOwnedRgbaBytes: peakOwnedRgba,
       heapPeak,
       correctness,
+      windowStart,
     }
   } catch (error) {
     return {
@@ -178,14 +189,14 @@ async function describeTrack(track) {
   return { kind, codec, nativeCanDecode: native }
 }
 
-async function seekAndDecode(track) {
+async function seekAndDecode(track, windowStart) {
   const kind = track.isVideoTrack() ? 'video' : 'audio'
   const sink = kind === 'video' ? new VideoSampleSink(track) : new AudioSampleSink(track)
   const frames = []
   let owned = 0
   try {
     for (const frame of SEEK_FRAMES) {
-      const timestamp = frame / FRAME_RATE
+      const timestamp = windowStart + frame / FRAME_RATE
       let sample = null
       try {
         sample = await sink.getSample(timestamp)
@@ -211,17 +222,18 @@ async function seekAndDecode(track) {
       ok: frames.length === SEEK_FRAMES.length && frames.every((entry) => entry.closed === true),
       frames,
       ownedAfter: owned,
+      windowStart,
     }
   } catch (error) {
     return { ok: false, error: errorMessage(error), ownedAfter: owned, frames }
   }
 }
 
-async function packetSeek(track) {
+async function packetSeek(track, windowStart) {
   const sink = new EncodedPacketSink(track)
   const points = []
   for (const frame of SEEK_FRAMES) {
-    const timestamp = frame / FRAME_RATE
+    const timestamp = windowStart + frame / FRAME_RATE
     try {
       const packet = await sink.getPacket(timestamp, { metadataOnly: true })
       points.push({
@@ -243,9 +255,9 @@ function avSync(video, audio) {
   }
   const pairs = []
   for (const frame of SEEK_FRAMES) {
-    const requested = frame / FRAME_RATE
     const videoHit = video.frames?.find((entry) => entry.frame === frame)
     const audioHit = audio.frames?.find((entry) => entry.frame === frame)
+    const requested = videoHit?.requestedSeconds ?? audioHit?.requestedSeconds ?? frame / FRAME_RATE
     if (!videoHit || !audioHit || videoHit.timestamp == null || audioHit.timestamp == null) {
       pairs.push({ frame, ok: false, reason: 'missing-sample' })
       continue
@@ -275,7 +287,7 @@ async function cancelDuringOpen(bytes) {
   }
 }
 
-async function audioClockFrame(videoTrack) {
+async function audioClockFrame(videoTrack, windowStart) {
   const context = new AudioContext()
   let videoSample = null
   try {
@@ -284,7 +296,7 @@ async function audioClockFrame(videoTrack) {
     await new Promise((resolve) => { setTimeout(resolve, 100) })
     const elapsed = context.currentTime - origin
     const derivedFrame = Math.max(0, Math.floor(elapsed * FRAME_RATE))
-    const requestedSeconds = derivedFrame / FRAME_RATE
+    const requestedSeconds = windowStart + derivedFrame / FRAME_RATE
     videoSample = await new VideoSampleSink(videoTrack).getSample(requestedSeconds)
     const videoTimestamp = videoSample?.timestamp ?? null
     const delta = videoTimestamp == null ? null : Math.abs(videoTimestamp - requestedSeconds)
@@ -295,6 +307,7 @@ async function audioClockFrame(videoTrack) {
       audioContextState: context.state,
       elapsedSeconds: elapsed,
       derivedFrame,
+      windowStart,
       requestedSeconds,
       videoTimestamp,
       withinOneFrame: delta != null && delta <= (1 / FRAME_RATE) + 1e-4,
@@ -321,7 +334,8 @@ export async function cancelDuringDecode(bytes) {
       return { skipped: 'not-decodable', disposed: input.disposed, ownedAfter: 0 }
     }
     const sink = video ? new VideoSampleSink(video) : new AudioSampleSink(audio)
-    iterator = sink.samples(0, 1)
+    const windowStart = await trackWindowStart(track)
+    iterator = sink.samples(windowStart, windowStart + 1)
     const first = await iterator.next()
     if (first.value) {
       owned += 1
@@ -392,20 +406,22 @@ export async function measureBytes(bytes, options = {}) {
     const audio = tracks.find((track) => track.isAudioTrack())
     const videoNative = described.find((track) => track.kind === 'video')?.nativeCanDecode === true
     const audioNative = described.find((track) => track.kind === 'audio')?.nativeCanDecode === true
+    const videoStart = video ? await trackWindowStart(video) : 0
+    const audioStart = audio ? await trackWindowStart(audio) : 0
     const videoDecode = video && videoNative
-      ? await seekAndDecode(video)
-      : { ok: false, skipped: !video ? 'no-video' : 'not-decodable' }
+      ? await seekAndDecode(video, videoStart)
+      : { ok: false, skipped: !video ? 'no-video' : 'not-decodable', windowStart: videoStart }
     const audioDecode = audio && audioNative
-      ? await seekAndDecode(audio)
-      : { ok: false, skipped: !audio ? 'no-audio' : 'not-decodable' }
+      ? await seekAndDecode(audio, audioStart)
+      : { ok: false, skipped: !audio ? 'no-audio' : 'not-decodable', windowStart: audioStart }
     const videoSequential = video && videoNative
-      ? await sequentialDecode(new VideoSampleSink(video))
-      : { ok: false, skipped: !video ? 'no-video' : 'not-decodable' }
+      ? await sequentialDecode(new VideoSampleSink(video), videoStart)
+      : { ok: false, skipped: !video ? 'no-video' : 'not-decodable', windowStart: videoStart }
     const audioSequential = audio && audioNative
-      ? await sequentialDecode(new AudioSampleSink(audio))
-      : { ok: false, skipped: !audio ? 'no-audio' : 'not-decodable' }
+      ? await sequentialDecode(new AudioSampleSink(audio), audioStart)
+      : { ok: false, skipped: !audio ? 'no-audio' : 'not-decodable', windowStart: audioStart }
     const audioClock = options.audioClock && video && audio && videoNative
-      ? await audioClockFrame(video)
+      ? await audioClockFrame(video, videoStart)
       : { applicable: false, reason: options.audioClock ? 'missing-decodable-video' : 'not-requested', productPlayback: false }
 
     const cancel = options.cancel ? await cancelDuringOpen(bytes.slice(0)) : null
@@ -418,8 +434,8 @@ export async function measureBytes(bytes, options = {}) {
       format: { name: format.name, mimeType: format.mimeType },
       tracks: described,
       packetSeek: {
-        video: video ? await packetSeek(video) : null,
-        audio: audio ? await packetSeek(audio) : null,
+        video: video ? await packetSeek(video, videoStart) : null,
+        audio: audio ? await packetSeek(audio, audioStart) : null,
       },
       decode: {
         video: videoDecode,

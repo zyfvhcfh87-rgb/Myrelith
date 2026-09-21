@@ -57,6 +57,23 @@ export function isCellValue(value) {
   return CELL_VALUES.includes(value)
 }
 
+export const RESEARCH_FRAME_RATE = 30
+
+/**
+ * MPEG-TS from ffmpeg often starts near 1.4s. A non-positive or missing
+ * timestamp keeps the old zero-based window (MP4, WebM, Opus preroll).
+ */
+export function playbackWindowStart(firstTimestamp) {
+  if (typeof firstTimestamp !== 'number' || !Number.isFinite(firstTimestamp) || firstTimestamp <= 0) {
+    return 0
+  }
+  return firstTimestamp
+}
+
+export function windowTimestamp(firstTimestamp, frame, frameRate = RESEARCH_FRAME_RATE) {
+  return playbackWindowStart(firstTimestamp) + frame / frameRate
+}
+
 export function errorMessage(error) {
   if (error instanceof Error) return `${error.name}: ${error.message}`
   return String(error)

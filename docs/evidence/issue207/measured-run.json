@@ -1,8 +1,8 @@
 {
   "schema": "myrelith-issue207-v1",
   "publicSupportClaim": false,
-  "startedAt": "2026-09-21T17:22:27.796Z",
-  "commit": "65102d5e3e2629dcbdba94f47005dfd906dfe154",
+  "startedAt": "2026-09-21T18:22:52.687Z",
+  "commit": "dc6f7e6c26b9d316363d881463ac3c14afe9a08c",
   "ranking": {
     "recordedAt": "2026-09-12T00:00:00Z",
     "authority": [
@@ -490,7 +490,7 @@
     {
       "name": "vorbis.ogg",
       "bytes": 3293,
-      "sha256": "a026f063ebd5d991e2eb076cba272d83168ee9fbfe1f648d7db68173c2d163d1"
+      "sha256": "67f2acad416c803e5084f8dc392806bc37c594a25843c3c800a4645ecb62abbc"
     },
     {
       "name": "avc-aac.mp4",
@@ -510,17 +510,17 @@
     {
       "name": "vp9-opus.webm",
       "bytes": 1994,
-      "sha256": "228dc256d9f37bb31c082f1e668c6dccf40fee13bc4b27202aa2480b401197d9"
+      "sha256": "a9091b777f146e21a55997cbe0fa4473342df98c2831c3ebd0353c99e0465a93"
     },
     {
       "name": "vp8-opus.webm",
       "bytes": 2837,
-      "sha256": "ddbc8a3a44013e79592fcc84ee2f13b139db17176b48af29add201761ff5bee8"
+      "sha256": "a8aba2a8fb4d491ecd3fdbd5d6cc53ac8a4abd1afab0c2c64ffb6a347bdccab0"
     },
     {
       "name": "av1-opus.webm",
       "bytes": 2418,
-      "sha256": "d2dcf033756a4298e681b0565640f73c0d751e552e1d95abb6f841a7fa41567d"
+      "sha256": "2b8071364c08a6e0ff99ae4964f8bb731e51696d4feaf11fc9cfc1e6eaefd9d2"
     },
     {
       "name": "hevc-aac.mp4",
@@ -530,7 +530,7 @@
     {
       "name": "avc-ac3.mkv",
       "bytes": 14612,
-      "sha256": "44d982e3f6d5257ff56837869f2b7f0979b5792d40cd6b3cfcabfcc1caf19693"
+      "sha256": "a6953604d0df15a3d75d1724fe3c1b164005d7adcb5fb8879c6873b940f2804d"
     },
     {
       "name": "prores.mov",
@@ -545,12 +545,12 @@
     {
       "name": "avc-dts.mkv",
       "bytes": 26802,
-      "sha256": "39af728646b8fc69c1445abab99e7fb64b75e586bdd35f219bf94377ed7ba5dc"
+      "sha256": "0796a53a57871ceba6f3ade5cdff11939a4f07bf1af470c8933313861881e85d"
     },
     {
       "name": "dnx-or-mpeg2.mxf",
       "bytes": 5689389,
-      "sha256": "5bfb323e0868133e3ef3f64e61bfd64d3ae6a6a9fcfed7e3b320c8b3b427dc72"
+      "sha256": "611650aa8e565035016508ca882ae339dc16c2890cc1879535eedb1a5ea368e3"
     },
     {
       "name": "playlist.m3u8",
@@ -599,7 +599,7 @@
           }
         }
       ],
-      "durationMs": 2,
+      "durationMs": 1,
       "sha256": "668e35400b6a7fdd946579aa2407925991d49ace0fb2066a3b0c48c5fac36f4b",
       "bytes": 96078
     },
@@ -714,7 +714,7 @@
         }
       ],
       "durationMs": 2,
-      "sha256": "a026f063ebd5d991e2eb076cba272d83168ee9fbfe1f648d7db68173c2d163d1",
+      "sha256": "67f2acad416c803e5084f8dc392806bc37c594a25843c3c800a4645ecb62abbc",
       "bytes": 3293
     },
     "avc-aac.mp4": {
@@ -839,7 +839,7 @@
           }
         }
       ],
-      "durationMs": 1,
+      "durationMs": 0,
       "sha256": "0ff1ffbd164b039c32080809da7d80a2c17ac87942bcabf34a86bde83678e25c",
       "bytes": 3666
     },
@@ -868,7 +868,13 @@
             "isKey": true,
             "byteLength": 846
           },
-          "packetAt500ms": null
+          "packetAt500ms": {
+            "timestamp": 1.9213333333333333,
+            "duration": 0.03333333333333333,
+            "type": "delta",
+            "isKey": false,
+            "byteLength": 17
+          }
         },
         {
           "kind": "audio",
@@ -887,10 +893,16 @@
             "isKey": true,
             "byteLength": 28
           },
-          "packetAt500ms": null
+          "packetAt500ms": {
+            "timestamp": 1.8906666666666667,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 11
+          }
         }
       ],
-      "durationMs": 4,
+      "durationMs": 5,
       "sha256": "516142da75a1dac24eba21441130b7544e365740414eb54855dd6b7f8c08411c",
       "bytes": 11468
     },
@@ -953,8 +965,8 @@
           }
         }
       ],
-      "durationMs": 2,
-      "sha256": "228dc256d9f37bb31c082f1e668c6dccf40fee13bc4b27202aa2480b401197d9",
+      "durationMs": 3,
+      "sha256": "a9091b777f146e21a55997cbe0fa4473342df98c2831c3ebd0353c99e0465a93",
       "bytes": 1994
     },
     "vp8-opus.webm": {
@@ -1017,7 +1029,7 @@
         }
       ],
       "durationMs": 1,
-      "sha256": "ddbc8a3a44013e79592fcc84ee2f13b139db17176b48af29add201761ff5bee8",
+      "sha256": "a8aba2a8fb4d491ecd3fdbd5d6cc53ac8a4abd1afab0c2c64ffb6a347bdccab0",
       "bytes": 2837
     },
     "av1-opus.webm": {
@@ -1080,7 +1092,7 @@
         }
       ],
       "durationMs": 1,
-      "sha256": "d2dcf033756a4298e681b0565640f73c0d751e552e1d95abb6f841a7fa41567d",
+      "sha256": "2b8071364c08a6e0ff99ae4964f8bb731e51696d4feaf11fc9cfc1e6eaefd9d2",
       "bytes": 2418
     },
     "hevc-aac.mp4": {
@@ -1206,7 +1218,7 @@
         }
       ],
       "durationMs": 1,
-      "sha256": "44d982e3f6d5257ff56837869f2b7f0979b5792d40cd6b3cfcabfcc1caf19693",
+      "sha256": "a6953604d0df15a3d75d1724fe3c1b164005d7adcb5fb8879c6873b940f2804d",
       "bytes": 14612
     },
     "prores.mov": {
@@ -1297,7 +1309,13 @@
             "isKey": true,
             "byteLength": 28
           },
-          "packetAt500ms": null
+          "packetAt500ms": {
+            "timestamp": 1.9026666666666667,
+            "duration": 0.021333333333333333,
+            "type": "key",
+            "isKey": true,
+            "byteLength": 11
+          }
         }
       ],
       "durationMs": 1,
@@ -1364,7 +1382,7 @@
         }
       ],
       "durationMs": 1,
-      "sha256": "39af728646b8fc69c1445abab99e7fb64b75e586bdd35f219bf94377ed7ba5dc",
+      "sha256": "0796a53a57871ceba6f3ade5cdff11939a4f07bf1af470c8933313861881e85d",
       "bytes": 26802
     },
     "dnx-or-mpeg2.mxf": {
@@ -1372,7 +1390,7 @@
       "format": null,
       "tracks": [],
       "durationMs": 0,
-      "sha256": "5bfb323e0868133e3ef3f64e61bfd64d3ae6a6a9fcfed7e3b320c8b3b427dc72",
+      "sha256": "611650aa8e565035016508ca882ae339dc16c2890cc1879535eedb1a5ea368e3",
       "bytes": 5689389
     },
     "playlist.m3u8": {
@@ -1489,7 +1507,7 @@
           "glWsVersion": "1.5 (ANGLE 2.1.28222 git hash: 6dab7c7e742b)",
           "hardwareSupportsVulkan": false,
           "inProcessGpu": false,
-          "initializationTime": 0.010298,
+          "initializationTime": 0.017884,
           "isAsan": false,
           "isClangCoverage": false,
           "jpegDecodeAcceleratorSupported": false,
@@ -1529,7 +1547,7 @@
       },
       "modelName": "",
       "modelVersion": "",
-      "commandLine": "/home/ubuntu/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --autoplay-policy=no-user-gesture-required --user-data-dir=/tmp/playwright_chromiumdev_profile-XWb5LZ --remote-debugging-pipe --no-startup-window --use-gl=angle --use-angle=swiftshader-webgl --ozone-platform=headless --allow-pre-commit-input"
+      "commandLine": "/home/ubuntu/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --mute-audio --autoplay-policy=no-user-gesture-required --user-data-dir=/tmp/playwright_chromiumdev_profile-gjAMrq --remote-debugging-pipe --no-startup-window --use-gl=angle --use-angle=swiftshader-webgl --ozone-platform=headless --allow-pre-commit-input"
     },
     "fixtures": {
       "pcm-s16.wav": {
@@ -1565,7 +1583,8 @@
         "decode": {
           "video": {
             "ok": false,
-            "skipped": "no-video"
+            "skipped": "no-video",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -1585,14 +1604,16 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         },
         "sequential": {
           "video": {
             "ok": false,
-            "skipped": "no-video"
+            "skipped": "no-video",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -1602,20 +1623,21 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.9813333333333331,
-            "durationMs": 2,
-            "samplesPerSecond": 12000,
-            "audioFramesPerSecond": 24000000,
+            "durationMs": 2.5,
+            "samplesPerSecond": 9600,
+            "audioFramesPerSecond": 19200000,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 192000,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 0,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -1630,10 +1652,10 @@
         },
         "throughput": {
           "videoSamplesPerSecond": null,
-          "audioSamplesPerSecond": 12000,
-          "audioFramesPerSecond": 24000000,
+          "audioSamplesPerSecond": 9600,
+          "audioFramesPerSecond": 19200000,
           "videoDurationMs": null,
-          "audioDurationMs": 2
+          "audioDurationMs": 2.5
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 0,
@@ -1655,13 +1677,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 5,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 6.199999999720603,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 11512568,
-        "cdpJsHeapAfter": 13696240
+        "cdpJsHeapBefore": 11531852,
+        "cdpJsHeapAfter": 13373632
       },
       "mp3.mp3": {
         "canRead": true,
@@ -1696,7 +1718,8 @@
         "decode": {
           "video": {
             "ok": false,
-            "skipped": "no-video"
+            "skipped": "no-video",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -1716,14 +1739,16 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         },
         "sequential": {
           "video": {
             "ok": false,
-            "skipped": "no-video"
+            "skipped": "no-video",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -1733,20 +1758,21 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.984,
-            "durationMs": 2.599999999976717,
-            "samplesPerSecond": 16153.846153990811,
-            "audioFramesPerSecond": 18609230.769397415,
+            "durationMs": 3.1000000000931323,
+            "samplesPerSecond": 13548.387096367163,
+            "audioFramesPerSecond": 15607741.935014972,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 193536,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 0,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -1761,10 +1787,10 @@
         },
         "throughput": {
           "videoSamplesPerSecond": null,
-          "audioSamplesPerSecond": 16153.846153990811,
-          "audioFramesPerSecond": 18609230.769397415,
+          "audioSamplesPerSecond": 13548.387096367163,
+          "audioFramesPerSecond": 15607741.935014972,
           "videoDurationMs": null,
-          "audioDurationMs": 2.599999999976717
+          "audioDurationMs": 3.1000000000931323
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 0,
@@ -1786,13 +1812,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 5.200000000069849,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 6,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 13696240,
-        "cdpJsHeapAfter": 14498912
+        "cdpJsHeapBefore": 13373632,
+        "cdpJsHeapAfter": 14181624
       },
       "flac.flac": {
         "canRead": true,
@@ -1827,7 +1853,8 @@
         "decode": {
           "video": {
             "ok": false,
-            "skipped": "no-video"
+            "skipped": "no-video",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -1847,14 +1874,16 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         },
         "sequential": {
           "video": {
             "ok": false,
-            "skipped": "no-video"
+            "skipped": "no-video",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -1864,20 +1893,21 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.864,
-            "durationMs": 1.2999999999301508,
-            "samplesPerSecond": 7692.307692721001,
-            "audioFramesPerSecond": 35446153.84805837,
+            "durationMs": 1.5,
+            "samplesPerSecond": 6666.666666666667,
+            "audioFramesPerSecond": 30720000,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 184320,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 0,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -1892,10 +1922,10 @@
         },
         "throughput": {
           "videoSamplesPerSecond": null,
-          "audioSamplesPerSecond": 7692.307692721001,
-          "audioFramesPerSecond": 35446153.84805837,
+          "audioSamplesPerSecond": 6666.666666666667,
+          "audioFramesPerSecond": 30720000,
           "videoDurationMs": null,
-          "audioDurationMs": 1.2999999999301508
+          "audioDurationMs": 1.5
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 0,
@@ -1917,13 +1947,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 3.900000000023283,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 4.2000000001862645,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 14498912,
-        "cdpJsHeapAfter": 12629428
+        "cdpJsHeapBefore": 14181624,
+        "cdpJsHeapAfter": 12757516
       },
       "vorbis.ogg": {
         "canRead": true,
@@ -1958,7 +1988,8 @@
         "decode": {
           "video": {
             "ok": false,
-            "skipped": "no-video"
+            "skipped": "no-video",
+            "windowStart": 0
           },
           "audio": {
             "ok": false,
@@ -1978,13 +2009,15 @@
                 "closed": false
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           }
         },
         "sequential": {
           "video": {
             "ok": false,
-            "skipped": "no-video"
+            "skipped": "no-video",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -1994,20 +2027,21 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.9933333333333333,
-            "durationMs": 2.700000000069849,
-            "samplesPerSecond": 17777.777777317864,
-            "audioFramesPerSecond": 18038518.51805186,
+            "durationMs": 4,
+            "samplesPerSecond": 12000,
+            "audioFramesPerSecond": 12176000,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 194816,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 0,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -2022,10 +2056,10 @@
         },
         "throughput": {
           "videoSamplesPerSecond": null,
-          "audioSamplesPerSecond": 17777.777777317864,
-          "audioFramesPerSecond": 18038518.51805186,
+          "audioSamplesPerSecond": 12000,
+          "audioFramesPerSecond": 12176000,
           "videoDurationMs": null,
-          "audioDurationMs": 2.700000000069849
+          "audioDurationMs": 4
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 0,
@@ -2047,13 +2081,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 5.900000000023283,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 8,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 12629428,
-        "cdpJsHeapAfter": 13293904
+        "cdpJsHeapBefore": 12757516,
+        "cdpJsHeapAfter": 13430668
       },
       "avc-aac.mp4": {
         "canRead": true,
@@ -2122,7 +2156,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -2142,7 +2177,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         },
@@ -2155,13 +2191,13 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.9666666666666667,
-            "durationMs": 3.900000000023283,
-            "samplesPerSecond": 7692.307692261769,
+            "durationMs": 5.600000000093132,
+            "samplesPerSecond": 5357.142857053764,
             "audioFramesPerSecond": 0,
             "closedRgbaBytes": 6912000,
             "closedPcmBytes": 0,
             "peakOwnedRgbaBytes": 230400,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "video",
               "rgb": [
@@ -2172,7 +2208,8 @@
               "alpha": 255,
               "matchesFixtureColor": true,
               "maxChannelDelta": 4
-            }
+            },
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -2182,20 +2219,21 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.9813333333333333,
-            "durationMs": 2.3999999999068677,
-            "samplesPerSecond": 19583.333334093266,
-            "audioFramesPerSecond": 20053333.334111504,
+            "durationMs": 2.7999999998137355,
+            "samplesPerSecond": 16785.714286830924,
+            "audioFramesPerSecond": 17188571.429714866,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 192512,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 0,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -2219,11 +2257,11 @@
           }
         },
         "throughput": {
-          "videoSamplesPerSecond": 7692.307692261769,
-          "audioSamplesPerSecond": 19583.333334093266,
-          "audioFramesPerSecond": 20053333.334111504,
-          "videoDurationMs": 3.900000000023283,
-          "audioDurationMs": 2.3999999999068677
+          "videoSamplesPerSecond": 5357.142857053764,
+          "audioSamplesPerSecond": 16785.714286830924,
+          "audioFramesPerSecond": 17188571.429714866,
+          "videoDurationMs": 5.600000000093132,
+          "audioDurationMs": 2.7999999998137355
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 230400,
@@ -2260,6 +2298,7 @@
           "audioContextState": "running",
           "elapsedSeconds": 0.11029478458049886,
           "derivedFrame": 3,
+          "windowStart": 0,
           "requestedSeconds": 0.1,
           "videoTimestamp": 0.1,
           "withinOneFrame": true
@@ -2273,13 +2312,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 136,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 145,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 13293904,
-        "cdpJsHeapAfter": 13050632
+        "cdpJsHeapBefore": 13430668,
+        "cdpJsHeapAfter": 13215304
       },
       "avc-aac.mov": {
         "canRead": true,
@@ -2348,7 +2387,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -2368,7 +2408,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         },
@@ -2381,13 +2422,13 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.9666666666666667,
-            "durationMs": 2.6000000000931323,
-            "samplesPerSecond": 11538.46153804823,
+            "durationMs": 3,
+            "samplesPerSecond": 10000,
             "audioFramesPerSecond": 0,
             "closedRgbaBytes": 6912000,
             "closedPcmBytes": 0,
             "peakOwnedRgbaBytes": 230400,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "video",
               "rgb": [
@@ -2398,7 +2439,8 @@
               "alpha": 255,
               "matchesFixtureColor": true,
               "maxChannelDelta": 4
-            }
+            },
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -2408,20 +2450,21 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.9813333333333333,
-            "durationMs": 2.299999999930151,
-            "samplesPerSecond": 20434.78260931624,
-            "audioFramesPerSecond": 20925217.39193983,
+            "durationMs": 2.3999999999068677,
+            "samplesPerSecond": 19583.333334093266,
+            "audioFramesPerSecond": 20053333.334111504,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 192512,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 0,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -2445,11 +2488,11 @@
           }
         },
         "throughput": {
-          "videoSamplesPerSecond": 11538.46153804823,
-          "audioSamplesPerSecond": 20434.78260931624,
-          "audioFramesPerSecond": 20925217.39193983,
-          "videoDurationMs": 2.6000000000931323,
-          "audioDurationMs": 2.299999999930151
+          "videoSamplesPerSecond": 10000,
+          "audioSamplesPerSecond": 19583.333334093266,
+          "audioFramesPerSecond": 20053333.334111504,
+          "videoDurationMs": 3,
+          "audioDurationMs": 2.3999999999068677
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 230400,
@@ -2486,6 +2529,7 @@
           "audioContextState": "running",
           "elapsedSeconds": 0.11029478458049886,
           "derivedFrame": 3,
+          "windowStart": 0,
           "requestedSeconds": 0.1,
           "videoTimestamp": 0.1,
           "withinOneFrame": true
@@ -2495,13 +2539,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 111,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 111.39999999990687,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 13050632,
-        "cdpJsHeapAfter": 13857408
+        "cdpJsHeapBefore": 13215304,
+        "cdpJsHeapAfter": 14022596
       },
       "avc-aac.ts": {
         "canRead": true,
@@ -2525,160 +2569,210 @@
           "video": [
             {
               "frame": 0,
-              "requestedSeconds": 0,
-              "timestamp": null,
-              "type": null
+              "requestedSeconds": 1.4213333333333333,
+              "timestamp": 1.4213333333333333,
+              "type": "key"
             },
             {
               "frame": 15,
-              "requestedSeconds": 0.5,
-              "timestamp": null,
-              "type": null
+              "requestedSeconds": 1.9213333333333333,
+              "timestamp": 1.9213333333333333,
+              "type": "delta"
             }
           ],
           "audio": [
             {
               "frame": 0,
-              "requestedSeconds": 0,
-              "timestamp": null,
-              "type": null
+              "requestedSeconds": 1.4,
+              "timestamp": 1.4,
+              "type": "key"
             },
             {
               "frame": 15,
-              "requestedSeconds": 0.5,
-              "timestamp": null,
-              "type": null
+              "requestedSeconds": 1.9,
+              "timestamp": 1.8906666666666667,
+              "type": "key"
             }
           ]
         },
         "decode": {
           "video": {
-            "ok": false,
+            "ok": true,
             "frames": [
               {
                 "frame": 0,
-                "requestedSeconds": 0,
-                "timestamp": null,
-                "duration": null,
-                "closed": false
+                "requestedSeconds": 1.4213333333333333,
+                "timestamp": 1.4213333333333333,
+                "duration": 0.03333333333333333,
+                "closed": true
               },
               {
                 "frame": 15,
-                "requestedSeconds": 0.5,
-                "timestamp": null,
-                "duration": null,
-                "closed": false
+                "requestedSeconds": 1.9213333333333333,
+                "timestamp": 1.9213333333333333,
+                "duration": 0.03333333333333333,
+                "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 1.4213333333333333
           },
           "audio": {
-            "ok": false,
+            "ok": true,
             "frames": [
               {
                 "frame": 0,
-                "requestedSeconds": 0,
-                "timestamp": null,
-                "duration": null,
-                "closed": false
+                "requestedSeconds": 1.4,
+                "timestamp": 1.4,
+                "duration": 0.021333333333333333,
+                "closed": true
               },
               {
                 "frame": 15,
-                "requestedSeconds": 0.5,
-                "timestamp": null,
-                "duration": null,
-                "closed": false
+                "requestedSeconds": 1.9,
+                "timestamp": 1.8906666666666667,
+                "duration": 0.021333333333333333,
+                "closed": true
               }
             ],
-            "ownedAfter": 0
-          }
+            "ownedAfter": 0,
+            "windowStart": 1.4
+          },
+          "ok": true
         },
         "sequential": {
           "video": {
-            "ok": false,
-            "count": 0,
+            "ok": true,
+            "count": 30,
             "audioFrames": 0,
             "capped": false,
             "ownedAfter": 0,
-            "firstTimestamp": null,
-            "lastTimestamp": null,
-            "durationMs": 2.900000000023283,
-            "samplesPerSecond": 0,
+            "firstTimestamp": 1.4213333333333333,
+            "lastTimestamp": 2.388,
+            "durationMs": 4.300000000279397,
+            "samplesPerSecond": 6976.744185593191,
             "audioFramesPerSecond": 0,
-            "closedRgbaBytes": 0,
+            "closedRgbaBytes": 6912000,
             "closedPcmBytes": 0,
-            "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
-            "correctness": null
+            "peakOwnedRgbaBytes": 230400,
+            "heapPeak": 24500000,
+            "correctness": {
+              "kind": "video",
+              "rgb": [
+                49,
+                92,
+                125
+              ],
+              "alpha": 255,
+              "matchesFixtureColor": true,
+              "maxChannelDelta": 1
+            },
+            "windowStart": 1.4213333333333333
           },
           "audio": {
-            "ok": false,
-            "count": 0,
-            "audioFrames": 0,
+            "ok": true,
+            "count": 47,
+            "audioFrames": 48128,
             "capped": false,
             "ownedAfter": 0,
-            "firstTimestamp": null,
-            "lastTimestamp": null,
-            "durationMs": 2.099999999976717,
-            "samplesPerSecond": 0,
-            "audioFramesPerSecond": 0,
+            "firstTimestamp": 1.4,
+            "lastTimestamp": 2.3813333333333335,
+            "durationMs": 2.5,
+            "samplesPerSecond": 18800,
+            "audioFramesPerSecond": 19251200,
             "closedRgbaBytes": 0,
-            "closedPcmBytes": 0,
+            "closedPcmBytes": 192512,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
-            "correctness": null
+            "heapPeak": 24500000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            },
+            "windowStart": 1.4
           }
         },
         "correctness": {
-          "video": null,
-          "audio": null
+          "video": {
+            "kind": "video",
+            "rgb": [
+              49,
+              92,
+              125
+            ],
+            "alpha": 255,
+            "matchesFixtureColor": true,
+            "maxChannelDelta": 1
+          },
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 0,
+            "frames": 256,
+            "nearSilence": true
+          }
         },
         "throughput": {
-          "videoSamplesPerSecond": 0,
-          "audioSamplesPerSecond": 0,
-          "audioFramesPerSecond": 0,
-          "videoDurationMs": 2.900000000023283,
-          "audioDurationMs": 2.099999999976717
+          "videoSamplesPerSecond": 6976.744185593191,
+          "audioSamplesPerSecond": 18800,
+          "audioFramesPerSecond": 19251200,
+          "videoDurationMs": 4.300000000279397,
+          "audioDurationMs": 2.5
         },
         "knownResources": {
-          "peakOwnedRgbaBytes": 0,
-          "closedRgbaBytes": 0,
-          "closedPcmBytes": 0,
+          "peakOwnedRgbaBytes": 230400,
+          "closedRgbaBytes": 6912000,
+          "closedPcmBytes": 192512,
           "nativeRss": "unmeasured"
         },
         "avSync": {
           "applicable": true,
-          "withinOneFrame": false,
+          "withinOneFrame": true,
           "pairs": [
             {
               "frame": 0,
-              "ok": false,
-              "reason": "missing-sample"
+              "requestedSeconds": 1.4213333333333333,
+              "videoTimestamp": 1.4213333333333333,
+              "audioTimestamp": 1.4,
+              "deltaSeconds": 0.021333333333333426,
+              "ok": true
             },
             {
               "frame": 15,
-              "ok": false,
-              "reason": "missing-sample"
+              "requestedSeconds": 1.9213333333333333,
+              "videoTimestamp": 1.9213333333333333,
+              "audioTimestamp": 1.8906666666666667,
+              "deltaSeconds": 0.03066666666666662,
+              "ok": true
             }
           ]
         },
         "audioClock": {
-          "applicable": false,
-          "reason": "not-requested",
-          "productPlayback": false
+          "applicable": true,
+          "productPlayback": false,
+          "clockAdvanced": true,
+          "audioContextState": "running",
+          "elapsedSeconds": 0.11029478458049886,
+          "derivedFrame": 3,
+          "windowStart": 1.4213333333333333,
+          "requestedSeconds": 1.5213333333333334,
+          "videoTimestamp": 1.5213333333333334,
+          "withinOneFrame": true
         },
         "cancel": null,
         "ownedAfter": {
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 7.799999999930151,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 117.39999999990687,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 13857408,
-        "cdpJsHeapAfter": 13814428
+        "cdpJsHeapBefore": 14022596,
+        "cdpJsHeapAfter": 13694084
       },
       "vp9-opus.webm": {
         "canRead": true,
@@ -2747,7 +2841,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -2767,7 +2862,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         },
@@ -2780,13 +2876,13 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.967,
-            "durationMs": 3.099999999976717,
-            "samplesPerSecond": 9677.419354911393,
+            "durationMs": 3.2000000001862645,
+            "samplesPerSecond": 9374.999999454303,
             "audioFramesPerSecond": 0,
             "closedRgbaBytes": 6912000,
             "closedPcmBytes": 0,
             "peakOwnedRgbaBytes": 230400,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "video",
               "rgb": [
@@ -2797,7 +2893,8 @@
               "alpha": 255,
               "matchesFixtureColor": true,
               "maxChannelDelta": 1
-            }
+            },
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -2807,20 +2904,21 @@
             "ownedAfter": 0,
             "firstTimestamp": -0.0065,
             "lastTimestamp": 0.987,
-            "durationMs": 2.300000000046566,
-            "samplesPerSecond": 22173.913043029326,
-            "audioFramesPerSecond": 21151304.347397856,
+            "durationMs": 2.3999999999068677,
+            "samplesPerSecond": 21250.00000082461,
+            "audioFramesPerSecond": 20270000.00078658,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 194592,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 2.0345869483764863e-34,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -2844,11 +2942,11 @@
           }
         },
         "throughput": {
-          "videoSamplesPerSecond": 9677.419354911393,
-          "audioSamplesPerSecond": 22173.913043029326,
-          "audioFramesPerSecond": 21151304.347397856,
-          "videoDurationMs": 3.099999999976717,
-          "audioDurationMs": 2.300000000046566
+          "videoSamplesPerSecond": 9374.999999454303,
+          "audioSamplesPerSecond": 21250.00000082461,
+          "audioFramesPerSecond": 20270000.00078658,
+          "videoDurationMs": 3.2000000001862645,
+          "audioDurationMs": 2.3999999999068677
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 230400,
@@ -2885,6 +2983,7 @@
           "audioContextState": "running",
           "elapsedSeconds": 0.11029478458049886,
           "derivedFrame": 3,
+          "windowStart": 0,
           "requestedSeconds": 0.1,
           "videoTimestamp": 0.1,
           "withinOneFrame": true
@@ -2894,13 +2993,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 113,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 114.1999999997206,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 13814428,
-        "cdpJsHeapAfter": 14827612
+        "cdpJsHeapBefore": 13694084,
+        "cdpJsHeapAfter": 14720344
       },
       "vp8-opus.webm": {
         "canRead": true,
@@ -2969,7 +3068,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -2989,7 +3089,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         },
@@ -3002,13 +3103,13 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.967,
-            "durationMs": 3.5,
-            "samplesPerSecond": 8571.42857142857,
+            "durationMs": 3.3000000002793968,
+            "samplesPerSecond": 9090.909090139403,
             "audioFramesPerSecond": 0,
             "closedRgbaBytes": 6912000,
             "closedPcmBytes": 0,
             "peakOwnedRgbaBytes": 230400,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "video",
               "rgb": [
@@ -3019,7 +3120,8 @@
               "alpha": 255,
               "matchesFixtureColor": true,
               "maxChannelDelta": 4
-            }
+            },
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -3029,20 +3131,21 @@
             "ownedAfter": 0,
             "firstTimestamp": -0.0065,
             "lastTimestamp": 0.987,
-            "durationMs": 2.300000000046566,
-            "samplesPerSecond": 22173.913043029326,
-            "audioFramesPerSecond": 21151304.347397856,
+            "durationMs": 2.3999999999068677,
+            "samplesPerSecond": 21250.00000082461,
+            "audioFramesPerSecond": 20270000.00078658,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 194592,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 2.0345869483764863e-34,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -3066,11 +3169,11 @@
           }
         },
         "throughput": {
-          "videoSamplesPerSecond": 8571.42857142857,
-          "audioSamplesPerSecond": 22173.913043029326,
-          "audioFramesPerSecond": 21151304.347397856,
-          "videoDurationMs": 3.5,
-          "audioDurationMs": 2.300000000046566
+          "videoSamplesPerSecond": 9090.909090139403,
+          "audioSamplesPerSecond": 21250.00000082461,
+          "audioFramesPerSecond": 20270000.00078658,
+          "videoDurationMs": 3.3000000002793968,
+          "audioDurationMs": 2.3999999999068677
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 230400,
@@ -3110,13 +3213,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 8.70000000006985,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 9,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 14827612,
-        "cdpJsHeapAfter": 14157608
+        "cdpJsHeapBefore": 14720344,
+        "cdpJsHeapAfter": 14008900
       },
       "av1-opus.webm": {
         "canRead": true,
@@ -3185,7 +3288,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -3205,7 +3309,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         },
@@ -3218,13 +3323,13 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.967,
-            "durationMs": 3.6000000000931323,
-            "samplesPerSecond": 8333.33333311775,
+            "durationMs": 4.7000000001862645,
+            "samplesPerSecond": 6382.978723151293,
             "audioFramesPerSecond": 0,
             "closedRgbaBytes": 6912000,
             "closedPcmBytes": 0,
             "peakOwnedRgbaBytes": 230400,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "video",
               "rgb": [
@@ -3235,7 +3340,8 @@
               "alpha": 255,
               "matchesFixtureColor": true,
               "maxChannelDelta": 4
-            }
+            },
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -3245,20 +3351,21 @@
             "ownedAfter": 0,
             "firstTimestamp": -0.0065,
             "lastTimestamp": 0.987,
-            "durationMs": 2.299999999930151,
-            "samplesPerSecond": 22173.913044151665,
-            "audioFramesPerSecond": 21151304.348468434,
+            "durationMs": 2.5,
+            "samplesPerSecond": 20400,
+            "audioFramesPerSecond": 19459200,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 194592,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 2.0345869483764863e-34,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -3282,11 +3389,11 @@
           }
         },
         "throughput": {
-          "videoSamplesPerSecond": 8333.33333311775,
-          "audioSamplesPerSecond": 22173.913044151665,
-          "audioFramesPerSecond": 21151304.348468434,
-          "videoDurationMs": 3.6000000000931323,
-          "audioDurationMs": 2.299999999930151
+          "videoSamplesPerSecond": 6382.978723151293,
+          "audioSamplesPerSecond": 20400,
+          "audioFramesPerSecond": 19459200,
+          "videoDurationMs": 4.7000000001862645,
+          "audioDurationMs": 2.5
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 230400,
@@ -3326,13 +3433,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 10.5,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 13,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 14157608,
-        "cdpJsHeapAfter": 14996884
+        "cdpJsHeapBefore": 14008900,
+        "cdpJsHeapAfter": 14844028
       },
       "hevc-aac.mp4": {
         "canRead": true,
@@ -3385,7 +3492,8 @@
         "decode": {
           "video": {
             "ok": false,
-            "skipped": "not-decodable"
+            "skipped": "not-decodable",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -3405,14 +3513,16 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         },
         "sequential": {
           "video": {
             "ok": false,
-            "skipped": "not-decodable"
+            "skipped": "not-decodable",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -3422,20 +3532,21 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.9813333333333333,
-            "durationMs": 2.699999999953434,
-            "samplesPerSecond": 17407.40740770763,
-            "audioFramesPerSecond": 17825185.185492612,
+            "durationMs": 2.7999999998137355,
+            "samplesPerSecond": 16785.714286830924,
+            "audioFramesPerSecond": 17188571.429714866,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 192512,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 0,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -3450,10 +3561,10 @@
         },
         "throughput": {
           "videoSamplesPerSecond": null,
-          "audioSamplesPerSecond": 17407.40740770763,
-          "audioFramesPerSecond": 17825185.185492612,
+          "audioSamplesPerSecond": 16785.714286830924,
+          "audioFramesPerSecond": 17188571.429714866,
           "videoDurationMs": null,
-          "audioDurationMs": 2.699999999953434
+          "audioDurationMs": 2.7999999998137355
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 0,
@@ -3475,13 +3586,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 4.100000000093132,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 4.7000000001862645,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 14996884,
-        "cdpJsHeapAfter": 14050544
+        "cdpJsHeapBefore": 14844028,
+        "cdpJsHeapAfter": 15411640
       },
       "avc-ac3.mkv": {
         "canRead": true,
@@ -3550,11 +3661,13 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "audio": {
             "ok": false,
-            "skipped": "not-decodable"
+            "skipped": "not-decodable",
+            "windowStart": 0
           },
           "ok": true
         },
@@ -3567,13 +3680,13 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.967,
-            "durationMs": 2.800000000046566,
-            "samplesPerSecond": 10714.285714107527,
+            "durationMs": 2.8999999999068677,
+            "samplesPerSecond": 10344.827586539117,
             "audioFramesPerSecond": 0,
             "closedRgbaBytes": 6912000,
             "closedPcmBytes": 0,
             "peakOwnedRgbaBytes": 230400,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "video",
               "rgb": [
@@ -3584,11 +3697,13 @@
               "alpha": 255,
               "matchesFixtureColor": true,
               "maxChannelDelta": 4
-            }
+            },
+            "windowStart": 0
           },
           "audio": {
             "ok": false,
-            "skipped": "not-decodable"
+            "skipped": "not-decodable",
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -3606,10 +3721,10 @@
           "audio": null
         },
         "throughput": {
-          "videoSamplesPerSecond": 10714.285714107527,
+          "videoSamplesPerSecond": 10344.827586539117,
           "audioSamplesPerSecond": null,
           "audioFramesPerSecond": null,
-          "videoDurationMs": 2.800000000046566,
+          "videoDurationMs": 2.8999999999068677,
           "audioDurationMs": null
         },
         "knownResources": {
@@ -3632,13 +3747,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 4.900000000023283,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 5.2999999998137355,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 14050544,
-        "cdpJsHeapAfter": 15148356
+        "cdpJsHeapBefore": 15411640,
+        "cdpJsHeapAfter": 14785980
       },
       "prores.mov": {
         "canRead": true,
@@ -3691,7 +3806,8 @@
         "decode": {
           "video": {
             "ok": false,
-            "skipped": "not-decodable"
+            "skipped": "not-decodable",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -3711,14 +3827,16 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         },
         "sequential": {
           "video": {
             "ok": false,
-            "skipped": "not-decodable"
+            "skipped": "not-decodable",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -3728,20 +3846,21 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.981333333333333,
-            "durationMs": 1.2000000000698492,
-            "samplesPerSecond": 24999.99999854481,
-            "audioFramesPerSecond": 39999999.99767169,
+            "durationMs": 1.400000000372529,
+            "samplesPerSecond": 21428.571422869452,
+            "audioFramesPerSecond": 34285714.27659112,
             "closedRgbaBytes": 0,
             "closedPcmBytes": 192000,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "audio",
               "finite": true,
               "peak": 0,
               "frames": 256,
               "nearSilence": true
-            }
+            },
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -3756,10 +3875,10 @@
         },
         "throughput": {
           "videoSamplesPerSecond": null,
-          "audioSamplesPerSecond": 24999.99999854481,
-          "audioFramesPerSecond": 39999999.99767169,
+          "audioSamplesPerSecond": 21428.571422869452,
+          "audioFramesPerSecond": 34285714.27659112,
           "videoDurationMs": null,
-          "audioDurationMs": 1.2000000000698492
+          "audioDurationMs": 1.400000000372529
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 0,
@@ -3781,13 +3900,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 1.7000000000698492,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 2.1000000000931323,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 15148356,
-        "cdpJsHeapAfter": 16000800
+        "cdpJsHeapBefore": 14785980,
+        "cdpJsHeapAfter": 14861368
       },
       "mpeg2-aac.ts": {
         "canRead": true,
@@ -3807,82 +3926,99 @@
           "audio": [
             {
               "frame": 0,
-              "requestedSeconds": 0,
-              "timestamp": null,
-              "type": null
+              "requestedSeconds": 1.412,
+              "timestamp": 1.412,
+              "type": "key"
             },
             {
               "frame": 15,
-              "requestedSeconds": 0.5,
-              "timestamp": null,
-              "type": null
+              "requestedSeconds": 1.912,
+              "timestamp": 1.9026666666666667,
+              "type": "key"
             }
           ]
         },
         "decode": {
           "video": {
             "ok": false,
-            "skipped": "no-video"
+            "skipped": "no-video",
+            "windowStart": 0
           },
           "audio": {
-            "ok": false,
+            "ok": true,
             "frames": [
               {
                 "frame": 0,
-                "requestedSeconds": 0,
-                "timestamp": null,
-                "duration": null,
-                "closed": false
+                "requestedSeconds": 1.412,
+                "timestamp": 1.412,
+                "duration": 0.021333333333333333,
+                "closed": true
               },
               {
                 "frame": 15,
-                "requestedSeconds": 0.5,
-                "timestamp": null,
-                "duration": null,
-                "closed": false
+                "requestedSeconds": 1.912,
+                "timestamp": 1.9026666666666667,
+                "duration": 0.021333333333333333,
+                "closed": true
               }
             ],
-            "ownedAfter": 0
-          }
+            "ownedAfter": 0,
+            "windowStart": 1.412
+          },
+          "ok": true
         },
         "sequential": {
           "video": {
             "ok": false,
-            "skipped": "no-video"
+            "skipped": "no-video",
+            "windowStart": 0
           },
           "audio": {
-            "ok": false,
-            "count": 0,
-            "audioFrames": 0,
+            "ok": true,
+            "count": 47,
+            "audioFrames": 48128,
             "capped": false,
             "ownedAfter": 0,
-            "firstTimestamp": null,
-            "lastTimestamp": null,
-            "durationMs": 2.199999999953434,
-            "samplesPerSecond": 0,
-            "audioFramesPerSecond": 0,
+            "firstTimestamp": 1.412,
+            "lastTimestamp": 2.3933333333333335,
+            "durationMs": 2.8000000002793968,
+            "samplesPerSecond": 16785.71428403933,
+            "audioFramesPerSecond": 17188571.426856276,
             "closedRgbaBytes": 0,
-            "closedPcmBytes": 0,
+            "closedPcmBytes": 192512,
             "peakOwnedRgbaBytes": 0,
-            "heapPeak": 26000000,
-            "correctness": null
+            "heapPeak": 24500000,
+            "correctness": {
+              "kind": "audio",
+              "finite": true,
+              "peak": 0,
+              "frames": 256,
+              "nearSilence": true
+            },
+            "windowStart": 1.412
           }
         },
         "correctness": {
           "video": null,
-          "audio": null
+          "audio": {
+            "kind": "audio",
+            "finite": true,
+            "peak": 0,
+            "frames": 256,
+            "nearSilence": true
+          }
         },
         "throughput": {
           "videoSamplesPerSecond": null,
-          "audioSamplesPerSecond": 0,
-          "audioFramesPerSecond": 0,
+          "audioSamplesPerSecond": 16785.71428403933,
+          "audioFramesPerSecond": 17188571.426856276,
           "videoDurationMs": null,
-          "audioDurationMs": 2.199999999953434
+          "audioDurationMs": 2.8000000002793968
         },
         "knownResources": {
           "peakOwnedRgbaBytes": 0,
           "closedRgbaBytes": 0,
-          "closedPcmBytes": 0,
+          "closedPcmBytes": 192512,
           "nativeRss": "unmeasured"
         },
         "avSync": {
@@ -3899,13 +4035,13 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 3.299999999930151,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 5.899999999906868,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 16000800,
-        "cdpJsHeapAfter": 16978816
+        "cdpJsHeapBefore": 14861368,
+        "cdpJsHeapAfter": 16247092
       },
       "avc-dts.mkv": {
         "canRead": true,
@@ -3974,11 +4110,13 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "audio": {
             "ok": false,
-            "skipped": "not-decodable"
+            "skipped": "not-decodable",
+            "windowStart": 0
           },
           "ok": true
         },
@@ -3991,13 +4129,13 @@
             "ownedAfter": 0,
             "firstTimestamp": 0,
             "lastTimestamp": 0.967,
-            "durationMs": 2.599999999976717,
-            "samplesPerSecond": 11538.461538564865,
+            "durationMs": 2.8000000002793968,
+            "samplesPerSecond": 10714.285713216594,
             "audioFramesPerSecond": 0,
             "closedRgbaBytes": 6912000,
             "closedPcmBytes": 0,
             "peakOwnedRgbaBytes": 230400,
-            "heapPeak": 26000000,
+            "heapPeak": 24500000,
             "correctness": {
               "kind": "video",
               "rgb": [
@@ -4008,11 +4146,13 @@
               "alpha": 255,
               "matchesFixtureColor": true,
               "maxChannelDelta": 4
-            }
+            },
+            "windowStart": 0
           },
           "audio": {
             "ok": false,
-            "skipped": "not-decodable"
+            "skipped": "not-decodable",
+            "windowStart": 0
           }
         },
         "correctness": {
@@ -4030,10 +4170,10 @@
           "audio": null
         },
         "throughput": {
-          "videoSamplesPerSecond": 11538.461538564865,
+          "videoSamplesPerSecond": 10714.285713216594,
           "audioSamplesPerSecond": null,
           "audioFramesPerSecond": null,
-          "videoDurationMs": 2.599999999976717,
+          "videoDurationMs": 2.8000000002793968,
           "audioDurationMs": null
         },
         "knownResources": {
@@ -4056,21 +4196,21 @@
           "video": 0,
           "audio": 0
         },
-        "heapBefore": 26000000,
-        "heapAfter": 26000000,
-        "heapPeak": 26000000,
-        "durationMs": 4.699999999953434,
+        "heapBefore": 24500000,
+        "heapAfter": 24500000,
+        "heapPeak": 24500000,
+        "durationMs": 5.300000000279397,
         "crossOriginIsolated": false,
-        "cdpJsHeapBefore": 16978816,
-        "cdpJsHeapAfter": 16109168
+        "cdpJsHeapBefore": 16247092,
+        "cdpJsHeapAfter": 15966724
       },
       "playlist.m3u8": {
         "canRead": false,
         "failClosed": true,
         "error": "TypeError: HLS inputs require `InputOptions.source` to be a PathedSource or a ref to one.",
-        "durationMs": 0.2000000000698492,
-        "cdpJsHeapBefore": 16109168,
-        "cdpJsHeapAfter": 16126680
+        "durationMs": 0.2999999998137355,
+        "cdpJsHeapBefore": 15966724,
+        "cdpJsHeapAfter": 15983788
       }
     },
     "encoders": {
@@ -4121,8 +4261,8 @@
       "localEncoderFallbackAttempted": false
     },
     "fallbacks": {
-      "registerMs": 0.2000000000698492,
-      "compileMs": 0.2000000000698492,
+      "registerMs": 0.09999999962747097,
+      "compileMs": 0.09999999962747097,
       "direct": {
         "prores": {
           "canRead": true,
@@ -4175,7 +4315,8 @@
           "decode": {
             "video": {
               "ok": false,
-              "skipped": "not-decodable"
+              "skipped": "not-decodable",
+              "windowStart": 0
             },
             "audio": {
               "ok": true,
@@ -4195,14 +4336,16 @@
                   "closed": true
                 }
               ],
-              "ownedAfter": 0
+              "ownedAfter": 0,
+              "windowStart": 0
             },
             "ok": true
           },
           "sequential": {
             "video": {
               "ok": false,
-              "skipped": "not-decodable"
+              "skipped": "not-decodable",
+              "windowStart": 0
             },
             "audio": {
               "ok": true,
@@ -4212,20 +4355,21 @@
               "ownedAfter": 0,
               "firstTimestamp": 0,
               "lastTimestamp": 0.981333333333333,
-              "durationMs": 0.39999999990686774,
-              "samplesPerSecond": 75000.0000174623,
-              "audioFramesPerSecond": 120000000.02793968,
+              "durationMs": 0.5,
+              "samplesPerSecond": 60000,
+              "audioFramesPerSecond": 96000000,
               "closedRgbaBytes": 0,
               "closedPcmBytes": 192000,
               "peakOwnedRgbaBytes": 0,
-              "heapPeak": 26000000,
+              "heapPeak": 24500000,
               "correctness": {
                 "kind": "audio",
                 "finite": true,
                 "peak": 0,
                 "frames": 256,
                 "nearSilence": true
-              }
+              },
+              "windowStart": 0
             }
           },
           "correctness": {
@@ -4240,10 +4384,10 @@
           },
           "throughput": {
             "videoSamplesPerSecond": null,
-            "audioSamplesPerSecond": 75000.0000174623,
-            "audioFramesPerSecond": 120000000.02793968,
+            "audioSamplesPerSecond": 60000,
+            "audioFramesPerSecond": 96000000,
             "videoDurationMs": null,
-            "audioDurationMs": 0.39999999990686774
+            "audioDurationMs": 0.5
           },
           "knownResources": {
             "peakOwnedRgbaBytes": 0,
@@ -4265,10 +4409,10 @@
             "video": 0,
             "audio": 0
           },
-          "heapBefore": 26000000,
-          "heapAfter": 26000000,
-          "heapPeak": 26000000,
-          "durationMs": 0.8000000000465661,
+          "heapBefore": 24500000,
+          "heapAfter": 24500000,
+          "heapPeak": 24500000,
+          "durationMs": 0.8999999999068677,
           "crossOriginIsolated": false
         },
         "ac3": {
@@ -4338,11 +4482,13 @@
                   "closed": true
                 }
               ],
-              "ownedAfter": 0
+              "ownedAfter": 0,
+              "windowStart": 0
             },
             "audio": {
               "ok": false,
-              "skipped": "not-decodable"
+              "skipped": "not-decodable",
+              "windowStart": 0
             },
             "ok": true
           },
@@ -4355,13 +4501,13 @@
               "ownedAfter": 0,
               "firstTimestamp": 0,
               "lastTimestamp": 0.967,
-              "durationMs": 2.900000000023283,
-              "samplesPerSecond": 10344.827586123842,
+              "durationMs": 3.2000000001862645,
+              "samplesPerSecond": 9374.999999454303,
               "audioFramesPerSecond": 0,
               "closedRgbaBytes": 6912000,
               "closedPcmBytes": 0,
               "peakOwnedRgbaBytes": 230400,
-              "heapPeak": 26000000,
+              "heapPeak": 24500000,
               "correctness": {
                 "kind": "video",
                 "rgb": [
@@ -4372,11 +4518,13 @@
                 "alpha": 255,
                 "matchesFixtureColor": true,
                 "maxChannelDelta": 4
-              }
+              },
+              "windowStart": 0
             },
             "audio": {
               "ok": false,
-              "skipped": "not-decodable"
+              "skipped": "not-decodable",
+              "windowStart": 0
             }
           },
           "correctness": {
@@ -4394,10 +4542,10 @@
             "audio": null
           },
           "throughput": {
-            "videoSamplesPerSecond": 10344.827586123842,
+            "videoSamplesPerSecond": 9374.999999454303,
             "audioSamplesPerSecond": null,
             "audioFramesPerSecond": null,
-            "videoDurationMs": 2.900000000023283,
+            "videoDurationMs": 3.2000000001862645,
             "audioDurationMs": null
           },
           "knownResources": {
@@ -4420,10 +4568,10 @@
             "video": 0,
             "audio": 0
           },
-          "heapBefore": 26000000,
-          "heapAfter": 26000000,
-          "heapPeak": 26000000,
-          "durationMs": 8.099999999976717,
+          "heapBefore": 24500000,
+          "heapAfter": 24500000,
+          "heapPeak": 24500000,
+          "durationMs": 10.200000000186265,
           "crossOriginIsolated": false
         }
       },
@@ -4495,7 +4643,8 @@
                   "closed": true
                 }
               ],
-              "ownedAfter": 0
+              "ownedAfter": 0,
+              "windowStart": 0
             },
             "audio": {
               "ok": true,
@@ -4515,7 +4664,8 @@
                   "closed": true
                 }
               ],
-              "ownedAfter": 0
+              "ownedAfter": 0,
+              "windowStart": 0
             },
             "ok": true
           },
@@ -4528,13 +4678,13 @@
               "ownedAfter": 0,
               "firstTimestamp": 0,
               "lastTimestamp": 0.9666666666666667,
-              "durationMs": 8.5,
-              "samplesPerSecond": 3529.4117647058824,
+              "durationMs": 7.5,
+              "samplesPerSecond": 4000,
               "audioFramesPerSecond": 0,
               "closedRgbaBytes": 6912000,
               "closedPcmBytes": 0,
               "peakOwnedRgbaBytes": 230400,
-              "heapPeak": 26000000,
+              "heapPeak": 24500000,
               "correctness": {
                 "kind": "video",
                 "rgb": [
@@ -4545,7 +4695,8 @@
                 "alpha": 255,
                 "matchesFixtureColor": true,
                 "maxChannelDelta": 1
-              }
+              },
+              "windowStart": 0
             },
             "audio": {
               "ok": true,
@@ -4555,20 +4706,21 @@
               "ownedAfter": 0,
               "firstTimestamp": 0,
               "lastTimestamp": 0.981333333333333,
-              "durationMs": 0.5999999999767169,
-              "samplesPerSecond": 50000.00000194026,
-              "audioFramesPerSecond": 80000000.0031044,
+              "durationMs": 0.5,
+              "samplesPerSecond": 60000,
+              "audioFramesPerSecond": 96000000,
               "closedRgbaBytes": 0,
               "closedPcmBytes": 192000,
               "peakOwnedRgbaBytes": 0,
-              "heapPeak": 26000000,
+              "heapPeak": 24500000,
               "correctness": {
                 "kind": "audio",
                 "finite": true,
                 "peak": 0,
                 "frames": 256,
                 "nearSilence": true
-              }
+              },
+              "windowStart": 0
             }
           },
           "correctness": {
@@ -4592,11 +4744,11 @@
             }
           },
           "throughput": {
-            "videoSamplesPerSecond": 3529.4117647058824,
-            "audioSamplesPerSecond": 50000.00000194026,
-            "audioFramesPerSecond": 80000000.0031044,
-            "videoDurationMs": 8.5,
-            "audioDurationMs": 0.5999999999767169
+            "videoSamplesPerSecond": 4000,
+            "audioSamplesPerSecond": 60000,
+            "audioFramesPerSecond": 96000000,
+            "videoDurationMs": 7.5,
+            "audioDurationMs": 0.5
           },
           "knownResources": {
             "peakOwnedRgbaBytes": 230400,
@@ -4636,10 +4788,10 @@
             "video": 0,
             "audio": 0
           },
-          "heapBefore": 26000000,
-          "heapAfter": 26000000,
-          "heapPeak": 26000000,
-          "durationMs": 25.199999999953434,
+          "heapBefore": 24500000,
+          "heapAfter": 24500000,
+          "heapPeak": 24500000,
+          "durationMs": 26.5,
           "crossOriginIsolated": false
         },
         "ac3": {
@@ -4709,7 +4861,8 @@
                   "closed": true
                 }
               ],
-              "ownedAfter": 0
+              "ownedAfter": 0,
+              "windowStart": 0
             },
             "audio": {
               "ok": false,
@@ -4729,7 +4882,8 @@
                   "closed": false
                 }
               ],
-              "ownedAfter": 0
+              "ownedAfter": 0,
+              "windowStart": 0
             }
           },
           "sequential": {
@@ -4741,13 +4895,13 @@
               "ownedAfter": 0,
               "firstTimestamp": 0,
               "lastTimestamp": 0.967,
-              "durationMs": 2.6000000000931323,
-              "samplesPerSecond": 11538.46153804823,
+              "durationMs": 2.7999999998137355,
+              "samplesPerSecond": 10714.285714998461,
               "audioFramesPerSecond": 0,
               "closedRgbaBytes": 6912000,
               "closedPcmBytes": 0,
               "peakOwnedRgbaBytes": 230400,
-              "heapPeak": 26000000,
+              "heapPeak": 24500000,
               "correctness": {
                 "kind": "video",
                 "rgb": [
@@ -4758,7 +4912,8 @@
                 "alpha": 255,
                 "matchesFixtureColor": true,
                 "maxChannelDelta": 4
-              }
+              },
+              "windowStart": 0
             },
             "audio": {
               "ok": true,
@@ -4768,20 +4923,21 @@
               "ownedAfter": 0,
               "firstTimestamp": -0.005333333333333333,
               "lastTimestamp": 0.9866666666666667,
-              "durationMs": 2.799999999930151,
-              "samplesPerSecond": 11428.571428856527,
-              "audioFramesPerSecond": 17554285.714723624,
+              "durationMs": 2.7000000001862645,
+              "samplesPerSecond": 11851.85185103423,
+              "audioFramesPerSecond": 18204444.443188578,
               "closedRgbaBytes": 0,
               "closedPcmBytes": 196608,
               "peakOwnedRgbaBytes": 0,
-              "heapPeak": 26000000,
+              "heapPeak": 24500000,
               "correctness": {
                 "kind": "audio",
                 "finite": true,
                 "peak": 0.000001942074050020892,
                 "frames": 256,
                 "nearSilence": true
-              }
+              },
+              "windowStart": 0
             }
           },
           "correctness": {
@@ -4805,11 +4961,11 @@
             }
           },
           "throughput": {
-            "videoSamplesPerSecond": 11538.46153804823,
-            "audioSamplesPerSecond": 11428.571428856527,
-            "audioFramesPerSecond": 17554285.714723624,
-            "videoDurationMs": 2.6000000000931323,
-            "audioDurationMs": 2.799999999930151
+            "videoSamplesPerSecond": 10714.285714998461,
+            "audioSamplesPerSecond": 11851.85185103423,
+            "audioFramesPerSecond": 18204444.443188578,
+            "videoDurationMs": 2.7999999998137355,
+            "audioDurationMs": 2.7000000001862645
           },
           "knownResources": {
             "peakOwnedRgbaBytes": 230400,
@@ -4843,10 +4999,10 @@
             "video": 0,
             "audio": 0
           },
-          "heapBefore": 26000000,
-          "heapAfter": 26000000,
-          "heapPeak": 26000000,
-          "durationMs": 50.09999999997672,
+          "heapBefore": 24500000,
+          "heapAfter": 24500000,
+          "heapPeak": 24500000,
+          "durationMs": 53.700000000186265,
           "crossOriginIsolated": false
         }
       },
@@ -4957,7 +5113,8 @@
         "nativeDecode": {
           "video": {
             "ok": false,
-            "skipped": "not-decodable"
+            "skipped": "not-decodable",
+            "windowStart": 0
           },
           "audio": {
             "ok": true,
@@ -4977,7 +5134,8 @@
                 "closed": true
               }
             ],
-            "ownedAfter": 0
+            "ownedAfter": 0,
+            "windowStart": 0
           },
           "ok": true
         }
@@ -5061,16 +5219,16 @@
     }
   ],
   "sourceDigests": {
-    "scripts/issue207/protocol.mjs": "1c40e7715f81713fb34da1331193500c702301020bfc54eb16bf4ae3d49a9fd6",
+    "scripts/issue207/protocol.mjs": "9476a7173da7b61913aa75d859b716dbc74849ebdd67db4489be156bd0d84115",
     "scripts/issue207/ranking.mjs": "822dd38c3c468b365896c7b2ad4820861e17c434e120d096fb1a57a1446cb4db",
     "scripts/issue207/inventory.mjs": "1df43fa8a037691b744ab10076fb12b84bc78500b286c7ef18e03df487ea3b49",
-    "scripts/issue207/fixtures.mjs": "f04b88f68e03e80d369d8319bcef127101bc50958091c59b8da1489974567094",
-    "scripts/issue207/demux.mjs": "26d21df8bcf8bb38612801069836aa6dd998070dbc55b7e9c1aeb5be1d6a508b",
+    "scripts/issue207/fixtures.mjs": "7aee0da455fc1c2ca4b5e8280e51c8cbe86bf0c0684b97256f3d9d12891c7161",
+    "scripts/issue207/demux.mjs": "56f019dfa25b7ff64a5dbce81d80daadf663576c70f9b702dc668f65e72d678a",
     "scripts/issue207/sizes.mjs": "f3454ce1d4b74d8fd949714cd7251639364b04b49d4a642973f0584861b55428",
     "scripts/issue207/decision.mjs": "c1f45ef6e64ae58a656cc19272babc7cd8018d730396adcf4571c080f70750c4",
-    "scripts/issue207/lab.mjs": "5c79f169c19aaf150bffd5599646878345483249e1a68fe2b8d94af76f6f7158",
-    "scripts/issue207/summary.mjs": "ea7ab68e780108f5cee66afc731df766bb50c9f171c7cefb62af87bb772736e3",
-    "scripts/issue207/run-research.mjs": "78a803afd61015fa7af4f514da6e76e8352cc6b2453189c4ff119a0caad100e2"
+    "scripts/issue207/lab.mjs": "3727c10f9e38979d5ca76278d78fd021e65f8803e6bc67c13dbb779c6cf869b2",
+    "scripts/issue207/summary.mjs": "1e4cc1a47a1cb1d518e8760823b4ef964c553c183ed224065bcbfff8652c0a53",
+    "scripts/issue207/run-research.mjs": "c3f25a0fd71190d3f974d48dc6e6d707e8b0ce32a046dc9f470f1199aeac3701"
   },
   "wasmSpikes": [
     {

@@ -22,6 +22,11 @@ No README, export-profile, or `MediaDecoderPath` change ships here.
 Those two children may be filed as one "advertised vs demuxable honesty" issue
 if that is easier to review. They still must not add a decoder.
 
+MPEG-TS AVC+AAC on this Chromium host decodes when the window starts at the
+first packet, near 1.4s. The earlier "no samples" result sampled 0s and 0.5s,
+which is before any media. That correction is still not a product decoder or
+a public support claim. MPEG-2 video inside MPEG-TS stays omitted.
+
 ## Exit criteria
 
 - Ranking: [ranking.md](ranking.md), frozen in `scripts/issue207/ranking.mjs`.

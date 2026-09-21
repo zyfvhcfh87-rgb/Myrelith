@@ -21,8 +21,8 @@ unnamed MPEG-2 video).
 | Container | Direct decode of named codecs | Fallback | Export |
 |---|---|---|---|
 | QTFF/MOV + AVC/AAC | native decode, integer-frame seek, A/V within one frame, samples closed | none | still MP4/WebM pairs; import ≠ export |
-| MPEG-TS + AVC/AAC | named and `canDecode` true; **random-access and sequential decode both returned no samples** on the 1s fixture | none | do not advertise MPEG-TS playback |
-| MPEG-TS + MPEG-2 | video omitted, not `unsupported-codec` | none | n/a |
+| MPEG-TS + AVC/AAC | named AVC+AAC. ffmpeg PTS starts near 1.4s. Sampling 0s was an empty window. From the first packet, random-access seek, sequential decode, color, near-silence, and muted audio-clock frame 3 all closed on this Chromium host. | none | not an export pair. This observation is not a support claim. |
+| MPEG-TS + MPEG-2 | video omitted, not `unsupported-codec`. The named AAC track decoded from its ~1.41s start. | none | n/a |
 
 HLS playlists on `BlobSource` remain fail-closed (local-first). That is a
 property to keep, not a network-import feature.
@@ -30,5 +30,6 @@ property to keep, not a network-import feature.
 ## Child issue shape
 
 Document container reach for named codecs. Optionally report omitted MPEG-TS
-streams as a diagnostic. Do **not** claim MPEG-TS random-access decode from
-this fixture. Do not add MPEG-2, remote HLS, or a second demuxer.
+streams as a diagnostic. This lab observation is not a README claim, a
+`MediaDecoderPath` change, or `publicSupportClaim`. Do not add MPEG-2, remote
+HLS, or a second demuxer.

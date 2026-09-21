@@ -100,11 +100,16 @@ export function renderMarkdown(result) {
       const seek = [cell.decode?.video, cell.decode?.audio]
         .map((entry) => (entry?.skipped ? entry.skipped : entry?.ok === true ? 'ok' : 'miss'))
         .join(' / ')
+      const starts = [cell.decode?.video?.windowStart, cell.decode?.audio?.windowStart]
+        .filter((value) => typeof value === 'number' && value > 0)
+      const seekText = starts.length
+        ? `${seek} from ${starts.map((value) => value.toFixed(3)).join('/')}s`
+        : seek
       const sequential = `v ${sequentialText(cell.sequential?.video)}; a ${sequentialText(cell.sequential?.audio)}`
       const correctness = `v ${correctnessText(cell.correctness?.video)}; a ${correctnessText(cell.correctness?.audio)}`
       const throughput = `v ${throughputText(cell.sequential?.video, 'frames')}; a ${throughputText(cell.sequential?.audio, 'packets')}`
       const rgba = cell.knownResources?.peakOwnedRgbaBytes ?? 'n/a'
-      lines.push(`| \`${name}\` | ${seek} | ${sequential} | ${correctness} | ${throughput} | ${heapDelta(cell)} | ${rgba} |`)
+      lines.push(`| \`${name}\` | ${seekText} | ${sequential} | ${correctness} | ${throughput} | ${heapDelta(cell)} | ${rgba} |`)
     }
     lines.push('', '## A/V sync', '')
     lines.push('Timestamp pairs compare independently decoded samples. The audio-clock rows start a muted `AudioContext`, derive an integer frame from `currentTime`, and fetch that video sample. That is not product playback.')

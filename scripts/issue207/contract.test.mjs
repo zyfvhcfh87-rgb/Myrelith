@@ -12,6 +12,8 @@ import {
   PRODUCT_EXPORT_PAIRS,
   PUBLIC_SUPPORT_CLAIM,
   SCHEMA,
+  playbackWindowStart,
+  windowTimestamp,
 } from './protocol.mjs'
 import { assertPinnedVocabulary, vocabularyBlocks } from './inventory.mjs'
 import { selectPrimaryBundle } from './sizes.mjs'
@@ -94,6 +96,18 @@ test('AC-3/ProRes encode and HEVC software fallback stay no-go', () => {
   assert.match(encode.reason, /Issue #16|encoder fallback/)
   const hevc = evaluateCandidate('hevc-software-fallback', { demux: {}, browser: { fixtures: {} } })
   assert.equal(hevc.recommendation, 'no-go')
+})
+
+test('playback window follows a positive MPEG-TS start and stays at zero otherwise', () => {
+  assert.equal(playbackWindowStart(1.4), 1.4)
+  assert.equal(playbackWindowStart(1.4213333333333333), 1.4213333333333333)
+  assert.equal(playbackWindowStart(0), 0)
+  assert.equal(playbackWindowStart(-0.0065), 0)
+  assert.equal(playbackWindowStart(undefined), 0)
+  assert.equal(windowTimestamp(1.4, 0), 1.4)
+  assert.equal(windowTimestamp(1.4, 15), 1.9)
+  assert.equal(windowTimestamp(0, 15), 0.5)
+  assert.equal(windowTimestamp(-0.0065, 0), 0)
 })
 
 test('public support claim stays false', () => {

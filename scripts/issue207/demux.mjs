@@ -8,7 +8,7 @@ import {
   Input,
   UnsupportedInputFormatError,
 } from 'mediabunny'
-import { errorMessage } from './protocol.mjs'
+import { errorMessage, playbackWindowStart } from './protocol.mjs'
 
 function copyBytes(filePath) {
   const disk = readFileSync(filePath)
@@ -30,7 +30,8 @@ async function describeTrack(track) {
   const first = await packetSink.getFirstPacket({ metadataOnly: true }).catch((error) => ({
     error: errorMessage(error),
   }))
-  const mid = await packetSink.getPacket(0.5, { metadataOnly: true }).catch((error) => ({
+  const windowStart = playbackWindowStart(first?.timestamp)
+  const mid = await packetSink.getPacket(windowStart + 0.5, { metadataOnly: true }).catch((error) => ({
     error: errorMessage(error),
   }))
   const durationSec = await track.computeDuration().catch(() => null)
