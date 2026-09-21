@@ -10,9 +10,12 @@ import {
   MEDIABUNNY_VIDEO_CODECS,
   PRODUCT_DECODER_PATHS,
   PRODUCT_EXPORT_PAIRS,
+  PUBLIC_SUPPORT_CLAIM,
   SCHEMA,
 } from './protocol.mjs'
 import { assertPinnedVocabulary, vocabularyBlocks } from './inventory.mjs'
+import { selectPrimaryBundle } from './sizes.mjs'
+import { assertResearchClaim, decodeCell, renderMarkdown } from './summary.mjs'
 
 const root = process.cwd()
 
@@ -91,6 +94,93 @@ test('AC-3/ProRes encode and HEVC software fallback stay no-go', () => {
   assert.match(encode.reason, /Issue #16|encoder fallback/)
   const hevc = evaluateCandidate('hevc-software-fallback', { demux: {}, browser: { fixtures: {} } })
   assert.equal(hevc.recommendation, 'no-go')
+})
+
+test('public support claim stays false', () => {
+  assert.equal(PUBLIC_SUPPORT_CLAIM, false)
+  assert.throws(() => assertResearchClaim({ publicSupportClaim: true }), /publicSupportClaim/)
+  assert.doesNotThrow(() => assertResearchClaim({ publicSupportClaim: false }))
+})
+
+test('primary bundle selection ignores umd copies and reports the real script', () => {
+  const bundle = selectPrimaryBundle([
+    { path: 'node_modules/turbores/dist/turbores.umd.cjs', bytes: 189948 },
+    { path: 'node_modules/turbores/dist/turbores.js', bytes: 200453 },
+    { path: 'node_modules/turbores/dist/turbores.d.ts', bytes: 12869 },
+    { path: 'node_modules/@mediabunny/ac3/dist/bundles/mediabunny-ac3.min.js', bytes: 900000 },
+    { path: 'node_modules/@mediabunny/ac3/dist/bundles/mediabunny-ac3.js', bytes: 1154782 },
+  ])
+  assert.equal(bundle.path, 'node_modules/@mediabunny/ac3/dist/bundles/mediabunny-ac3.js')
+  const turbo = selectPrimaryBundle([
+    { path: 'node_modules/turbores/dist/turbores.umd.cjs', bytes: 189948 },
+    { path: 'node_modules/turbores/dist/turbores.js', bytes: 200453 },
+  ])
+  assert.equal(turbo.path, 'node_modules/turbores/dist/turbores.js')
+})
+
+test('measured-run markdown records the required gates without a support claim', () => {
+  const ready = {
+    canRead: true,
+    format: { name: 'MP4' },
+    decode: {
+      video: { ok: true },
+      audio: { ok: true },
+      ok: true,
+    },
+    sequential: {
+      video: { ok: true, count: 30, ownedAfter: 0 },
+      audio: { ok: true, count: 40, ownedAfter: 0 },
+    },
+    correctness: {
+      video: { kind: 'video', rgb: [49, 91, 125], matchesFixtureColor: true },
+      audio: { kind: 'audio', finite: true, peak: 0, nearSilence: true },
+    },
+    throughput: { videoSamplesPerSecond: 100, audioFramesPerSecond: 48000 },
+    knownResources: { peakOwnedRgbaBytes: 320 * 180 * 4, nativeRss: 'unmeasured' },
+    avSync: { applicable: true, withinOneFrame: true },
+    audioClock: { applicable: true, clockAdvanced: true, derivedFrame: 3, withinOneFrame: true },
+    cdpJsHeapBefore: 1000,
+    cdpJsHeapAfter: 1200,
+    cancel: { rejected: true, disposed: true },
+  }
+  const markdown = renderMarkdown({
+    schema: SCHEMA,
+    publicSupportClaim: false,
+    machine: { platform: 'linux', arch: 'x64' },
+    decisions: [{ id: 'honesty-audio', recommendation: 'bounded-child' }],
+    demux: { 'pcm-s16.wav': { format: { name: 'WAVE' }, tracks: [{ kind: 'audio', codec: 'pcm-s16', canDecode: true }] } },
+    browser: {
+      host: { userAgent: 'HeadlessChrome', crossOriginIsolated: false, hevcHardwareObservation: false, av1HardwareObservation: true },
+      fixtures: { 'avc-aac.mp4': ready },
+      encoders: { video: [{ id: 'avc', supported: true }], audio: [] },
+      fallbacks: {
+        registerMs: 0,
+        direct: { prores: { tracks: [{ kind: 'video', nativeCanDecode: false }] }, ac3: { tracks: [{ kind: 'audio', nativeCanDecode: false }] } },
+        fallback: {
+          prores: { tracks: [{ kind: 'video', nativeCanDecode: true }], decode: { video: { ok: true } }, sequential: { video: { count: 30, ownedAfter: 0 } }, durationMs: 12 },
+          ac3: { tracks: [{ kind: 'audio', nativeCanDecode: true }], decode: { audio: { ok: false } }, sequential: { audio: { count: 0, ownedAfter: 0 } }, durationMs: 8 },
+        },
+        encoderRegistration: false,
+      },
+      recovery: { decodeCancel: { 'pcm-s16.wav': { rejected: true, disposed: true, ownedAfter: 0 } } },
+    },
+    sizes: { payloads: [{ packageName: 'turbores', license: 'MPL-2.0', totalBytes: 10, primaryBundle: { bytes: 200453, path: 'node_modules/turbores/dist/turbores.js' } }] },
+  })
+  assert.equal(decodeCell(ready), 'ready')
+  assert.match(markdown, /publicSupportClaim/)
+  assert.match(markdown, /Correctness, seek, throughput, memory/)
+  assert.match(markdown, /Failure recovery/)
+  assert.match(markdown, /Firefox and Safari/)
+  assert.match(markdown, /turbores\.js/)
+  assert.doesNotMatch(markdown, /primary bundle/)
+  assert.throws(() => renderMarkdown({
+    schema: SCHEMA,
+    publicSupportClaim: true,
+    machine: { platform: 'linux', arch: 'x64' },
+    decisions: [],
+    demux: {},
+    sizes: { payloads: [] },
+  }), /publicSupportClaim/)
 })
 
 test('evaluateAll covers every ranked candidate exactly once', () => {

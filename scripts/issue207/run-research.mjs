@@ -13,13 +13,14 @@ import { join, resolve } from 'node:path'
 import os from 'node:os'
 import { chromium } from '@playwright/test'
 import { createServer } from 'vite'
-import { SCHEMA } from './protocol.mjs'
+import { PUBLIC_SUPPORT_CLAIM, SCHEMA } from './protocol.mjs'
 import { CANDIDATES, RANKING_AUTHORITY, RANKING_RECORDED_AT, RUBRIC } from './ranking.mjs'
 import { assertPinnedVocabulary, productPolicy, staticInventoryRows } from './inventory.mjs'
 import { fixtureDirectory, generateFixtures } from './fixtures.mjs'
 import { probeDemuxFile } from './demux.mjs'
 import { measureDecoderPayloads } from './sizes.mjs'
 import { evaluateAll } from './decision.mjs'
+import { assertResearchClaim, renderMarkdown } from './summary.mjs'
 
 const root = process.cwd()
 const nodeOnly = process.argv.includes('--node-only')
@@ -66,6 +67,20 @@ function base64(name, directory) {
   return readFileSync(join(directory, name)).toString('base64')
 }
 
+async function jsHeap(page) {
+  const session = await page.context().newCDPSession(page)
+  try {
+    await session.send('Performance.enable')
+    const { metrics } = await session.send('Performance.getMetrics')
+    const metric = metrics.find((entry) => entry.name === 'JSHeapUsedSize')
+    return typeof metric?.value === 'number' ? metric.value : null
+  } catch {
+    return null
+  } finally {
+    await session.detach()
+  }
+}
+
 async function measureBrowser(fixtures) {
   const server = await createServer({
     root,
@@ -86,7 +101,7 @@ async function measureBrowser(fixtures) {
       args: ['--mute-audio', '--autoplay-policy=no-user-gesture-required'],
     })
     const page = await browser.newPage()
-    page.setDefaultTimeout(60_000)
+    page.setDefaultTimeout(120_000)
     await page.goto(`http://127.0.0.1:${port}/scripts/issue207/lab.html`)
     const host = await page.evaluate(async () => {
       const lab = await import('/scripts/issue207/lab.mjs')
@@ -100,13 +115,21 @@ async function measureBrowser(fixtures) {
       'mpeg2-aac.ts', 'avc-dts.mkv', 'playlist.m3u8',
     ]
     const measured = {}
+    const audioClockNames = new Set(['avc-aac.mp4', 'avc-aac.mov', 'vp9-opus.webm'])
     for (const name of names) {
       process.stdout.write(`Browser measure ${name}\n`)
-      measured[name] = await page.evaluate(async ({ b64, cancel }) => {
+      const cdpJsHeapBefore = await jsHeap(page)
+      measured[name] = await page.evaluate(async ({ b64, cancel, audioClock }) => {
         const binary = Uint8Array.from(atob(b64), (char) => char.charCodeAt(0))
         const lab = await import('/scripts/issue207/lab.mjs')
-        return lab.measureBytes(binary, { cancel })
-      }, { b64: base64(name, fixtures.outputDirectory), cancel: name === 'avc-aac.mp4' })
+        return lab.measureBytes(binary, { cancel, audioClock })
+      }, {
+        b64: base64(name, fixtures.outputDirectory),
+        cancel: name === 'avc-aac.mp4',
+        audioClock: audioClockNames.has(name),
+      })
+      measured[name].cdpJsHeapBefore = cdpJsHeapBefore
+      measured[name].cdpJsHeapAfter = await jsHeap(page)
     }
     const encoders = await page.evaluate(async () => {
       const lab = await import('/scripts/issue207/lab.mjs')
@@ -121,6 +144,15 @@ async function measureBrowser(fixtures) {
       prores: base64('prores.mov', fixtures.outputDirectory),
       ac3: base64('avc-ac3.mkv', fixtures.outputDirectory),
     })
+    const decodeCancel = {}
+    for (const name of ['avc-aac.mp4', 'pcm-s16.wav']) {
+      process.stdout.write(`Browser cancel during decode ${name}\n`)
+      decodeCancel[name] = await page.evaluate(async (b64) => {
+        const binary = Uint8Array.from(atob(b64), (char) => char.charCodeAt(0))
+        const lab = await import('/scripts/issue207/lab.mjs')
+        return lab.cancelDuringDecode(binary)
+      }, base64(name, fixtures.outputDirectory))
+    }
     const cdp = await browser.newBrowserCDPSession()
     const version = await cdp.send('Browser.getVersion')
     let gpu = null
@@ -133,81 +165,12 @@ async function measureBrowser(fixtures) {
       fixtures: measured,
       encoders,
       fallbacks,
+      recovery: { decodeCancel },
     }
   } finally {
     await browser?.close()
     await server.close()
   }
-}
-
-function decodeCell(cell) {
-  if (cell.canRead === false) return cell.failClosed || cell.error ? 'unsupported' : 'unsupported'
-  const video = cell.decode?.video
-  const audio = cell.decode?.audio
-  const issues = []
-  if (video?.skipped === 'not-decodable') issues.push('video-undecodable')
-  if (audio?.skipped === 'not-decodable') issues.push('audio-undecodable')
-  if (video && !video.skipped && video.ok !== true) issues.push('video-seek')
-  if (audio && !audio.skipped && audio.ok !== true) issues.push('audio-seek')
-  if (issues.length) return `limited (${issues.join(', ')})`
-  if (cell.decode?.ok) return 'ready'
-  return 'limited'
-}
-
-function renderMarkdown(result) {
-  const lines = [
-    '# Issue #207 measured run',
-    '',
-    `Schema \`${result.schema}\`. Host ${result.machine.platform}/${result.machine.arch}.`,
-    'Firefox and Safari cells are **U** (Issue #208). This run does not ship formats.',
-    '',
-    '## Decisions',
-    '',
-    '| Candidate | Recommendation |',
-    '|---|---|',
-  ]
-  for (const decision of result.decisions) {
-    lines.push(`| \`${decision.id}\` | **${decision.recommendation}** |`)
-  }
-  lines.push('', '## Demux (Node, Mediabunny 1.50.9)', '', '| Fixture | Format | Codecs | canDecode (Node) |', '|---|---|---|---|')
-  for (const [name, probe] of Object.entries(result.demux)) {
-    const codecs = (probe.tracks ?? []).map((track) => `${track.kind}:${track.codec ?? 'null'}`).join(', ') || 'none'
-    const decode = (probe.tracks ?? []).map((track) => String(track.canDecode)).join(',') || 'n/a'
-    lines.push(`| \`${name}\` | ${probe.format?.name ?? (probe.failClosed ? 'fail-closed' : 'unread')} | ${codecs} | ${decode} |`)
-  }
-  if (result.browser) {
-    lines.push('', `## Chromium decode / encode`, '')
-    lines.push(`Host: \`${result.browser.host?.userAgent ?? 'unknown'}\`. Isolated: ${result.browser.host?.crossOriginIsolated}. HEVC observation: ${result.browser.host?.hevcHardwareObservation}. AV1 observation: ${result.browser.host?.av1HardwareObservation}. Firefox/Safari: **U**.`)
-    lines.push('', '| Fixture | Direct decode | Notes |', '|---|---|---|')
-    for (const [name, cell] of Object.entries(result.browser.fixtures ?? {})) {
-      lines.push(`| \`${name}\` | ${decodeCell(cell)} | ${cell.format?.name ?? cell.error ?? ''} |`)
-    }
-    lines.push('', '### Existing fallback path (already shipped, not a new format)', '')
-    const fallbacks = result.browser.fallbacks
-    if (fallbacks) {
-      const proresDirect = fallbacks.direct?.prores?.tracks?.find((track) => track.kind === 'video')
-      const proresAfter = fallbacks.fallback?.prores?.tracks?.find((track) => track.kind === 'video')
-      const ac3Direct = fallbacks.direct?.ac3?.tracks?.find((track) => track.kind === 'audio')
-      const ac3After = fallbacks.fallback?.ac3?.tracks?.find((track) => track.kind === 'audio')
-      lines.push(`- ProRes direct \`canDecode\`: ${proresDirect?.nativeCanDecode}; after \`registerProresDecoder\`: ${proresAfter?.nativeCanDecode}; sample seek: ${fallbacks.fallback?.prores?.decode?.video?.ok}`)
-      lines.push(`- AC-3 direct \`canDecode\`: ${ac3Direct?.nativeCanDecode}; after \`registerAc3Decoder\`: ${ac3After?.nativeCanDecode}; sample seek: ${fallbacks.fallback?.ac3?.decode?.audio?.ok}`)
-      lines.push(`- Encoder registration attempted: ${fallbacks.encoderRegistration === true}`)
-    }
-    lines.push('', '### Native encoder probes', '')
-    for (const row of result.browser.encoders?.video ?? []) {
-      lines.push(`- video \`${row.id}\`: ${row.supported ? 'supported' : 'unsupported'}`)
-    }
-    for (const row of result.browser.encoders?.audio ?? []) {
-      lines.push(`- audio \`${row.id}\`: ${row.supported ? 'supported' : 'unsupported'}`)
-    }
-  } else {
-    lines.push('', 'Browser lab skipped (`--node-only`). Chromium cells remain **U** until `npm run qa:issue207:research`.', '')
-  }
-  lines.push('', '## Payload sizes', '')
-  for (const payload of result.sizes.payloads) {
-    lines.push(`- ${payload.packageName}: ${payload.primaryBundle?.bytes ?? payload.totalBytes} bytes primary bundle (${payload.license})`)
-  }
-  return `${lines.join('\n')}\n`
 }
 
 const researchSources = [
@@ -219,6 +182,7 @@ const researchSources = [
   'scripts/issue207/sizes.mjs',
   'scripts/issue207/decision.mjs',
   'scripts/issue207/lab.mjs',
+  'scripts/issue207/summary.mjs',
   'scripts/issue207/run-research.mjs',
 ]
 
@@ -246,6 +210,7 @@ async function main() {
 
   const result = {
     schema: SCHEMA,
+    publicSupportClaim: PUBLIC_SUPPORT_CLAIM,
     startedAt: new Date().toISOString(),
     commit: git('rev-parse', 'HEAD'),
     ranking: { recordedAt: RANKING_RECORDED_AT, authority: RANKING_AUTHORITY, rubric: RUBRIC, candidates: CANDIDATES },
@@ -277,6 +242,7 @@ async function main() {
     })),
   }
 
+  assertResearchClaim(result)
   const jsonPath = join(artifactDir, 'run.json')
   const evidenceJson = join(evidenceDir, 'measured-run.json')
   const evidenceMd = join(evidenceDir, 'measured-run.md')

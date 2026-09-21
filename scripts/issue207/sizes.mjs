@@ -24,6 +24,17 @@ const TARGETS = Object.freeze([
   }),
 ])
 
+export function selectPrimaryBundle(files) {
+  return files
+    .filter((file) => (
+      /\/dist\/.+\.(?:mjs|js)$/.test(file.path)
+      && !file.path.endsWith('.d.ts')
+      && !file.path.includes('.umd.')
+      && !file.path.includes('.min.')
+    ))
+    .sort((left, right) => right.bytes - left.bytes)[0] ?? null
+}
+
 function walkFiles(directory, files = []) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name)
@@ -41,9 +52,7 @@ export function measureDecoderPayloads(root = process.cwd()) {
       path: path.slice(root.length + 1),
       bytes: statSync(path).size,
     }))
-    const bundle = files
-      .filter((file) => /dist\/bundles\/.*\.(mjs|js)$/.test(file.path) && !file.path.includes('.min.'))
-      .sort((left, right) => right.bytes - left.bytes)[0] ?? null
+    const bundle = selectPrimaryBundle(files)
     measured.push({
       ...target,
       directory: directory.slice(root.length + 1),

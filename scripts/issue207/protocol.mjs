@@ -2,6 +2,9 @@
 
 export const SCHEMA = 'myrelith-issue207-v1'
 
+/** Issue #207 must not publish a browser support claim. Firefox/Safari stay #208. */
+export const PUBLIC_SUPPORT_CLAIM = false
+
 export const PATH_KINDS = Object.freeze(['direct', 'fallback'])
 
 export const CELL_VALUES = Object.freeze([

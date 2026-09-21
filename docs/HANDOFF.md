@@ -1693,10 +1693,12 @@ surface; it is not a second zoom and never enters document history.
   matrix plus a hash/ffprobe manifest under `.tmp/issue-19-codec-fixtures/`;
   it exits nonzero when the expected container/codec/damage matrix drifts.
 - `npm run qa:issue207:research` generates ignored Issue #207 fixtures under
-  `.tmp/issue207/fixtures/`, demuxes them with pinned Mediabunny, optionally
-  measures headed-off Chromium decode/encode, and writes hashes-only evidence
-  to `docs/evidence/issue207/measured-run.json`. `npm run qa:issue207:check`
-  locks ranking, vocabulary, and go/no-go rules without Playwright.
+  `.tmp/issue207/fixtures/`, demuxes them with pinned Mediabunny, and measures
+  Chromium decode, seek, fixture correctness, muted audio-clock frame
+  derivation, heap delta, and cancel. It writes hashes-only evidence to
+  `docs/evidence/issue207/measured-run.json`. `publicSupportClaim` stays
+  false. `npm run qa:issue207:check` locks ranking, vocabulary, go/no-go, and
+  that claim without Playwright.
 - Generate a labeled test MP4 IN THE BROWSER:
   import mediabunny via `/@fs/E:/ClaudeSpace/Myrelith/node_modules/mediabunny/dist/modules/src/index.js`,
   `Output` + `Mp4OutputFormat` + `BufferTarget` + `CanvasSource`, draw

@@ -15,6 +15,10 @@ import {
 
 const FRAME_RATE = 30
 const SEEK_FRAMES = Object.freeze([0, 15])
+const SEQUENTIAL_CAP = 64
+const FIXTURE_RGB = Object.freeze([0x31, 0x5b, 0x7d])
+const COLOR_TOLERANCE = 40
+const SILENCE_PEAK = 0.05
 
 function errorMessage(error) {
   if (error instanceof Error) return `${error.name}: ${error.message}`
@@ -23,6 +27,148 @@ function errorMessage(error) {
 
 function closeSample(sample) {
   try { sample?.close?.() } catch { /* already closed */ }
+}
+
+function heapBytes() {
+  const value = performance.memory?.usedJSHeapSize
+  return typeof value === 'number' ? value : null
+}
+
+function isVideoSample(sample) {
+  return typeof sample?.draw === 'function'
+}
+
+async function inspectVideo(sample) {
+  const canvas = new OffscreenCanvas(1, 1)
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) return { kind: 'video', error: 'no-2d-context' }
+  sample.draw(context, 0, 0, 1, 1)
+  const pixel = context.getImageData(0, 0, 1, 1).data
+  const rgb = [pixel[0], pixel[1], pixel[2]]
+  const delta = rgb.map((value, index) => Math.abs(value - FIXTURE_RGB[index]))
+  return {
+    kind: 'video',
+    rgb,
+    alpha: pixel[3],
+    matchesFixtureColor: delta.every((value) => value <= COLOR_TOLERANCE),
+    maxChannelDelta: Math.max(...delta),
+  }
+}
+
+function inspectAudio(sample) {
+  const frames = Math.min(sample.numberOfFrames, 256)
+  const data = new Float32Array(frames)
+  sample.copyTo(data, {
+    planeIndex: 0,
+    format: 'f32-planar',
+    frameCount: frames,
+  })
+  let peak = 0
+  let finite = true
+  for (const value of data) {
+    if (!Number.isFinite(value)) finite = false
+    else peak = Math.max(peak, Math.abs(value))
+  }
+  return {
+    kind: 'audio',
+    finite,
+    peak,
+    frames,
+    nearSilence: finite && peak <= SILENCE_PEAK,
+  }
+}
+
+async function inspectSample(sample) {
+  try {
+    if (isVideoSample(sample)) return await inspectVideo(sample)
+    return inspectAudio(sample)
+  } catch (error) {
+    return { error: errorMessage(error) }
+  }
+}
+
+function knownBytes(sample) {
+  if (isVideoSample(sample)) {
+    const width = sample.displayWidth || sample.codedWidth || 0
+    const height = sample.displayHeight || sample.codedHeight || 0
+    return { rgba: width * height * 4, pcm: 0 }
+  }
+  const frames = sample.numberOfFrames || 0
+  const channels = sample.numberOfChannels || 0
+  return { rgba: 0, pcm: frames * channels * 4 }
+}
+
+async function sequentialDecode(sink) {
+  const started = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  const iterator = sink.samples(0, 1)
+  let count = 0
+  let owned = 0
+  let audioFrames = 0
+  let closedRgba = 0
+  let closedPcm = 0
+  let peakOwnedRgba = 0
+  let firstTimestamp = null
+  let lastTimestamp = null
+  let correctness = null
+  let heapPeak = heapBytes()
+  try {
+    while (count < SEQUENTIAL_CAP) {
+      const next = await iterator.next()
+      if (next.done) break
+      const sample = next.value
+      if (!sample) continue
+      owned += 1
+      try {
+        count += 1
+        if (firstTimestamp == null) firstTimestamp = sample.timestamp
+        lastTimestamp = sample.timestamp
+        if (isVideoSample(sample)) {
+          const bytes = knownBytes(sample)
+          peakOwnedRgba = Math.max(peakOwnedRgba, bytes.rgba)
+          closedRgba += bytes.rgba
+        } else {
+          audioFrames += sample.numberOfFrames || 0
+          closedPcm += knownBytes(sample).pcm
+        }
+        if (count === 1) correctness = await inspectSample(sample)
+        const heap = heapBytes()
+        if (heap != null && (heapPeak == null || heap > heapPeak)) heapPeak = heap
+      } finally {
+        closeSample(sample)
+        owned -= 1
+      }
+    }
+    const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - started
+    return {
+      ok: count > 0 && owned === 0,
+      count,
+      audioFrames,
+      capped: count >= SEQUENTIAL_CAP,
+      ownedAfter: owned,
+      firstTimestamp,
+      lastTimestamp,
+      durationMs,
+      samplesPerSecond: durationMs > 0 ? (count * 1000) / durationMs : null,
+      audioFramesPerSecond: durationMs > 0 ? (audioFrames * 1000) / durationMs : null,
+      closedRgbaBytes: closedRgba,
+      closedPcmBytes: closedPcm,
+      peakOwnedRgbaBytes: peakOwnedRgba,
+      heapPeak,
+      correctness,
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      count,
+      audioFrames,
+      ownedAfter: owned,
+      error: errorMessage(error),
+      correctness,
+      durationMs: (typeof performance !== 'undefined' ? performance.now() : Date.now()) - started,
+    }
+  } finally {
+    try { await iterator.return?.() } catch { /* decoder teardown */ }
+  }
 }
 
 async function describeTrack(track) {
@@ -129,9 +275,90 @@ async function cancelDuringOpen(bytes) {
   }
 }
 
+async function audioClockFrame(videoTrack) {
+  const context = new AudioContext()
+  let videoSample = null
+  try {
+    if (context.state === 'suspended') await context.resume().catch(() => {})
+    const origin = context.currentTime
+    await new Promise((resolve) => { setTimeout(resolve, 100) })
+    const elapsed = context.currentTime - origin
+    const derivedFrame = Math.max(0, Math.floor(elapsed * FRAME_RATE))
+    const requestedSeconds = derivedFrame / FRAME_RATE
+    videoSample = await new VideoSampleSink(videoTrack).getSample(requestedSeconds)
+    const videoTimestamp = videoSample?.timestamp ?? null
+    const delta = videoTimestamp == null ? null : Math.abs(videoTimestamp - requestedSeconds)
+    return {
+      applicable: true,
+      productPlayback: false,
+      clockAdvanced: elapsed > 0.02,
+      audioContextState: context.state,
+      elapsedSeconds: elapsed,
+      derivedFrame,
+      requestedSeconds,
+      videoTimestamp,
+      withinOneFrame: delta != null && delta <= (1 / FRAME_RATE) + 1e-4,
+    }
+  } catch (error) {
+    return { applicable: false, productPlayback: false, reason: errorMessage(error) }
+  } finally {
+    closeSample(videoSample)
+    await context.close().catch(() => {})
+  }
+}
+
+export async function cancelDuringDecode(bytes) {
+  const input = new Input({ formats: ALL_FORMATS, source: new BufferSource(bytes) })
+  let owned = 0
+  let iterator = null
+  try {
+    const tracks = await input.getTracks()
+    const video = tracks.find((track) => track.isVideoTrack())
+    const audio = tracks.find((track) => track.isAudioTrack())
+    const track = video ?? audio
+    if (!track) return { skipped: 'no-track', disposed: input.disposed, ownedAfter: 0 }
+    if (await track.canDecode() !== true) {
+      return { skipped: 'not-decodable', disposed: input.disposed, ownedAfter: 0 }
+    }
+    const sink = video ? new VideoSampleSink(video) : new AudioSampleSink(audio)
+    iterator = sink.samples(0, 1)
+    const first = await iterator.next()
+    if (first.value) {
+      owned += 1
+      closeSample(first.value)
+      owned -= 1
+    }
+    input.dispose()
+    let rejected = false
+    let error = null
+    try {
+      const next = await iterator.next()
+      if (next.value) {
+        owned += 1
+        closeSample(next.value)
+        owned -= 1
+      }
+    } catch (caught) {
+      rejected = true
+      error = errorMessage(caught)
+    }
+    return { rejected, disposed: input.disposed === true, ownedAfter: owned, error, started: true }
+  } catch (error) {
+    return {
+      rejected: true,
+      disposed: input.disposed === true,
+      ownedAfter: owned,
+      error: errorMessage(error),
+    }
+  } finally {
+    try { await iterator?.return?.() } catch { /* decoder teardown */ }
+    input.dispose()
+  }
+}
+
 export async function measureBytes(bytes, options = {}) {
   const started = typeof performance !== 'undefined' ? performance.now() : Date.now()
-  const heapBefore = performance.memory?.usedJSHeapSize ?? null
+  const heapBefore = heapBytes()
   const input = new Input({
     formats: ALL_FORMATS,
     source: new BufferSource(bytes),
@@ -163,14 +390,29 @@ export async function measureBytes(bytes, options = {}) {
 
     const video = tracks.find((track) => track.isVideoTrack())
     const audio = tracks.find((track) => track.isAudioTrack())
-    const videoDecode = video && described.find((track) => track.kind === 'video')?.nativeCanDecode
+    const videoNative = described.find((track) => track.kind === 'video')?.nativeCanDecode === true
+    const audioNative = described.find((track) => track.kind === 'audio')?.nativeCanDecode === true
+    const videoDecode = video && videoNative
       ? await seekAndDecode(video)
       : { ok: false, skipped: !video ? 'no-video' : 'not-decodable' }
-    const audioDecode = audio && described.find((track) => track.kind === 'audio')?.nativeCanDecode
+    const audioDecode = audio && audioNative
       ? await seekAndDecode(audio)
       : { ok: false, skipped: !audio ? 'no-audio' : 'not-decodable' }
+    const videoSequential = video && videoNative
+      ? await sequentialDecode(new VideoSampleSink(video))
+      : { ok: false, skipped: !video ? 'no-video' : 'not-decodable' }
+    const audioSequential = audio && audioNative
+      ? await sequentialDecode(new AudioSampleSink(audio))
+      : { ok: false, skipped: !audio ? 'no-audio' : 'not-decodable' }
+    const audioClock = options.audioClock && video && audio && videoNative
+      ? await audioClockFrame(video)
+      : { applicable: false, reason: options.audioClock ? 'missing-decodable-video' : 'not-requested', productPlayback: false }
 
     const cancel = options.cancel ? await cancelDuringOpen(bytes.slice(0)) : null
+    const heapAfter = heapBytes()
+    const heapPeak = [heapBefore, heapAfter, videoSequential.heapPeak, audioSequential.heapPeak]
+      .filter((value) => typeof value === 'number')
+      .reduce((peak, value) => Math.max(peak, value), heapBefore ?? 0)
     return {
       canRead: true,
       format: { name: format.name, mimeType: format.mimeType },
@@ -185,14 +427,34 @@ export async function measureBytes(bytes, options = {}) {
         ok: (videoDecode.ok === true || videoDecode.skipped) && (audioDecode.ok === true || audioDecode.skipped)
           && (videoDecode.ok === true || audioDecode.ok === true),
       },
+      sequential: { video: videoSequential, audio: audioSequential },
+      correctness: {
+        video: videoSequential.correctness ?? null,
+        audio: audioSequential.correctness ?? null,
+      },
+      throughput: {
+        videoSamplesPerSecond: videoSequential.samplesPerSecond ?? null,
+        audioSamplesPerSecond: audioSequential.samplesPerSecond ?? null,
+        audioFramesPerSecond: audioSequential.audioFramesPerSecond ?? null,
+        videoDurationMs: videoSequential.durationMs ?? null,
+        audioDurationMs: audioSequential.durationMs ?? null,
+      },
+      knownResources: {
+        peakOwnedRgbaBytes: Math.max(videoSequential.peakOwnedRgbaBytes ?? 0, 0),
+        closedRgbaBytes: videoSequential.closedRgbaBytes ?? 0,
+        closedPcmBytes: audioSequential.closedPcmBytes ?? 0,
+        nativeRss: 'unmeasured',
+      },
       avSync: avSync(videoDecode, audioDecode),
+      audioClock,
       cancel,
       ownedAfter: {
-        video: videoDecode.ownedAfter ?? 0,
-        audio: audioDecode.ownedAfter ?? 0,
+        video: (videoDecode.ownedAfter ?? 0) + (videoSequential.ownedAfter ?? 0),
+        audio: (audioDecode.ownedAfter ?? 0) + (audioSequential.ownedAfter ?? 0),
       },
       heapBefore,
-      heapAfter: performance.memory?.usedJSHeapSize ?? null,
+      heapAfter,
+      heapPeak: heapBefore == null ? null : heapPeak,
       durationMs: (typeof performance !== 'undefined' ? performance.now() : Date.now()) - started,
       crossOriginIsolated: globalThis.crossOriginIsolated === true,
     }
@@ -267,6 +529,7 @@ export async function measureExistingFallbacks(proresBytes, ac3Bytes) {
     ac3: await measureBytes(ac3Bytes),
   }
   return {
+    registerMs: compileMs,
     compileMs,
     direct: before,
     fallback: after,

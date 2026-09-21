@@ -33,6 +33,13 @@ npm run qa:issue207:research
 The laboratory lives under `scripts/issue207/` and must not enter the
 ordinary production graph. See `ARCHITECTURE.md`.
 
+The Chromium pass measures demux, native `canDecode`, integer-frame random
+access, sequential decode, fixture color / silence, sample-timestamp A/V
+delta, a muted `AudioContext` frame derivation, JS heap delta, closed-sample
+RGBA-equivalent size, module size, and cancel during open and decode.
+`publicSupportClaim` stays false. Filmstrip, waveform, product playback,
+native RSS, Firefox, and Safari stay unmeasured. No new decoder is loaded.
+
 ## Exit criteria
 
 | Criterion | Record |
