@@ -1,6 +1,6 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–1 complete; Step 2
+Status: scope approved in principle on 2026-09-21; Steps 0–2 complete; Step 3
 is next and starts only on the user's request.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
@@ -172,7 +172,16 @@ reference starts under a main-thread stall. Temporary permission revocation
 ended the track. Acoustic round-trip delay varied, so the candidate automatic
 physical offset is zero until the user calibrates it. The measurements and
 limits are in [the Step 1 clock proof](evidence/issue209/STEP_1_CLOCK_PROOF.md).
-This is a clock-only GO; the voiceover gate still needs Step 2 storage proof.
+At this checkpoint, the clock was a GO and the storage gate remained open.
+
+**Step 2 checkpoint (2026-09-21):** A disposable Chromium OPFS worker probe
+streamed a 60-minute-size WAV with a 64 KiB in-flight cap and recovered
+decodable partial takes after worker termination, browser process kill,
+short write, injected quota failure, and damaged checkpoint/header data.
+The alternating checkpoint journal, bounds, observations, and limits are in
+[the Step 2 storage proof](evidence/issue209/STEP_2_STORAGE_PROOF.md). Storage
+is a qualified GO; together with Step 1, the voiceover feasibility gate passed.
+Step 3 is the next requested unit. Product implementation remains unstarted.
 
 ### Voiceover implementation
 
