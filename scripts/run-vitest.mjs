@@ -8,6 +8,9 @@ const repositoryRoot = fileURLToPath(new URL('..', import.meta.url))
 const benchmarkRunnerTest = fileURLToPath(
   new URL('./performance/run-benchmark.test.mjs', import.meta.url),
 )
+const issue207ContractTest = fileURLToPath(
+  new URL('./issue207/contract.test.mjs', import.meta.url),
+)
 
 function run(command, args) {
   return new Promise((resolve) => {
@@ -56,7 +59,7 @@ async function main() {
   // node:test, so the canonical gate runs them after Vitest without recursion.
   const runner = await run(
     process.execPath,
-    ['--test', benchmarkRunnerTest],
+    ['--test', benchmarkRunnerTest, issue207ContractTest],
   )
   if (runner.startError) throw runner.startError
   if (runner.signal) {

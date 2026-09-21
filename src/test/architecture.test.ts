@@ -417,6 +417,11 @@ describe('architecture guard', () => {
       .map(edgeLabel)).toEqual([])
   })
 
+  test('keeps the Issue 207 codec evidence laboratory outside production imports', () => {
+    expect(edges.filter((edge) => /(?:^|\/)issue207(?:\/|$)/.test(edge.specifier))
+      .map(edgeLabel)).toEqual([])
+  })
+
   test('keeps the title pixel proof and archived baseline outside production imports', () => {
     expect(edges.filter((edge) => /titleRenderProof|issue200-baseline|diagnostics\/issue200/.test(edge.specifier)).map(edgeLabel)).toEqual([])
   })
