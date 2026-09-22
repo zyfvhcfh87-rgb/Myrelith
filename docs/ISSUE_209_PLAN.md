@@ -1,6 +1,6 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–5 complete; Step 6
+Status: scope approved in principle on 2026-09-21; Steps 0–6 complete; Step 7
 is next and starts only on the user's request.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
@@ -247,6 +247,20 @@ tail, recovered exactly 262,144 PCM bytes in a new worker, and decoded the
 evidence, not a power-loss or real-quota guarantee. Step 6 must connect the
 microphone worklet to this bridge and prove real-time sample ordering, transfer
 bound, overrun stop, and silent monitoring in Chromium.
+
+**Step 6 checkpoint (2026-09-23):** Added a capture-only mono PCM16
+`AudioWorkletProcessor` and `app/voiceoverMicrophoneBridge.ts`. The worklet
+reports exact `AudioContext` sample frames, transfers at most four unacknowledged
+16 KiB batches, and stops on overrun. The app bridge validates contiguous
+frames and byte counts, acknowledges only completed writer appends, and
+stops/checkpoints the writer after all accepted batches settle. The worklet fills its
+output with zeroes; a zero-gain node guards the destination connection. Its
+source stream is supplied by a later capture owner. [Step 6 evidence](evidence/issue209/STEP_6_MICROPHONE_BRIDGE.md)
+records two passing real Chromium flows. The focused writer suite (11 Vitest
+cases and 28 Node checks), build/typecheck, lint and diff check passed; lint
+retains five unrelated warnings. Physical microphone and transport alignment
+remain unqualified. Step 7
+owns permissions, tracks, interruption and project teardown.
 
 ### Voiceover implementation
 
