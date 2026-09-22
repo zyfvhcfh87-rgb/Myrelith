@@ -1,6 +1,6 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–3 complete; Step 4
+Status: scope approved in principle on 2026-09-21; Steps 0–4 complete; Step 5
 is next and starts only on the user's request.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
@@ -194,6 +194,35 @@ this change. No product UI or browser behavior is added in this step, so no
 browser flow was needed. Step 4 owns session transitions and destination
 validation; actual transport joining, real input, and placement remain later
 gates.
+
+**Step 4 checkpoint (2026-09-22):** Added pure `domain/voiceoverSession.ts`
+and `domain/voiceoverDestination.ts`. The session rules cover permission,
+preparation, count-in, recording, cleanup, review, keep, discard, and failure.
+Session ids and operation tokens reject stale completions; repeated actions
+issue no duplicate effect. A cancelled Stop cannot be completed by the older
+Stop reply. Cleanup failure blocks a new session until cleanup succeeds.
+Keep is accepted only from review; Cancel is disabled during that import
+attempt, and a failed Keep returns to review. Source ending or interruption
+stops an active take for explicit review. Project replacement retains the
+draft and invalidates pending import completion.
+
+Pinned intent copies project identity/generation, active sequence, edit
+revision, lane, integer start frame, and rates. Existing media-placement rules
+check lane kind/lock and full-range overlap, including compound items. Failed
+placement leaves the take in the same project's Pool; project replacement
+instead retains the draft. Step 7 must supply a monotonic edit revision that
+includes undo/redo and navigation, dispose late resources even when their
+events are ignored, and execute/acknowledge each cleanup effect. Step 9 must
+revalidate before import and again immediately before placement; the pure
+decision does not itself authorize a later commit after another await.
+
+Validation: `NODE_OPTIONS=--no-experimental-webstorage npm test --
+src/domain/voiceoverDestination.test.ts src/domain/voiceoverSession.test.ts
+src/domain/mediaPlacement.test.ts` passed 41 Vitest cases and 28 Node runner
+checks. `npm run build`, `npm run lint`, and `git diff --check` passed; the
+existing bundle-size notice and five unrelated lint warnings remain. This
+step adds pure domain rules with no observable browser behavior. Step 5 is
+the next requested unit: implement the OPFS WAV writer proven in Step 2.
 
 ### Voiceover implementation
 

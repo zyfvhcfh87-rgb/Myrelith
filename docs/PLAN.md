@@ -11,7 +11,9 @@ record; new post-MVP work needs a new user-approved plan. Companion context:
 The user accepted the voiceover-first scope and requested small, resumable
 steps before implementation. The [Issue #209 plan](ISSUE_209_PLAN.md) lists
 those steps and their separate clock, storage, and A/V feasibility gates.
-Product implementation has not begun.
+Pure voiceover clock and session rules are complete through Step 4. The
+remaining steps cover the writer, browser capture owner, placement, UI, and
+their separate acceptance gates.
 
 ## Post-MVP issue #204 — image-sequence, audio-only, alpha, and chapter delivery
 
