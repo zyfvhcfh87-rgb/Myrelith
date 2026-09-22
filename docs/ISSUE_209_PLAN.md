@@ -1,6 +1,6 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–4 complete; Step 5
+Status: scope approved in principle on 2026-09-21; Steps 0–5 complete; Step 6
 is next and starts only on the user's request.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
@@ -223,6 +223,30 @@ checks. `npm run build`, `npm run lint`, and `git diff --check` passed; the
 existing bundle-size notice and five unrelated lint warnings remain. This
 step adds pure domain rules with no observable browser behavior. Step 5 is
 the next requested unit: implement the OPFS WAV writer proven in Step 2.
+
+**Step 5 checkpoint (2026-09-22):** Added `pipeline/voiceoverWavDraft.ts`
+with injected synchronous file I/O, the Step 2 two-slot checkpoint format,
+exact write-count checks, periodic flushes, tail-truncating recovery, bounded
+header/length finalization, and retryable close/discard. A dedicated OPFS
+worker owns the recordings directory and serializes operations. The app bridge
+transfers at most four 16 KiB batches (64 KiB total) before acknowledgements;
+an overrun faults the take, so it cannot silently build a queue. Original WAVs
+stay outside the disposable proxy and analysis caches. This step exposes a
+production writer seam, not a microphone source or Media Pool import.
+
+Focused tests covered short audio and journal writes, injected quota failure,
+worker-loss tail recovery, torn newest checkpoint, invalid journal, changed
+final length, close/discard retries, transfer credit, worker failure, and
+reply mismatch: 11 Vitest cases plus the test runner's 28 Node checks passed.
+`npm run build`, `npm run lint`, and `git diff --check` passed; lint still
+reports the five existing unrelated warnings and Vite reports its existing
+large-chunk notice. The checked-in Playwright test passed in real Chromium:
+it wrote a 262,144-byte checkpoint, terminated the worker with a 16,384-byte
+tail, recovered exactly 262,144 PCM bytes in a new worker, and decoded the
+262,188-byte WAV as 131,072 mono samples at 48 kHz. This is worker-loss
+evidence, not a power-loss or real-quota guarantee. Step 6 must connect the
+microphone worklet to this bridge and prove real-time sample ordering, transfer
+bound, overrun stop, and silent monitoring in Chromium.
 
 ### Voiceover implementation
 
