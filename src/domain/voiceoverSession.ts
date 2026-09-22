@@ -4,7 +4,7 @@ import type { VoiceoverDestination } from './voiceoverDestination'
 export type VoiceoverInterruption =
   | 'source-ended' | 'hidden' | 'transport-changed' | 'destination-changed' | 'overrun'
 export type VoiceoverFailure =
-  | 'permission-denied' | 'permission-dismissed' | 'unsupported'
+  | 'permission-denied' | 'permission-dismissed' | 'unsupported' | 'device-unavailable'
   | 'writer-failed' | 'finalization-failed' | 'project-replaced' | 'cleanup-failed'
 
 interface SessionBase {

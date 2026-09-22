@@ -13,8 +13,11 @@ export interface VoiceoverMicrophoneOptions {
   stream: MediaStream
   writer: VoiceoverCaptureWriter
   startFrame: number
+  onStarted?: (atFrame: number) => void
   onBatch?: (batch: { sequence: number; startFrame: number; frames: number }) => void
   onOverrun?: (atFrame: number) => void
+  /** The capture owner retains writer cleanup after a graph failure. */
+  closeWriterOnFailure?: boolean
 }
 
 export interface VoiceoverMicrophoneResult {
@@ -37,6 +40,11 @@ async function loadWorklet(context: AudioContext): Promise<void> {
     void loaded.catch(() => loadedWorklets.delete(context))
   }
   await loaded
+}
+
+/** Prepare module loading before the app chooses an imminent clock frame. */
+export async function prepareVoiceoverMicrophoneWorklet(context: AudioContext): Promise<void> {
+  await loadWorklet(context)
 }
 
 function validFrame(frame: number): boolean { return Number.isSafeInteger(frame) && frame >= 0 }
@@ -65,6 +73,7 @@ export async function connectVoiceoverMicrophone(options: VoiceoverMicrophoneOpt
   let finishing = false
   let stopRequested = false
   let nextFrame = startFrame
+  let started = false
   let nextSequence = 1
   let pendingBytes = 0
   let peakInFlightBytes = 0
@@ -91,7 +100,9 @@ export async function connectVoiceoverMicrophone(options: VoiceoverMicrophoneOpt
     const error = cause instanceof Error ? cause : new Error(String(cause))
     try { node.port.postMessage({ type: 'abort' } satisfies VoiceoverCaptureControl) } catch { /* Port may already be closed. */ }
     disconnectGraph()
-    try { writer.close() } catch { /* Preserve the capture failure. */ }
+    if (options.closeWriterOnFailure !== false) {
+      try { writer.close() } catch { /* Preserve the capture failure. */ }
+    }
     rejectFinished(error)
   }
 
@@ -117,8 +128,17 @@ export async function connectVoiceoverMicrophone(options: VoiceoverMicrophoneOpt
 
   function receive(message: VoiceoverCaptureWorkletMessage): void {
     if (settled) return
+    if (message.type === 'started') {
+      if (started || terminal || message.atFrame !== startFrame) {
+        fail(new Error('Recording worklet started at an unexpected sample frame'))
+        return
+      }
+      started = true
+      try { options.onStarted?.(message.atFrame) } catch (cause) { fail(cause) }
+      return
+    }
     if (message.type === 'batch') {
-      if (terminal || message.sequence !== nextSequence || message.startFrame !== nextFrame ||
+      if (!started || terminal || message.sequence !== nextSequence || message.startFrame !== nextFrame ||
         !Number.isSafeInteger(message.frames) || message.frames < 1 ||
         message.frames > VOICEOVER_WAV_LIMITS.batchBytes / 2 ||
         !(message.buffer instanceof ArrayBuffer) || message.buffer.byteLength !== message.frames * 2) {
@@ -189,6 +209,14 @@ export async function connectVoiceoverMicrophone(options: VoiceoverMicrophoneOpt
         catch (cause) { fail(cause) }
       }
       return finished
+    },
+    /** Cut input immediately while leaving the writer available for discard or recovery. */
+    abortForCleanup(): void {
+      if (settled || terminal) return
+      settled = true
+      try { node.port.postMessage({ type: 'abort' } satisfies VoiceoverCaptureControl) } catch { /* Port may already be closed. */ }
+      disconnectGraph()
+      rejectFinished(new DOMException('Recording capture interrupted for cleanup', 'AbortError'))
     },
     dispose(): void { if (!settled) fail(new DOMException('Recording bridge disposed', 'AbortError')) },
     snapshot: () => ({ nextFrame, pendingBytes, peakInFlightBytes, batches,

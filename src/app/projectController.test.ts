@@ -853,6 +853,31 @@ describe('active-project cleanup', () => {
     })
   })
 
+  test('project exit waits for voiceover teardown before disposing transport or media', async () => {
+    const gate = deferred<void>()
+    const deps = makeDeps({ disposeVoiceoverCapture: vi.fn(() => gate.promise) })
+    useProjectSessionStore.setState({ screen: 'editor', activeProjectName: 'Recording' })
+    const leaving = leaveActiveProject(deps)
+    await flush()
+    expect(deps.disposeVoiceoverCapture).toHaveBeenCalledOnce()
+    expect(deps.disposeTransport).not.toHaveBeenCalled()
+    expect(deps.disposeMediaVisuals).not.toHaveBeenCalled()
+    gate.resolve()
+    await expect(leaving).resolves.toEqual({ status: 'ready' })
+    expect(deps.disposeTransport).toHaveBeenCalledOnce()
+  })
+
+  test('failed voiceover cleanup prevents project exit and preserves the editor', async () => {
+    const deps = makeDeps({ disposeVoiceoverCapture: vi.fn(async () => {
+      throw new Error('recording draft is still open')
+    }) })
+    useProjectSessionStore.setState({ screen: 'editor', activeProjectName: 'Recording' })
+    await expect(leaveActiveProject(deps)).resolves.toMatchObject({ status: 'failed' })
+    expect(deps.disposeTransport).not.toHaveBeenCalled()
+    expect(deps.disposeMediaVisuals).not.toHaveBeenCalled()
+    expect(useProjectSessionStore.getState().screen).toBe('editor')
+  })
+
   test('a failed plugin teardown preserves the active project and resumes persistence', async () => {
     const asset = makeAsset({
       id: 'asset-plugin-teardown-failed',

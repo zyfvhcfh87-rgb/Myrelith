@@ -1,6 +1,6 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–6 complete; Step 7
+Status: scope approved in principle on 2026-09-21; Steps 0–7 complete; Step 8
 is next and starts only on the user's request.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
@@ -259,8 +259,26 @@ source stream is supplied by a later capture owner. [Step 6 evidence](evidence/i
 records two passing real Chromium flows. The focused writer suite (11 Vitest
 cases and 28 Node checks), build/typecheck, lint and diff check passed; lint
 retains five unrelated warnings. Physical microphone and transport alignment
-remain unqualified. Step 7
-owns permissions, tracks, interruption and project teardown.
+remain unqualified. Step 7 owns permissions, tracks, interruption and project teardown.
+
+**Step 7 checkpoint (2026-09-23):** Added an app-owned microphone session
+controller that requests permission on the initiating call, pins the destination,
+owns stream, tracks, worklet and WAV writer, and publishes only serializable
+status. It stops tracks on stop, cancel, source loss, hidden/frozen/pagehide,
+failure, and project replacement. Project exit/activation waits for voiceover
+cleanup before transport or media teardown. Delayed permission and worklet
+callbacks cannot revive a cancelled or replaced session; cleanup failure blocks
+the next take until retry. A monotonic app revision invalidates pinned intent
+through edits, undo/redo and navigation. Interrupted takes reopen the last
+durable checkpoint with a diagnostic that recent audio may be lost.
+
+[Step 7 evidence](evidence/issue209/STEP_7_CAPTURE_OWNER.md) records the fault
+matrix and synthetic-source Chromium checks. Focused tests passed 101 Vitest
+cases plus 28 Node runner checks; build/typecheck, lint, and diff check passed
+with the existing five lint warnings and Vite size notice. Four Chromium tests
+passed across the owner and Step 6 bridge. There is no product recording UI yet;
+the provisional start frame is not aligned to playback or timeline. Step 8
+must join the shared transport clock and prove alignment before Step 9 keep/import.
 
 ### Voiceover implementation
 

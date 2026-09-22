@@ -29,6 +29,7 @@ export class VoiceoverWavBridge {
   private nextId = 1
   private outstanding = 0
   private appendFailure: unknown = null
+  private stoppedProgress: VoiceoverDraftProgress | null = null
   private phase: 'idle' | 'opening' | 'writing' | 'stopping' | 'faulted' | 'stopped' | 'discarded' | 'closed' = 'idle'
 
   constructor(createWorker: () => VoiceoverWavWorkerLike = () => new Worker(
@@ -55,6 +56,7 @@ export class VoiceoverWavBridge {
   }
 
   get inFlightBytes(): number { return this.outstanding }
+  get isClosed(): boolean { return this.phase === 'closed' }
 
   private fail(cause: Error): void {
     if (this.phase === 'closed') return
@@ -136,11 +138,15 @@ export class VoiceoverWavBridge {
       const result = await this.send({ type: 'stop' })
       if (result.type !== 'stop') throw new Error('Invalid stop result')
       this.phase = 'stopped'
+      this.stoppedProgress = result.progress
       return result.progress
     } catch (cause) { this.markFaulted(); throw cause }
   }
 
   async release(): Promise<VoiceoverDraftProgress> {
+    // A capture graph may detect a sample-count error after the writer has
+    // already checkpointed successfully. That draft is already released.
+    if (this.phase === 'stopped' && this.stoppedProgress) return this.stoppedProgress
     if (this.phase !== 'writing' && this.phase !== 'faulted') throw new Error('Recording draft cannot be released now')
     this.phase = 'stopping'
     try {
@@ -159,6 +165,7 @@ export class VoiceoverWavBridge {
       const result = await this.send({ type: 'recover', id })
       if (result.type !== 'recover') throw new Error('Invalid recovery result')
       this.phase = 'stopped'
+      this.stoppedProgress = result.progress
       return result.progress
     } catch (cause) { this.markFaulted(); throw cause }
   }

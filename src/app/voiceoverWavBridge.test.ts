@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { VoiceoverWavBridge, type VoiceoverWavWorkerLike } from './voiceoverWavBridge'
 import { VOICEOVER_WAV_LIMITS as LIMITS } from '../pipeline/voiceoverWavDraft'
 import type { VoiceoverWavReply, VoiceoverWavRequest, VoiceoverWavResult } from '../pipeline/voiceoverWavProtocol'
@@ -34,6 +34,19 @@ async function opened() {
 }
 
 describe('voiceover WAV transfer bound', () => {
+  it('releases an already stopped draft without issuing a second worker operation', async () => {
+    const { worker, bridge } = await opened()
+    const stopped = bridge.stop()
+    await vi.waitFor(() => expect(worker.sent).toHaveLength(2))
+    worker.reply(1, { type: 'stop', progress: zero })
+    await stopped
+    await expect(bridge.release()).resolves.toEqual(zero)
+    expect(worker.sent).toHaveLength(2)
+    expect(bridge.isClosed).toBe(false)
+    bridge.close()
+    expect(bridge.isClosed).toBe(true)
+  })
+
   it('transfers four full batches, rejects the fifth, and frees credit only on acknowledgement', async () => {
     const { worker, bridge } = await opened()
     const buffers = Array.from({ length: 4 }, () => new ArrayBuffer(LIMITS.batchBytes))

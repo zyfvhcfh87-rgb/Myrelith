@@ -88,6 +88,9 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
       }
       for (let index = from; index < to; index++) {
         const frame = blockStart + index
+        if (this.nextCaptureFrame === null) {
+          this.port.postMessage({ type: 'started', atFrame: frame })
+        }
         if (this.nextCaptureFrame !== null && frame !== this.nextCaptureFrame) {
           this.fail('Microphone sample frame discontinuity', frame)
           return true

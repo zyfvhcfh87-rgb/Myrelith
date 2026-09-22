@@ -14,6 +14,7 @@ import { disposeLoadedPlugins } from '../pluginLifecycle';
 import { pickLocalProjectFile, requestLocalProjectPermission } from '../localProjectStorage';
 import { getRecentProjectRecord, getRecoveryJournalRecord, rememberRecentProjectRecord } from '../projectLibraryController';
 import { createLocalProjectBindingId } from '../localProjectProvenance';
+import { teardownVoiceoverForProjectChange } from '../voiceoverCaptureOwner';
 import type { ProjectControllerDeps } from './contracts';
 
 export const projectControllerRealDeps: ProjectControllerDeps = {
@@ -24,6 +25,7 @@ export const projectControllerRealDeps: ProjectControllerDeps = {
   readText: (file) => file.text(),
   inspectMedia: inspectMediaFileCompatibility,
   disposeExport: disposeLoadedExport,
+  disposeVoiceoverCapture: teardownVoiceoverForProjectChange,
   disposeTransport: async () => {
     await disposeSourcePlayback()
     await disposeTransport()
