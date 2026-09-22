@@ -1,6 +1,6 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–2 complete; Step 3
+Status: scope approved in principle on 2026-09-21; Steps 0–3 complete; Step 4
 is next and starts only on the user's request.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
@@ -182,6 +182,18 @@ The alternating checkpoint journal, bounds, observations, and limits are in
 [the Step 2 storage proof](evidence/issue209/STEP_2_STORAGE_PROOF.md). Storage
 is a qualified GO; together with Step 1, the voiceover feasibility gate passed.
 Step 3 is the next requested unit. Product implementation remains unstarted.
+
+**Step 3 checkpoint (2026-09-22):** Added pure `domain/voiceoverClock.ts`
+sample/frame anchors, an exact count-in window, a fixed-length trim/pad plan,
+and signed sample/frame compensation capped at ±0.5 seconds. Count-in and
+recording both use the canonical rational audio sample grid; samples before
+the capture anchor are never borrowed. Focused `voiceoverClock` and `time`
+tests passed (39 Vitest cases); the test runner's 28 Node checks, build/
+typecheck, and lint passed. Lint still reports five existing warnings outside
+this change. No product UI or browser behavior is added in this step, so no
+browser flow was needed. Step 4 owns session transitions and destination
+validation; actual transport joining, real input, and placement remain later
+gates.
 
 ### Voiceover implementation
 
