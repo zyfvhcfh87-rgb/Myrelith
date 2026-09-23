@@ -5,6 +5,8 @@ import {
   planVoiceoverSampleWindow,
   voiceoverCompensationFromFrames,
   voiceoverCountInWindow,
+  voiceoverCountInCues,
+  voiceoverStopBoundary,
   voiceoverSampleAtTimelineFrame,
   voiceoverTimelineFrameAtSample,
 } from './voiceoverClock'
@@ -52,6 +54,17 @@ describe('voiceover count-in and frame anchor', () => {
     expect(() => voiceoverTimelineFrameAtSample(1, 0, 0, {
       frameRate: { num: 96_000, den: 1 }, audioSampleRate: 48_000,
     })).toThrow(RangeError)
+  })
+
+  test('count-in cues and stop land on the rational frame grid', () => {
+    expect(voiceoverCountInCues(58_048, 30, ntsc)).toEqual([
+      10_000, 21_211, 34_024, 45_235,
+    ])
+    expect(voiceoverCountInCues(10_000, 0, ntsc)).toEqual([])
+    const stop = voiceoverStopBoundary(11_603, 10_000, 1, 2_400, ntsc)
+    expect(stop.stopFrame).toBe(4)
+    expect(stop.stopSample).toBe(14_804)
+    expect(() => voiceoverStopBoundary(9_999, 10_000, 1, 0, ntsc)).toThrow(RangeError)
   })
 })
 

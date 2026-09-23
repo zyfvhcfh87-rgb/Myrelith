@@ -98,6 +98,39 @@ export function voiceoverTimelineFrameAtSample(
   return frame
 }
 
+/** First timeline-frame boundary safely after a stop request reaches the app. */
+export function voiceoverStopBoundary(
+  nowSample: number,
+  anchorSample: number,
+  startFrame: number,
+  leadSamples: number,
+  doc: AudioSampleDocument,
+): { stopSample: number; stopFrame: number } {
+  nonNegative(nowSample, 'Current sample')
+  nonNegative(leadSamples, 'Stop lead samples')
+  if (nowSample < anchorSample) throw new RangeError('Voiceover has not reached its anchor')
+  const after = safe(BigInt(nowSample) + BigInt(leadSamples), 'Stop lead boundary')
+  const containing = voiceoverTimelineFrameAtSample(after, anchorSample, startFrame, doc)
+  if (containing === null || containing < startFrame || containing >= Number.MAX_SAFE_INTEGER) {
+    throw new RangeError('Stop frame is outside the timeline sample grid')
+  }
+  const stopFrame = containing + 1
+  return { stopFrame, stopSample: voiceoverSampleAtTimelineFrame(stopFrame, anchorSample, startFrame, doc) }
+}
+
+/** Four count-in cues, each on an integer frame's exact sample boundary. */
+export function voiceoverCountInCues(
+  anchorSample: number,
+  durationFrames: number,
+  doc: AudioSampleDocument,
+): readonly number[] {
+  const window = voiceoverCountInWindow(anchorSample, durationFrames, doc)
+  if (durationFrames === 0) return []
+  const beats = Math.min(4, durationFrames)
+  return Array.from({ length: beats }, (_, index) =>
+    window.startSample + audioSampleBoundary(Math.floor(index * durationFrames / beats), doc))
+}
+
 export interface VoiceoverSampleWindow {
   readonly anchorSample: number
   readonly stopSample: number

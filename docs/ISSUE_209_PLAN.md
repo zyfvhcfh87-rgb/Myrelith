@@ -1,6 +1,6 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–7 complete; Step 8
+Status: scope approved in principle on 2026-09-21; Steps 0–8 complete; Step 9
 is next and starts only on the user's request.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
@@ -279,6 +279,19 @@ with the existing five lint warnings and Vite size notice. Four Chromium tests
 passed across the owner and Step 6 bridge. There is no product recording UI yet;
 the provisional start frame is not aligned to playback or timeline. Step 8
 must join the shared transport clock and prove alignment before Step 9 keep/import.
+
+**Step 8 checkpoint (2026-09-23):** The capture owner now arms Program
+playback, count-in cues, the microphone worklet, and video transport on one
+future 48 kHz sample anchor. An audible timeline uses the existing audio
+session's anchor; an empty/silent timeline uses the same shared context clock.
+Stop targets the next exact integer timeline frame with a bounded lead. Seek,
+scrub, playback, device, project, and media changes interrupt the take; count-in
+cancel stops the microphone and transport. The worklet tolerates inactive
+pre-anchor render gaps but rejects missed anchors and in-take discontinuities.
+Default physical compensation remains zero pending per-device qualification.
+[Step 8 evidence](evidence/issue209/STEP_8_TRANSPORT_JOIN.md) records focused
+tests, Chromium sample alignment and failure paths, build/lint, and limits.
+Step 9 may now implement keep/import and optional placement.
 
 ### Voiceover implementation
 

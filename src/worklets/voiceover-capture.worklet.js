@@ -69,16 +69,19 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
     const length = outputs[0]?.[0]?.length ?? input?.length ?? 128
     const blockStart = currentFrame
     const blockEnd = blockStart + length
-    if (this.lastRenderEnd !== null && blockStart !== this.lastRenderEnd) {
-      this.fail('Audio render frame discontinuity', blockStart)
-      return true
-    }
-    this.lastRenderEnd = blockEnd
-    if (blockEnd <= this.startFrame) return true
     if (this.nextCaptureFrame === null && blockStart > this.startFrame) {
       this.fail('Recording missed its start sample frame', blockStart)
       return true
     }
+    if (this.nextCaptureFrame !== null &&
+      this.lastRenderEnd !== null && blockStart !== this.lastRenderEnd) {
+      this.fail('Audio render frame discontinuity', blockStart)
+      return true
+    }
+    this.lastRenderEnd = blockEnd
+    // An inactive worklet can skip render quanta before the anchor. Only the
+    // captured interval requires continuous callbacks and sample numbering.
+    if (blockEnd <= this.startFrame) return true
     const from = Math.max(0, this.startFrame - blockStart)
     const to = Math.min(length, this.stopFrame - blockStart)
     if (to > from) {

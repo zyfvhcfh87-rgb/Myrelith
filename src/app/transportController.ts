@@ -26,6 +26,9 @@ import {
   type SourceBoundsCatalog,
 } from '../domain/crossfadePlan'
 import { docDurationFrames } from '../domain/selectors'
+import { voiceoverCountInCues, voiceoverCountInWindow } from '../domain/voiceoverClock'
+import { audioSampleBoundary } from '../domain/time'
+import { VOICEOVER_WAV_LIMITS } from '../pipeline/voiceoverWavDraft'
 import { createProjectTimelineAudioMixPlan } from '../domain/projectAudioMixPlan'
 import type { TimelineAudioMixPlan } from '../domain/audioMixPlan'
 import {
@@ -146,6 +149,21 @@ interface ControllerState {
   /** Async playback startups and stop work that project switching must drain. */
   playbackTasks: Set<Promise<void>>
   cleanupTasks: Set<Promise<void>>
+  voiceover: VoiceoverPlayback | null
+}
+
+interface VoiceoverPlayback {
+  internalPlayheadWrite: boolean
+  release(): void
+  interrupt(reason: 'transport-changed' | 'destination-changed'): void
+}
+
+export interface VoiceoverTransportLease {
+  readonly context: AudioContext
+  readonly anchorSample: number
+  readonly countInStartSample: number
+  readonly startFrame: number
+  release(): void
 }
 
 const state: ControllerState = {
@@ -166,6 +184,7 @@ const state: ControllerState = {
   unsubscribes: [],
   playbackTasks: new Set(),
   cleanupTasks: new Set(),
+  voiceover: null,
 }
 
 let stopSourcePlaybackClock = (): void => {}
@@ -469,15 +488,19 @@ function ensureEngine(): PlaybackEngine {
     onFrame: (frame) => {
       // Clamp against the CURRENT duration — edits may have shortened the
       // doc since start(). Reaching the end (either way) parks and pauses.
-      const last = lastFrame()
+      const voiceover = state.voiceover
+      const last = voiceover ? frame : lastFrame()
       if (frame > last) {
         useTransportStore.getState().setPlayheadFrame(Math.min(frame, last))
         pause()
       } else {
-        useTransportStore.getState().setPlayheadFrame(frame)
+        if (voiceover) voiceover.internalPlayheadWrite = true
+        try { useTransportStore.getState().setPlayheadFrame(frame) }
+        finally { if (voiceover) voiceover.internalPlayheadWrite = false }
       }
     },
     onEnded: () => {
+      if (state.voiceover) { state.voiceover.interrupt('transport-changed'); return }
       cancelPlaybackWork()
       useTransportStore.getState().setIsPlaying(false)
     },
@@ -488,6 +511,10 @@ function ensureEngine(): PlaybackEngine {
       if (s.isScrubbing && !prev.isScrubbing) pause()
     }),
     useDocumentStore.subscribe((s, prev) => {
+      if (state.voiceover && (s.project !== prev.project || s.activeSequenceId !== prev.activeSequenceId)) {
+        state.voiceover.interrupt('destination-changed')
+        return
+      }
       if (s.activeSequenceId !== prev.activeSequenceId) {
         cancelPlaybackWork()
         useTransportStore.getState().setIsPlaying(false)
@@ -509,6 +536,10 @@ function ensureEngine(): PlaybackEngine {
       }
     }),
     useMediaStore.subscribe((s, prev) => {
+      if (state.voiceover && (s.assets !== prev.assets || s.descriptors !== prev.descriptors)) {
+        state.voiceover.interrupt('transport-changed')
+        return
+      }
       if (
         (s.assets !== prev.assets || s.descriptors !== prev.descriptors)
         && useTransportStore.getState().isPlaying
@@ -526,6 +557,7 @@ function ensureEngine(): PlaybackEngine {
       }
     }),
     state.deps.subscribeDeviceChange(() => {
+      if (state.voiceover) { state.voiceover.interrupt('transport-changed'); return }
       if (useTransportStore.getState().isPlaying) restartPlayback()
     }),
   )
@@ -711,6 +743,7 @@ function startPlayback(from: number, unlockedContext?: Promise<unknown>): void {
 }
 
 function restartPlayback(): void {
+  if (state.voiceover) { state.voiceover.interrupt('transport-changed'); return }
   const transport = useTransportStore.getState()
   if (!transport.isPlaying) return
   const frame = transport.playheadFrame
@@ -723,6 +756,7 @@ function restartPlayback(): void {
  * playhead already rests at/after the last frame. No-op on an empty doc.
  */
 export function play(): void {
+  if (state.voiceover) { state.voiceover.interrupt('transport-changed'); return }
   const source = useSourceMonitorStore.getState()
   const sourceWasPlaying = source.playbackOwner === 'source'
     || (source.session?.shuttleStep ?? 0) !== 0
@@ -779,6 +813,7 @@ export function play(): void {
 
 /** Stop advancing; the playhead stays exactly where it is. */
 export function pause(): void {
+  if (state.voiceover) { state.voiceover.interrupt('transport-changed'); return }
   cancelPlaybackWork()
   useTransportStore.getState().setIsPlaying(false)
 }
@@ -812,6 +847,188 @@ export async function pauseAndDrainPlayback(): Promise<void> {
   await Promise.all([sourceDrain, drainProgramPlayback()])
 }
 
+function scheduleVoiceoverCountIn(
+  context: AudioContext,
+  anchorSample: number,
+  countInFrames: number,
+  doc: TimelineDoc,
+): () => void {
+  if (countInFrames === 0) return () => {}
+  const sources: AudioBufferSourceNode[] = []
+  try {
+    const length = Math.round(context.sampleRate * 0.012)
+    const buffer = context.createBuffer(1, length, context.sampleRate)
+    const channel = buffer.getChannelData(0)
+    for (let index = 0; index < length; index++) {
+      channel[index] = 0.16 * Math.sin(2 * Math.PI * 1_200 * index / context.sampleRate)
+        * Math.exp(-index / (context.sampleRate * 0.0025))
+    }
+    for (const sample of voiceoverCountInCues(anchorSample, countInFrames, doc)) {
+      if (sample / context.sampleRate <= context.currentTime) {
+        throw new Error('Count-in cue missed its audio clock deadline')
+      }
+      const source = context.createBufferSource()
+      source.buffer = buffer
+      source.connect(context.destination)
+      source.onended = () => source.disconnect()
+      sources.push(source)
+      source.start(sample / context.sampleRate)
+    }
+  } catch (cause) {
+    for (const source of sources) {
+      try { source.stop() } catch { /* Already ended or not yet scheduled. */ }
+      source.disconnect()
+    }
+    throw cause
+  }
+  return () => {
+    for (const source of sources) {
+      try { source.stop() } catch { /* Already ended. */ }
+      source.disconnect()
+    }
+  }
+}
+
+/** Arm Program playback and count-in against one exact context sample anchor. */
+export function armVoiceoverTransport(options: {
+  context: AudioContext
+  startFrame: number
+  countInFrames: number
+  onInterrupted(reason: 'transport-changed' | 'destination-changed'): void
+}): Promise<VoiceoverTransportLease> {
+  const { context, startFrame, countInFrames, onInterrupted } = options
+  const documentState = useDocumentStore.getState()
+  const doc = documentState.doc
+  const transport = useTransportStore.getState()
+  if (!Number.isSafeInteger(startFrame) || startFrame < 0 ||
+    !Number.isSafeInteger(countInFrames) || countInFrames < 0 ||
+    countInFrames > Math.ceil(doc.frameRate.num * 5 / doc.frameRate.den)) {
+    return Promise.reject(new RangeError('Voiceover frame or count-in is outside its bound'))
+  }
+  if (doc.audioSampleRate !== VOICEOVER_WAV_LIMITS.sampleRate ||
+    context !== ensureClock() || context.sampleRate !== doc.audioSampleRate) {
+    return Promise.reject(new Error('Voiceover must use the active 48 kHz playback clock'))
+  }
+  if (state.voiceover || transport.isPlaying || transport.isScrubbing) {
+    return Promise.reject(new Error('Pause playback and scrubbing before recording'))
+  }
+
+  const pendingPlayback = [...state.playbackTasks, ...state.cleanupTasks]
+  const abort = new AbortController()
+  let stopCues = () => {}
+  let unsubscribe = () => {}
+  let retired = false
+  const mode: VoiceoverPlayback = {
+    internalPlayheadWrite: false,
+    release: () => {
+      if (retired) return
+      retired = true
+      abort.abort()
+      stopCues()
+      unsubscribe()
+      if (state.voiceover === mode) {
+        state.voiceover = null
+        cancelPlaybackWork()
+        useTransportStore.getState().setIsPlaying(false)
+      }
+    },
+    interrupt: (reason) => {
+      if (retired) return
+      mode.release()
+      onInterrupted(reason)
+    },
+  }
+  state.voiceover = mode
+  // Install project/media/device listeners before asynchronous audio priming.
+  ensureEngine()
+  unsubscribe = useTransportStore.subscribe((next, previous) => {
+    if (state.voiceover !== mode || mode.internalPlayheadWrite) return
+    if (next.playheadFrame !== previous.playheadFrame ||
+      (next.isScrubbing && !previous.isScrubbing) ||
+      (!next.isPlaying && previous.isPlaying)) mode.interrupt('transport-changed')
+  })
+  mode.internalPlayheadWrite = true
+  try { transport.setPlayheadFrame(startFrame) }
+  finally { mode.internalPlayheadWrite = false }
+  transport.setIsPlaying(true)
+  const generation = ++state.playGeneration
+  state.startupAbort = abort
+
+  const task = (async (): Promise<VoiceoverTransportLease> => {
+    let localLease: MediaResourceLease | null = null
+    let adopted = false
+    try {
+      haltSourcePlaybackClock()
+      useSourceMonitorStore.getState().requestPlayback('program')
+      const speechDrain = beginSpeechRetirement('Program playback')
+      await Promise.all([
+        ...pendingPlayback,
+        drainSourcePlaybackClock(),
+        drainSourcePreviewPlayback(),
+        ...(speechDrain ? [speechDrain] : []),
+      ])
+      if (retired || generation !== state.playGeneration) throw new DOMException('Voiceover arm cancelled', 'AbortError')
+      await context.resume()
+      if (retired || generation !== state.playGeneration) throw new DOMException('Voiceover arm cancelled', 'AbortError')
+      const countInSamples = audioSampleBoundary(countInFrames, doc)
+      const leadSeconds = (countInSamples + 12_000) / doc.audioSampleRate
+      const assets = new Map(useMediaStore.getState().assets)
+      const catalog = currentSourceBoundsCatalog()
+      const mixPlan = createProjectTimelineAudioMixPlan(documentState.project,
+        documentState.activeSequenceId, catalog)
+      const duration = docDurationFrames(doc)
+      let anchorTime: number
+      if (startFrame < duration && hasAudioPlaybackContent(doc, startFrame, catalog, mixPlan)) {
+        localLease = mediaResourceAdmission.reserve({ kind: 'audio', decoderSlots: mixPlan.clips.length,
+          surfaceBytes: 0, monitorCompatible: true })
+        const session = await state.deps.startAudio(context, doc, startFrame,
+          createAssetResolver(assets, state.deps.fetchBlob), {
+            signal: abort.signal, sourceBoundsCatalog: catalog, mixPlan,
+            minimumStartLeadSeconds: leadSeconds,
+          })
+        if (retired || generation !== state.playGeneration) {
+          await session.stop()
+          throw new DOMException('Voiceover arm cancelled', 'AbortError')
+        }
+        state.audioSession = session
+        state.audioLease = localLease
+        adopted = true
+        state.audioPlanKey = audioPlaybackPlanKey(doc, catalog, mixPlan)
+        state.audioAssetsKey = audioAssetsKey(doc, 0, assets, catalog, mixPlan)
+        startAudioMeter(generation, session)
+        anchorTime = session.anchorTime
+      } else {
+        anchorTime = Math.ceil((context.currentTime + leadSeconds) * context.sampleRate) / context.sampleRate
+      }
+      const anchorSample = Math.round(anchorTime * context.sampleRate)
+      const countInStartSample = voiceoverCountInWindow(anchorSample, countInFrames, doc).startSample
+      const nowSample = Math.ceil(context.currentTime * context.sampleRate)
+      if (!Number.isSafeInteger(anchorSample) ||
+        countInStartSample - nowSample < 4_800) {
+        throw new Error('Voiceover missed its count-in setup deadline')
+      }
+      stopCues = scheduleVoiceoverCountIn(context, anchorSample, countInFrames, doc)
+      if (retired || generation !== state.playGeneration) throw new DOMException('Voiceover arm cancelled', 'AbortError')
+      state.startupAbort = null
+      const maximumFrames = Number((BigInt(VOICEOVER_WAV_LIMITS.maxDurationSamples) *
+        BigInt(doc.frameRate.num) + BigInt(doc.audioSampleRate * doc.frameRate.den) - 1n) /
+        BigInt(doc.audioSampleRate * doc.frameRate.den))
+      const endFrame = Math.max(duration, startFrame + maximumFrames + 1)
+      ensureEngine().start(startFrame, endFrame, doc.frameRate, anchorTime)
+      return { context, anchorSample, countInStartSample, startFrame, release: mode.release }
+    } catch (cause) {
+      mode.release()
+      throw cause
+    } finally {
+      if (!adopted) localLease?.release()
+    }
+  })()
+  const tracked = task.then(() => undefined, () => undefined)
+  state.playbackTasks.add(tracked)
+  void tracked.then(() => state.playbackTasks.delete(tracked))
+  return task
+}
+
 /** The play/pause button behavior. */
 export function togglePlayback(): void {
   if (useTransportStore.getState().isPlaying) pause()
@@ -835,6 +1052,7 @@ export function stepFrame(delta: number): void {
  * Project activation awaits this before revoking the outgoing media URLs.
  */
 export async function disposeTransport(): Promise<void> {
+  state.voiceover?.release()
   haltSourcePlaybackClock()
   const sourceDrain = drainSourcePlaybackClock()
   cancelPlaybackWork()

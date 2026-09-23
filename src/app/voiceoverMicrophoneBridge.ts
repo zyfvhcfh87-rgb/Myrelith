@@ -16,6 +16,7 @@ export interface VoiceoverMicrophoneOptions {
   onStarted?: (atFrame: number) => void
   onBatch?: (batch: { sequence: number; startFrame: number; frames: number }) => void
   onOverrun?: (atFrame: number) => void
+  onTerminal?: (reason: 'stopped' | 'overrun', endFrame: number) => void
   /** The capture owner retains writer cleanup after a graph failure. */
   closeWriterOnFailure?: boolean
 }
@@ -177,6 +178,8 @@ export async function connectVoiceoverMicrophone(options: VoiceoverMicrophoneOpt
       return
     }
     terminal = { reason: message.type, endFrame: message.endFrame }
+    try { options.onTerminal?.(message.type, message.endFrame) }
+    catch (cause) { fail(cause); return }
     if (message.type === 'overrun') {
       try { options.onOverrun?.(message.endFrame) } catch (cause) { fail(cause); return }
     }
