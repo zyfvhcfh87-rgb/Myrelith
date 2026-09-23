@@ -1,6 +1,6 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–8 complete; Step 9
+Status: scope approved in principle on 2026-09-21; Steps 0–9 complete; Step 10
 is next and starts only on the user's request.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
@@ -292,6 +292,18 @@ Default physical compensation remains zero pending per-device qualification.
 [Step 8 evidence](evidence/issue209/STEP_8_TRANSPORT_JOIN.md) records focused
 tests, Chromium sample alignment and failure paths, build/lint, and limits.
 Step 9 may now implement keep/import and optional placement.
+
+**Step 9 checkpoint (2026-09-23):** Keep now finalizes and verifies the stopped
+WAV, passes its OPFS `File` and handle through the existing compatibility and
+Media Pool import path, and waits to remember the original under the active
+local project binding. Timeline placement uses the existing controller after
+another pinned-destination check. Invalid or stale destinations, a late
+collision, and mismatched decoded duration leave the imported take in the Pool.
+Import failure retains the review draft for retry; project replacement cancels
+and drains pending Keep work before activation. Placement remains one history
+entry with working undo/redo. [Step 9 evidence](evidence/issue209/STEP_9_KEEP_PLACE.md)
+records the focused checks, real Chromium import, limitations, and handoff.
+Step 10 may now define draft recovery and kept-original reconnect/removal.
 
 ### Voiceover implementation
 

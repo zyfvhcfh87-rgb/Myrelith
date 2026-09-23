@@ -1,17 +1,23 @@
 /** One app-owned microphone session. Native resources never enter Zustand. */
-import { checkVoiceoverDestination, pinVoiceoverDestination, type VoiceoverDestinationContext } from '../domain/voiceoverDestination'
+import { checkVoiceoverDestination, pinVoiceoverDestination, resolveVoiceoverKeepDestination, type VoiceoverDestinationContext } from '../domain/voiceoverDestination'
 import { beginVoiceoverSession, transitionVoiceoverSession, type VoiceoverFailure, type VoiceoverInterruption, type VoiceoverSession, type VoiceoverSessionEffect, type VoiceoverSessionEvent } from '../domain/voiceoverSession'
 import { VOICEOVER_WAV_LIMITS } from '../pipeline/voiceoverWavDraft'
 import { planVoiceoverSampleWindow, voiceoverStopBoundary, voiceoverTimelineFrameAtSample } from '../domain/voiceoverClock'
 import { useDocumentStore } from '../state/documentStore'
 import { useVoiceoverCaptureStore, type VoiceoverCaptureStatus, type VoiceoverCaptureTiming } from '../state/voiceoverCaptureStore'
 import { useTransportStore } from '../state/transportStore'
+import { useMediaStore } from '../state/mediaStore'
+import { importMediaFromHandle, cancelMediaImport, type MediaImportResult } from './mediaImportController'
+import { placeImportedAsset, type PlaceImportedAssetResult } from './mediaPlacementController'
+import { getActiveLocalProjectBindingId } from './localProjectProvenance'
+import { localMediaHandleRegistry } from './localMediaHandles'
 import { armVoiceoverTransport, getPlaybackClockContext, type VoiceoverTransportLease } from './transportController'
 import { connectVoiceoverMicrophone, prepareVoiceoverMicrophoneWorklet } from './voiceoverMicrophoneBridge'
 import { VoiceoverWavBridge } from './voiceoverWavBridge'
 
 type Capture = Awaited<ReturnType<typeof connectVoiceoverMicrophone>>
 type Writer = Pick<VoiceoverWavBridge, 'create' | 'stop' | 'release' | 'recover' | 'discard' | 'close' | 'append'>
+  & { finalize?: VoiceoverWavBridge['finalize'] }
   & { readonly isClosed?: boolean }
 
 export interface VoiceoverCaptureDeps {
@@ -26,6 +32,11 @@ export interface VoiceoverCaptureDeps {
   visibleAndFocused(): boolean
   preflight?(): string | null
   startConflict?(): string | null
+  importFinalized?(file: File, handle: FileSystemFileHandle): Promise<MediaImportResult>
+  rememberOriginal?(assetId: string, handle: FileSystemFileHandle): Promise<void>
+  importedDurationFrames?(assetId: string): number | null
+  placeImported?(projectId: string, assetId: string, trackId: string, startFrame: number): PlaceImportedAssetResult
+  cancelImport?(): void
   /** Fault-harness fallback; the app owner uses armTransport's shared anchor. */
   planStartFrame(context: AudioContext): number
   publish(status: VoiceoverCaptureStatus): void
@@ -52,6 +63,9 @@ interface Active {
   transport: VoiceoverTransportLease | null
   timing: VoiceoverCaptureTiming | null
   requestedStopSample: number | null
+  keepTask: Promise<void> | null
+  keepImportPending: boolean
+  keepCancelled: boolean
 }
 
 let editRevision = 0
@@ -152,7 +166,8 @@ export class VoiceoverCaptureOwner {
       writerStopped: false, stopRetryRecovery: false,
       capture: null, preparing: null, cleanup: Promise.resolve(), pendingStarted: false,
       trackListeners: [], sourceLabel: null, capturedSamples: 0, diagnostic: null,
-      countInFrames: countIn, transport: null, timing: null, requestedStopSample: null }
+      countInFrames: countIn, transport: null, timing: null, requestedStopSample: null,
+      keepTask: null, keepImportPending: false, keepCancelled: false }
     this.active = active
     this.publish()
     const unavailable = this.deps.preflight?.()
@@ -220,7 +235,13 @@ export class VoiceoverCaptureOwner {
       active.preparing = task
       return task
     }
-    if (effect.kind === 'request-permission' || effect.kind === 'keep') return Promise.resolve()
+    if (effect.kind === 'request-permission') return Promise.resolve()
+    if (effect.kind === 'keep') {
+      const task = this.keepDraft(active, effect)
+      active.keepTask = task
+      void task.finally(() => { if (active.keepTask === task) active.keepTask = null }).catch(() => {})
+      return task
+    }
     const kind = effect.kind
     const normalStop = kind === 'stop' && !active.stopRetryRecovery &&
       (!active.state.interruption || active.state.interruption === 'overrun')
@@ -286,6 +307,95 @@ export class VoiceoverCaptureOwner {
       stopFrame: active.timing.stopFrame ?? voiceoverTimelineFrameAtSample(endSample,
         active.timing.anchorSample, active.timing.startFrame, active.state.destination) }
     this.publish()
+  }
+
+  private async keepDraft(active: Active, effect: Extract<VoiceoverSessionEffect, { kind: 'keep' }>): Promise<void> {
+    const live = () => this.active === active && !active.keepCancelled && active.state.phase === 'keeping' &&
+      active.state.operation === effect.operation
+    let committedAssetId: string | null = null
+    try {
+      const writer = active.writer
+      if (!writer || !active.writerStopped || !writer.finalize || !this.deps.importFinalized ||
+        !this.deps.rememberOriginal || !this.deps.importedDurationFrames || !this.deps.placeImported) {
+        throw new Error('The finalized recording is unavailable for Keep')
+      }
+      const expectedFrames = active.timing?.stopFrame !== null && active.timing?.stopFrame !== undefined
+        ? active.timing.stopFrame - active.state.destination.startFrame : null
+      const before = resolveVoiceoverKeepDestination(active.state.destination,
+        this.deps.destinationContext(), Math.max(1, expectedFrames ?? 1),
+        effect.placeOnTimeline && active.state.interruption === null && expectedFrames !== null)
+      if (before.status === 'retain-draft') throw new Error('The project changed; the recording draft was retained')
+
+      const finalized = await writer.finalize()
+      if (!live()) return
+      if (finalized.pcmBytes <= 0 || finalized.pcmBytes % 2 !== 0 ||
+        finalized.file.size !== finalized.pcmBytes + VOICEOVER_WAV_LIMITS.headerBytes ||
+        finalized.pcmBytes / 2 !== active.capturedSamples) {
+        throw new Error('The finalized WAV does not match the reviewed sample count')
+      }
+      const beforeImport = resolveVoiceoverKeepDestination(active.state.destination,
+        this.deps.destinationContext(), Math.max(1, expectedFrames ?? 1), false)
+      if (beforeImport.status === 'retain-draft') throw new Error('The project changed; the recording draft was retained')
+
+      active.keepImportPending = true
+      let imported: MediaImportResult
+      try { imported = await this.deps.importFinalized(finalized.file, finalized.handle) }
+      finally { active.keepImportPending = false }
+      if (!live()) return
+      if (imported.status !== 'imported') {
+        throw new Error(imported.status === 'failed' ? imported.message :
+          `The finalized WAV was not imported (${imported.status})`)
+      }
+      const assetId = imported.assetId
+      committedAssetId = assetId
+      const importedFrames = this.deps.importedDurationFrames(assetId)
+      let rememberWarning: string | null = null
+      try { await this.deps.rememberOriginal(assetId, finalized.handle) }
+      catch (cause) { rememberWarning = `Recording kept, but its OPFS original could not be remembered: ${errorMessage(cause)}` }
+      if (!live()) return
+
+      const validDuration = importedFrames !== null && Number.isSafeInteger(importedFrames) && importedFrames >= 1
+      const matchingDuration = validDuration && expectedFrames !== null && importedFrames === expectedFrames
+      const destination = resolveVoiceoverKeepDestination(active.state.destination,
+        this.deps.destinationContext(), validDuration ? importedFrames : 1,
+        effect.placeOnTimeline && active.state.interruption === null && matchingDuration)
+      let location: 'pool' | 'timeline' = 'pool'
+      let placementWarning: string | null = null
+      if (destination.status === 'place') {
+        try {
+          const placed = this.deps.placeImported(active.state.destination.sequenceId, assetId,
+            destination.trackId, destination.startFrame)
+          if (placed.status === 'placed') location = 'timeline'
+          else placementWarning = `Recording kept in the Media Pool: ${placed.reason}`
+        } catch (cause) { placementWarning = `Recording kept in the Media Pool: ${errorMessage(cause)}` }
+      } else if (effect.placeOnTimeline) {
+        const reason = !matchingDuration && active.state.interruption === null
+          ? 'the imported duration differs from the captured frame window'
+          : destination.status === 'pool-only' ? destination.reason ?? 'the take was interrupted'
+            : 'the project changed'
+        placementWarning = `Recording kept in the Media Pool: ${reason}`
+      }
+      try { writer.close() }
+      catch (cause) { rememberWarning = `${rememberWarning ?? ''} Recording worker close failed: ${errorMessage(cause)}`.trim() }
+      active.writer = null
+      active.diagnostic = [rememberWarning, placementWarning].filter(Boolean).join(' ') || null
+      await this.dispatch(active, { sessionId: effect.sessionId, operation: effect.operation,
+        kind: 'kept', assetId, location })
+    } catch (cause) {
+      if (!live()) return
+      if (committedAssetId) {
+        active.diagnostic = `Recording kept in the Media Pool after import: ${errorMessage(cause)}`
+        try { active.writer?.close() } catch { /* The imported original remains in OPFS. */ }
+        active.writer = null
+        await this.dispatch(active, { sessionId: effect.sessionId, operation: effect.operation,
+          kind: 'kept', assetId: committedAssetId, location: 'pool' })
+        return
+      }
+      active.diagnostic = errorMessage(cause)
+      this.publish()
+      await this.dispatch(active, { sessionId: effect.sessionId, operation: effect.operation,
+        kind: 'keep-failed' })
+    }
   }
 
   private async prepare(active: Active, operation: number): Promise<void> {
@@ -449,6 +559,12 @@ export class VoiceoverCaptureOwner {
     return this.dispatch(active, { sessionId: active.state.sessionId, kind: 'cancel' })
   }
 
+  keep(placeOnTimeline: boolean): Promise<void> {
+    const active = this.active
+    if (!active) return Promise.resolve()
+    return this.dispatch(active, { sessionId: active.state.sessionId, kind: 'keep', placeOnTimeline })
+  }
+
   retryCleanup(): Promise<void> {
     const active = this.active
     if (!active) return Promise.resolve()
@@ -465,6 +581,9 @@ export class VoiceoverCaptureOwner {
   async teardownForProjectChange(): Promise<void> {
     const active = this.active
     if (!active) return
+    active.keepCancelled = true
+    if (active.keepImportPending) this.deps.cancelImport?.()
+    if (active.keepTask) await active.keepTask
     await this.dispatch(active, { sessionId: active.state.sessionId, kind: 'project-replaced' })
     if (active.state.phase === 'cleanup-failed') throw new Error(active.diagnostic ?? 'Voiceover cleanup failed')
   }
@@ -499,6 +618,15 @@ export function getVoiceoverCaptureOwner(): VoiceoverCaptureOwner {
     getContext: () => getPlaybackClockContext() as AudioContext,
     createWriter: () => new VoiceoverWavBridge(),
     connect: connectVoiceoverMicrophone,
+    importFinalized: (file, handle) => importMediaFromHandle(file, handle),
+    rememberOriginal: async (assetId, handle) => {
+      const binding = getActiveLocalProjectBindingId()
+      if (!binding) throw new Error('The local project binding is unavailable')
+      await localMediaHandleRegistry.remember(binding, assetId, handle)
+    },
+    importedDurationFrames: (assetId) => useMediaStore.getState().assets.get(assetId)?.durationFrames ?? null,
+    placeImported: placeImportedAsset,
+    cancelImport: () => { cancelMediaImport() },
     armTransport: (context, startFrame, countInFrames, onInterrupted) =>
       armVoiceoverTransport({ context, startFrame, countInFrames, onInterrupted }),
     prepareWorklet: prepareVoiceoverMicrophoneWorklet,
