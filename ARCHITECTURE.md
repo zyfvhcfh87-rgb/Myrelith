@@ -136,6 +136,13 @@ non-negotiable rules. Re-read it at the start of every coding session.
     it owns bounded finite native decoders, demux inputs and one scratch surface.
     The app bridge drains or terminates it before releasing shared optional-media
     admission. Monitoring never supplies authored switch timing or export frames,
+  - `workers/voiceover-wav.worker.ts` may import only
+    `pipeline/voiceoverWavDraft.ts` (the bounded OPFS WAV draft writer: checked
+    sync writes, two-slot checkpoint journal, tail-truncating recovery, and
+    bounded header finalization) and `pipeline/voiceoverWavProtocol.ts` (its
+    serializable worker contract); it owns the recordings directory, one
+    serialized draft, and bounded writes, and is their sole production runtime
+    host. It never assembles a whole take in memory,
   - `engine/worker-bridge.ts` references the worker FILE via
     `new Worker(new URL(...))` — a URL, not a module import; the pipeline
     chunk source reaches the bridge by injection, never by import.
