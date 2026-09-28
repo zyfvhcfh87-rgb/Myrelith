@@ -203,6 +203,7 @@ interface Fixture {
   compatibility: Map<string, MediaCompatibilityItem>
   currentDocument(): TimelineDoc
   setDocument(document: TimelineDoc): void
+  setProjectGeneration(generation: number): void
   inspect: ReturnType<typeof vi.fn<MediaImportDeps['inspect']>>
   replaceProjectRate: ReturnType<typeof vi.fn<MediaImportDeps['replaceProjectRate']>>
   rememberMediaHandle: ReturnType<
@@ -221,6 +222,7 @@ function makeFixture(
   projectId?: string,
 ): Fixture {
   let document = startingDocument
+  let projectGeneration = 0
   const assets = new Map<string, MediaAsset>()
   const compatibility = new Map<string, MediaCompatibilityItem>()
   let requestCount = 0
@@ -249,6 +251,7 @@ function makeFixture(
     inspect,
     getDocument: () => document,
     getProjectId: () => projectId ?? document.id,
+    getProjectGeneration: () => projectGeneration,
     getSequences: () => [document],
     replaceProjectRate,
     hasAsset: (id) => assets.has(id),
@@ -293,6 +296,9 @@ function makeFixture(
     currentDocument: () => document,
     setDocument: (next) => {
       document = next
+    },
+    setProjectGeneration: (next) => {
+      projectGeneration = next
     },
     inspect,
     replaceProjectRate,
@@ -1193,6 +1199,22 @@ describe('mediaImportController', () => {
     fixture.deps.inspect = vi.fn(() => pending.promise)
     const result = importMedia(file(), fixture.deps)
     fixture.setDocument({ ...fixture.currentDocument(), id: 'another-doc' })
+    pending.resolve(readyProbe(makeAsset()))
+
+    await expect(result).resolves.toMatchObject({
+      status: 'failed',
+      message: expect.stringContaining('active project changed'),
+    })
+    expect(fixture.assets).toHaveLength(0)
+    expect(fixture.revokeObjectURL).toHaveBeenCalledWith('blob:source')
+  })
+
+  test('reopening the same portable project during analysis rejects the stale import', async () => {
+    const pending = deferred<MediaProbeResult>()
+    const fixture = makeFixture(makeAsset(), undefined, 'reused-project-id')
+    fixture.deps.inspect = vi.fn(() => pending.promise)
+    const result = importMedia(file(), fixture.deps)
+    fixture.setProjectGeneration(1)
     pending.resolve(readyProbe(makeAsset()))
 
     await expect(result).resolves.toMatchObject({

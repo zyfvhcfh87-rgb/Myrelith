@@ -21,16 +21,19 @@ import {
   type VoiceoverDraftReference,
 } from '../domain/voiceoverDrafts'
 import type { VoiceoverSession } from '../domain/voiceoverSession'
-import { sequenceById } from '../domain/projectSequences'
-import { sequenceInstances } from '../domain/nestedSequences'
+import { projectMediaAssetIds } from '../domain/projectSequences'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useVoiceoverCaptureStore } from '../state/voiceoverCaptureStore'
 import { VoiceoverWavBridge } from './voiceoverWavBridge'
-import type { LocalMediaFileHandle } from './localMediaHandles'
+import type {
+  LocalMediaFileHandle,
+  LocalMediaHandleReference,
+} from './localMediaHandles'
 import { localMediaHandleRegistry } from './localMediaHandles'
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
 import { importMediaFromHandle, type MediaImportResult } from './mediaImportController'
+import { VOICEOVER_RECORDINGS_DIRECTORY } from '../pipeline/voiceoverWavDraft'
 
 /**
  * The directory/draft operations the recovery feature needs from one worker
@@ -47,12 +50,19 @@ export interface VoiceoverDraftRecoveryDeps {
   /** One dedicated worker per recovery instance; never the capture bridge. */
   createWriter(): RecoveryWriter
   projectBindingId(): string | null
+  projectGeneration(): number
+  /** Immutable Zustand snapshot identity; changes on edits and history moves. */
+  documentSnapshot(): object
   /** Every asset id in the active project, connected or offline. */
   projectAssetIds(): readonly string[]
   loadHandle(projectBindingId: string, assetId: string): Promise<LocalMediaFileHandle | null>
   forgetHandle(projectBindingId: string, assetId: string): Promise<void>
-  /** Asset ids used by a clip of any project sequence (dormant and nested included). */
-  clipReferencedAssetIds(): readonly string[]
+  /** All remembered handles, including assets from projects not currently open. */
+  allRememberedHandles(): Promise<readonly LocalMediaHandleReference[]>
+  /** Asset ids retained by the current project, its undo stack, or redo stack. */
+  retainedAssetIds(): readonly string[]
+  /** Prove the registry handle names the OPFS entry, not a same-named local file. */
+  isRecordingOriginal(draftId: string, handle: LocalMediaFileHandle): Promise<boolean>
   importMedia(file: File, handle: LocalMediaFileHandle): Promise<MediaImportResult>
   /** The capture session's state; its id is the draft id while it owns one. */
   liveSession(): VoiceoverSession | null
@@ -69,6 +79,7 @@ export type VoiceoverDraftAction =
   | { status: 'recovered'; assetId: string; sizeBytes: number | null }
   | { status: 'discarded'; sizeBytes: number | null }
   | { status: 'removed'; sizeBytes: number | null; note?: string }
+  | { status: 'cancelled' }
   | { status: 'rejected'; reason: string }
   | { status: 'failed'; message: string }
 
@@ -79,6 +90,7 @@ function failureMessage(cause: unknown): string {
 export class VoiceoverDraftRecovery {
   private readonly deps: VoiceoverDraftRecoveryDeps
   private bridge: RecoveryWriter | null = null
+  private lifecycle = 0
 
   constructor(deps: VoiceoverDraftRecoveryDeps) {
     this.deps = deps
@@ -86,6 +98,7 @@ export class VoiceoverDraftRecovery {
 
   /** Terminate the dedicated worker; drafts on disk are never touched. */
   dispose(): void {
+    this.lifecycle++
     if (this.bridge) {
       this.bridge.close()
       this.bridge = null
@@ -122,22 +135,27 @@ export class VoiceoverDraftRecovery {
   }
 
   private async references(): Promise<VoiceoverDraftReference[]> {
-    const binding = this.deps.projectBindingId()
-    if (!binding) return []
-    const settled = await Promise.allSettled(
-      this.deps.projectAssetIds().map(async (assetId) => {
-        const handle = await this.deps.loadHandle(binding, assetId)
-        return handle ? { fileName: handle.name, assetId } : null
-      }),
-    )
-    // An unreadable registry entry must not silently reclassify a kept draft
-    // as orphaned; fail the survey so nothing is offered for deletion.
-    for (const outcome of settled) {
-      if (outcome.status === 'rejected') {
-        throw new Error(`Could not read remembered media handles: ${failureMessage(outcome.reason)}`)
-      }
+    let references: readonly LocalMediaHandleReference[]
+    try {
+      references = await this.deps.allRememberedHandles()
+    } catch (cause) {
+      throw new Error(`Could not read remembered media handles: ${failureMessage(cause)}`)
     }
-    return settled.flatMap((outcome) => outcome.status === 'fulfilled' && outcome.value ? [outcome.value] : [])
+    return references.map(({ projectBindingId, assetId, handle }) => ({
+      fileName: handle.name,
+      projectBindingId,
+      assetId,
+    }))
+  }
+
+  private projectIsCurrent(
+    bindingId: string,
+    projectGeneration: number,
+    documentSnapshot: object,
+  ): boolean {
+    return this.deps.projectBindingId() === bindingId
+      && this.deps.projectGeneration() === projectGeneration
+      && this.deps.documentSnapshot() === documentSnapshot
   }
 
   /**
@@ -151,7 +169,14 @@ export class VoiceoverDraftRecovery {
     if (!binding) {
       return { status: 'failed', message: 'Open a local project before recovering a draft' }
     }
+    const projectGeneration = this.deps.projectGeneration()
+    const documentSnapshot = this.deps.documentSnapshot()
+    const lifecycle = this.lifecycle
     const classification = await this.classify(draftId)
+    if (
+      lifecycle !== this.lifecycle
+      || !this.projectIsCurrent(binding, projectGeneration, documentSnapshot)
+    ) return { status: 'cancelled' }
     if (!classification) {
       return { status: 'failed', message: 'The draft no longer exists in the recordings directory' }
     }
@@ -168,7 +193,15 @@ export class VoiceoverDraftRecovery {
       const bridge = this.writer()
       try {
         await bridge.recover(draftId)
+        if (
+          lifecycle !== this.lifecycle
+          || !this.projectIsCurrent(binding, projectGeneration, documentSnapshot)
+        ) return { status: 'cancelled' }
         const finalized = await bridge.finalize()
+        if (
+          lifecycle !== this.lifecycle
+          || !this.projectIsCurrent(binding, projectGeneration, documentSnapshot)
+        ) return { status: 'cancelled' }
         const imported = await this.deps.importMedia(finalized.file, finalized.handle)
         if (imported.status !== 'imported') {
           return {
@@ -226,12 +259,11 @@ export class VoiceoverDraftRecovery {
     if (!binding) {
       return { status: 'failed', message: 'Open a local project before removing a kept original' }
     }
+    const projectGeneration = this.deps.projectGeneration()
+    const documentSnapshot = this.deps.documentSnapshot()
+    const lifecycle = this.lifecycle
     if (!this.deps.projectAssetIds().includes(assetId)) {
       return { status: 'rejected', reason: 'The asset is not part of this project' }
-    }
-    const clipReferenced = this.deps.clipReferencedAssetIds()
-    if (clipReferenced.includes(assetId)) {
-      return { status: 'rejected', reason: 'The recording is still used by clips; remove them first' }
     }
     let handle: LocalMediaFileHandle | null
     try {
@@ -248,6 +280,10 @@ export class VoiceoverDraftRecovery {
     } catch (cause) {
       return { status: 'failed', message: failureMessage(cause) }
     }
+    if (
+      lifecycle !== this.lifecycle
+      || !this.projectIsCurrent(binding, projectGeneration, documentSnapshot)
+    ) return { status: 'cancelled' }
     const classification = survey.drafts.find((draft) => `${draft.id}.wav` === handle.name)
     if (!classification) {
       // The remembered file is not visibly in the recordings directory. It may
@@ -261,9 +297,32 @@ export class VoiceoverDraftRecovery {
     if (classification.state === 'live') {
       return { status: 'rejected', reason: 'The draft belongs to the active recording session' }
     }
-    if (!keptOriginalRemovalEligible(classification.assetIds, clipReferenced)) {
+    if (classification.references.some((reference) => (
+      reference.projectBindingId === null
+      || reference.projectBindingId !== binding
+      || reference.assetId === null
+    ))) {
+      return { status: 'rejected', reason: 'Another project also remembers this original; remove it there first' }
+    }
+    let isOriginal: boolean
+    try {
+      isOriginal = await this.deps.isRecordingOriginal(classification.id, handle)
+    } catch (cause) {
+      return { status: 'failed', message: `Could not verify the recording original: ${failureMessage(cause)}` }
+    }
+    if (!isOriginal) {
+      return { status: 'rejected', reason: 'The remembered file is not this recording original' }
+    }
+    const retainedAssetIds = this.deps.retainedAssetIds()
+    if (!keptOriginalRemovalEligible(classification.assetIds, retainedAssetIds)) {
       return { status: 'rejected', reason: 'The original is still referenced by clips; remove them first' }
     }
+    if (
+      lifecycle !== this.lifecycle
+      || !this.projectIsCurrent(binding, projectGeneration, documentSnapshot)
+      || !this.deps.projectAssetIds().includes(assetId)
+      || !keptOriginalRemovalEligible(classification.assetIds, this.deps.retainedAssetIds())
+    ) return { status: 'cancelled' }
     try {
       await this.writer().discardId(classification.id)
     } catch (cause) {
@@ -271,13 +330,19 @@ export class VoiceoverDraftRecovery {
     }
     let note: string | undefined
     try {
-      await this.deps.forgetHandle(binding, assetId)
+      for (const referencedAssetId of classification.assetIds) {
+        await this.deps.forgetHandle(binding, referencedAssetId)
+      }
     } catch (cause) {
       // The file is already deleted; the stale grant self-heals on the next
       // resume, so report the removal with the cleanup caveat.
       note = `The original was deleted, but its browser grant could not be forgotten: ${failureMessage(cause)}`
     }
-    this.deps.disconnectAsset(assetId)
+    if (this.projectIsCurrent(binding, projectGeneration, documentSnapshot)) {
+      for (const referencedAssetId of classification.assetIds) {
+        this.deps.disconnectAsset(referencedAssetId)
+      }
+    }
     return { status: 'removed', sizeBytes: classification.sizeBytes, ...(note ? { note } : {}) }
   }
 
@@ -294,28 +359,26 @@ export function getVoiceoverDraftRecovery(): VoiceoverDraftRecovery {
   recovery = new VoiceoverDraftRecovery({
     createWriter: () => new VoiceoverWavBridge(),
     projectBindingId: getActiveLocalProjectBindingId,
+    projectGeneration: () => useDocumentStore.getState().projectGeneration,
+    documentSnapshot: () => useDocumentStore.getState(),
     projectAssetIds: () => [...useMediaStore.getState().descriptors.keys()],
     loadHandle: (binding, assetId) => localMediaHandleRegistry.load(binding, assetId),
     forgetHandle: (binding, assetId) => localMediaHandleRegistry.forget(binding, assetId),
-    clipReferencedAssetIds: () => {
+    allRememberedHandles: () => localMediaHandleRegistry.list(),
+    retainedAssetIds: () => {
       const documentState = useDocumentStore.getState()
       const ids = new Set<string>()
-      const visited = new Set<string>()
-      const queue = documentState.project.sequences.map((sequence) => sequence.id)
-      while (queue.length > 0) {
-        const sequenceId = queue.shift()!
-        if (visited.has(sequenceId)) continue
-        visited.add(sequenceId)
-        const sequence = sequenceById(documentState.project, sequenceId)
-        if (!sequence) continue
-        for (const track of sequence.tracks) {
-          for (const clip of track.clips) {
-            if (clip.text === undefined && clip.title === undefined) ids.add(clip.assetId)
-          }
-          for (const instance of sequenceInstances(track)) queue.push(instance.sequenceId)
-        }
+      for (const project of [documentState.project, ...documentState.past, ...documentState.future]) {
+        for (const assetId of projectMediaAssetIds(project)) ids.add(assetId)
       }
       return [...ids]
+    },
+    isRecordingOriginal: async (draftId, handle) => {
+      if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) return false
+      const root = await navigator.storage.getDirectory()
+      const recordings = await root.getDirectoryHandle(VOICEOVER_RECORDINGS_DIRECTORY)
+      const original = await recordings.getFileHandle(`${draftId}.wav`)
+      return handle.isSameEntry(original)
     },
     importMedia: (file, handle) => importMediaFromHandle(file, handle),
     liveSession: () => useVoiceoverCaptureStore.getState().session,

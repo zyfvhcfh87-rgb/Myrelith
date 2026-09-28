@@ -5,78 +5,67 @@ Date: 2026-09-28. Branch/worktree: `codex/issue209`, `.worktrees/issue209`.
 ## Delivered
 
 The recordings directory (`myrelith-recordings-v1`, deliberately outside the
-disposable `myrelith-derived/*` namespace) is now an explicit product surface.
+disposable `myrelith-derived/*` namespace) is an explicit product surface.
 
-The pure domain layer (`domain/voiceoverDrafts`) classifies every `.wav` entry
-from three browser facts: remembered registry handles (a draft whose name a
-handle points at is `kept`, even when a finished Keep session still lingers),
-the capture session (an unfinished session makes its own draft `live`), and
-everything else `orphaned`. Discard is legal for `orphaned` drafts only; a
-kept original may be removed only when none of its referencing assets appears
-in any clip of any project sequence, dormant or nested.
+The pure domain layer (`domain/voiceoverDrafts`) combines remembered file
+handles from every local project, capture-session ownership, and directory
+metadata into `kept`, `live`, and `orphaned`. A null file size means a writer
+still holds the OPFS sync-access lock, so the draft is treated as `live` even
+when that writer belongs to another browser tab. Registry enumeration includes
+both current and legacy keys; a registry read error still fails the survey
+closed. Forgetting a project from Recents does not erase its media grants, so
+its recording remains protected while no project is open.
 
-The worker gained a metadata-only `list` (sync-access `getSize()` per entry,
-journal existence, sorted) and `discardStored(id)`, which removes a stored
-draft without touching the worker's own draft and is idempotent after a partial
-removal. The bridge exposes `list()` and `discardId()` valid in every
-non-closed phase.
+The worker's metadata-only `list` reports exact sizes and journal presence
+without reading whole takes. It reports a null size only for Chromium's
+`NoModificationAllowedError` while a writer owns the file; other storage
+errors surface. `discardStored(id)` is idempotent and never touches the
+worker's own draft. The recovery feature has a dedicated worker, imports a
+checkpoint through the ordinary media path, and keeps its file as the imported
+asset's original. Recovery stops if the local project changes during an await.
+The media import controller also checks project generation, protecting against
+reopening the same portable project id while inspection is in progress.
 
-The app feature (`app/voiceoverDraftRecovery`) owns one dedicated worker and
-never the capture session's writer. Its survey reads the directory and every
-asset's registry handle in parallel; a registry read failure fails the whole
-survey rather than silently reclassifying a kept draft as discardable.
-`recoverDraft` accepts an orphaned draft with a checkpoint, replays the last
-durable checkpoint through the dedicated worker, and imports through the
-ordinary media import path, whose handle memory makes the file the kept
-original of the imported asset on the next survey. `discardDraft` deletes
-orphaned drafts only. `removeKeptOriginal` requires the asset to be in the
-project, unreferenced by clips, and visibly present in the recordings
-directory; it then deletes the file, forgets the registry grant (IndexedDB
-only), and marks the source offline in the current session. The project
-descriptor remains, so a reload reports the source missing and the existing
-manual relink reconnects it. A remembered source that is not visible in the
-directory is rejected — never forgotten or disconnected — because a moved or
-externally deleted file, or a non-voiceover asset, must not be mistaken for a
-gone recording original.
+Removing a kept original proves that the remembered file handle is the same
+OPFS directory entry, so a same-named ordinary local WAV cannot be mistaken for
+the recording. It checks media use in the current project and every undo/redo
+snapshot, including dormant/nested sequences and multicam angles. It blocks if
+another project remembers the recording, and when same-project assets share an
+original it clears each grant and disconnects each asset together. Content or
+project changes during asynchronous checks cancel removal before the delete.
+The project descriptors remain after safe removal, enabling the existing
+missing-source and manual-relink flow.
 
 ## Browser-only findings
 
-- A pre-commit working-tree change had made the worker transfer the finalized
-  handle in its reply. Real Chromium rejects that:
-  `Value at index 0 does not have a transferable type`, and the main thread
-  waits forever. `FileSystemFileHandle` crosses `postMessage` by cloning, not
-  transferring; the reply is posted without a transfer list (as in Steps 5–9),
-  and the main thread receives a working handle.
+- A pre-commit change had tried to transfer the finalized file handle in its
+  worker reply. Chromium rejects that with `Value at index 0 does not have a
+  transferable type`; the worker now posts without a transfer list, and the
+  main thread receives a working cloned handle.
 - `createSyncAccessHandle()` fails with `NoModificationAllowedError` while
-  another access handle holds the same file open, so a listing while a
-  recording is in progress cannot measure that file. The directory read now
-  reports that entry with a `null` size instead of failing the listing; the
-  entry still classifies normally (size is not used for classification).
+  another access handle holds the file open. The listing now records a null
+  size, and the classifier protects that draft as live, including across tabs.
+- Real Chromium verified the registry can enumerate handles from separate
+  local project bindings, an OPFS handle matches its directory entry with
+  `isSameEntry`, another project's grant blocks removal, and removal succeeds
+  after that grant is forgotten.
 
 ## Verification
 
-- Focused Vitest: 112 cases passed across draft classification, storage
-  separation, draft writer list/discardStored, bridge list/discardId, the
-  recovery feature (14 cases: survey classification, registry-failure survey,
-  recover-through-import with the file retained and reclassified kept,
-  incomplete-import no-op, kept/live rejections, discard gating and failure,
-  removal eligibility, shared-original protection, non-directory rejection),
-  and the architecture guard with the new imports.
-- Real Playwright Chromium: all nine issue-209 specs passed. The wav-writer
-  spec additionally proves the new worker path on real OPFS: a listing while
-  the writer's handle is open reports the live draft with a `null` size, a
-  listing after the files are closed reports the exact recovered length
-  (262188 bytes) with its journal, and the finalized reply (cloned handle)
-  still reaches the main thread and decodes.
-- `npm run build` passed TypeScript and the production build, with the
-  existing large-chunk notice. `npm run lint` passed with five existing
-  unrelated warnings. `git diff --check` passed.
+- Full Vitest: 5,502 tests passed across 417 files.
+- Focused recovery, registry, writer, and media-import tests: 106 passed.
+- Real Chromium: all 10 Issue 209 browser tests passed, including the new
+  cross-project ownership and OPFS identity gate.
+- `npm run build` passed TypeScript and the production build. It retains the
+  existing large-chunk notice.
+- `npm run lint` passed with five existing warnings in caption tests and export
+  cleanup code. `git diff --check` passed.
 
 Commands:
 
 ```text
-NODE_OPTIONS=--no-experimental-webstorage npm test -- src/domain/voiceoverDrafts.test.ts src/pipeline/voiceoverWavDraft.test.ts src/app/voiceoverWavBridge.test.ts src/app/voiceoverDraftRecovery.test.ts src/test/architecture.test.ts
-npx playwright test tests/browser/issue-209-wav-writer.spec.ts tests/browser/issue-209-keep-place.spec.ts tests/browser/issue-209-transport-join.spec.ts tests/browser/issue-209-capture-owner.spec.ts tests/browser/issue-209-microphone-bridge.spec.ts
+NODE_OPTIONS=--no-experimental-webstorage npm test
+npx playwright test tests/browser/issue-209-*.spec.ts
 npm run build
 npm run lint
 git diff --check

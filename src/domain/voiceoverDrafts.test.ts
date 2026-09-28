@@ -25,20 +25,24 @@ describe('voiceover draft classification', () => {
       draft('voiceover_b'), // live session, unreferenced
       draft('voiceover_c', { hasJournal: false }), // unreferenced, no session
       draft('voiceover_d'), // referenced AND live (finished Keep lingers)
+      draft('voiceover_locked', { sizeBytes: null }), // another tab owns the OPFS lock
     ]
     const classified = classifyVoiceoverDrafts(
       drafts,
       ['voiceover_b', 'voiceover_d'],
       [
-        { fileName: 'voiceover_a.wav', assetId: 'asset_a' },
-        { fileName: 'voiceover_d.wav', assetId: 'asset_d1' },
-        { fileName: 'voiceover_d.wav', assetId: 'asset_d2' },
+        { fileName: 'voiceover_a.wav', projectBindingId: 'project-a', assetId: 'asset_a' },
+        { fileName: 'voiceover_d.wav', projectBindingId: 'project-a', assetId: 'asset_d1' },
+        { fileName: 'voiceover_d.wav', projectBindingId: 'project-b', assetId: 'asset_d2' },
         // A handle whose name matches no draft must not classify anything.
-        { fileName: 'other.wav', assetId: 'asset_x' },
+        { fileName: 'other.wav', projectBindingId: 'project-a', assetId: 'asset_x' },
       ],
     )
-    expect(classified.map((item) => item.state)).toEqual(['kept', 'live', 'orphaned', 'kept'])
+    expect(classified.map((item) => item.state)).toEqual(['kept', 'live', 'orphaned', 'kept', 'live'])
     expect(classified[0].assetIds).toEqual(['asset_a'])
+    expect(classified[0].references).toEqual([
+      { fileName: 'voiceover_a.wav', projectBindingId: 'project-a', assetId: 'asset_a' },
+    ])
     expect(classified[1].assetIds).toEqual([])
     expect(classified[3].assetIds).toEqual(['asset_d1', 'asset_d2'])
   })
@@ -50,7 +54,8 @@ describe('voiceover draft classification', () => {
       [],
     )
     expect(classified[0]).toEqual({
-      id: 'voiceover_a', sizeBytes: 42, hasJournal: false, state: 'orphaned', assetIds: [],
+      id: 'voiceover_a', sizeBytes: 42, hasJournal: false,
+      state: 'orphaned', assetIds: [], references: [],
     })
   })
 
@@ -58,7 +63,7 @@ describe('voiceover draft classification', () => {
     const classified = classifyVoiceoverDrafts(
       [draft('a'), draft('b'), draft('c')],
       ['b'],
-      [{ fileName: 'a.wav', assetId: 'asset_a' }],
+      [{ fileName: 'a.wav', projectBindingId: 'project-a', assetId: 'asset_a' }],
     )
     expect(classified.map(isVoiceoverDraftDiscardable)).toEqual([false, false, true])
   })

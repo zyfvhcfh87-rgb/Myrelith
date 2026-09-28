@@ -56,11 +56,16 @@ async function listDrafts(): Promise<VoiceoverDraftInfo[]> {
       } finally {
         sync.close()
       }
-    } catch {
+    } catch (cause) {
       // Chromium refuses a second sync access handle while one is open, so a
       // recording in progress cannot be measured; report its size as unknown
-      // instead of failing the whole listing.
-      sizeBytes = null
+      // instead of failing the whole listing. Other storage failures must
+      // surface so they cannot make a draft look like an ordinary orphan.
+      if (cause instanceof DOMException && cause.name === 'NoModificationAllowedError') {
+        sizeBytes = null
+      } else {
+        throw cause
+      }
     }
     drafts.push({ id, sizeBytes, hasJournal: await exists(directory, `${id}.checkpoint`) })
   }

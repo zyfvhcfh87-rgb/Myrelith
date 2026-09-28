@@ -33,6 +33,7 @@ function makeStore(): LocalMediaHandleStore & { values: Map<string, unknown> } {
   const store: LocalMediaHandleStore & { values: Map<string, unknown> } = {
     values,
     get: async (key) => values.get(key),
+    entries: async () => [...values].map(([key, value]) => ({ key, value })),
     set: async (key, value) => {
       values.set(key, value)
     },
@@ -110,6 +111,26 @@ describe('local media handle registry', () => {
       legacyLocalProjectBindingId('doc-a'),
       'asset-1',
     ]))).toBe(handle)
+  })
+
+  test('lists remembered ownership across projects, including legacy bindings', async () => {
+    const store = makeStore()
+    const registry = createLocalMediaHandleRegistry(store)
+    const current = makeHandle('voiceover_current.wav')
+    const legacy = makeHandle('voiceover_legacy.wav')
+    await registry.remember('local-project:current', 'asset-current', current)
+    store.values.set(JSON.stringify(['old-document', 'asset-legacy']), legacy)
+    await registry.forget('local-project:current', 'asset-forgotten')
+
+    await expect(registry.list()).resolves.toEqual(expect.arrayContaining([
+      {
+        projectBindingId: 'local-project:current', assetId: 'asset-current', handle: current,
+      },
+      {
+        projectBindingId: legacyLocalProjectBindingId('old-document'),
+        assetId: 'asset-legacy', handle: legacy,
+      },
+    ]))
   })
 
   test('rejects malformed IndexedDB values instead of trusting them as handles', async () => {

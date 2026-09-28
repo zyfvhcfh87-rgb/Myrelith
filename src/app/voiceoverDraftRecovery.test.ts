@@ -48,6 +48,19 @@ class FakeRegistry {
     this.tombstones.add(key)
     return Promise.resolve()
   }
+
+  list() {
+    if (this.failLoadFor !== null) return Promise.reject(new Error('IndexedDB unavailable'))
+    return Promise.resolve([...this.handles].flatMap(([key, rememberedHandle]) => {
+      const separator = key.lastIndexOf(':')
+      if (separator < 0) return []
+      return [{
+        projectBindingId: key.slice(0, separator),
+        assetId: key.slice(separator + 1),
+        handle: rememberedHandle,
+      }]
+    }))
+  }
 }
 
 function handle(name: string): LocalMediaFileHandle {
@@ -108,6 +121,7 @@ interface HarnessOptions {
   failLoadFor?: string
   failRecoverFor?: string
   failDiscardFor?: string
+  sameEntry?: boolean
 }
 
 function harness(options: HarnessOptions) {
@@ -121,6 +135,9 @@ function harness(options: HarnessOptions) {
   }
   let writers: Array<RecoveryWriter & { calls: string[] }> = []
   const projectAssets = [...(options.projectAssets ?? [])]
+  let binding: string | null = BINDING
+  let projectGeneration = 0
+  let documentSnapshot: object = {}
   const deps: VoiceoverDraftRecoveryDeps = {
     createWriter: () => {
       const writer = createFakeWriter(directory, {
@@ -130,12 +147,18 @@ function harness(options: HarnessOptions) {
       writers = [writer, ...writers]
       return writer
     },
-    projectBindingId: () => BINDING,
+    projectBindingId: () => binding,
+    projectGeneration: () => projectGeneration,
+    documentSnapshot: () => documentSnapshot,
     // Live view: an import adds its asset to the project, like the media store.
     projectAssetIds: () => projectAssets,
     loadHandle: (binding, assetId) => registry.load(binding, assetId),
     forgetHandle: (binding, assetId) => registry.forget(binding, assetId),
-    clipReferencedAssetIds: () => options.clipReferenced ?? [],
+    allRememberedHandles: () => registry.list(),
+    retainedAssetIds: () => options.clipReferenced ?? [],
+    isRecordingOriginal: async (draftId, rememberedHandle) => (
+      options.sameEntry ?? rememberedHandle.name === `${draftId}.wav`
+    ),
     importMedia: (file, importedHandle) =>
       options.importResult
         ? options.importResult(file, importedHandle)
@@ -160,6 +183,9 @@ function harness(options: HarnessOptions) {
     writers,
     deps,
     projectAssets,
+    setProjectGeneration(value: number) { projectGeneration = value },
+    setBinding(value: string | null) { binding = value },
+    setDocumentSnapshot(value: object) { documentSnapshot = value },
     newestWriter: () => writers[0] as RecoveryWriter & { calls: string[] },
   }
 }
@@ -190,10 +216,14 @@ describe('voiceover draft recovery', () => {
         return writer
       },
       projectBindingId: () => BINDING,
+      projectGeneration: () => 0,
+      documentSnapshot: () => ({}),
       projectAssetIds: () => ['asset_kept'],
       loadHandle: (binding, assetId) => registry.load(binding, assetId),
       forgetHandle: (binding, assetId) => registry.forget(binding, assetId),
-      clipReferencedAssetIds: () => [],
+      allRememberedHandles: () => registry.list(),
+      retainedAssetIds: () => [],
+      isRecordingOriginal: async () => true,
       importMedia,
       liveSession: () => ({
         sessionId: 'voiceover_live', destination: {} as never, operation: 1,
@@ -204,9 +234,15 @@ describe('voiceover draft recovery', () => {
 
     const survey = await recovery.survey()
     expect(survey.drafts).toEqual([
-      { id: 'voiceover_a', sizeBytes: 48, hasJournal: true, state: 'kept', assetIds: ['asset_kept'] },
-      { id: 'voiceover_live', sizeBytes: 48, hasJournal: true, state: 'live', assetIds: [] },
-      { id: 'voiceover_orphan', sizeBytes: 48, hasJournal: false, state: 'orphaned', assetIds: [] },
+      {
+        id: 'voiceover_a', sizeBytes: 48, hasJournal: true,
+        state: 'kept', assetIds: ['asset_kept'],
+        references: [{
+          fileName: 'voiceover_a.wav', projectBindingId: BINDING, assetId: 'asset_kept',
+        }],
+      },
+      { id: 'voiceover_live', sizeBytes: 48, hasJournal: true, state: 'live', assetIds: [], references: [] },
+      { id: 'voiceover_orphan', sizeBytes: 48, hasJournal: false, state: 'orphaned', assetIds: [], references: [] },
     ])
     // Survey is a read: the worker only listed, never imported or deleted.
     expect(writers[0].calls).toEqual(['list'])
@@ -222,6 +258,53 @@ describe('voiceover draft recovery', () => {
       failLoadFor: 'asset_a',
     })
     await expect(recovery.survey()).rejects.toThrow(/Could not read remembered media handles/)
+  })
+
+  it('keeps a recording owned by a different local project protected from discard', async () => {
+    const { recovery, directory, registry } = harness({
+      drafts: [draft('voiceover_other_project')],
+      projectAssets: [],
+    })
+    await registry.remember('local-project:other', 'asset_other', handle('voiceover_other_project.wav'))
+    const survey = await recovery.survey()
+    expect(survey.drafts[0]).toMatchObject({ state: 'kept', assetIds: ['asset_other'] })
+    const action = await recovery.discardDraft('voiceover_other_project')
+    expect(action).toMatchObject({ status: 'rejected', reason: expect.stringMatching(/kept recording/) })
+    expect(directory.entries.has('voiceover_other_project')).toBe(true)
+    recovery.dispose()
+  })
+
+  it('keeps a forgotten recent project original protected when no project is open', async () => {
+    const { recovery, directory, registry, setBinding } = harness({
+      drafts: [draft('voiceover_forgotten_project')],
+      projectAssets: [],
+    })
+    await registry.remember(
+      'local-project:forgotten',
+      'asset_forgotten',
+      handle('voiceover_forgotten_project.wav'),
+    )
+    setBinding(null)
+    const survey = await recovery.survey()
+    expect(survey.drafts[0]).toMatchObject({ state: 'kept', assetIds: ['asset_forgotten'] })
+    const action = await recovery.discardDraft('voiceover_forgotten_project')
+    expect(action).toMatchObject({ status: 'rejected', reason: expect.stringMatching(/kept recording/) })
+    expect(directory.entries.has('voiceover_forgotten_project')).toBe(true)
+    recovery.dispose()
+  })
+
+  it('refuses to remove an original still remembered by another project', async () => {
+    const { recovery, directory, registry } = harness({
+      drafts: [draft('voiceover_a')],
+      remembered: [{ assetId: 'asset_a', name: 'voiceover_a.wav' }],
+      projectAssets: ['asset_a'],
+    })
+    await registry.remember('local-project:other', 'asset_other', handle('voiceover_a.wav'))
+    const action = await recovery.removeKeptOriginal('asset_a')
+    expect(action).toMatchObject({ status: 'rejected', reason: expect.stringMatching(/Another project/) })
+    expect(directory.entries.has('voiceover_a')).toBe(true)
+    expect(registry.forgetCalls).toEqual([])
+    recovery.dispose()
   })
 
   it('recovers a crash remnant through import and leaves the original as the protected kept source', async () => {
@@ -312,6 +395,19 @@ describe('voiceover draft recovery', () => {
     recovery.dispose()
   })
 
+  it('protects a draft that is write-locked by a capture in another tab', async () => {
+    const { recovery, directory } = harness({
+      drafts: [draft('voiceover_other_tab', { sizeBytes: null })],
+      sessionPhase: null,
+    })
+    const action = await recovery.discardDraft('voiceover_other_tab')
+    expect(action).toMatchObject({
+      status: 'rejected', reason: expect.stringMatching(/active recording session/),
+    })
+    expect(directory.entries.has('voiceover_other_tab')).toBe(true)
+    recovery.dispose()
+  })
+
   it('discards an orphaned draft and nothing else', async () => {
     const { recovery, directory, registry, newestWriter } = harness({
       drafts: [draft('voiceover_orphan'), draft('voiceover_live')],
@@ -377,7 +473,7 @@ describe('voiceover draft recovery', () => {
       clipReferenced: ['asset_a'],
     })
     const action = await recovery.removeKeptOriginal('asset_a')
-    expect(action).toMatchObject({ status: 'rejected', reason: expect.stringMatching(/still used by clips/) })
+    expect(action).toMatchObject({ status: 'rejected', reason: expect.stringMatching(/still referenced by clips/) })
     expect(directory.entries.has('voiceover_a')).toBe(true)
     expect(registry.forgetCalls).toEqual([])
     recovery.dispose()
@@ -398,6 +494,79 @@ describe('voiceover draft recovery', () => {
     expect(directory.entries.has('voiceover_a')).toBe(true)
     expect(registry.forgetCalls).toEqual([])
     recovery.dispose()
+  })
+
+  it('removes every same-project grant when multiple assets share one original', async () => {
+    const { recovery, directory, registry, deps } = harness({
+      drafts: [draft('voiceover_a')],
+      remembered: [
+        { assetId: 'asset_a', name: 'voiceover_a.wav' },
+        { assetId: 'asset_b', name: 'voiceover_a.wav' },
+      ],
+      projectAssets: ['asset_a', 'asset_b'],
+    })
+    const action = await recovery.removeKeptOriginal('asset_a')
+    expect(action).toEqual({ status: 'removed', sizeBytes: 48 })
+    expect(directory.entries.has('voiceover_a')).toBe(false)
+    expect(registry.forgetCalls).toEqual([`${BINDING}:asset_a`, `${BINDING}:asset_b`])
+    expect(deps.disconnectAsset).toHaveBeenCalledTimes(2)
+    recovery.dispose()
+  })
+
+  it('does not remove a same-named local file that is not the OPFS original', async () => {
+    const { recovery, directory, registry, deps } = harness({
+      drafts: [draft('voiceover_a')],
+      remembered: [{ assetId: 'asset_a', name: 'voiceover_a.wav' }],
+      projectAssets: ['asset_a'],
+      sameEntry: false,
+    })
+    const action = await recovery.removeKeptOriginal('asset_a')
+    expect(action).toMatchObject({ status: 'rejected', reason: expect.stringMatching(/not this recording original/) })
+    expect(directory.entries.has('voiceover_a')).toBe(true)
+    expect(registry.forgetCalls).toEqual([])
+    expect(deps.disconnectAsset).not.toHaveBeenCalled()
+    recovery.dispose()
+  })
+
+  it('cancels removal when project content changes during asynchronous checks', async () => {
+    const { recovery, directory, deps, setDocumentSnapshot } = harness({
+      drafts: [draft('voiceover_a')],
+      remembered: [{ assetId: 'asset_a', name: 'voiceover_a.wav' }],
+      projectAssets: ['asset_a'],
+    })
+    const load = deps.loadHandle
+    deps.loadHandle = async (binding, assetId) => {
+      const rememberedHandle = await load(binding, assetId)
+      setDocumentSnapshot({ changed: true })
+      return rememberedHandle
+    }
+    const action = await recovery.removeKeptOriginal('asset_a')
+    expect(action).toEqual({ status: 'cancelled' })
+    expect(directory.entries.has('voiceover_a')).toBe(true)
+    recovery.dispose()
+  })
+
+  it('cancels crash recovery when the local project changes before import', async () => {
+    const h = harness({ drafts: [draft('voiceover_orphan')] })
+    const createWriter = h.deps.createWriter
+    h.deps.createWriter = () => {
+      const writer = createWriter()
+      const recover = writer.recover.bind(writer)
+      writer.recover = async (id) => {
+        const result = await recover(id)
+        h.setBinding('local-project:next')
+        h.setProjectGeneration(1)
+        return result
+      }
+      return writer
+    }
+    const importMedia = vi.fn(h.deps.importMedia)
+    h.deps.importMedia = importMedia
+    const action = await h.recovery.recoverDraft('voiceover_orphan')
+    expect(action).toEqual({ status: 'cancelled' })
+    expect(importMedia).not.toHaveBeenCalled()
+    expect(h.directory.entries.has('voiceover_orphan')).toBe(true)
+    h.recovery.dispose()
   })
 
   it('rejects removal when the remembered source is not in the recordings directory', async () => {

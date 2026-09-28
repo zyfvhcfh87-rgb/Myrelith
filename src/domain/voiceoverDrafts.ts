@@ -8,7 +8,7 @@
  * deletion, or an explicit Keep, the directory can hold three kinds of
  * entries:
  *
- * - `live`: owned by the capture session whose writer may still hold the file;
+ * - `live`: owned by the capture session, or still locked by another writer;
  * - `kept`: referenced by at least one project asset through a remembered
  *   file handle;
  * - `orphaned`: neither — unreferenced leftovers (crash remnants, drafts of
@@ -40,7 +40,9 @@ export type VoiceoverDraftState = 'live' | 'kept' | 'orphaned'
 export interface VoiceoverDraftReference {
   /** The remembered handle's file name, e.g. `voiceover_<uuid>.wav`. */
   readonly fileName: string
-  readonly assetId: string
+  /** Null only when an older or damaged registry key has no known owner. */
+  readonly projectBindingId: string | null
+  readonly assetId: string | null
 }
 
 export interface VoiceoverDraftClassification {
@@ -50,6 +52,8 @@ export interface VoiceoverDraftClassification {
   readonly state: VoiceoverDraftState
   /** Asset ids whose remembered handles point at this draft (`kept` only). */
   readonly assetIds: readonly string[]
+  /** All remembered owners, including projects that are not currently open. */
+  readonly references: readonly VoiceoverDraftReference[]
 }
 
 /**
@@ -64,17 +68,17 @@ export function classifyVoiceoverDrafts(
   references: readonly VoiceoverDraftReference[],
 ): readonly VoiceoverDraftClassification[] {
   const live = new Set(liveSessionIds)
-  const referencesByName = new Map<string, string[]>()
+  const referencesByName = new Map<string, VoiceoverDraftReference[]>()
   for (const reference of references) {
-    const assetIds = referencesByName.get(reference.fileName)
-    if (assetIds) assetIds.push(reference.assetId)
-    else referencesByName.set(reference.fileName, [reference.assetId])
+    const matches = referencesByName.get(reference.fileName)
+    if (matches) matches.push(reference)
+    else referencesByName.set(reference.fileName, [reference])
   }
   return drafts.map((draft) => {
-    const assetIds = referencesByName.get(`${draft.id}.wav`)
-    const state: VoiceoverDraftState = assetIds
+    const draftReferences = referencesByName.get(`${draft.id}.wav`) ?? []
+    const state: VoiceoverDraftState = draftReferences.length > 0
       ? 'kept'
-      : live.has(draft.id)
+      : live.has(draft.id) || draft.sizeBytes === null
         ? 'live'
         : 'orphaned'
     return {
@@ -82,7 +86,10 @@ export function classifyVoiceoverDrafts(
       sizeBytes: draft.sizeBytes,
       hasJournal: draft.hasJournal,
       state,
-      assetIds: assetIds ?? [],
+      assetIds: [...new Set(draftReferences.flatMap((reference) => (
+        reference.assetId ? [reference.assetId] : []
+      )))],
+      references: draftReferences,
     }
   })
 }

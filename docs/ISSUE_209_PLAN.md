@@ -303,27 +303,29 @@ Import failure retains the review draft for retry; project replacement cancels
 and drains pending Keep work before activation. Placement remains one history
 entry with working undo/redo. [Step 9 evidence](evidence/issue209/STEP_9_KEEP_PLACE.md)
 records the focused checks, real Chromium import, limitations, and handoff.
-Step 10 may now define draft recovery and kept-original reconnect/removal.
+Step 10 defines draft recovery and kept-original reconnect/removal.
 
 **Step 10 checkpoint (2026-09-28):** The recordings directory is now an
-explicit product surface. A pure domain classifier turns three browser facts —
-remembered registry handles, the unfinished capture session, and the directory
-listing — into `kept` / `live` / `orphaned`, where a referenced draft is kept
-even when a finished Keep lingers, and discard is legal only for `orphaned`.
-The worker gained a metadata-only `list` and an idempotent `discardStored(id)`
-that never touches its own draft; the bridge exposes both in any non-closed
-phase. A dedicated app recovery feature (never the capture writer) surveys the
-directory and every asset's remembered handle, fails the whole survey rather
-than under-classify on a registry error, recovers a crashed orphan through the
-ordinary import path while leaving its file as the kept original, discards
-orphans only, and removes a kept original only when no clip references it.
-Referenced media is never deleted by any path here. Two browser-only facts were
-locked in real Chromium: a `FileSystemFileHandle` crosses `postMessage` by
-cloning (not transferring), and a file held open by a live recording reports a
-`null` size in a concurrent listing instead of failing it. [Step 10
-evidence](evidence/issue209/STEP_10_DRAFT_RECOVERY.md) records the focused
-checks, the Chromium proof, limitations, and handoff. Step 11 may now add the
-voiceover controls including the draft list.
+explicit product surface. A pure domain classifier combines remembered file
+handles from every local project, capture-session ownership, and directory
+metadata into `kept` / `live` / `orphaned`. A locked file with unknown size is
+treated as `live`, including when another tab owns it; only an unreferenced,
+unlocked draft may be recovered or discarded. The worker gained a
+metadata-only `list` and an idempotent `discardStored(id)` that never touches
+its own draft. A dedicated app recovery feature (never the capture writer)
+imports a recovered checkpoint through the ordinary media path and retains its
+original. Removal proves the remembered handle is the same OPFS entry, checks
+the current project plus undo and redo snapshots across sequences and multicam
+angles, blocks while any other project remembers the file, and clears every
+same-project grant that shares it. Recovery and removal stop if asynchronous
+work observes a project switch or edit; ordinary import also checks project
+generation so reopening the same portable id cannot receive a late result.
+Forgetting a project from Recents leaves its local media grants intact, so its
+recordings remain protected. Real Chromium confirms handle cloning over
+`postMessage`, the locked-file size behavior, and the production OPFS identity
+and cross-project removal path. [Step 10 evidence](evidence/issue209/STEP_10_DRAFT_RECOVERY.md)
+records the complete checks and limits. Step 11 adds the voiceover controls and
+draft list.
 
 ### Voiceover implementation
 
