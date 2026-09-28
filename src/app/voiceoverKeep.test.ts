@@ -34,7 +34,11 @@ function harness(options: {
   beforePlace?: () => void
   corruptFinalLength?: boolean
   durationReadFailure?: boolean
+  lock?: { held: string[]; released: string[] }
 } = {}) {
+  const armed: { onInterrupted: ((reason: 'transport-changed' | 'destination-changed') => void) | null
+    extras: Parameters<NonNullable<VoiceoverCaptureDeps['armTransport']>>[4] | null
+    connect: Parameters<VoiceoverCaptureDeps['connect']>[0] | null } = { onInterrupted: null, extras: null, connect: null }
   const clock = { sampleRate: 48_000, currentTime: 0, resume: async () => undefined }
   const context = clock as AudioContext
   const trackState = { readyState: 'live' as 'live' | 'ended' }
@@ -53,7 +57,7 @@ function harness(options: {
     const result = await options.importResult?.(file) ?? 'imported'
     if (result === 'cancelled') return { status: 'cancelled' as const }
     if (result === 'unsupported') return { status: 'unsupported' as const, itemId: 'voiceover-asset' }
-    const frames = (recorded.endSample - 48_000) / 1_600 + (options.durationOffset ?? 0)
+    const frames = recorded.pcmBytes / 2 / 1_600 + (options.durationOffset ?? 0)
     expect(useMediaStore.getState().addAsset(importedAudio(frames))).toBe(true)
     return { status: 'imported' as const, assetId: 'voiceover-asset' }
   })
@@ -82,6 +86,7 @@ function harness(options: {
       close: () => undefined,
     }),
     connect: async (input) => {
+      armed.connect = input
       input.onStarted?.(input.startFrame)
       const finished = deferred<Awaited<ReturnType<Awaited<ReturnType<VoiceoverCaptureDeps['connect']>>['stop']>>>()
       return { outputNode: {} as AudioWorkletNode, finished: finished.promise,
@@ -101,8 +106,15 @@ function harness(options: {
           peakInFlightBytes: 0, batches: 0, reason: null, settled: false }),
       }
     },
-    armTransport: async (_context, startFrame) => ({ context, anchorSample: 48_000,
-      countInStartSample: 46_400, startFrame, release: () => undefined }),
+    armTransport: async (_context, startFrame, _countIn, onInterrupted, extras) => {
+      armed.onInterrupted = onInterrupted
+      armed.extras = extras ?? null
+      return { context, anchorSample: 48_000, countInStartSample: 46_400, startFrame, release: () => undefined }
+    },
+    holdDraftLock: options.lock ? async (id) => {
+      options.lock!.held.push(id)
+      return () => { options.lock!.released.push(id) }
+    } : undefined,
     visibleAndFocused: () => true,
     planStartFrame: () => { throw new Error('Fallback anchor used') },
     publish: () => undefined,
@@ -116,10 +128,10 @@ function harness(options: {
     cancelImport,
     subscribeDocument: (onChange) => useDocumentStore.subscribe(onChange),
   })
-  return { owner, clock, track, recorded, handle, remember, importFinalized, cancelImport,
+  return { owner, clock, track, recorded, handle, remember, importFinalized, cancelImport, armed,
     staleProject: () => { projectOverride = 'other-project' },
     async review() {
-      expect(owner.start('A1', 20, 0).status).toBe('started')
+      expect(owner.start('A1', 20, { countInFrames: 0 }).status).toBe('started')
       await owner.whenIdle()
       expect(owner.status.session?.phase).toBe('recording')
       clock.currentTime = 1.1
@@ -257,5 +269,99 @@ describe('voiceover Keep and placement', () => {
     expect(h.owner.status.session).toMatchObject({ phase: 'kept', location: 'pool' })
     expect(h.owner.status.diagnostic).toContain('could not be remembered')
     expect(useMediaStore.getState().assets.size).toBe(1)
+  })
+})
+
+describe('voiceover take shaping', () => {
+  test('a positive latency offset shifts the capture window and keeps the placement frame', async () => {
+    const h = harness()
+    expect(h.owner.start('A1', 20, { countInFrames: 0, compensationSamples: 3_840 }).status).toBe('started')
+    await h.owner.whenIdle()
+    expect(h.armed.connect?.startFrame).toBe(48_000 + 3_840)
+    expect(h.armed.extras).toMatchObject({ mutePlayback: false, preRollSamples: 0 })
+    h.clock.currentTime = 1.1
+    await h.owner.stop()
+    expect(h.owner.status.session?.phase).toBe('review')
+    const timing = h.owner.status.timing!
+    expect(timing.compensationSamples).toBe(3_840)
+    // Capture ends compensation samples after the timeline stop, so length is unchanged.
+    expect(h.recorded.endSample - 3_840).toBe(timing.stopSample)
+    expect(h.recorded.pcmBytes / 2).toBe(timing.stopSample! - timing.anchorSample)
+    await h.owner.keep(true)
+    expect(h.owner.status.session).toMatchObject({ phase: 'kept', location: 'timeline' })
+    expect(useDocumentStore.getState().doc.tracks.find((track) => track.id === 'A1')?.clips[0]
+      ?.timelineRange.startFrame).toBe(20)
+  })
+
+  test('a negative offset asks the transport for matching pre-roll', async () => {
+    const h = harness()
+    h.owner.start('A1', 20, { countInFrames: 0, compensationSamples: -2_400, mutePlayback: true })
+    await h.owner.whenIdle()
+    expect(h.armed.extras).toMatchObject({ mutePlayback: true, preRollSamples: 2_400 })
+    expect(h.armed.connect?.startFrame).toBe(48_000 - 2_400)
+    expect(h.owner.status.playbackMuted).toBe(true)
+    await h.owner.cancel()
+  })
+
+  test('rejects an offset beyond half a second before requesting the microphone', () => {
+    const h = harness()
+    expect(h.owner.start('A1', 20, { compensationSamples: 24_001 })).toMatchObject({ status: 'rejected' })
+    expect(h.owner.status.session).toBeNull()
+  })
+
+  test('the take limit is pre-scheduled on a frame boundary and ends in review', async () => {
+    const h = harness()
+    h.owner.start('A1', 20, { countInFrames: 0 })
+    await h.owner.whenIdle()
+    const limitStop = h.armed.connect!.limitStopFrame!
+    expect(limitStop - 48_000).toBeLessThanOrEqual(60 * 60 * 48_000)
+    // 30 fps project: 1,600 samples per frame, so the limit lands on a frame edge.
+    expect((limitStop - 48_000) % 1_600).toBe(0)
+    // The worklet reaches its limit without a user stop.
+    h.recorded.endSample = limitStop
+    h.recorded.pcmBytes = (limitStop - 48_000) * 2
+    h.armed.connect!.onTerminal?.('stopped', limitStop)
+    await h.owner.whenIdle()
+    expect(h.owner.status.session).toMatchObject({ phase: 'review', interruption: null })
+    expect(h.owner.status.diagnostic).toMatch(/60-minute take limit/)
+    expect(h.owner.status.timing?.stopFrame).toBe(20 + (limitStop - 48_000) / 1_600)
+  })
+
+  test('a transport interruption ends on a frame boundary and keeps the written audio', async () => {
+    const h = harness()
+    h.owner.start('A1', 20, { countInFrames: 0 })
+    await h.owner.whenIdle()
+    h.clock.currentTime = 1.1
+    h.armed.onInterrupted?.('transport-changed')
+    await h.owner.whenIdle()
+    expect(h.owner.status.session).toMatchObject({ phase: 'review', interruption: 'transport-changed' })
+    // Graceful: the worklet was asked to stop at an exact boundary, not aborted.
+    expect(h.recorded.endSample).toBeGreaterThan(48_000)
+    expect((h.recorded.endSample - 48_000) % 1_600).toBe(0)
+    expect(h.owner.status.capturedSamples).toBe(h.recorded.endSample - 48_000)
+    await h.owner.keep(true)
+    expect(h.owner.status.session).toMatchObject({ phase: 'kept', location: 'pool' })
+  })
+
+  test('the play/pause toggle during a take is an ordinary stop', async () => {
+    const h = harness()
+    h.owner.start('A1', 20, { countInFrames: 0 })
+    await h.owner.whenIdle()
+    h.clock.currentTime = 1.1
+    h.armed.extras?.onStopRequested()
+    await h.owner.whenIdle()
+    expect(h.owner.status.session).toMatchObject({ phase: 'review', interruption: null })
+  })
+
+  test('holds the draft lock through review and releases it once kept', async () => {
+    const lock = { held: [] as string[], released: [] as string[] }
+    const h = harness({ lock })
+    await h.review()
+    const id = h.owner.status.session!.sessionId
+    expect(lock.held).toEqual([id])
+    expect(lock.released).toEqual([])
+    await h.owner.keep(false)
+    expect(h.owner.status.session?.phase).toBe('kept')
+    expect(lock.released).toEqual([id])
   })
 })

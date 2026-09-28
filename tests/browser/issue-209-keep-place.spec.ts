@@ -63,7 +63,7 @@ test('Chromium keeps an OPFS voiceover through normal import and one-history pla
       subscribeDocument: (onChange: () => void) => useDocumentStore.subscribe(onChange),
     })
     try {
-      const started = owner.start('A1', 20, 30)
+      const started = owner.start('A1', 20, { countInFrames: 30 })
       if (started.status !== 'started') throw new Error(started.reason)
       const deadline = performance.now() + 6_000
       while (owner.status.session?.phase !== 'recording' && performance.now() < deadline) {

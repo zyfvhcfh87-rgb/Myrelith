@@ -73,6 +73,12 @@ export function checkVoiceoverDestination(
   return plan.status === 'reject' ? plan : { status: 'valid' }
 }
 
+/** Audio lanes a take may target, in timeline order; locked lanes stay listed but unusable. */
+export function voiceoverLaneOptions(doc: TimelineDoc): readonly { id: string; name: string; locked: boolean }[] {
+  return doc.tracks.filter((track) => track.kind === 'audio')
+    .map((track) => ({ id: track.id, name: track.name, locked: track.locked }))
+}
+
 export function pinVoiceoverDestination(
   live: VoiceoverDestinationContext,
   trackId: string,

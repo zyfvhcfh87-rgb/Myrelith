@@ -3,6 +3,8 @@ import {
   classifyVoiceoverDrafts,
   isVoiceoverDraftDiscardable,
   keptOriginalRemovalEligible,
+  voiceoverDraftIdsFromLockNames,
+  voiceoverDraftLockName,
   voiceoverSessionOwnsDraft,
   type VoiceoverDraftInfo,
 } from './voiceoverDrafts'
@@ -95,5 +97,13 @@ describe('session draft ownership', () => {
     expect(voiceoverSessionOwnsDraft(session('requesting'))).toBe(false)
     expect(voiceoverSessionOwnsDraft(session('failed'))).toBe(false)
     expect(voiceoverSessionOwnsDraft(session('cancelled'))).toBe(false)
+  })
+})
+
+describe('voiceover draft lock names', () => {
+  it('round-trips draft ids and ignores unrelated or empty lock names', () => {
+    const name = voiceoverDraftLockName('voiceover_abc')
+    expect(voiceoverDraftIdsFromLockNames([name, 'other-lock', undefined,
+      voiceoverDraftLockName('')])).toEqual(['voiceover_abc'])
   })
 })

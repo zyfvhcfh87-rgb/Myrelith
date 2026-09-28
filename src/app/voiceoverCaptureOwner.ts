@@ -2,7 +2,7 @@
 import { checkVoiceoverDestination, pinVoiceoverDestination, resolveVoiceoverKeepDestination, type VoiceoverDestinationContext } from '../domain/voiceoverDestination'
 import { beginVoiceoverSession, transitionVoiceoverSession, type VoiceoverFailure, type VoiceoverInterruption, type VoiceoverSession, type VoiceoverSessionEffect, type VoiceoverSessionEvent } from '../domain/voiceoverSession'
 import { VOICEOVER_WAV_LIMITS } from '../pipeline/voiceoverWavDraft'
-import { planVoiceoverSampleWindow, voiceoverStopBoundary, voiceoverTimelineFrameAtSample } from '../domain/voiceoverClock'
+import { MAX_VOICEOVER_COMPENSATION_SECONDS, planVoiceoverSampleWindow, voiceoverCaptureSample, voiceoverLimitStop, voiceoverStopBoundary, voiceoverTimelineFrameAtSample } from '../domain/voiceoverClock'
 import { useDocumentStore } from '../state/documentStore'
 import { useVoiceoverCaptureStore, type VoiceoverCaptureStatus, type VoiceoverCaptureTiming } from '../state/voiceoverCaptureStore'
 import { useTransportStore } from '../state/transportStore'
@@ -14,20 +14,49 @@ import { localMediaHandleRegistry } from './localMediaHandles'
 import { armVoiceoverTransport, getPlaybackClockContext, type VoiceoverTransportLease } from './transportController'
 import { connectVoiceoverMicrophone, prepareVoiceoverMicrophoneWorklet } from './voiceoverMicrophoneBridge'
 import { VoiceoverWavBridge } from './voiceoverWavBridge'
+import { voiceoverDraftLockName } from '../domain/voiceoverDrafts'
 
 type Capture = Awaited<ReturnType<typeof connectVoiceoverMicrophone>>
 type Writer = Pick<VoiceoverWavBridge, 'create' | 'stop' | 'release' | 'recover' | 'discard' | 'close' | 'append'>
   & { finalize?: VoiceoverWavBridge['finalize'] }
+  & { discardId?: VoiceoverWavBridge['discardId'] }
   & { readonly isClosed?: boolean }
+
+export interface VoiceoverStartOptions {
+  /** Integer frames at the document rate; defaults to one second. */
+  countInFrames?: number
+  /** Signed input-latency offset in samples (see voiceoverCaptureSample). */
+  compensationSamples?: number
+  mutePlayback?: boolean
+  /** null lets the browser choose its default microphone. */
+  deviceId?: string | null
+}
+
+export interface VoiceoverTransportExtras {
+  mutePlayback: boolean
+  preRollSamples: number
+  onStopRequested(): void
+}
+
+/** Interruptions that leave the microphone usable end on a frame boundary and keep every written sample. */
+const BOUNDARY_INTERRUPTIONS: ReadonlySet<VoiceoverInterruption> = new Set(['transport-changed', 'destination-changed'])
+const STOP_LEAD_SAMPLES = 4_800
+const MAX_COMPENSATION_SAMPLES = Math.floor(VOICEOVER_WAV_LIMITS.sampleRate * MAX_VOICEOVER_COMPENSATION_SECONDS)
 
 export interface VoiceoverCaptureDeps {
   destinationContext(): VoiceoverDestinationContext
-  requestMicrophone(): Promise<MediaStream>
+  requestMicrophone(deviceId: string | null): Promise<MediaStream>
   getContext(): AudioContext
   createWriter(): Writer
   connect(options: Parameters<typeof connectVoiceoverMicrophone>[0]): Promise<Capture>
   armTransport?(context: AudioContext, startFrame: number, countInFrames: number,
-    onInterrupted: (reason: 'transport-changed' | 'destination-changed') => void): Promise<VoiceoverTransportLease>
+    onInterrupted: (reason: 'transport-changed' | 'destination-changed') => void,
+    extras?: VoiceoverTransportExtras): Promise<VoiceoverTransportLease>
+  /**
+   * Hold a cross-tab lock naming this draft until the session is terminal, so
+   * another tab's recovery list treats a take in review as live.
+   */
+  holdDraftLock?(sessionId: string): Promise<() => void>
   prepareWorklet?(context: AudioContext): Promise<void>
   visibleAndFocused(): boolean
   preflight?(): string | null
@@ -60,6 +89,15 @@ interface Active {
   capturedSamples: number
   diagnostic: string | null
   countInFrames: number
+  compensationSamples: number
+  mutePlayback: boolean
+  inputPeak: number
+  /** A writer was asked to create this draft; a discard must remove its files. */
+  draftMayExist: boolean
+  releaseLock: (() => void) | null
+  /** The shared playback clock the worklet renders on; outlives the transport lease. */
+  context: AudioContext | null
+  limit: { stopSample: number; stopFrame: number } | null
   transport: VoiceoverTransportLease | null
   timing: VoiceoverCaptureTiming | null
   requestedStopSample: number | null
@@ -124,7 +162,8 @@ export class VoiceoverCaptureOwner {
   get status(): VoiceoverCaptureStatus {
     const active = this.active
     return { session: active?.state ?? null, sourceLabel: active?.sourceLabel ?? null,
-      capturedSamples: active?.capturedSamples ?? 0, diagnostic: active?.diagnostic ?? null,
+      capturedSamples: active?.capturedSamples ?? 0, inputPeak: active?.inputPeak ?? 0,
+      playbackMuted: active?.mutePlayback ?? false, diagnostic: active?.diagnostic ?? null,
       timing: active?.timing ?? null }
   }
 
@@ -141,8 +180,13 @@ export class VoiceoverCaptureOwner {
   }
 
   /** Call from the click handler: permission is requested before the first await. */
-  start(trackId: string, startFrame: number, countInFrames?: number): { status: 'started'; sessionId: string }
+  start(trackId: string, startFrame: number, options: VoiceoverStartOptions = {}): { status: 'started'; sessionId: string }
     | { status: 'rejected'; reason: string } {
+    const { countInFrames } = options
+    const compensation = options.compensationSamples ?? 0
+    if (!Number.isSafeInteger(compensation) || Math.abs(compensation) > MAX_COMPENSATION_SAMPLES) {
+      return { status: 'rejected', reason: 'Latency offset must be within half a second.' }
+    }
     const prior = this.active?.state
     if (prior && prior.phase !== 'cancelled' && prior.phase !== 'failed' && prior.phase !== 'kept') {
       return { status: 'rejected', reason: 'A recording is already active or awaiting cleanup.' }
@@ -166,7 +210,9 @@ export class VoiceoverCaptureOwner {
       writerStopped: false, stopRetryRecovery: false,
       capture: null, preparing: null, cleanup: Promise.resolve(), pendingStarted: false,
       trackListeners: [], sourceLabel: null, capturedSamples: 0, diagnostic: null,
-      countInFrames: countIn, transport: null, timing: null, requestedStopSample: null,
+      countInFrames: countIn, compensationSamples: compensation, mutePlayback: options.mutePlayback ?? false,
+      inputPeak: 0, draftMayExist: false, releaseLock: null, context: null, limit: null,
+      transport: null, timing: null, requestedStopSample: null,
       keepTask: null, keepImportPending: false, keepCancelled: false }
     this.active = active
     this.publish()
@@ -179,7 +225,7 @@ export class VoiceoverCaptureOwner {
     }
     // Nothing asynchronous may precede this call; browsers can require the click activation.
     let permission: Promise<MediaStream>
-    try { permission = this.deps.requestMicrophone() }
+    try { permission = this.deps.requestMicrophone(options.deviceId ?? null) }
     catch (cause) { permission = Promise.reject(cause) }
     this.watch(permission.then((stream) => this.permissionGranted(active, stream),
       (cause) => this.permissionRejected(active, cause)))
@@ -195,6 +241,8 @@ export class VoiceoverCaptureOwner {
     const decision = transitionVoiceoverSession(active.state, event)
     if (decision.state === active.state) return active.cleanup
     active.state = decision.state
+    const phase = decision.state.phase
+    if (phase === 'kept' || phase === 'cancelled' || phase === 'failed') this.releaseDraftLock(active)
     this.publish()
     if (!decision.effect) return active.cleanup
     const task = this.runEffect(active, decision.effect)
@@ -243,8 +291,7 @@ export class VoiceoverCaptureOwner {
       return task
     }
     const kind = effect.kind
-    const normalStop = kind === 'stop' && !active.stopRetryRecovery &&
-      (!active.state.interruption || active.state.interruption === 'overrun')
+    const normalStop = kind === 'stop' && this.finishesNormally(active)
     let stopPending: ReturnType<Capture['stop']> | null = null
     let graphError: unknown = null
     try {
@@ -296,17 +343,54 @@ export class VoiceoverCaptureOwner {
     return task
   }
 
+  /** Stop on a boundary that retains every accepted sample, then review. */
+  private finishesNormally(active: Active): boolean {
+    const interruption = active.state.interruption
+    return !active.stopRetryRecovery && (!interruption || interruption === 'overrun' ||
+      (BOUNDARY_INTERRUPTIONS.has(interruption) && active.requestedStopSample !== null))
+  }
+
+  /** Capture samples are the timeline window shifted by the take's compensation. */
   private completedWindow(active: Active, startSample: number, endSample: number, samples: number): void {
     if (!active.timing) return
-    const plan = planVoiceoverSampleWindow({ anchorSample: active.timing.anchorSample,
+    const compensation = active.compensationSamples
+    const captureAnchor = voiceoverCaptureSample(active.timing.anchorSample, compensation,
+      VOICEOVER_WAV_LIMITS.sampleRate)
+    const plan = planVoiceoverSampleWindow({ anchorSample: captureAnchor,
       stopSample: endSample, inputStartSample: startSample, inputEndSample: endSample,
       compensationSamples: 0, audioSampleRate: VOICEOVER_WAV_LIMITS.sampleRate })
     if (plan.missingInputSamples !== 0 || plan.sourceSamples !== samples ||
       plan.outputSamples !== samples) throw new Error('Voiceover input missed its pinned sample window')
-    active.timing = { ...active.timing, stopSample: endSample,
-      stopFrame: active.timing.stopFrame ?? voiceoverTimelineFrameAtSample(endSample,
+    const timelineStop = endSample - compensation
+    active.timing = { ...active.timing, stopSample: timelineStop,
+      stopFrame: active.timing.stopFrame ?? voiceoverTimelineFrameAtSample(timelineStop,
         active.timing.anchorSample, active.timing.startFrame, active.state.destination) }
     this.publish()
+  }
+
+  /**
+   * Choose the next exact timeline frame boundary at least STOP_LEAD_SAMPLES
+   * after the worklet's current position and ask the worklet to end there.
+   */
+  private scheduleBoundaryStop(active: Active): void {
+    if (!active.context || !active.timing) throw new Error('Voiceover timing is unavailable')
+    const compensation = active.compensationSamples
+    const nowSample = Math.ceil(active.context.currentTime * VOICEOVER_WAV_LIMITS.sampleRate)
+    const timelineNow = Math.max(nowSample - compensation, active.timing.anchorSample)
+    const boundary = voiceoverStopBoundary(timelineNow, active.timing.anchorSample,
+      active.timing.startFrame, STOP_LEAD_SAMPLES, active.state.destination)
+    const limit = active.limit
+    const chosen = limit && boundary.stopSample > limit.stopSample ? limit : boundary
+    active.requestedStopSample = voiceoverCaptureSample(chosen.stopSample, compensation,
+      VOICEOVER_WAV_LIMITS.sampleRate)
+    active.timing = { ...active.timing, stopFrame: chosen.stopFrame }
+    this.publish()
+  }
+
+  private releaseDraftLock(active: Active): void {
+    const release = active.releaseLock
+    active.releaseLock = null
+    try { release?.() } catch { /* A lock that cannot be released ends with the page. */ }
   }
 
   private async keepDraft(active: Active, effect: Extract<VoiceoverSessionEffect, { kind: 'keep' }>): Promise<void> {
@@ -400,52 +484,64 @@ export class VoiceoverCaptureOwner {
 
   private async prepare(active: Active, operation: number): Promise<void> {
     try {
+      if (this.deps.holdDraftLock) {
+        const release = await this.deps.holdDraftLock(active.state.sessionId)
+        if (!this.live(active, operation, 'preparing')) { try { release() } catch { /* ended */ } return }
+        active.releaseLock = release
+      }
       const writer = this.deps.createWriter()
       active.writer = writer
+      active.draftMayExist = true
       await writer.create(active.state.sessionId)
       active.writerCreated = true
       if (!this.live(active, operation, 'preparing')) return
       const context = this.deps.getContext()
       if (context.sampleRate !== VOICEOVER_WAV_LIMITS.sampleRate) throw new Error('The playback clock is not 48 kHz')
+      active.context = context
       await context.resume()
       if (!this.live(active, operation, 'preparing')) return
       await this.deps.prepareWorklet?.(context)
       if (!this.live(active, operation, 'preparing')) return
       const transport = await this.deps.armTransport?.(context, active.state.destination.startFrame,
         active.countInFrames, (reason) => {
-          if (this.active === active) void this.dispatch(active,
-            { sessionId: active.state.sessionId, kind: 'interrupted', reason })
-        })
+          if (this.active === active) void this.interruptActive(active, reason)
+        }, { mutePlayback: active.mutePlayback, preRollSamples: Math.max(0, -active.compensationSamples),
+          onStopRequested: () => { if (this.active === active) void this.stop() } })
       if (!this.live(active, operation, 'preparing')) { transport?.release(); return }
       active.transport = transport ?? null
-      const startFrame = transport?.anchorSample ?? this.deps.planStartFrame(context)
-      if (!Number.isSafeInteger(startFrame) ||
-        startFrame - Math.ceil(context.currentTime * context.sampleRate) < 128) {
+      const anchorSample = transport?.anchorSample ?? this.deps.planStartFrame(context)
+      if (!Number.isSafeInteger(anchorSample)) throw new Error('Voiceover playback anchor is invalid')
+      const startFrame = voiceoverCaptureSample(anchorSample, active.compensationSamples, context.sampleRate)
+      if (startFrame - Math.ceil(context.currentTime * context.sampleRate) < 128) {
         throw new Error('Voiceover worklet missed its playback anchor setup deadline')
       }
+      active.limit = voiceoverLimitStop(anchorSample, active.state.destination.startFrame,
+        VOICEOVER_WAV_LIMITS.maxDurationSamples, active.state.destination)
       const trackSettings = active.stream?.getAudioTracks()[0]?.getSettings?.() as
         (MediaTrackSettings & { latency?: number }) | undefined
       const trackLatency = trackSettings?.latency
-      active.timing = { anchorSample: startFrame,
-        countInStartSample: transport?.countInStartSample ?? startFrame,
+      active.timing = { anchorSample,
+        countInStartSample: transport?.countInStartSample ?? anchorSample,
         startFrame: active.state.destination.startFrame, stopSample: null, stopFrame: null,
-        compensationSamples: 0,
+        compensationSamples: active.compensationSamples,
         trackLatencySeconds: typeof trackLatency === 'number' && Number.isFinite(trackLatency) ? trackLatency : null,
         outputLatencySeconds: Number.isFinite(context.outputLatency) ? context.outputLatency : null }
       this.publish()
       const capture = await this.deps.connect({ context, stream: active.stream!, writer,
         startFrame, closeWriterOnFailure: false,
+        limitStopFrame: voiceoverCaptureSample(active.limit.stopSample, active.compensationSamples, context.sampleRate),
         onStarted: () => {
           if (this.live(active, operation, 'preparing')) active.pendingStarted = true
           else if (this.live(active, operation, 'counting-in')) {
             void this.dispatch(active, { sessionId: active.state.sessionId, operation, kind: 'recording-started' })
           }
         },
-        onBatch: ({ frames }) => {
+        onBatch: ({ frames, peak }) => {
           if (this.active === active && (active.state.phase === 'counting-in' ||
             active.state.phase === 'recording' ||
             (active.state.phase === 'closing' && active.state.after === 'review'))) {
             active.capturedSamples += frames
+            active.inputPeak = peak
             this.publish()
           }
         },
@@ -453,13 +549,22 @@ export class VoiceoverCaptureOwner {
           if (this.active === active) void this.dispatch(active,
             { sessionId: active.state.sessionId, kind: 'interrupted', reason: 'overrun' })
         },
-        onTerminal: (_reason, endFrame) => {
+        onTerminal: (reason, endFrame) => {
           if (this.active !== active) return
           active.transport?.release()
           active.transport = null
           stopTracks(active.stream)
-          if (active.timing) active.timing = { ...active.timing, stopSample: endFrame }
+          active.inputPeak = 0
+          if (active.timing) active.timing = { ...active.timing, stopSample: endFrame - active.compensationSamples }
+          // A stop nobody requested is the pre-scheduled take limit: review it normally.
+          const limitStop = reason === 'stopped' && active.requestedStopSample === null && active.limit
+          if (limitStop && active.timing) {
+            active.requestedStopSample = endFrame
+            active.timing = { ...active.timing, stopFrame: active.limit!.stopFrame }
+            active.diagnostic = 'Reached the 60-minute take limit; the take stopped there.'
+          }
           this.publish()
+          if (limitStop) void this.dispatch(active, { sessionId: active.state.sessionId, kind: 'stop' })
         },
       })
       active.capture = capture
@@ -491,24 +596,35 @@ export class VoiceoverCaptureOwner {
     // Late setup has settled. There can be no new native graph after this point.
     const capture = active.capture
     const writer = active.writer
-    if (kind === 'stop' && capture && !active.writerStopped && !active.stopRetryRecovery &&
-      (!active.state.interruption || active.state.interruption === 'overrun')) {
+    const normal = this.finishesNormally(active)
+    if (kind === 'stop' && capture && !active.writerStopped && normal) {
       const result = await capture.stop()
       active.writerStopped = true
       active.capturedSamples = result.progress.pcmBytes / 2
       this.publish()
     }
-    if (writer) {
-      if (kind === 'discard') {
-        if (active.writerCreated) await writer.discard()
-        writer.close()
-        active.writer = null
-      } else if (kind === 'release') {
+    if (kind === 'discard') {
+      // A dead or already-released writer cannot discard its own draft; a
+      // fresh worker removes the files by id (idempotent) instead.
+      let discarded = !active.draftMayExist
+      if (writer && active.writerCreated && !writer.isClosed) {
+        try { await writer.discard(); discarded = true } catch { /* fall back below */ }
+      }
+      if (writer) { writer.close(); active.writer = null }
+      if (!discarded) {
+        const fresh = this.deps.createWriter()
+        try {
+          if (!fresh.discardId) throw new Error('The recording draft could not be discarded')
+          await fresh.discardId(active.state.sessionId)
+        } finally { fresh.close() }
+      }
+      active.draftMayExist = false
+    } else if (writer) {
+      if (kind === 'release') {
         if (active.writerCreated && !active.writerStopped && !writer.isClosed) await writer.release()
         writer.close()
         active.writer = null
-      } else if (kind === 'stop' &&
-        (active.stopRetryRecovery || (active.state.interruption && active.state.interruption !== 'overrun'))) {
+      } else if (kind === 'stop' && !normal) {
         // An interrupted worklet cannot finalize its last in-memory batch.
         // Reopen the last durable checkpoint for explicit review.
         if (active.writerCreated && !active.writerStopped && !writer.isClosed) await writer.release()
@@ -536,14 +652,10 @@ export class VoiceoverCaptureOwner {
   stop(): Promise<void> {
     const active = this.active
     if (!active) return Promise.resolve()
-    if (active.state.phase === 'recording' && active.transport && active.timing) {
+    if (active.state.phase === 'recording' && active.transport && active.timing &&
+      active.requestedStopSample === null) {
       try {
-        const nowSample = Math.ceil(active.transport.context.currentTime * VOICEOVER_WAV_LIMITS.sampleRate)
-        const boundary = voiceoverStopBoundary(nowSample, active.timing.anchorSample,
-          active.timing.startFrame, 4_800, active.state.destination)
-        active.requestedStopSample = boundary.stopSample
-        active.timing = { ...active.timing, stopFrame: boundary.stopFrame }
-        this.publish()
+        this.scheduleBoundaryStop(active)
       } catch (cause) {
         active.diagnostic = errorMessage(cause)
         this.publish()
@@ -574,6 +686,17 @@ export class VoiceoverCaptureOwner {
   interrupt(reason: VoiceoverInterruption): Promise<void> {
     const active = this.active
     if (!active) return Promise.resolve()
+    return this.interruptActive(active, reason)
+  }
+
+  private interruptActive(active: Active, reason: VoiceoverInterruption): Promise<void> {
+    // The microphone is still healthy after a seek, pause, or edit: end on the
+    // next frame boundary so already-written audio is kept for review.
+    if (BOUNDARY_INTERRUPTIONS.has(reason) && active.state.phase === 'recording' &&
+      active.timing && active.requestedStopSample === null && active.capture) {
+      try { this.scheduleBoundaryStop(active) }
+      catch { active.requestedStopSample = null }
+    }
     return this.dispatch(active, { sessionId: active.state.sessionId, kind: 'interrupted', reason })
   }
 
@@ -604,7 +727,8 @@ export class VoiceoverCaptureOwner {
   dispose(): void {
     this.unsubscribe?.()
     this.unsubscribePageEvents?.()
-    void this.cancel()
+    const active = this.active
+    void this.cancel().finally(() => { if (active) this.releaseDraftLock(active) })
   }
 }
 
@@ -614,7 +738,15 @@ export function getVoiceoverCaptureOwner(): VoiceoverCaptureOwner {
   if (owner) return owner
   owner = new VoiceoverCaptureOwner({
     destinationContext: currentVoiceoverDestinationContext,
-    requestMicrophone: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false }),
+    requestMicrophone: (deviceId) => navigator.mediaDevices.getUserMedia({ audio: {
+      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+    }, video: false }),
+    holdDraftLock: (sessionId) => new Promise<() => void>((resolve, reject) => {
+      if (typeof navigator === 'undefined' || !navigator.locks) { resolve(() => {}); return }
+      navigator.locks.request(voiceoverDraftLockName(sessionId), { mode: 'exclusive' },
+        () => new Promise<void>((release) => resolve(release))).catch(reject)
+    }),
     getContext: () => getPlaybackClockContext() as AudioContext,
     createWriter: () => new VoiceoverWavBridge(),
     connect: connectVoiceoverMicrophone,
@@ -627,8 +759,8 @@ export function getVoiceoverCaptureOwner(): VoiceoverCaptureOwner {
     importedDurationFrames: (assetId) => useMediaStore.getState().assets.get(assetId)?.durationFrames ?? null,
     placeImported: placeImportedAsset,
     cancelImport: () => { cancelMediaImport() },
-    armTransport: (context, startFrame, countInFrames, onInterrupted) =>
-      armVoiceoverTransport({ context, startFrame, countInFrames, onInterrupted }),
+    armTransport: (context, startFrame, countInFrames, onInterrupted, extras) =>
+      armVoiceoverTransport({ context, startFrame, countInFrames, onInterrupted, ...extras }),
     prepareWorklet: prepareVoiceoverMicrophoneWorklet,
     visibleAndFocused: () => document.visibilityState === 'visible' && document.hasFocus(),
     preflight: () => !navigator.mediaDevices?.getUserMedia || !navigator.storage?.getDirectory ||

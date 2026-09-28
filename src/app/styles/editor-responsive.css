@@ -283,6 +283,18 @@
     gap: 8px;
   }
 
+  /* Keep every toolbar action reachable instead of clipping the row's end. */
+  .toolbar-actions {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    padding-block: 2px;
+  }
+
+  .toolbar-actions > * {
+    flex: 0 0 auto;
+  }
+
   .toolbar-recovery-status {
     display: none;
   }

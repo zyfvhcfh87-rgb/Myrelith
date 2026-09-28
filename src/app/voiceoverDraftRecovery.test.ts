@@ -122,6 +122,11 @@ interface HarnessOptions {
   failRecoverFor?: string
   failDiscardFor?: string
   sameEntry?: boolean
+  /** Draft ids whose capture Web Lock another tab holds. */
+  lockedIds?: string[]
+  /** File names of current-project media descriptors. */
+  assetFileNames?: string[]
+  rememberFailure?: boolean
 }
 
 function harness(options: HarnessOptions) {
@@ -174,6 +179,12 @@ function harness(options: HarnessOptions) {
           phase: options.sessionPhase ?? 'recording',
         } as VoiceoverSession,
     disconnectAsset: vi.fn(),
+    heldDraftLockIds: async () => options.lockedIds ?? [],
+    projectAssetFileNames: () => options.assetFileNames ?? [],
+    rememberHandle: vi.fn(async (bindingId: string, assetId: string, rememberedHandle: LocalMediaFileHandle) => {
+      if (options.rememberFailure) throw new Error('IndexedDB unavailable')
+      await registry.remember(bindingId, assetId, rememberedHandle)
+    }),
   }
   const recovery = new VoiceoverDraftRecovery(deps)
   return {
@@ -597,5 +608,60 @@ describe('voiceover draft recovery', () => {
     const survey = await recovery.survey()
     expect(survey.drafts[0]).toMatchObject({ id: 'voiceover_orphan', state: 'orphaned', assetIds: [] })
     recovery.dispose()
+  })
+
+  it('treats a draft locked by another tab as live, even with a known size', async () => {
+    const h = harness({ drafts: [draft('voiceover_other_tab')], sessionPhase: null,
+      lockedIds: ['voiceover_other_tab'] })
+    const survey = await h.recovery.survey()
+    expect(survey.drafts[0]?.state).toBe('live')
+    expect(await h.recovery.discardDraft('voiceover_other_tab')).toMatchObject({ status: 'rejected' })
+    expect(await h.recovery.recoverDraft('voiceover_other_tab')).toMatchObject({ status: 'rejected' })
+    expect(h.directory.entries.has('voiceover_other_tab')).toBe(true)
+  })
+
+  it('awaits the grant for a recovered original before reporting success', async () => {
+    // The importer returns before any grant exists (its remember is fire-and-forget).
+    const h = harness({ drafts: [draft('voiceover_crash')], sessionPhase: null,
+      importResult: async () => ({ status: 'imported', assetId: 'recovered-asset' }) })
+    const result = await h.recovery.recoverDraft('voiceover_crash')
+    expect(result).toMatchObject({ status: 'recovered', assetId: 'recovered-asset' })
+    expect(h.deps.rememberHandle).toHaveBeenCalledOnce()
+    const survey = await h.recovery.survey()
+    expect(survey.drafts[0]?.state).toBe('kept')
+  })
+
+  it('reports a recovered take whose grant failed and never lets it be discarded while in use', async () => {
+    const h = harness({ drafts: [draft('voiceover_crash')], sessionPhase: null, rememberFailure: true,
+      assetFileNames: ['voiceover_crash.wav'],
+      importResult: async () => ({ status: 'imported', assetId: 'recovered-asset' }) })
+    const result = await h.recovery.recoverDraft('voiceover_crash')
+    expect(result).toMatchObject({ status: 'recovered' })
+    expect(result.status === 'recovered' && result.note).toMatch(/grant could not be saved/)
+    expect(await h.recovery.discardDraft('voiceover_crash')).toMatchObject({ status: 'rejected' })
+    expect(h.directory.entries.has('voiceover_crash')).toBe(true)
+  })
+
+  it('serializes concurrent operations so one cannot close the worker under another', async () => {
+    const gate = { release: () => {}, entered: false }
+    const h = harness({ drafts: [draft('voiceover_a'), draft('voiceover_b')], sessionPhase: null,
+      importResult: (_file, importedHandle) => new Promise((resolve) => {
+        gate.entered = true
+        gate.release = () => {
+          void h.registry.remember(BINDING, 'asset-a', importedHandle).then(() =>
+            resolve({ status: 'imported', assetId: 'asset-a' }))
+        }
+      }) })
+    const recovering = h.recovery.recoverDraft('voiceover_a')
+    const discarding = h.recovery.discardDraft('voiceover_b')
+    const surveying = h.recovery.survey()
+    await vi.waitFor(() => expect(gate.entered).toBe(true))
+    // Nothing else runs while the first recovery is waiting on import.
+    expect(h.directory.entries.has('voiceover_b')).toBe(true)
+    gate.release()
+    expect(await recovering).toMatchObject({ status: 'recovered' })
+    expect(await discarding).toMatchObject({ status: 'discarded' })
+    const survey = await surveying
+    expect(survey.drafts.map((entry) => [entry.id, entry.state])).toEqual([['voiceover_a', 'kept']])
   })
 })

@@ -72,6 +72,21 @@ async function listDrafts(): Promise<VoiceoverDraftInfo[]> {
   return drafts.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
+/**
+ * A listing in another worker or tab probes each file with a momentary sync
+ * handle; retry that short lock instead of failing a create or recovery.
+ * A recording that really owns the file keeps it locked past this window.
+ */
+async function openSyncHandle(handle: FileSystemFileHandle): Promise<VoiceoverSyncFile> {
+  for (let attempt = 0; ; attempt++) {
+    try { return await (handle as SyncFileHandle).createSyncAccessHandle() }
+    catch (cause) {
+      if (!(cause instanceof DOMException && cause.name === 'NoModificationAllowedError') || attempt >= 8) throw cause
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+  }
+}
+
 const storage: VoiceoverDraftStorage<FileSystemFileHandle> = {
   async open(id, create) {
     const directory = await recordingDirectory(create)
@@ -87,8 +102,8 @@ const storage: VoiceoverDraftStorage<FileSystemFileHandle> = {
       audioCreated = create
       const journalFile = await directory.getFileHandle(name.journal, { create })
       journalCreated = create
-      audio = await (audioFile as SyncFileHandle).createSyncAccessHandle()
-      const journal = await (journalFile as SyncFileHandle).createSyncAccessHandle()
+      audio = await openSyncHandle(audioFile)
+      const journal = await openSyncHandle(journalFile)
       return { audio, journal }
     } catch (cause) {
       try { audio?.close() }
@@ -110,7 +125,13 @@ const storage: VoiceoverDraftStorage<FileSystemFileHandle> = {
     return { handle, file: await handle.getFile() }
   },
   async remove(id) {
-    const directory = await recordingDirectory(false)
+    let directory: FileSystemDirectoryHandle
+    try { directory = await recordingDirectory(false) }
+    catch (cause) {
+      // Nothing was ever written, so there is nothing to remove.
+      if (cause instanceof DOMException && cause.name === 'NotFoundError') return
+      throw cause
+    }
     const name = names(id)
     await removeIfPresent(directory, name.audio)
     await removeIfPresent(directory, name.journal)
@@ -149,6 +170,14 @@ globalThis.onmessage = ({ data }: MessageEvent<VoiceoverWavRequest>) => {
     // A FileSystemFileHandle clones (it never transfers through
     // postMessage); the File clones the same way, so no transfer list is
     // needed or accepted.
-    globalThis.postMessage(reply)
+    try { globalThis.postMessage(reply) }
+    catch (cause) {
+      // Answer the request anyway so the bridge cannot wait forever.
+      globalThis.postMessage({ requestId: data.requestId, error: {
+        name: 'DataCloneError', message: cause instanceof Error ? cause.message : String(cause),
+      } } satisfies VoiceoverWavReply)
+    }
+  }).catch(() => {
+    // Keep serializing later requests even if a reply could not be posted.
   })
 }

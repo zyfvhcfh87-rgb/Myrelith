@@ -23,7 +23,7 @@ function stream(track = new FakeTrack()) {
   return { track, media: { getTracks: () => [track], getAudioTracks: () => [track] } as unknown as MediaStream }
 }
 
-function harness(options: { permission?: Promise<MediaStream>; failDiscardOnce?: boolean;
+function harness(options: { permission?: Promise<MediaStream>; discardFailures?: number;
   failStopOnce?: boolean; create?: Promise<void>; visible?: boolean; unsupported?: boolean;
   lifecycle?: EventTarget } = {}) {
   const live: VoiceoverDestinationContext = {
@@ -31,7 +31,8 @@ function harness(options: { permission?: Promise<MediaStream>; failDiscardOnce?:
     doc: createTimelineDoc('Voiceover', DEFAULT_PROJECT_SETTINGS, 'sequence'),
   }
   const calls = { requested: 0, created: 0, stopRequests: 0, stopped: 0, released: 0,
-    recovered: 0, discarded: 0, closed: 0, aborted: 0, connected: 0 }
+    recovered: 0, discarded: 0, discardedById: 0, closed: 0, aborted: 0, connected: 0 }
+  const failures = { discard: options.discardFailures ?? 0 }
   let started: (() => void) | null = null
   let overrun: (() => void) | null = null
   let finishedReject: ((cause: Error) => void) | null = null
@@ -45,7 +46,8 @@ function harness(options: { permission?: Promise<MediaStream>; failDiscardOnce?:
       stop: async () => { calls.stopped++; return { pcmBytes: 0, committedBytes: 0 } as never },
       release: async () => { calls.released++; return { pcmBytes: 0, committedBytes: 0 } as never },
       recover: async () => { calls.recovered++; return {} as never },
-      discard: async () => { calls.discarded++; if (options.failDiscardOnce && calls.discarded === 1) throw new Error('Injected cleanup failure') },
+      discard: async () => { calls.discarded++; if (failures.discard-- > 0) throw new Error('Injected cleanup failure') },
+      discardId: async () => { calls.discardedById++; if (failures.discard-- > 0) throw new Error('Injected cleanup failure') },
       close: () => { calls.closed++ },
     }),
     connect: async (input) => {
@@ -161,7 +163,8 @@ describe('voiceover capture ownership', () => {
 
   test('cleanup failure blocks a new take and retry discards the same draft', async () => {
     const captured = stream()
-    const h = harness({ permission: Promise.resolve(captured.media), failDiscardOnce: true })
+    // The writer's own discard and the by-id fallback both fail once.
+    const h = harness({ permission: Promise.resolve(captured.media), discardFailures: 2 })
     await h.recording()
     await h.owner.cancel()
     expect(captured.track.stops).toBe(1)
@@ -169,7 +172,8 @@ describe('voiceover capture ownership', () => {
     expect(h.start().status).toBe('rejected')
     await h.owner.retryCleanup()
     expect(h.owner.status.session?.phase).toBe('cancelled')
-    expect(h.calls.discarded).toBe(2)
+    expect(h.calls.discarded).toBe(1)
+    expect(h.calls.discardedById).toBe(2)
   })
 
   test('failed graph stop retries through the durable checkpoint', async () => {
@@ -234,5 +238,36 @@ describe('voiceover capture ownership', () => {
     const undone = currentVoiceoverDestinationContext().editRevision
     expect(edited).toBeGreaterThan(first)
     expect(undone).toBeGreaterThan(edited)
+  })
+
+  test('a dead writer in review is discarded by id from a fresh worker', async () => {
+    const h = harness({ discardFailures: 1 })
+    await h.recording()
+    await h.owner.stop()
+    expect(h.owner.status.session?.phase).toBe('review')
+    await h.owner.cancel()
+    expect(h.owner.status.session?.phase).toBe('cancelled')
+    expect(h.calls.discarded).toBe(1)
+    expect(h.calls.discardedById).toBe(1)
+  })
+
+  test('discarding after a project replacement removes the retained draft by id', async () => {
+    const h = harness()
+    await h.recording()
+    await h.owner.stop()
+    await h.owner.teardownForProjectChange()
+    expect(h.owner.status.session).toMatchObject({ phase: 'failed', failure: 'project-replaced' })
+    await h.owner.cancel()
+    expect(h.owner.status.session?.phase).toBe('cancelled')
+    expect(h.calls.discardedById).toBe(1)
+  })
+
+  test('cancelling before any writer existed deletes nothing', async () => {
+    const pending = deferred<MediaStream>()
+    const h = harness({ permission: pending.promise })
+    h.start()
+    await h.owner.cancel()
+    expect(h.owner.status.session?.phase).toBe('cancelled')
+    expect(h.calls.discarded + h.calls.discardedById).toBe(0)
   })
 })

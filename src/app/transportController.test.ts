@@ -505,6 +505,49 @@ describe('live audio integration', () => {
     lease.release()
   })
 
+  test('the play/pause toggle during a voiceover take requests a stop instead of interrupting', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    fake.startAudio.mockResolvedValueOnce(makeAudioSession(1))
+    const interrupted = vi.fn()
+    const stopRequested = vi.fn()
+    const clock = getPlaybackClockContext() as AudioContext
+    const lease = await armVoiceoverTransport({
+      context: clock, startFrame: 15, countInFrames: 0, onInterrupted: interrupted,
+      onStopRequested: stopRequested,
+    })
+    togglePlayback()
+    expect(stopRequested).toHaveBeenCalledOnce()
+    expect(interrupted).not.toHaveBeenCalled()
+    expect(transport().isPlaying).toBe(true)
+    lease.release()
+  })
+
+  test('muted voiceover playback never starts timeline audio but keeps the shared anchor', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const clock = getPlaybackClockContext() as AudioContext
+    const lease = await armVoiceoverTransport({
+      context: clock, startFrame: 15, countInFrames: 0, mutePlayback: true, onInterrupted: vi.fn(),
+    })
+    expect(fake.startAudio).not.toHaveBeenCalled()
+    expect(Number.isSafeInteger(lease.anchorSample)).toBe(true)
+    expect(lease.anchorSample).toBeGreaterThanOrEqual(12_000)
+    lease.release()
+  })
+
+  test('pre-roll for a negative latency offset extends the arming lead', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const clock = getPlaybackClockContext() as AudioContext
+    fake.startAudio.mockResolvedValueOnce(makeAudioSession(1))
+    const lease = await armVoiceoverTransport({
+      context: clock, startFrame: 15, countInFrames: 0, preRollSamples: 24_000, onInterrupted: vi.fn(),
+    })
+    expect(fake.startAudio.mock.calls[0][4].minimumStartLeadSeconds).toBe(0.75)
+    lease.release()
+    await expect(armVoiceoverTransport({
+      context: clock, startFrame: 15, countInFrames: 0, preRollSamples: -1, onInterrupted: vi.fn(),
+    })).rejects.toThrow(RangeError)
+  })
+
   test('an edit during voiceover audio priming retires the late session', async () => {
     useDocumentStore.getState().setDoc(makeAudibleDoc())
     const priming = deferred<TimelineAudioPlaybackSession>()

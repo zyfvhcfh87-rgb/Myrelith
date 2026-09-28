@@ -199,3 +199,49 @@ export function planVoiceoverSampleWindow(window: VoiceoverSampleWindow): Voiceo
     missingInputSamples: safe(idealCount - sourceCount, 'Missing input'),
   }
 }
+
+/**
+ * The last timeline-frame boundary whose take length stays within
+ * `maxSamples`. The capture owner schedules this as the worklet's hard stop,
+ * so reaching the take limit ends on an exact frame instead of a writer fault.
+ */
+export function voiceoverLimitStop(
+  anchorSample: number,
+  startFrame: number,
+  maxSamples: number,
+  doc: AudioSampleDocument,
+): { stopSample: number; stopFrame: number } {
+  nonNegative(anchorSample, 'Anchor sample')
+  nonNegative(startFrame, 'Start frame')
+  nonNegative(maxSamples, 'Maximum samples')
+  sampleGrid(doc)
+  const startBoundary = audioSampleBoundary(startFrame, doc)
+  const fits = (frames: number) =>
+    audioSampleBoundary(startFrame + frames, doc) - startBoundary <= maxSamples
+  // Exact floor of maxSamples × rate / sampleRate, then correct the rounding
+  // of per-frame sample boundaries by at most one frame either way.
+  let frames = safe(BigInt(maxSamples) * BigInt(doc.frameRate.num) /
+    (BigInt(doc.audioSampleRate) * BigInt(doc.frameRate.den)), 'Limit frames')
+  while (frames > 0 && !fits(frames)) frames--
+  while (fits(frames + 1)) frames++
+  if (frames < 1) throw new RangeError('The take limit is shorter than one timeline frame')
+  const stopFrame = startFrame + frames
+  return { stopFrame, stopSample: voiceoverSampleAtTimelineFrame(stopFrame, anchorSample, startFrame, doc) }
+}
+
+/**
+ * Microphone signal for timeline sample `t` arrives at context sample `t + C`
+ * when the input path is `C` samples late. The capture window is therefore the
+ * timeline window shifted by the signed compensation; its length is unchanged.
+ */
+export function voiceoverCaptureSample(timelineSample: number, compensationSamples: number, audioSampleRate: number): number {
+  nonNegative(timelineSample, 'Timeline sample')
+  if (!Number.isSafeInteger(audioSampleRate) || audioSampleRate <= 0) {
+    throw new RangeError('Audio sample rate must be a positive safe integer')
+  }
+  if (!Number.isSafeInteger(compensationSamples) ||
+    Math.abs(compensationSamples) > Math.floor(audioSampleRate * MAX_VOICEOVER_COMPENSATION_SECONDS)) {
+    throw new RangeError('Voiceover compensation exceeds the half-second sample bound')
+  }
+  return safe(BigInt(timelineSample) + BigInt(compensationSamples), 'Capture sample')
+}

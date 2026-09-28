@@ -50,7 +50,7 @@ for (const mode of ['normal', 'late', 'cancel'] as const) test(`Chromium voiceov
       publish: () => {},
     })
     try {
-      const started = owner.start('A1', 20, 30)
+      const started = owner.start('A1', 20, { countInFrames: 30 })
       if (started.status !== 'started') throw new Error(started.reason)
       const deadline = performance.now() + 6_000
       while (!(mode === 'cancel' ? ['counting-in', 'failed', 'cleanup-failed'] :

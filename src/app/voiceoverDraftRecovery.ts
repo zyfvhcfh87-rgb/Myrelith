@@ -16,7 +16,9 @@
 import {
   classifyVoiceoverDrafts,
   keptOriginalRemovalEligible,
+  voiceoverDraftIdsFromLockNames,
   voiceoverSessionOwnsDraft,
+  type VoiceoverDraftAction,
   type VoiceoverDraftClassification,
   type VoiceoverDraftReference,
 } from '../domain/voiceoverDrafts'
@@ -68,6 +70,15 @@ export interface VoiceoverDraftRecoveryDeps {
   liveSession(): VoiceoverSession | null
   /** Mark a source offline in this session after its original file is gone. */
   disconnectAsset(assetId: string): void
+  /**
+   * Persist the recovered original's grant before reporting success, so no
+   * later survey can see the imported file as an orphan.
+   */
+  rememberHandle?(projectBindingId: string, assetId: string, handle: LocalMediaFileHandle): Promise<void>
+  /** File names of every current-project media descriptor (online or offline). */
+  projectAssetFileNames?(): readonly string[]
+  /** Draft ids whose capture-session Web Lock is held in any tab of this origin. */
+  heldDraftLockIds?(): Promise<readonly string[]>
 }
 
 export interface VoiceoverDraftSurvey {
@@ -75,13 +86,7 @@ export interface VoiceoverDraftSurvey {
   readonly drafts: readonly VoiceoverDraftClassification[]
 }
 
-export type VoiceoverDraftAction =
-  | { status: 'recovered'; assetId: string; sizeBytes: number | null }
-  | { status: 'discarded'; sizeBytes: number | null }
-  | { status: 'removed'; sizeBytes: number | null; note?: string }
-  | { status: 'cancelled' }
-  | { status: 'rejected'; reason: string }
-  | { status: 'failed'; message: string }
+export type { VoiceoverDraftAction }
 
 function failureMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
@@ -91,6 +96,8 @@ export class VoiceoverDraftRecovery {
   private readonly deps: VoiceoverDraftRecoveryDeps
   private bridge: RecoveryWriter | null = null
   private lifecycle = 0
+  /** Every public operation runs alone: one shared worker, no interleaved classify/delete. */
+  private queue: Promise<unknown> = Promise.resolve()
 
   constructor(deps: VoiceoverDraftRecoveryDeps) {
     this.deps = deps
@@ -109,15 +116,26 @@ export class VoiceoverDraftRecovery {
    * Enumerate the recordings directory and classify every entry. Reading and
    * classifying only: nothing is imported or deleted, ever, from this path.
    */
-  async survey(): Promise<VoiceoverDraftSurvey> {
-    const [drafts, references] = await Promise.all([
+  survey(): Promise<VoiceoverDraftSurvey> {
+    return this.serialized(() => this.surveyNow())
+  }
+
+  private serialized<T>(run: () => Promise<T>): Promise<T> {
+    const task = this.queue.then(run, run)
+    this.queue = task.catch(() => {})
+    return task
+  }
+
+  private async surveyNow(): Promise<VoiceoverDraftSurvey> {
+    const [drafts, references, locked] = await Promise.all([
       this.writer().list(),
       this.references(),
+      this.deps.heldDraftLockIds?.() ?? Promise.resolve([]),
     ])
     return {
       drafts: classifyVoiceoverDrafts(
         drafts,
-        this.liveSessionIds(),
+        [...this.liveSessionIds(), ...locked],
         references,
       ),
     }
@@ -164,7 +182,11 @@ export class VoiceoverDraftRecovery {
    * The file STAYS in the recordings directory and becomes the kept original
    * of the imported asset; only an explicit discard removes it later.
    */
-  async recoverDraft(draftId: string): Promise<VoiceoverDraftAction> {
+  recoverDraft(draftId: string): Promise<VoiceoverDraftAction> {
+    return this.serialized(() => this.recoverNow(draftId))
+  }
+
+  private async recoverNow(draftId: string): Promise<VoiceoverDraftAction> {
     const binding = this.deps.projectBindingId()
     if (!binding) {
       return { status: 'failed', message: 'Open a local project before recovering a draft' }
@@ -211,7 +233,13 @@ export class VoiceoverDraftRecovery {
               : `The recovered draft was not imported (${imported.status})`,
           }
         }
-        return { status: 'recovered', assetId: imported.assetId, sizeBytes: classification.sizeBytes }
+        let note: string | undefined
+        try { await this.deps.rememberHandle?.(binding, imported.assetId, finalized.handle) }
+        catch (cause) {
+          note = `The recording is in the Media Pool, but its browser grant could not be saved: ${failureMessage(cause)}`
+        }
+        return { status: 'recovered', assetId: imported.assetId, sizeBytes: classification.sizeBytes,
+          ...(note ? { note } : {}) }
       } finally {
         bridge.close()
         this.bridge = null
@@ -225,7 +253,11 @@ export class VoiceoverDraftRecovery {
    * Explicit discard. Legal only for orphaned drafts; a kept or live draft is
    * rejected so referenced media is never deleted.
    */
-  async discardDraft(draftId: string): Promise<VoiceoverDraftAction> {
+  discardDraft(draftId: string): Promise<VoiceoverDraftAction> {
+    return this.serialized(() => this.discardNow(draftId))
+  }
+
+  private async discardNow(draftId: string): Promise<VoiceoverDraftAction> {
     const classification = await this.classify(draftId)
     if (!classification) {
       return { status: 'failed', message: 'The draft no longer exists in the recordings directory' }
@@ -235,6 +267,10 @@ export class VoiceoverDraftRecovery {
     }
     if (classification.state === 'live') {
       return { status: 'rejected', reason: 'The draft belongs to the active recording session' }
+    }
+    // A grant that failed to persist must not expose an imported file to deletion.
+    if (this.deps.projectAssetFileNames?.().includes(`${draftId}.wav`)) {
+      return { status: 'rejected', reason: 'A media item in this project uses this recording' }
     }
     try {
       await this.writer().discardId(draftId)
@@ -254,7 +290,11 @@ export class VoiceoverDraftRecovery {
    * directory — a moved or externally deleted source is reconnected, never
    * silently disconnected.
   */
-  async removeKeptOriginal(assetId: string): Promise<VoiceoverDraftAction> {
+  removeKeptOriginal(assetId: string): Promise<VoiceoverDraftAction> {
+    return this.serialized(() => this.removeNow(assetId))
+  }
+
+  private async removeNow(assetId: string): Promise<VoiceoverDraftAction> {
     const binding = this.deps.projectBindingId()
     if (!binding) {
       return { status: 'failed', message: 'Open a local project before removing a kept original' }
@@ -276,7 +316,7 @@ export class VoiceoverDraftRecovery {
     }
     let survey: VoiceoverDraftSurvey
     try {
-      survey = await this.survey()
+      survey = await this.surveyNow()
     } catch (cause) {
       return { status: 'failed', message: failureMessage(cause) }
     }
@@ -347,7 +387,7 @@ export class VoiceoverDraftRecovery {
   }
 
   private async classify(draftId: string): Promise<VoiceoverDraftClassification | null> {
-    const survey = await this.survey()
+    const survey = await this.surveyNow()
     return survey.drafts.find((draft) => draft.id === draftId) ?? null
   }
 }
@@ -383,6 +423,15 @@ export function getVoiceoverDraftRecovery(): VoiceoverDraftRecovery {
     importMedia: (file, handle) => importMediaFromHandle(file, handle),
     liveSession: () => useVoiceoverCaptureStore.getState().session,
     disconnectAsset: (assetId) => useMediaStore.getState().disconnectAsset(assetId),
+    rememberHandle: (binding, assetId, handle) => localMediaHandleRegistry.remember(binding, assetId, handle),
+    projectAssetFileNames: () => [...useMediaStore.getState().descriptors.values()]
+      .map((descriptor) => descriptor.fileName),
+    heldDraftLockIds: async () => {
+      if (typeof navigator === 'undefined' || !navigator.locks?.query) return []
+      const snapshot = await navigator.locks.query()
+      return voiceoverDraftIdsFromLockNames([...(snapshot.held ?? []), ...(snapshot.pending ?? [])]
+        .map((lock) => lock.name))
+    },
   })
   return recovery
 }

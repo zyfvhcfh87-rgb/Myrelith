@@ -1,7 +1,7 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–10 complete; Step 11
-is next and starts only on the user's request.
+Status: scope approved in principle on 2026-09-21; Steps 0–11 complete, plus a
+review-hardening pass over Steps 5–10 (2026-09-29). Step 12 is next.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
 
@@ -133,9 +133,10 @@ recording, auto-upload, or implicit system-audio capture.
 
 ## Staged execution and usage checkpoints
 
-**One numbered step per user-requested work turn.** Finish its stated proof,
-record the result, and stop with a concise handoff naming the next step. Do not
-automatically continue into the next numbered step, even when usage remains.
+**Each numbered step is a quality checkpoint.** Finish its stated proof and
+record the result before starting the next one. (Until 2026-09-28 each step was
+also one work turn, to fit a usage limit; the user lifted that pacing on
+2026-09-29, so consecutive steps may now run in one session.)
 Each implementation step ends with focused tests, production build/typecheck,
 lint, `git diff --check`, and browser verification when its behavior is
 observable. Commit a passing step with the Aryel author, message-file, and
@@ -326,6 +327,47 @@ recordings remain protected. Real Chromium confirms handle cloning over
 and cross-project removal path. [Step 10 evidence](evidence/issue209/STEP_10_DRAFT_RECOVERY.md)
 records the complete checks and limits. Step 11 adds the voiceover controls and
 draft list.
+
+**Review hardening (2026-09-29):** An independent two-part review of the
+committed Steps 5–10 found no defects in the clock math, WAV format, or
+checkpoint journal (the frame/sample conversions were brute-force checked
+against linear search at 30000/1001, 24000/1001, 60000/1001, 25, 120 and
+47999/1 with no mismatch). It found edge-case lifecycle defects, now fixed and
+tested. A take reaching the 60-minute limit faulted the writer instead of
+stopping for review; the limit is now a pre-scheduled frame-boundary stop in the
+worklet. Seek, pause, and timeline-edit interruptions aborted the graph and
+lost up to one checkpoint (about 2.7 s); they now end on the next frame
+boundary and keep every written sample (the take stays Pool-only). The
+transport's Pause button ends a take normally. A dead or released writer made
+Discard fail forever and blocked leaving the project; discard now falls back to
+an idempotent delete by id from a fresh worker. Cross-tab: a take in review is
+protected by a held Web Lock, so another tab's list classifies it as live.
+Recovery awaits its own handle grant, serializes every operation through one
+queue, and refuses to discard a file named by a current media descriptor. The
+worklet processor now retires after its terminal message; the worker answers
+a request even when its reply cannot be cloned and keeps serving afterwards;
+a sync-handle open retries briefly through another listing's momentary lock;
+`discardStored` refuses the writer's own active draft.
+
+**Step 11 checkpoint (2026-09-29):** A toolbar Voiceover entry opens a
+non-modal panel with audio track, microphone (enumerated without opening a
+device; labels appear after the first grant), count-in (off–4 s), a signed
+latency offset (whole ms within ±500, converted to exact samples), an explicit
+mute-timeline-audio option, and headphone advice. Record pins the playhead
+inside the click so the browser keeps its activation. While the microphone is
+held, the toolbar entry becomes a red REC badge with elapsed time and Stop, even
+with the panel closed. The panel shows a level meter and warns after two
+seconds of all-zero input. Review offers Keep on timeline (disabled after an
+interruption), Keep in Media Pool, and Discard; failures and interruptions have
+plain-language explanations. The recordings list offers Recover/Delete for
+unsaved drafts and Delete file for kept recordings, never showing live drafts.
+The toolbar badges drafts left by a crash or reload.
+The latency offset shifts the whole capture window (`[anchor + C, stop + C)`),
+so length and placement frame are unchanged; a negative offset asks the
+transport for matching pre-roll. At narrow widths the toolbar's action row now
+scrolls instead of clipping (Export and later actions were previously cut off
+at 720 px). [Step 11 evidence](evidence/issue209/STEP_11_VOICEOVER_CONTROLS.md)
+records the checks. Step 12 is the real-device acceptance matrix.
 
 ### Voiceover implementation
 

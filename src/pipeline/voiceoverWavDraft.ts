@@ -178,12 +178,14 @@ export class VoiceoverWavDraft<Handle> {
     if (bytes.byteLength < 2 || bytes.byteLength > VOICEOVER_WAV_LIMITS.batchBytes || bytes.byteLength % 2) {
       throw new RangeError('Recording batch must contain 1–8192 PCM16 samples')
     }
-    if (this.pcmBytes + bytes.byteLength > MAX_PCM_BYTES ||
-      this.pcmBytes + bytes.byteLength + VOICEOVER_WAV_LIMITS.headerBytes +
-      VOICEOVER_WAV_LIMITS.inFlightBytes > VOICEOVER_WAV_LIMITS.maxTakeBytes) {
-      throw new RangeError('Recording take limit exceeded')
-    }
     try {
+      // The capture owner stops on a frame boundary at the limit; reaching
+      // this check means a caller overshot, so the draft faults explicitly.
+      if (this.pcmBytes + bytes.byteLength > MAX_PCM_BYTES ||
+        this.pcmBytes + bytes.byteLength + VOICEOVER_WAV_LIMITS.headerBytes +
+        VOICEOVER_WAV_LIMITS.inFlightBytes > VOICEOVER_WAV_LIMITS.maxTakeBytes) {
+        throw new RangeError('Recording take limit exceeded')
+      }
       checkedWrite(this.audio, bytes, VOICEOVER_WAV_LIMITS.headerBytes + this.pcmBytes)
       this.pcmBytes += bytes.byteLength
       if (this.pcmBytes - this.committedBytes >= VOICEOVER_WAV_LIMITS.checkpointBytes) this.checkpoint()
@@ -279,6 +281,9 @@ export class VoiceoverWavDraft<Handle> {
    */
   async discardStored(id: string): Promise<void> {
     validId(id)
+    if (id === this.id && this.phase !== 'idle' && this.phase !== 'discarded') {
+      throw new Error('Use discard() for this writer\'s own recording draft')
+    }
     await this.storage.remove(id)
   }
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from './projectSettings'
 import {
-  checkVoiceoverDestination, pinVoiceoverDestination, resolveVoiceoverKeepDestination,
+  checkVoiceoverDestination, pinVoiceoverDestination, resolveVoiceoverKeepDestination, voiceoverLaneOptions,
   type VoiceoverDestinationContext,
 } from './voiceoverDestination'
 
@@ -107,5 +107,17 @@ describe('pinned voiceover destination', () => {
       expect(checkVoiceoverDestination(destination, live, duration))
         .toEqual({ status: 'reject', reason: 'invalid-duration' })
     }
+  })
+})
+
+describe('voiceover lane options', () => {
+  test('lists audio lanes in order with their lock state', () => {
+    const doc = context().doc
+    const locked = { ...doc, tracks: doc.tracks.map((track) =>
+      track.kind === 'audio' && track.id === 'A1' ? { ...track, locked: true } : track) }
+    const lanes = voiceoverLaneOptions(locked)
+    expect(lanes.length).toBeGreaterThan(0)
+    expect(lanes.every((lane) => locked.tracks.find((track) => track.id === lane.id)?.kind === 'audio')).toBe(true)
+    expect(lanes.find((lane) => lane.id === 'A1')?.locked).toBe(true)
   })
 })

@@ -154,6 +154,8 @@ interface ControllerState {
 
 interface VoiceoverPlayback {
   internalPlayheadWrite: boolean
+  /** The play/pause toggle ends the take normally instead of interrupting it. */
+  requestStop(): void
   release(): void
   interrupt(reason: 'transport-changed' | 'destination-changed'): void
 }
@@ -894,15 +896,23 @@ export function armVoiceoverTransport(options: {
   context: AudioContext
   startFrame: number
   countInFrames: number
+  /** Leave timeline audio silent; count-in cues and video still run. */
+  mutePlayback?: boolean
+  /** Extra lead before the anchor for capture that starts early (negative compensation). */
+  preRollSamples?: number
   onInterrupted(reason: 'transport-changed' | 'destination-changed'): void
+  onStopRequested?(): void
 }): Promise<VoiceoverTransportLease> {
   const { context, startFrame, countInFrames, onInterrupted } = options
+  const preRollSamples = options.preRollSamples ?? 0
   const documentState = useDocumentStore.getState()
   const doc = documentState.doc
   const transport = useTransportStore.getState()
   if (!Number.isSafeInteger(startFrame) || startFrame < 0 ||
     !Number.isSafeInteger(countInFrames) || countInFrames < 0 ||
-    countInFrames > Math.ceil(doc.frameRate.num * 5 / doc.frameRate.den)) {
+    countInFrames > Math.ceil(doc.frameRate.num * 5 / doc.frameRate.den) ||
+    !Number.isSafeInteger(preRollSamples) || preRollSamples < 0 ||
+    preRollSamples > VOICEOVER_WAV_LIMITS.sampleRate) {
     return Promise.reject(new RangeError('Voiceover frame or count-in is outside its bound'))
   }
   if (doc.audioSampleRate !== VOICEOVER_WAV_LIMITS.sampleRate ||
@@ -920,6 +930,11 @@ export function armVoiceoverTransport(options: {
   let retired = false
   const mode: VoiceoverPlayback = {
     internalPlayheadWrite: false,
+    requestStop: () => {
+      if (retired) return
+      if (options.onStopRequested) options.onStopRequested()
+      else mode.interrupt('transport-changed')
+    },
     release: () => {
       if (retired) return
       retired = true
@@ -971,14 +986,15 @@ export function armVoiceoverTransport(options: {
       await context.resume()
       if (retired || generation !== state.playGeneration) throw new DOMException('Voiceover arm cancelled', 'AbortError')
       const countInSamples = audioSampleBoundary(countInFrames, doc)
-      const leadSeconds = (countInSamples + 12_000) / doc.audioSampleRate
+      const leadSeconds = (Math.max(countInSamples, preRollSamples) + 12_000) / doc.audioSampleRate
       const assets = new Map(useMediaStore.getState().assets)
       const catalog = currentSourceBoundsCatalog()
       const mixPlan = createProjectTimelineAudioMixPlan(documentState.project,
         documentState.activeSequenceId, catalog)
       const duration = docDurationFrames(doc)
       let anchorTime: number
-      if (startFrame < duration && hasAudioPlaybackContent(doc, startFrame, catalog, mixPlan)) {
+      if (!options.mutePlayback && startFrame < duration &&
+        hasAudioPlaybackContent(doc, startFrame, catalog, mixPlan)) {
         localLease = mediaResourceAdmission.reserve({ kind: 'audio', decoderSlots: mixPlan.clips.length,
           surfaceBytes: 0, monitorCompatible: true })
         const session = await state.deps.startAudio(context, doc, startFrame,
@@ -1004,7 +1020,7 @@ export function armVoiceoverTransport(options: {
       const countInStartSample = voiceoverCountInWindow(anchorSample, countInFrames, doc).startSample
       const nowSample = Math.ceil(context.currentTime * context.sampleRate)
       if (!Number.isSafeInteger(anchorSample) ||
-        countInStartSample - nowSample < 4_800) {
+        Math.min(countInStartSample, anchorSample - preRollSamples) - nowSample < 4_800) {
         throw new Error('Voiceover missed its count-in setup deadline')
       }
       stopCues = scheduleVoiceoverCountIn(context, anchorSample, countInFrames, doc)
@@ -1031,6 +1047,7 @@ export function armVoiceoverTransport(options: {
 
 /** The play/pause button behavior. */
 export function togglePlayback(): void {
+  if (state.voiceover) { state.voiceover.requestStop(); return }
   if (useTransportStore.getState().isPlaying) pause()
   else play()
 }

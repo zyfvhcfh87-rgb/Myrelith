@@ -5,6 +5,32 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
+## Post-MVP issue #209 — local voiceover capture (in progress, 2026-09-29)
+
+Plan and per-step checkpoints: [ISSUE_209_PLAN.md](ISSUE_209_PLAN.md); evidence
+under [evidence/issue209](evidence/issue209). Work lives on `codex/issue209`
+(`.worktrees/issue209`), not the older `codex/209` branch. Voiceover Steps 0–11
+are done; Step 12 (real-device acceptance) is next, and camera/screen (13–21)
+stay disabled until it passes.
+
+- UI: `ui/VoiceoverIndicator.tsx` (toolbar entry / REC badge / draft badge),
+  lazy `ui/VoiceoverPanel.tsx`, `app/styles/voiceover.css`. Both call only
+  `app/voiceoverController.ts` and read `state/voiceoverCaptureStore.ts`.
+- Capture: `app/voiceoverCaptureOwner.ts` (one session, Web Lock per draft,
+  latency-shifted capture window, pre-scheduled 60-minute stop) →
+  `app/voiceoverMicrophoneBridge.ts` → `worklets/voiceover-capture.worklet.js`
+  → `app/voiceoverWavBridge.ts` → `workers/voiceover-wav.worker.ts` →
+  `pipeline/voiceoverWavDraft.ts` (OPFS `myrelith-recordings-v1`).
+- Clock/rules: `domain/voiceoverClock.ts`, `voiceoverSession.ts`,
+  `voiceoverDestination.ts`, `voiceoverDrafts.ts`. Transport join is
+  `armVoiceoverTransport` in `app/transportController.ts`; its Play/Pause
+  toggle ends a take normally.
+- Recovery: `app/voiceoverDraftRecovery.ts` (serialized; never imports or
+  deletes without an explicit action).
+- Browser gates: `npx playwright test tests/browser/issue-209-*.spec.ts`
+  (the UI spec uses Chromium's fake capture device; output stays muted).
+- There is no Space shortcut for Play/Pause in this app; do not assume one.
+
 ## Milestone 9 integration (2026-09-09)
 
 The initial combined branch was merged through PR #226 as `4fc0ac8`, closing

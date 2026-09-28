@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest'
 import { audioSampleBoundary } from './time'
 import {
+  voiceoverCaptureSample,
+  voiceoverLimitStop,
   MAX_VOICEOVER_COMPENSATION_SECONDS,
   planVoiceoverSampleWindow,
   voiceoverCompensationFromFrames,
@@ -137,5 +139,41 @@ describe('fixed-window voiceover trim and pad', () => {
       compensationSamples: 0 })).toThrow(RangeError)
     expect(() => planVoiceoverSampleWindow({ ...window, inputStartSample: 116,
       compensationSamples: 0 })).toThrow(RangeError)
+  })
+})
+
+describe('voiceover take limit and capture window', () => {
+  const rates = [
+    { num: 30000, den: 1001 }, { num: 24000, den: 1001 }, { num: 25, den: 1 }, { num: 60, den: 1 },
+  ]
+
+  test('the limit stop is the last frame boundary within the sample budget', () => {
+    for (const frameRate of rates) {
+      const doc = { frameRate, audioSampleRate: 48_000 }
+      for (const startFrame of [0, 1, 17, 90_001]) {
+        const anchor = 1_000_000
+        const limit = 60 * 60 * 48_000
+        const { stopFrame, stopSample } = voiceoverLimitStop(anchor, startFrame, limit, doc)
+        const length = (frame: number) => audioSampleBoundary(frame, doc) - audioSampleBoundary(startFrame, doc)
+        expect(length(stopFrame)).toBeLessThanOrEqual(limit)
+        expect(length(stopFrame + 1)).toBeGreaterThan(limit)
+        expect(stopSample - anchor).toBe(length(stopFrame))
+      }
+    }
+  })
+
+  test('a one-frame budget and an impossible budget', () => {
+    const doc = { frameRate: { num: 30000, den: 1001 }, audioSampleRate: 48_000 }
+    expect(voiceoverLimitStop(0, 0, 1602, doc)).toEqual({ stopFrame: 1, stopSample: 1602 })
+    expect(() => voiceoverLimitStop(0, 0, 1000, doc)).toThrow(RangeError)
+  })
+
+  test('capture samples shift by the signed compensation within ±0.5 s', () => {
+    expect(voiceoverCaptureSample(48_000, 0, 48_000)).toBe(48_000)
+    expect(voiceoverCaptureSample(48_000, 3_840, 48_000)).toBe(51_840)
+    expect(voiceoverCaptureSample(48_000, -24_000, 48_000)).toBe(24_000)
+    expect(() => voiceoverCaptureSample(48_000, 24_001, 48_000)).toThrow(RangeError)
+    expect(() => voiceoverCaptureSample(10, -11, 48_000)).toThrow(RangeError)
+    expect(() => voiceoverCaptureSample(10, 0.5, 48_000)).toThrow(RangeError)
   })
 })

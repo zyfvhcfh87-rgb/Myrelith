@@ -21,6 +21,27 @@
 
 import type { VoiceoverSession } from './voiceoverSession'
 
+/** Outcome of one explicit recovery, discard, or removal action. */
+export type VoiceoverDraftAction =
+  | { status: 'recovered'; assetId: string; sizeBytes: number | null; note?: string }
+  | { status: 'discarded'; sizeBytes: number | null }
+  | { status: 'removed'; sizeBytes: number | null; note?: string }
+  | { status: 'cancelled' }
+  | { status: 'rejected'; reason: string }
+  | { status: 'failed'; message: string }
+
+/** Cross-tab Web Lock name a capture session holds while it owns its draft. */
+export function voiceoverDraftLockName(draftId: string): string {
+  return `myrelith-voiceover-draft:${draftId}`
+}
+
+/** Draft ids whose owner lock is held, from Web Lock names (other names ignored). */
+export function voiceoverDraftIdsFromLockNames(names: readonly (string | undefined)[]): string[] {
+  const prefix = voiceoverDraftLockName('')
+  return names.flatMap((name) => name && name.startsWith(prefix) && name.length > prefix.length
+    ? [name.slice(prefix.length)] : [])
+}
+
 /** One `.wav` entry observed in the recordings directory. */
 export interface VoiceoverDraftInfo {
   /** Draft id; the recording is `${id}.wav`, its journal `${id}.checkpoint`. */

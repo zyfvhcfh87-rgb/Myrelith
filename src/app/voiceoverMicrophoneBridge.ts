@@ -13,8 +13,10 @@ export interface VoiceoverMicrophoneOptions {
   stream: MediaStream
   writer: VoiceoverCaptureWriter
   startFrame: number
+  /** Pre-scheduled exclusive stop at the take limit; a later stop may only shorten it. */
+  limitStopFrame?: number
   onStarted?: (atFrame: number) => void
-  onBatch?: (batch: { sequence: number; startFrame: number; frames: number }) => void
+  onBatch?: (batch: { sequence: number; startFrame: number; frames: number; peak: number }) => void
   onOverrun?: (atFrame: number) => void
   onTerminal?: (reason: 'stopped' | 'overrun', endFrame: number) => void
   /** The capture owner retains writer cleanup after a graph failure. */
@@ -54,6 +56,10 @@ export async function connectVoiceoverMicrophone(options: VoiceoverMicrophoneOpt
   const { context, stream, writer, startFrame } = options
   if (context.sampleRate !== VOICEOVER_WAV_LIMITS.sampleRate) throw new RangeError('Voiceover requires a 48 kHz AudioContext')
   if (!validFrame(startFrame)) throw new RangeError('Recording start must be a safe sample frame')
+  const limitStopFrame = options.limitStopFrame
+  if (limitStopFrame !== undefined && (!validFrame(limitStopFrame) || limitStopFrame <= startFrame)) {
+    throw new RangeError('Recording limit must follow its start sample frame')
+  }
   if (!stream.getAudioTracks().some((track) => track.readyState === 'live')) {
     throw new Error('A live microphone audio track is required')
   }
@@ -62,7 +68,7 @@ export async function connectVoiceoverMicrophone(options: VoiceoverMicrophoneOpt
   const source = context.createMediaStreamSource(stream)
   const node = new AudioWorkletNode(context, 'myrelith-voiceover-capture-v1', {
     numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
-    channelCount: 1, channelCountMode: 'explicit', processorOptions: { startFrame },
+    channelCount: 1, channelCountMode: 'explicit', processorOptions: { startFrame, limitStopFrame },
   })
   // Both the processor and this guard output silence. Playback/count-in remain
   // independent paths on the same AudioContext.
@@ -141,6 +147,7 @@ export async function connectVoiceoverMicrophone(options: VoiceoverMicrophoneOpt
     if (message.type === 'batch') {
       if (!started || terminal || message.sequence !== nextSequence || message.startFrame !== nextFrame ||
         !Number.isSafeInteger(message.frames) || message.frames < 1 ||
+        typeof message.peak !== 'number' || !(message.peak >= 0 && message.peak <= 1) ||
         message.frames > VOICEOVER_WAV_LIMITS.batchBytes / 2 ||
         !(message.buffer instanceof ArrayBuffer) || message.buffer.byteLength !== message.frames * 2) {
         fail(new Error('Recording worklet returned a discontinuous or invalid batch'))
@@ -157,7 +164,8 @@ export async function connectVoiceoverMicrophone(options: VoiceoverMicrophoneOpt
       pendingBytes += bytes
       peakInFlightBytes = Math.max(peakInFlightBytes, pendingBytes)
       try {
-        options.onBatch?.({ sequence: message.sequence, startFrame: message.startFrame, frames: message.frames })
+        options.onBatch?.({ sequence: message.sequence, startFrame: message.startFrame,
+          frames: message.frames, peak: message.peak })
         const accepted = writer.append(message.buffer)
         void accepted.then(() => {
           if (settled) return

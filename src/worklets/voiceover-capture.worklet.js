@@ -6,13 +6,16 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super()
     this.startFrame = options.processorOptions.startFrame
-    this.stopFrame = Infinity
+    // The take limit is a pre-scheduled frame-boundary stop; Stop may only shorten it.
+    const limit = options.processorOptions.limitStopFrame
+    this.stopFrame = Number.isSafeInteger(limit) && limit >= this.startFrame ? limit : Infinity
     this.lastRenderEnd = null
     this.nextCaptureFrame = null
     this.batch = null
     this.batchView = null
     this.batchStartFrame = null
     this.batchFrames = 0
+    this.batchPeak = 0
     this.sequence = 0
     this.outstanding = new Set()
     this.terminal = false
@@ -48,9 +51,10 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
     const sequence = ++this.sequence
     this.outstanding.add(sequence)
     this.port.postMessage({ type: 'batch', sequence, startFrame: this.batchStartFrame,
-      frames: this.batchFrames, buffer }, [buffer])
+      frames: this.batchFrames, peak: this.batchPeak / 32768, buffer }, [buffer])
     this.batch = this.batchView = null
     this.batchFrames = 0
+    this.batchPeak = 0
     this.batchStartFrame = null
   }
 
@@ -63,7 +67,9 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
 
   process(inputs, outputs) {
     for (const channel of outputs[0] ?? []) channel.fill(0)
-    if (this.terminal) return true
+    // Once terminal, let the processor be collected instead of rendering
+    // silence on the long-lived playback context for every later take.
+    if (this.terminal) return false
 
     const input = inputs[0]?.[0]
     const length = outputs[0]?.[0]?.length ?? input?.length ?? 128
@@ -71,12 +77,12 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
     const blockEnd = blockStart + length
     if (this.nextCaptureFrame === null && blockStart > this.startFrame) {
       this.fail('Recording missed its start sample frame', blockStart)
-      return true
+      return false
     }
     if (this.nextCaptureFrame !== null &&
       this.lastRenderEnd !== null && blockStart !== this.lastRenderEnd) {
       this.fail('Audio render frame discontinuity', blockStart)
-      return true
+      return false
     }
     this.lastRenderEnd = blockEnd
     // An inactive worklet can skip render quanta before the anchor. Only the
@@ -87,7 +93,7 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
     if (to > from) {
       if (!input || input.length < to) {
         this.fail('Microphone input became unavailable', blockStart + from)
-        return true
+        return false
       }
       for (let index = from; index < to; index++) {
         const frame = blockStart + index
@@ -96,13 +102,13 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
         }
         if (this.nextCaptureFrame !== null && frame !== this.nextCaptureFrame) {
           this.fail('Microphone sample frame discontinuity', frame)
-          return true
+          return false
         }
         if (!this.batch) {
           if (this.outstanding.size >= MAX_OUTSTANDING) {
             this.terminal = true
             this.port.postMessage({ type: 'overrun', endFrame: frame })
-            return true
+            return false
           }
           this.batch = new ArrayBuffer(BATCH_FRAMES * 2)
           this.batchView = new DataView(this.batch)
@@ -110,18 +116,20 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
         }
         if (!Number.isFinite(input[index])) {
           this.fail('Microphone input contained a non-finite sample', frame)
-          return true
+          return false
         }
         const sample = Math.max(-1, Math.min(1, input[index]))
         const pcm = Math.round(sample < 0 ? sample * 32768 : sample * 32767)
         this.batchView.setInt16(this.batchFrames * 2, pcm, true)
+        const magnitude = pcm < 0 ? -pcm : pcm
+        if (magnitude > this.batchPeak) this.batchPeak = magnitude
         this.batchFrames++
         this.nextCaptureFrame = frame + 1
         if (this.batchFrames === BATCH_FRAMES) this.emitBatch()
       }
     }
     if (this.stopFrame <= blockEnd) this.finish()
-    return true
+    return !this.terminal
   }
 }
 
