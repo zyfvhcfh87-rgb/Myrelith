@@ -1,4 +1,15 @@
 /** Worker-safe mono PCM16 WAV draft writer. OPFS access is injected. */
+import type { VoiceoverDraftInfo } from '../domain/voiceoverDrafts'
+
+export type { VoiceoverDraftInfo } from '../domain/voiceoverDrafts'
+
+/**
+ * Top-level recordings directory, deliberately outside the disposable
+ * `myrelith-derived/*` proxy/analysis cache namespace: kept originals must
+ * survive derived-data clearing.
+ */
+export const VOICEOVER_RECORDINGS_DIRECTORY = 'myrelith-recordings-v1'
+
 export const VOICEOVER_WAV_LIMITS = {
   sampleRate: 48_000,
   headerBytes: 44,
@@ -27,6 +38,8 @@ export interface VoiceoverDraftStorage<Handle> {
   open(id: string, create: boolean): Promise<{ audio: VoiceoverSyncFile; journal: VoiceoverSyncFile }>
   file(id: string): Promise<{ file: File; handle: Handle }>
   remove(id: string): Promise<void>
+  /** Enumerate every stored draft without opening a write handle on it. */
+  list(): Promise<VoiceoverDraftInfo[]>
 }
 
 export interface VoiceoverDraftProgress {
@@ -257,5 +270,20 @@ export class VoiceoverWavDraft<Handle> {
     this.closeFiles()
     await this.storage.remove(this.id)
     this.phase = 'discarded'
+  }
+
+  /**
+   * Remove a stored draft by id without touching this writer's active draft.
+   * Recovery features use it to discard orphans; it is idempotent after a
+   * partial removal and never opens a write handle.
+   */
+  async discardStored(id: string): Promise<void> {
+    validId(id)
+    await this.storage.remove(id)
+  }
+
+  /** Enumerate stored drafts; the directory listing never opens write handles. */
+  async list(): Promise<VoiceoverDraftInfo[]> {
+    return this.storage.list()
   }
 }

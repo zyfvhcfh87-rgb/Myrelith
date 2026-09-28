@@ -1,6 +1,6 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–9 complete; Step 10
+Status: scope approved in principle on 2026-09-21; Steps 0–10 complete; Step 11
 is next and starts only on the user's request.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
@@ -304,6 +304,26 @@ and drains pending Keep work before activation. Placement remains one history
 entry with working undo/redo. [Step 9 evidence](evidence/issue209/STEP_9_KEEP_PLACE.md)
 records the focused checks, real Chromium import, limitations, and handoff.
 Step 10 may now define draft recovery and kept-original reconnect/removal.
+
+**Step 10 checkpoint (2026-09-28):** The recordings directory is now an
+explicit product surface. A pure domain classifier turns three browser facts —
+remembered registry handles, the unfinished capture session, and the directory
+listing — into `kept` / `live` / `orphaned`, where a referenced draft is kept
+even when a finished Keep lingers, and discard is legal only for `orphaned`.
+The worker gained a metadata-only `list` and an idempotent `discardStored(id)`
+that never touches its own draft; the bridge exposes both in any non-closed
+phase. A dedicated app recovery feature (never the capture writer) surveys the
+directory and every asset's remembered handle, fails the whole survey rather
+than under-classify on a registry error, recovers a crashed orphan through the
+ordinary import path while leaving its file as the kept original, discards
+orphans only, and removes a kept original only when no clip references it.
+Referenced media is never deleted by any path here. Two browser-only facts were
+locked in real Chromium: a `FileSystemFileHandle` crosses `postMessage` by
+cloning (not transferring), and a file held open by a live recording reports a
+`null` size in a concurrent listing instead of failing it. [Step 10
+evidence](evidence/issue209/STEP_10_DRAFT_RECOVERY.md) records the focused
+checks, the Chromium proof, limitations, and handoff. Step 11 may now add the
+voiceover controls including the draft list.
 
 ### Voiceover implementation
 

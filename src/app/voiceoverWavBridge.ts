@@ -1,5 +1,5 @@
 /** Owns one recording worker and the only outstanding PCM transfer ledger. */
-import { VOICEOVER_WAV_LIMITS, type VoiceoverDraftProgress, type VoiceoverDraftRecovery } from '../pipeline/voiceoverWavDraft'
+import { VOICEOVER_WAV_LIMITS, type VoiceoverDraftInfo, type VoiceoverDraftProgress, type VoiceoverDraftRecovery } from '../pipeline/voiceoverWavDraft'
 import type { VoiceoverWavReply, VoiceoverWavRequest, VoiceoverWavResult } from '../pipeline/voiceoverWavProtocol'
 
 export interface VoiceoverWavWorkerLike {
@@ -15,6 +15,8 @@ type RequestInput =
   | { type: 'create' | 'recover'; id: string }
   | { type: 'append'; buffer: ArrayBuffer }
   | { type: 'stop' | 'release' | 'finalize' | 'discard' }
+  | { type: 'discard-id'; id: string }
+  | { type: 'list' }
 type Pending = {
   type: Command
   bytes: number
@@ -189,5 +191,26 @@ export class VoiceoverWavBridge {
       if (result.type !== 'discard') throw new Error('Invalid discard result')
       this.phase = 'discarded'
     } catch (cause) { this.markFaulted(); throw cause }
+  }
+
+  /**
+   * Enumerate stored drafts. A directory read that never touches this
+   * bridge's own draft, so it is valid in every non-closed phase.
+   */
+  async list(): Promise<VoiceoverDraftInfo[]> {
+    if (this.phase === 'closed') throw new Error('Recording worker is closed')
+    const result = await this.send({ type: 'list' })
+    if (result.type !== 'list') throw new Error('Invalid list result')
+    return result.drafts
+  }
+
+  /**
+   * Remove a stored draft by id without touching this bridge's own draft.
+   * Recovery features gate the id before calling this.
+   */
+  async discardId(id: string): Promise<void> {
+    if (this.phase === 'closed') throw new Error('Recording worker is closed')
+    const result = await this.send({ type: 'discard-id', id })
+    if (result.type !== 'discard-id') throw new Error('Invalid discard result')
   }
 }

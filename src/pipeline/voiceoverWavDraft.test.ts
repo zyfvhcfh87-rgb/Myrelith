@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { VOICEOVER_WAV_LIMITS as LIMITS, VoiceoverWavDraft, voiceoverWavHeader, type VoiceoverSyncFile } from './voiceoverWavDraft'
+import { ANALYSIS_CACHE_ROOT } from '../domain/analysisCache'
+import { VOICEOVER_RECORDINGS_DIRECTORY, VOICEOVER_WAV_LIMITS as LIMITS, VoiceoverWavDraft, voiceoverWavHeader, type VoiceoverSyncFile } from './voiceoverWavDraft'
 
 type Stored = { bytes: Uint8Array; failClose: boolean }
 
@@ -78,6 +79,17 @@ class MemoryStorage {
       this.files.delete(name)
       this.events.push(`${name}:remove`)
     }
+  }
+
+  async list() {
+    const drafts = [...this.files.keys()]
+      .filter((name) => name.endsWith('.wav'))
+      .map((name) => ({
+        id: name.slice(0, -'.wav'.length),
+        sizeBytes: this.files.get(name)!.bytes.length,
+        hasJournal: this.files.has(`${name.slice(0, -'.wav'.length)}.checkpoint`),
+      }))
+    return drafts.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   }
 }
 
@@ -177,5 +189,58 @@ describe('voiceover WAV draft', () => {
     expect(storage.files.has('take.checkpoint')).toBe(true)
     await draft.discard()
     expect(storage.files.size).toBe(0)
+  })
+
+  it('lists stored drafts with size and journal facts without opening them', async () => {
+    const storage = new MemoryStorage()
+    const first = new VoiceoverWavDraft(storage)
+    await first.create('take_a')
+    first.append(new Uint8Array([1, 2, 3, 4]))
+    first.stop()
+    const second = new VoiceoverWavDraft(storage)
+    await second.create('take_b')
+    await second.discard()
+    const third = new VoiceoverWavDraft(storage)
+    await third.create('take_c')
+    storage.files.delete('take_c.checkpoint')
+    const eventsBefore = storage.events.length
+    const listed = await first.list()
+    expect(listed).toEqual([
+      { id: 'take_a', sizeBytes: LIMITS.headerBytes + 4, hasJournal: true },
+      { id: 'take_c', sizeBytes: LIMITS.headerBytes, hasJournal: false },
+    ])
+    // Listing must not open, write, flush, or close any file handle.
+    expect(storage.events.slice(eventsBefore)).toEqual([])
+    expect(storage.files.has('take_a.wav')).toBe(true)
+    expect(storage.files.has('take_c.wav')).toBe(true)
+  })
+
+  it('removes a stored draft by id without touching its active draft', async () => {
+    const storage = new MemoryStorage()
+    const draft = new VoiceoverWavDraft(storage)
+    await draft.create('active')
+    draft.append(new Uint8Array([1, 2]))
+    const other = new VoiceoverWavDraft(storage)
+    await other.create('orphan')
+    other.append(new Uint8Array([3, 4]))
+    await other.stop()
+    await draft.discardStored('orphan')
+    expect(storage.files.has('orphan.wav')).toBe(false)
+    expect(storage.files.has('orphan.checkpoint')).toBe(false)
+    expect(storage.files.has('active.wav')).toBe(true)
+    expect(storage.files.has('active.checkpoint')).toBe(true)
+    expect(() => draft.append(new Uint8Array([5, 6]))).not.toThrow()
+    await expect(draft.discardStored('orphan')).resolves.toBeUndefined()
+    await expect(draft.discardStored('no spaces')).rejects.toThrow(/Invalid recording draft id/)
+  })
+})
+
+describe('recordings storage separation', () => {
+  it('keeps the recordings directory outside the disposable derived-data namespace', () => {
+    // Disposable derived-data clearing covers the proxy and analysis caches
+    // under `myrelith-derived/*`; kept recording originals must survive it.
+    expect(VOICEOVER_RECORDINGS_DIRECTORY.startsWith('myrelith-derived/')).toBe(false)
+    expect(VOICEOVER_RECORDINGS_DIRECTORY).not.toBe(ANALYSIS_CACHE_ROOT)
+    expect(VOICEOVER_RECORDINGS_DIRECTORY).not.toBe('myrelith-derived/proxy-cache-v1')
   })
 })

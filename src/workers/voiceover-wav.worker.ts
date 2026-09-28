@@ -1,7 +1,8 @@
-import { VoiceoverWavDraft, type VoiceoverDraftStorage, type VoiceoverSyncFile } from '../pipeline/voiceoverWavDraft'
+import { VOICEOVER_RECORDINGS_DIRECTORY, VoiceoverWavDraft, type VoiceoverDraftInfo, type VoiceoverDraftStorage, type VoiceoverSyncFile } from '../pipeline/voiceoverWavDraft'
+
 import type { VoiceoverWavReply, VoiceoverWavRequest, VoiceoverWavResult } from '../pipeline/voiceoverWavProtocol'
 
-const DIRECTORY = 'myrelith-recordings-v1'
+const DIRECTORY = VOICEOVER_RECORDINGS_DIRECTORY
 type SyncFileHandle = FileSystemFileHandle & { createSyncAccessHandle(): Promise<VoiceoverSyncFile> }
 
 async function recordingDirectory(create: boolean): Promise<FileSystemDirectoryHandle> {
@@ -26,6 +27,44 @@ async function removeIfPresent(directory: FileSystemDirectoryHandle, name: strin
   catch (cause) {
     if (!(cause instanceof DOMException && cause.name === 'NotFoundError')) throw cause
   }
+}
+
+/**
+ * Metadata-only directory read. Sizes come from sync access handles (no
+ * whole-take buffer, no file read). A file still held open by a recording in
+ * progress cannot be measured while its handle is open, so it is reported
+ * with a `null` size instead of failing the listing.
+ */
+async function listDrafts(): Promise<VoiceoverDraftInfo[]> {
+  let directory: FileSystemDirectoryHandle
+  try {
+    directory = await recordingDirectory(false)
+  } catch (cause) {
+    // No recordings have ever been made in this browser.
+    if (cause instanceof DOMException && cause.name === 'NotFoundError') return []
+    throw cause
+  }
+  const drafts: VoiceoverDraftInfo[] = []
+  for await (const entry of directory.values()) {
+    if (entry.kind !== 'file' || !entry.name.endsWith('.wav')) continue
+    const id = entry.name.slice(0, -'.wav'.length)
+    let sizeBytes: number | null
+    try {
+      const sync = await (entry as SyncFileHandle).createSyncAccessHandle()
+      try {
+        sizeBytes = sync.getSize()
+      } finally {
+        sync.close()
+      }
+    } catch {
+      // Chromium refuses a second sync access handle while one is open, so a
+      // recording in progress cannot be measured; report its size as unknown
+      // instead of failing the whole listing.
+      sizeBytes = null
+    }
+    drafts.push({ id, sizeBytes, hasJournal: await exists(directory, `${id}.checkpoint`) })
+  }
+  return drafts.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
 const storage: VoiceoverDraftStorage<FileSystemFileHandle> = {
@@ -71,6 +110,7 @@ const storage: VoiceoverDraftStorage<FileSystemFileHandle> = {
     await removeIfPresent(directory, name.audio)
     await removeIfPresent(directory, name.journal)
   },
+  list: () => listDrafts(),
 }
 
 const draft = new VoiceoverWavDraft(storage)
@@ -84,6 +124,8 @@ async function run(request: VoiceoverWavRequest): Promise<VoiceoverWavResult> {
     case 'recover': return { type: 'recover', progress: await draft.recover(request.id) }
     case 'finalize': return { type: 'finalize', ...await draft.finalize() }
     case 'discard': await draft.discard(); return { type: 'discard' }
+    case 'discard-id': await draft.discardStored(request.id); return { type: 'discard-id' }
+    case 'list': return { type: 'list', drafts: await draft.list() }
   }
 }
 
@@ -99,6 +141,9 @@ globalThis.onmessage = ({ data }: MessageEvent<VoiceoverWavRequest>) => {
         message: cause instanceof Error ? cause.message : String(cause),
       } }
     }
+    // A FileSystemFileHandle clones (it never transfers through
+    // postMessage); the File clones the same way, so no transfer list is
+    // needed or accepted.
     globalThis.postMessage(reply)
   })
 }

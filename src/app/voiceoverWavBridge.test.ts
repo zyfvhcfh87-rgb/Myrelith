@@ -93,4 +93,38 @@ describe('voiceover WAV transfer bound', () => {
     expect(bridge.inFlightBytes).toBe(0)
     expect(worker.terminated).toBe(true)
   })
+
+  it('lists stored drafts in any non-closed phase without changing draft state', async () => {
+    const { worker, bridge } = await opened()
+    const drafts = [
+      { id: 'voiceover_a', sizeBytes: 48, hasJournal: true },
+      { id: 'voiceover_b', sizeBytes: 44, hasJournal: false },
+    ]
+    const listed = bridge.list()
+    worker.reply(1, { type: 'list', drafts })
+    await expect(listed).resolves.toEqual(drafts)
+    expect(worker.sent[1].request).toEqual({ requestId: 2, type: 'list' })
+    // The bridge's own draft session is untouched by a directory read.
+    expect(bridge.isClosed).toBe(false)
+    const stopped = bridge.stop()
+    await vi.waitFor(() => expect(worker.sent).toHaveLength(3))
+    worker.reply(2, { type: 'stop', progress: zero })
+    await stopped
+    bridge.close()
+    await expect(bridge.list()).rejects.toThrow(/closed/)
+    await expect(bridge.discardId('voiceover_a')).rejects.toThrow(/closed/)
+  })
+
+  it('discards a stored draft by id and fails on a mismatched reply', async () => {
+    const { worker, bridge } = await opened()
+    const discarded = bridge.discardId('voiceover_b')
+    expect(worker.sent[1].request).toEqual({ requestId: 2, type: 'discard-id', id: 'voiceover_b' })
+    worker.reply(1, { type: 'discard-id' })
+    await expect(discarded).resolves.toBeUndefined()
+    expect(bridge.isClosed).toBe(false)
+    const mismatched = bridge.discardId('voiceover_b')
+    worker.reply(2, { type: 'discard' })
+    await expect(mismatched).rejects.toThrow(/wrong result/)
+    expect(worker.terminated).toBe(true)
+  })
 })
