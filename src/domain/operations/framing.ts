@@ -1,19 +1,17 @@
-import type { Clip, ClipAnimationProperty, ClipId, TimelineDoc, Transform } from '../schema';
+import type { Clip, ClipAnimationProperty, ClipAnimationTrack, ClipId, TimelineDoc, Transform } from '../schema';
 import { ANIMATABLE_CLIP_PROPERTIES, clipAnimation, clipAnimationKeyframeCount, clipAnimationValidationError, documentAnimationKeyframeGrowthAllowed, animationPropertyValueError, isClipPropertyAnimated, LINEAR_ANIMATION_EASING, upsertAnimationKeyframe } from '../clipAnimation';
 import { createDynamicZoomPlan, dynamicZoomKeyframeBudgetReason, isDynamicZoomFramingProperty, type DynamicZoomRequest, type DynamicZoomSourceDimensions } from '../dynamicZoom';
-import { VIDEO_STABILIZATION_PROPERTIES, type VideoStabilizationPlan } from '../videoStabilization';
-import { BOX_TRACKING_PROPERTIES, POINT_TRACKING_PROPERTIES, type MotionTrackingPlan } from '../motionTracking';
+import type { VideoStabilizationPlan } from '../videoStabilization';
+import type { MotionTrackingPlan } from '../motionTracking';
+import { BOX_TRACKING_PROPERTIES, POINT_TRACKING_PROPERTIES, VIDEO_STABILIZATION_PROPERTIES } from '../framingProperties';
 import { clipVisualSettings } from '../clipInspector';
 import { clipBlendModeIntent } from '../blendModes';
 import { clipSourceTimeMap, sourceTicksAtTimelineOffset } from '../sourceTimeMap';
-import { locateClip, reject } from './operationInternals';
+import { locateClip, reject, type ClipLocation } from './operationInternals';
 import { animationEditLocationResult, replaceClipAnimation } from './animation';
 import { sameVisual, TRANSFORM_ANIMATION_PROPERTIES, updateClipVisual, type ClipVisualPatch } from './visual';
 
-/**
- * Replace the four ordinary position/scale tracks with one dynamic-zoom plan.
- * Rotation/opacity and future animation-container fields remain untouched.
- */
+/** Framing edits report rejection and no-op outcomes to their Inspector UI. */
 export type ClipFramingOperationResult =
   | {
     readonly ok: true
@@ -36,6 +34,78 @@ function rejectClipFramingOperation(
   return { ok: false, changed: false, doc, reason }
 }
 
+/** Canonical track order: the animatable property list. */
+function byAnimatablePropertyOrder(
+  left: { readonly property: string },
+  right: { readonly property: string },
+): number {
+  return ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property as ClipAnimationProperty)
+    - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property as ClipAnimationProperty)
+}
+
+/** True when a plan carries exactly one version-1 track per expected property. */
+function planTracksMatch(
+  tracks: readonly ClipAnimationTrack[],
+  expected: readonly string[],
+  owned: ReadonlySet<string>,
+): boolean {
+  return tracks.length === expected.length
+    && expected.every((property) => (
+      tracks.filter((track) => track.property === property).length === 1
+    ))
+    && tracks.every((track) => owned.has(track.property) && (track.propertyVersion ?? 1) === 1)
+}
+
+/**
+ * Swap the tracks a stabilization or tracking plan owns for the plan's
+ * copies, keeping every other track, then validate and budget the result.
+ */
+function replaceOwnedTransformTracks(
+  doc: TimelineDoc,
+  loc: ClipLocation,
+  op: string,
+  owned: ReadonlySet<string>,
+  planTracks: readonly ClipAnimationTrack[],
+  budgetReason: string,
+): ClipFramingOperationResult {
+  const current = clipAnimation(loc.clip)
+  const tracks = [
+    ...current.tracks.filter((track) => !owned.has(track.property)),
+    ...planTracks.map((track) => ({
+      property: track.property,
+      keyframes: track.keyframes.map((keyframe) => ({
+        ...keyframe,
+        easing: keyframe.easing.type === 'cubic-bezier'
+          ? { ...keyframe.easing }
+          : { type: keyframe.easing.type },
+      })),
+    })),
+  ]
+  tracks.sort(byAnimatablePropertyOrder)
+  const animation = { ...current, tracks }
+  const error = clipAnimationValidationError(animation)
+  if (error) return rejectClipFramingOperation(doc, op, error)
+  const additionalKeyframes = Math.max(
+    0,
+    clipAnimationKeyframeCount(animation) - clipAnimationKeyframeCount(current),
+  )
+  if (!documentAnimationKeyframeGrowthAllowed(doc, additionalKeyframes)) {
+    return rejectClipFramingOperation(doc, op, budgetReason)
+  }
+  if (JSON.stringify(animation) === JSON.stringify(current)) {
+    return { ok: true, changed: false, doc }
+  }
+  return {
+    ok: true,
+    changed: true,
+    doc: replaceClipAnimation(doc, loc, animation),
+  }
+}
+
+/**
+ * Replace the four ordinary position/scale tracks with one dynamic-zoom plan.
+ * Rotation/opacity and future animation-container fields remain untouched.
+ */
 export function applyDynamicZoomWithResult(
   doc: TimelineDoc,
   clipId: ClipId,
@@ -77,10 +147,7 @@ export function applyDynamicZoomWithResult(
     )
   }
   const tracks = [...retainedTracks, ...plannedTracks]
-  tracks.sort(
-    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property as ClipAnimationProperty)
-      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property as ClipAnimationProperty),
-  )
+  tracks.sort(byAnimatablePropertyOrder)
   const animation = { ...current, tracks }
   const animationError = clipAnimationValidationError(animation)
   if (animationError) return rejectClipFramingOperation(doc, op, animationError)
@@ -94,15 +161,6 @@ export function applyDynamicZoomWithResult(
   }
 }
 
-export function applyDynamicZoom(
-  doc: TimelineDoc,
-  clipId: ClipId,
-  source: DynamicZoomSourceDimensions,
-  request: DynamicZoomRequest,
-): TimelineDoc {
-  return applyDynamicZoomWithResult(doc, clipId, source, request).doc
-}
-
 /** Replace the five ordinary transform tracks with one reviewed stabilization plan. */
 export function applyVideoStabilizationWithResult(
   doc: TimelineDoc,
@@ -114,8 +172,8 @@ export function applyVideoStabilizationWithResult(
   const location = animationEditLocationResult(doc, clipId)
   if (!location.ok) return rejectClipFramingOperation(doc, op, location.reason)
   const owned = new Set<string>(VIDEO_STABILIZATION_PROPERTIES)
-  const current = clipAnimation(location.loc.clip)
-  const existingOwned = current.tracks.some((track) => owned.has(track.property))
+  const existingOwned = clipAnimation(location.loc.clip).tracks
+    .some((track) => owned.has(track.property))
   if (existingOwned && !replaceExisting) {
     return rejectClipFramingOperation(
       doc,
@@ -123,49 +181,17 @@ export function applyVideoStabilizationWithResult(
       'existing Position, Rotation, or Scale animation requires explicit replacement confirmation',
     )
   }
-  if (
-    plan.tracks.length !== VIDEO_STABILIZATION_PROPERTIES.length
-    || VIDEO_STABILIZATION_PROPERTIES.some((property) => (
-      plan.tracks.filter((track) => track.property === property).length !== 1
-    ))
-    || plan.tracks.some((track) => !owned.has(track.property) || (track.propertyVersion ?? 1) !== 1)
-  ) {
+  if (!planTracksMatch(plan.tracks, VIDEO_STABILIZATION_PROPERTIES, owned)) {
     return rejectClipFramingOperation(doc, op, 'stabilization plan has an invalid track set')
   }
-  const tracks = [
-    ...current.tracks.filter((track) => !owned.has(track.property)),
-    ...plan.tracks.map((track) => ({
-      property: track.property,
-      keyframes: track.keyframes.map((keyframe) => ({
-        ...keyframe,
-        easing: keyframe.easing.type === 'cubic-bezier'
-          ? { ...keyframe.easing }
-          : { type: keyframe.easing.type },
-      })),
-    })),
-  ]
-  tracks.sort(
-    (left, right) => ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property as ClipAnimationProperty)
-      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property as ClipAnimationProperty),
+  return replaceOwnedTransformTracks(
+    doc,
+    location.loc,
+    op,
+    owned,
+    plan.tracks,
+    'stabilization would exceed the document keyframe budget',
   )
-  const animation = { ...current, tracks }
-  const animationError = clipAnimationValidationError(animation)
-  if (animationError) return rejectClipFramingOperation(doc, op, animationError)
-  const additionalKeyframes = Math.max(
-    0,
-    clipAnimationKeyframeCount(animation) - clipAnimationKeyframeCount(current),
-  )
-  if (!documentAnimationKeyframeGrowthAllowed(doc, additionalKeyframes)) {
-    return rejectClipFramingOperation(doc, op, 'stabilization would exceed the document keyframe budget')
-  }
-  if (JSON.stringify(animation) === JSON.stringify(current)) {
-    return { ok: true, changed: false, doc }
-  }
-  return {
-    ok: true,
-    changed: true,
-    doc: replaceClipAnimation(doc, location.loc, animation),
-  }
 }
 
 /** Replace the exact Position/Scale properties owned by one accepted tracking plan. */
@@ -181,53 +207,26 @@ export function applyMotionTrackingWithResult(
     ? BOX_TRACKING_PROPERTIES
     : POINT_TRACKING_PROPERTIES
   const owned = new Set<string>(expected)
-  if (
-    plan.tracks.length !== expected.length
-    || expected.some((property) => plan.tracks.filter((track) => track.property === property).length !== 1)
-    || plan.tracks.some((track) => !owned.has(track.property) || (track.propertyVersion ?? 1) !== 1)
-  ) return rejectClipFramingOperation(doc, op, 'motion-tracking plan has an invalid track set')
-  const current = clipAnimation(location.loc.clip)
-  if (current.tracks.some((track) => owned.has(track.property)) && !replaceExisting) {
+  if (!planTracksMatch(plan.tracks, expected, owned)) {
+    return rejectClipFramingOperation(doc, op, 'motion-tracking plan has an invalid track set')
+  }
+  const existingOwned = clipAnimation(location.loc.clip).tracks
+    .some((track) => owned.has(track.property))
+  if (existingOwned && !replaceExisting) {
     return rejectClipFramingOperation(
       doc,
       op,
       `existing ${plan.includeScale ? 'Position or Scale' : 'Position'} animation requires explicit replacement confirmation`,
     )
   }
-  const tracks = [
-    ...current.tracks.filter((track) => !owned.has(track.property)),
-    ...plan.tracks.map((track) => ({
-      property: track.property,
-      keyframes: track.keyframes.map((keyframe) => ({
-        ...keyframe,
-        easing: keyframe.easing.type === 'cubic-bezier'
-          ? { ...keyframe.easing }
-          : { type: keyframe.easing.type },
-      })),
-    })),
-  ]
-  tracks.sort((left, right) => (
-    ANIMATABLE_CLIP_PROPERTIES.indexOf(left.property as ClipAnimationProperty)
-      - ANIMATABLE_CLIP_PROPERTIES.indexOf(right.property as ClipAnimationProperty)
-  ))
-  const animation = { ...current, tracks }
-  const error = clipAnimationValidationError(animation)
-  if (error) return rejectClipFramingOperation(doc, op, error)
-  const additionalKeyframes = Math.max(
-    0,
-    clipAnimationKeyframeCount(animation) - clipAnimationKeyframeCount(current),
+  return replaceOwnedTransformTracks(
+    doc,
+    location.loc,
+    op,
+    owned,
+    plan.tracks,
+    'motion tracking would exceed the document keyframe budget',
   )
-  if (!documentAnimationKeyframeGrowthAllowed(doc, additionalKeyframes)) {
-    return rejectClipFramingOperation(doc, op, 'motion tracking would exceed the document keyframe budget')
-  }
-  if (JSON.stringify(animation) === JSON.stringify(current)) {
-    return { ok: true, changed: false, doc }
-  }
-  return {
-    ok: true,
-    changed: true,
-    doc: replaceClipAnimation(doc, location.loc, animation),
-  }
 }
 
 /** Explicit one-entry removal of every ordinary Position/Rotation/Scale track. */
@@ -276,13 +275,6 @@ export function resetClipFramingAnimationWithResult(
     changed: true,
     doc: replaceClipAnimation(doc, loc, { ...current, tracks }),
   }
-}
-
-export function resetClipFramingAnimation(
-  doc: TimelineDoc,
-  clipId: ClipId,
-): TimelineDoc {
-  return resetClipFramingAnimationWithResult(doc, clipId).doc
 }
 
 function staticVisualPatchDiffers(

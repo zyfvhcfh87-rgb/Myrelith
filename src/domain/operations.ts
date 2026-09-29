@@ -52,11 +52,9 @@ export {
 } from './operations/animation'
 export type { ClipFramingOperationResult } from './operations/framing'
 export {
-  applyDynamicZoom,
   applyDynamicZoomWithResult,
   applyMotionTrackingWithResult,
   applyVideoStabilizationWithResult,
-  resetClipFramingAnimation,
   resetClipFramingAnimationWithResult,
   resetVideoStabilizationWithResult,
   updateClipVisualAtFrame,

@@ -24,6 +24,7 @@ import {
 } from './motionAnalysis'
 import { isProceduralTitleClip } from './textOverlay'
 import { MAX_ANALYSIS_SAMPLES } from './analysisCache'
+import { VIDEO_STABILIZATION_PROPERTIES } from './framingProperties'
 import type {
   Clip,
   ClipAnimationProperty,
@@ -52,13 +53,7 @@ export const MAX_STABILIZATION_SIMPLIFICATION_COMPARISONS = 4_000_000
 const PRE_ZOOM_CORNER_TOLERANCE_PX = STABILIZATION_CORNER_TOLERANCE_PX
   / MAX_STABILIZATION_SAFE_ZOOM
 
-export const VIDEO_STABILIZATION_PROPERTIES = [
-  'position-x',
-  'position-y',
-  'rotation',
-  'scale-x',
-  'scale-y',
-] as const satisfies readonly ClipAnimationProperty[]
+export { VIDEO_STABILIZATION_PROPERTIES }
 
 export interface VideoStabilizationAnalysisSample {
   readonly timestampUs: number

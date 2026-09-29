@@ -19,7 +19,6 @@ import {
 } from './motionTrackingResearch'
 import type {
   Clip,
-  ClipAnimationProperty,
   ClipAnimationTrack,
   FrameRate,
   TimelineDoc,
@@ -114,16 +113,7 @@ export interface MotionTrackingBoxAnalysis extends MotionTrackingAnalysisBase {
 
 export type MotionTrackingAnalysis = MotionTrackingPointAnalysis | MotionTrackingBoxAnalysis
 
-export const POINT_TRACKING_PROPERTIES = [
-  'position-x',
-  'position-y',
-] as const satisfies readonly ClipAnimationProperty[]
-
-export const BOX_TRACKING_PROPERTIES = [
-  ...POINT_TRACKING_PROPERTIES,
-  'scale-x',
-  'scale-y',
-] as const satisfies readonly ClipAnimationProperty[]
+export { BOX_TRACKING_PROPERTIES, POINT_TRACKING_PROPERTIES } from './framingProperties'
 
 export interface MotionTrackingPlan {
   readonly sourceClipId: string

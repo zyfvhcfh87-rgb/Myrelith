@@ -3,9 +3,16 @@ import { describe, expect, test, vi } from 'vitest'
 import { evaluateAnimationTrack, resolveClipAnimationAtFrame } from './clipAnimation'
 import { defaultClipVisualSettings } from './clipInspector'
 import { dynamicZoomRequestFromPreset, reverseDynamicZoomRequest } from './dynamicZoom'
-import { applyDynamicZoom, resetClipFramingAnimation } from './operations'
+import { applyDynamicZoomWithResult, resetClipFramingAnimationWithResult } from './operations'
 import type { Clip, TimelineDoc, Track } from './schema'
 import { clipWithAnimationKeyframeCount } from '../test/animationBudgetFixtures'
+
+const applyDynamicZoom = (
+  ...args: Parameters<typeof applyDynamicZoomWithResult>
+): TimelineDoc => applyDynamicZoomWithResult(...args).doc
+const resetClipFramingAnimation = (
+  ...args: Parameters<typeof resetClipFramingAnimationWithResult>
+): TimelineDoc => resetClipFramingAnimationWithResult(...args).doc
 
 function clip(overrides: Partial<Clip> = {}): Clip {
   return {
