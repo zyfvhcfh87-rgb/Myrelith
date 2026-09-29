@@ -96,7 +96,6 @@ non-negotiable rules. Re-read it at the start of every coding session.
     does not generalize to any other engine-to-worker runtime import,
   - anyone may import `workers/decode-types.ts` and
     `workers/render-protocol.ts` (types only, no runtime),
-  - `workers/` may import `engine/frame-cache.ts` (pure class, no deps),
   - `workers/render.worker.ts` remains the sole browser wiring entry and may
     import only `pipeline/lensRemapWebgl.ts` and `pipeline/static-image.ts` to
     construct the injected production backends. Its owned
@@ -1525,7 +1524,7 @@ explicit selection; the store commits the complete validated batch once.
 src/
   domain/      time, schema, operations, selectors      (pure TS)
   state/       document, transport, media, project-session/library stores
-  engine/      playback-engine, render bridge, frame-cache
+  engine/      playback-engine, render bridge
   workers/     protocols/types, render worker
   pipeline/    demux, render, export
   codecs/      realm-local lazy decoder registration and resource policy

@@ -1522,7 +1522,6 @@ surface; it is not a second zoom and never enters document history.
   Original Slice 7 adds one lazy worker-owned leg/group surface pair, reused
   and cleared for transition frames and resized with the document canvas.
   Superseded presentation never cancels a healthy playback lane.
-- `src/engine/frame-cache.ts` — LRU with single-owner close discipline.
 - `src/pipeline/demux.ts` — Mediabunny loadAsset + decoderConfig (de)serialize;
   records canonical integer-microsecond duration and conforms playable frames
   to the active document rate.
