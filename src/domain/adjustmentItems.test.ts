@@ -200,6 +200,38 @@ describe('bounded adjustment timeline items', () => {
       .effects[0]!.params.contrast).toBe(0.75)
   })
 
+  test('rejects a mixed static/animated parameter edit as a whole', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    let start = doc()
+    const item = createAdjustmentItem(10, 20)
+    const color = createColorAdjustEffect('fx-color')
+    start = insertAdjustment(start, 'V1', item)
+    start = addAdjustmentEffect(start, item.id, color)
+    const animated = structuredClone(start)
+    animated.tracks[0]!.adjustments![0]!.animation.effectTracks.push({
+      effectId: color.id,
+      parameter: 'contrast',
+      keyframes: [{ frame: 0, value: 0, easing: { type: 'linear' } }],
+    })
+    // The animated contrast key is valid; the static exposure value is not.
+    expect(updateAdjustmentEffectParamsAtFrame(animated, item.id, color.id, 15,
+      { contrast: 0.5, exposure: 99 })).toBe(animated)
+
+    // A rejected animated half must not leave the static half applied either.
+    const invalidAnimation = structuredClone(animated)
+    invalidAnimation.tracks[0]!.adjustments![0]!.animation.tracks.push({
+      property: 'opacity',
+      keyframes: [{ frame: 0, value: 2, easing: { type: 'linear' } }],
+    })
+    expect(updateAdjustmentEffectParamsAtFrame(invalidAnimation, item.id, color.id, 15,
+      { contrast: 0.5, exposure: 1 })).toBe(invalidAnimation)
+
+    const accepted = updateAdjustmentEffectParamsAtFrame(animated, item.id, color.id, 15,
+      { contrast: 0.5, exposure: 1 })
+    const resolved = resolveAdjustmentAtFrame(findAdjustment(accepted, item.id)!, 15).effects[0]!
+    expect(resolved.params).toMatchObject({ contrast: 0.5, exposure: 1 })
+  })
+
   test('bypass is idempotent and rejected edits retain the exact document reference', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     let start = doc()

@@ -728,16 +728,13 @@ export function updateAdjustmentEffectParamsAtFrame(
   }
   let working = doc
   if (Object.keys(staticPatch).length > 0) {
+    let rejected = false
     working = updateAdjustmentEffect(doc, adjustmentId, effectId, operation, (current, index, effects) => {
       const next = { ...current, params: { ...current.params, ...staticPatch } }
-      const error = effectValidationError(next)
+      const error = effectValidationError(next) ?? effectReplacementBudgetError(doc, current, next)
       if (error) {
         reject(doc, operation, error)
-        return null
-      }
-      const budgetError = effectReplacementBudgetError(doc, current, next)
-      if (budgetError) {
-        reject(doc, operation, budgetError)
+        rejected = true
         return null
       }
       if (Object.entries(staticPatch).every(([key, value]) => current.params[key] === value)) return null
@@ -745,6 +742,8 @@ export function updateAdjustmentEffectParamsAtFrame(
       copy[index] = next
       return copy
     })
+    // One edit: a rejected static half must not let its animated keys through.
+    if (rejected) return doc
   }
   if (animated.size === 0) return working
   const nextLocation = locateAdjustment(working, adjustmentId)
@@ -780,7 +779,9 @@ export function updateAdjustmentEffectParamsAtFrame(
     left.effectId.localeCompare(right.effectId)
     || left.parameter.localeCompare(right.parameter)
   ))
-  return replaceAdjustmentAnimation(working, adjustmentId, animation, operation)
+  const next = replaceAdjustmentAnimation(working, adjustmentId, animation, operation)
+  // Nor may a rejected animated half leave the static half applied.
+  return next === working ? doc : next
 }
 
 export function setAdjustmentEffectKeyframe(
