@@ -151,7 +151,9 @@ beforeEach(() => {
   useDocumentStore.getState().setDoc(doc(item))
   useMediaStore.setState({ descriptors: new Map([[descriptor.id, descriptor]]) })
   useMotionTrackingSelectionStore.getState().clear()
-  useTransportStore.getState().setClipVisualPreview(null)
+  for (const owner of ['visual-gesture', 'stabilization', 'motion-tracking'] as const) {
+    useTransportStore.getState().setOwnedClipVisualPreview(owner, null)
+  }
   const session = {
     sourceClipId: item.id,
     analysis: { kind: 'point', failure: null },

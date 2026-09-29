@@ -340,8 +340,6 @@ export interface TransportState {
   setSnapGuide: (guide: TimelineSnapGuide | null) => void
   /** Update or clear one preview-only text manipulation. */
   setTextOverlayPreview: (preview: TextOverlayPreview | null) => void
-  /** Update or clear one preview-only media manipulation. */
-  setClipVisualPreview: (preview: ClipVisualPreview | null) => void
   /** Publish or release one independently mounted media-preview candidate. */
   setOwnedClipVisualPreview: (
     owner: ClipVisualPreviewOwner,
@@ -886,10 +884,6 @@ export const useTransportStore = create<TransportState>()((set) => ({
   setMaskPreview: (maskPreview) => set({ maskPreview, effectDocumentPreview: updateEffectPreview('mask-gesture', maskPreview) }),
   setMaskTrackingPreview: (preview, visible = true) => set({ effectDocumentPreview: updateEffectPreview('mask-tracking', preview, visible) }),
   setColorGradingPreview: (colorGradingPreview) => set({ colorGradingPreview, effectDocumentPreview: updateEffectPreview('color-grading', colorGradingPreview) }),
-  setClipVisualPreview: (clipVisualPreview) => {
-    clearOwnedClipVisualPreviews()
-    set({ clipVisualPreview: cloneClipVisualPreview(clipVisualPreview) })
-  },
   setOwnedClipVisualPreview: (owner, preview) => {
     if (preview) {
       const current = ownedClipVisualPreviews.get(owner)

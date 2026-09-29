@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test } from 'vitest'
 import { useDocumentStore } from '../state/documentStore'
+import { setClipVolume } from '../domain/operations'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import { useMediaStore } from '../state/mediaStore'
 import { animationCatalog, ATTRIBUTE_ASSET_DESCRIPTOR, foundationProject, PLUGIN_ANIMATION_EFFECT_TYPE, scalarKey } from '../test/animationFoundationFixtures'
 import { bindAnimationParameter } from './animationBindingController'
@@ -32,7 +34,7 @@ describe('explicit animation declaration binding', () => {
   test.each(['missing catalog', 'catalog replaced after candidate creation'] as const)('rejects a %s without clearing redo', (change) => {
     const catalog = animationCatalog(), replacement = animationCatalog(2)
     let reads = 0
-    useDocumentStore.getState().setClipVolume('clip', 0.5)
+    commitDocumentEdit(setClipVolume, 'clip', 0.5)
     useDocumentStore.getState().undo()
     const before = useDocumentStore.getState()
     const read = change === 'missing catalog' ? () => undefined : () => ++reads < 2 ? catalog : replacement

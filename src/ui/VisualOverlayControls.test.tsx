@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useRef } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { clipFromAsset, insertClip } from '../domain/operations'
+import { clipFromAsset, insertClip, setClipKeyframe, updateClipVisual } from '../domain/operations'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
 import { findClip } from '../domain/selectors'
 import type { MediaAsset } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { INITIAL_TRANSPORT_STATE, useTransportStore } from '../state/transportStore'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import VisualOverlayControls from './VisualOverlayControls'
 
 function rect(left: number, top: number, width: number, height: number): DOMRect {
@@ -118,7 +119,7 @@ describe('VisualOverlayControls', () => {
 
   test('counter-scales fixed-size handles against clip scale and explicit flips', async () => {
     const clip = selectedClip()
-    useDocumentStore.getState().updateClipVisual(clip.id, {
+    commitDocumentEdit(updateClipVisual, clip.id, {
       transform: { scaleX: 0.25, scaleY: 0.25 },
       visual: { flipHorizontal: true },
     })
@@ -159,12 +160,12 @@ describe('VisualOverlayControls', () => {
   test('pointer move keys only the animated position properties', async () => {
     const clip = selectedClip()
     const linear = { type: 'linear' } as const
-    useDocumentStore.getState().setClipKeyframe(clip.id, 'position-x', {
+    commitDocumentEdit(setClipKeyframe, clip.id, 'position-x', {
       frame: 0,
       value: 0,
       easing: linear,
     })
-    useDocumentStore.getState().setClipKeyframe(clip.id, 'rotation', {
+    commitDocumentEdit(setClipKeyframe, clip.id, 'rotation', {
       frame: 0,
       value: 0,
       easing: linear,
@@ -288,7 +289,7 @@ describe('VisualOverlayControls', () => {
     expect(useDocumentStore.getState().past).toHaveLength(0)
 
     fireEvent.pointerDown(body, { pointerId: 7, clientX: 0, clientY: 0 })
-    useDocumentStore.getState().updateClipVisual(selectedClip().id, { opacity: 0.5 })
+    commitDocumentEdit(updateClipVisual, selectedClip().id, { opacity: 0.5 })
     fireEvent.pointerMove(body, { pointerId: 7, clientX: 100, clientY: 0 })
     fireEvent.pointerUp(body, { pointerId: 7, clientX: 100, clientY: 0 })
 

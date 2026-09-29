@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createCaptionTrack } from '../domain/captions'
+import { createCaptionTrack, shiftCaptionItems } from '../domain/captions'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import { useDocumentStore } from './documentStore'
 
 describe('caption document-store history', () => {
@@ -25,7 +26,7 @@ describe('caption document-store history', () => {
     expect(useDocumentStore.getState().doc.captionTracks?.[0]?.items).toHaveLength(1)
     useDocumentStore.getState().redo()
     useDocumentStore.getState().mergeCaptionWithNext('track-1', 'cue-1')
-    useDocumentStore.getState().shiftCaptionItems('track-1', null, 5)
+    commitDocumentEdit(shiftCaptionItems, 'track-1', null, 5)
 
     expect(useDocumentStore.getState().doc.captionTracks?.[0]?.items[0]).toMatchObject({
       id: 'cue-1',

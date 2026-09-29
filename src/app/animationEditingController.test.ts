@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { createAnimationEditingController } from './animationEditingController'
 import { useDocumentStore } from '../state/documentStore'
+import { setClipVolume } from '../domain/operations'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import { useTransportStore } from '../state/transportStore'
 import { useMediaStore } from '../state/mediaStore'
 import { animationCatalog, ATTRIBUTE_ASSET_DESCRIPTOR, foundationProject, scalarKey, pathTrack } from '../test/animationFoundationFixtures'
@@ -64,7 +66,7 @@ describe('animation gesture ownership', () => {
     gesture.preview({ kind: 'move', deltaFrames: 3 })
     const lateCallback = [...pending.values()][0]
     const initial = useDocumentStore.getState()
-    if (change === 'project') useDocumentStore.getState().setClipVolume('clip', 0.5)
+    if (change === 'project') commitDocumentEdit(setClipVolume, 'clip', 0.5)
     if (change === 'generation') useDocumentStore.setState({ projectGeneration: initial.projectGeneration + 1 })
     if (change === 'sequence') useDocumentStore.setState({ activeSequenceId: 'other' })
     if (change === 'selection') useTransportStore.getState().setAnimationSelection([key(10)])
@@ -181,7 +183,7 @@ describe('animation gesture ownership', () => {
   })
 
   test('a rejected collision and a no-op preserve redo and exact selection/focus', () => {
-    useDocumentStore.getState().setClipVolume('clip', 0.5); useDocumentStore.getState().undo()
+    commitDocumentEdit(setClipVolume, 'clip', 0.5); useDocumentStore.getState().undo()
     useTransportStore.getState().setAnimationSelection([key(0), key(10)], key(10))
     const before = useDocumentStore.getState(), selection = useTransportStore.getState().animationSelection, focus = useTransportStore.getState().animationFocus
     expect(controller.edit({ kind: 'move', deltaFrames: 0 })).toBeNull()
@@ -244,7 +246,7 @@ describe('animation clipboard ownership', () => {
     const changed = structuredClone(original.project)
     changed.sequences[0].tracks[0].clips[0].effects = [{ id: 'same-id', type: wheels.type, version: 1, enabled: true, params: { ...wheels.defaultParams } }]
     expect(commitPortableProjectEdit(original.project, original.projectGeneration, changed)).toBeNull()
-    useDocumentStore.getState().setClipVolume('clip', 0.5); useDocumentStore.getState().undo()
+    commitDocumentEdit(setClipVolume, 'clip', 0.5); useDocumentStore.getState().undo()
     useTransportStore.getState().setPlayheadFrame(20)
     const before = useDocumentStore.getState(), selection = useTransportStore.getState().animationSelection
     expect(before.past.length).toBeGreaterThan(0)
@@ -283,7 +285,7 @@ describe('animation clipboard ownership', () => {
     useTransportStore.getState().setAnimationSelection([key(0)])
     expect(controller.copy()).toBeNull()
     const previousClipboard = controller.getClipboard()
-    useDocumentStore.getState().setClipVolume('clip', 0.5); useDocumentStore.getState().undo()
+    commitDocumentEdit(setClipVolume, 'clip', 0.5); useDocumentStore.getState().undo()
     const tracksBytes = JSON.stringify([track]).length
     // Leave enough for another bare track array, but not its full clipboard envelope.
     let remaining = TITLE_BUDGET_LIMITS.retainedBytes / 2 - tracksBytes * 2 - 10

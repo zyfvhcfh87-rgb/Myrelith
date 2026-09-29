@@ -6,7 +6,9 @@ import { sequenceProjectFromTimeline } from '../domain/projectSequences'
 import { createMaskEffect } from '../domain/effectStack'
 import { MAX_KEYFRAMES_PER_TRACK, resolveClipAnimationAtFrame } from '../domain/clipAnimation'
 import { updateEffectParamsAtFrame } from '../domain/operations/effects'
+import { setEffectKeyframe } from '../domain/operations'
 import { useDocumentStore } from '../state/documentStore'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import { useTransportStore } from '../state/transportStore'
 import { useMediaStore } from '../state/mediaStore'
 import { pathTrack } from '../test/animationFoundationFixtures'
@@ -141,7 +143,7 @@ test('no-op and invalid numeric/path edits preserve undo and redo; a replaced se
 })
 
 test('static and animated patches match Inspector numeric operations, including source ticks and existing easing', () => {
-  useDocumentStore.getState().setEffectKeyframe('clip', 'mask', 'x', { frame: 0, value: 0.1, easing: { type: 'hold' } })
+  commitDocumentEdit(setEffectKeyframe, 'clip', 'mask', 'x', { frame: 0, value: 0.1, easing: { type: 'hold' } })
   useTransportStore.getState().setPlayheadFrame(15)
   const state = useDocumentStore.getState(), patch = { x: 0.4, feather: 0.2 }
   const expected = updateEffectParamsAtFrame(state.doc, 'clip', 'mask', 15, patch)

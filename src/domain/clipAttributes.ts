@@ -57,9 +57,13 @@ export interface AttributePasteOptions {
   readonly includeAnimation: boolean
   readonly effectsMode: StackPasteMode
 }
-export type ClipAttributeCommand =
-  | { readonly kind: 'paste'; readonly targetIds: readonly string[]; readonly template: ClipAttributeTemplate; readonly options: AttributePasteOptions }
-  | { readonly kind: 'reset'; readonly targetIds: readonly string[]; readonly groups: readonly ClipAttributeGroup[]; readonly selectedEffectIds?: readonly string[] }
+/** Store-committed attribute batch. Paste commits through the app's portable-edit path instead. */
+export interface ClipAttributeCommand {
+  readonly kind: 'reset'
+  readonly targetIds: readonly string[]
+  readonly groups: readonly ClipAttributeGroup[]
+  readonly selectedEffectIds?: readonly string[]
+}
 export type AttributeTemplateResult =
   | { readonly ok: true; readonly template: ClipAttributeTemplate }
   | { readonly ok: false; readonly reason: string }

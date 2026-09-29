@@ -32,7 +32,7 @@ import { editVideoBus, type VideoBusEdit, type VideoBusTarget } from '../domain/
 
 import { create } from 'zustand'
 import {
-  pasteClipAttributes, resetClipAttributes, type ClipAttributeCommand,
+  resetClipAttributes, type ClipAttributeCommand,
 } from '../domain/clipAttributes'
 import type {
   AdjustmentAnimationKeyframe,
@@ -45,8 +45,6 @@ import type {
   AudioEffectDescriptor,
   AudioEffectId,
   Clip,
-  ClipAnimationKeyframe,
-  ClipAnimationProperty,
   ClipId,
   Effect,
   EffectId,
@@ -73,7 +71,6 @@ import {
   removeCaptionItem as deleteCaptionCue,
   removeCaptionTrack as deleteCaptionLane,
   replaceCaptionItems,
-  shiftCaptionItems,
   splitCaptionItem,
   updateCaptionItem as updateCaptionCue,
   updateCaptionTrack as updateCaptionLane,
@@ -106,7 +103,6 @@ import type {
 import type { VideoStabilizationPlan } from '../domain/videoStabilization'
 import type { MotionTrackingPlan } from '../domain/motionTracking'
 import {
-  addCrossfade,
   addCrossfadeWithSourceBounds as addExactCrossfade,
   addAudioEffect,
   applyAudioEffectPreset,
@@ -126,31 +122,19 @@ import {
   resetEffect,
   resetVideoStabilizationWithResult,
   renameTrack,
-  setClipVolume,
   setMasterAudio,
   normalizeMasterLoudness,
   setAudioEffectEnabled,
   setEffectEnabled,
-  setCrossfadeDuration,
   setCrossfadeSettingsWithSourceBounds,
   setTrackFlags,
   setTrackMixer,
-  updateClipAudio,
   updateClipAudioAtFrame,
   updateClipTransform,
-  updateClipVisual,
   updateClipVisualAtFrame,
   updateAudioEffectParams,
   updateEffectParams,
   updateEffectParamsAtFrame,
-  setClipKeyframe,
-  setEffectKeyframe,
-  moveEffectKeyframe,
-  removeEffectKeyframe,
-  resetEffectAnimationTrack,
-  moveClipKeyframe,
-  removeClipKeyframe,
-  resetClipAnimationTrack,
   resetClipFramingAnimationWithResult,
   updateTextClip,
 } from '../domain/operations'
@@ -268,7 +252,7 @@ export interface DocumentState {
   setDocWithHistory: (doc: TimelineDoc) => void
   /** Freshly validated mask gesture; rejection must retain both history branches. */
   commitMaskEdit: (expectedProject: SequenceProject, generation: number, sequenceId: string, doc: TimelineDoc) => string | null
-  /** Validate and commit an entire attribute batch once against its opening snapshot. */
+  /** Validate and commit an entire attribute reset batch once against its opening snapshot. */
   applyClipAttributes: (expectedProject: SequenceProject, sequenceId: string, command: ClipAttributeCommand) => string | null
   /** Navigate without persistence, dirty state, or history. */
   switchSequence: (sequenceId: string) => boolean
@@ -447,30 +431,12 @@ export interface DocumentState {
     asset: MediaAsset | null,
     catalog?: SourceBoundsCatalog,
   ) => void
-  /**
-   * Add a centered crossfade between ordered touching video clips. A valid
-   * add is one undo entry; rejected geometry or a locked track adds none.
-   */
-  addCrossfade: (
-    fromClipId: ClipId,
-    toClipId: ClipId,
-    durationFrames: number,
-  ) => void
   /** Add exact handle-aware duration/audio intent as one history entry. */
   addCrossfadeWithSourceBounds: (
     fromClipId: ClipId,
     toClipId: ClipId,
     settings: CrossfadeSettings,
     catalog: SourceBoundsCatalog,
-  ) => void
-  /**
-   * Change one crossfade duration while preserving its id. `trackId` scopes
-   * stale UI calls; unchanged or rejected edits add no history entry.
-   */
-  setCrossfadeDuration: (
-    trackId: TrackId,
-    transitionId: TransitionId,
-    durationFrames: number,
   ) => void
   /** Atomically replace duration and audio intent in one history entry. */
   setCrossfadeSettings: (
@@ -503,8 +469,6 @@ export interface DocumentState {
    * independently editable even when linked to an audio half.
    */
   updateClipTransform: (clipId: ClipId, patch: ClipTransformPatch) => void
-  /** Atomically edit/reset the complete static visual Inspector surface. */
-  updateClipVisual: (clipId: ClipId, patch: ClipVisualPatch) => void
   /** Replace or clear the supported manual source-geometry model. */
   setManualLensCorrection: (
     clipId: ClipId,
@@ -515,27 +479,6 @@ export interface DocumentState {
     clipId: ClipId,
     timelineFrame: number,
     patch: ClipVisualPatch,
-  ) => void
-  /** Add/replace, move, remove, or reset one property keyframe track. */
-  setClipKeyframe: (
-    clipId: ClipId,
-    property: ClipAnimationProperty,
-    keyframe: ClipAnimationKeyframe,
-  ) => void
-  moveClipKeyframe: (
-    clipId: ClipId,
-    property: ClipAnimationProperty,
-    fromFrame: number,
-    toFrame: number,
-  ) => void
-  removeClipKeyframe: (
-    clipId: ClipId,
-    property: ClipAnimationProperty,
-    frame: number,
-  ) => void
-  resetClipAnimationTrack: (
-    clipId: ClipId,
-    property: ClipAnimationProperty,
   ) => void
   /** Replace Position X/Y and Scale X/Y with one ordinary-keyframe preset. */
   applyDynamicZoom: (
@@ -560,15 +503,6 @@ export interface DocumentState {
   resetClipFramingAnimation: (clipId: ClipId) => ClipFramingOperationResult
   /** Update one text payload atomically; invalid/unchanged patches add no history. */
   updateTextClip: (clipId: ClipId, patch: TextPropsPatch) => void
-  /**
-   * Set a clip's audio volume (Inspector for audio clips). Domain-clamped
-   * to [0, MAX_CLIP_VOLUME]; an unchanged value pushes no history entry.
-   * Does NOT follow links — volume lives on the audio half and stays
-   * independently editable even when linked to a video half.
-   */
-  setClipVolume: (clipId: ClipId, volume: number) => void
-  /** Atomically edit/reset the complete static audio Inspector surface. */
-  updateClipAudio: (clipId: ClipId, patch: ClipAudioPatch) => void
   /** Edit static audio fields or upsert active volume/balance keys at one playhead frame. */
   updateClipAudioAtFrame: (
     clipId: ClipId,
@@ -633,11 +567,6 @@ export interface DocumentState {
     rightItemId: CaptionItemId,
   ) => void
   mergeCaptionWithNext: (trackId: CaptionTrackId, itemId: CaptionItemId) => void
-  shiftCaptionItems: (
-    trackId: CaptionTrackId,
-    fromItemId: CaptionItemId | null,
-    deltaFrames: number,
-  ) => void
   /** Append an effect to a clip's chain. */
   addEffect: (clipId: ClipId, effect: Effect) => void
   /** Enable or bypass one effect. */
@@ -654,30 +583,6 @@ export interface DocumentState {
     effectId: EffectId,
     timelineFrame: number,
     patch: Readonly<Record<string, EffectParamValue>>,
-  ) => void
-  setEffectKeyframe: (
-    clipId: ClipId,
-    effectId: EffectId,
-    parameter: string,
-    keyframe: ClipAnimationKeyframe,
-  ) => void
-  moveEffectKeyframe: (
-    clipId: ClipId,
-    effectId: EffectId,
-    parameter: string,
-    fromFrame: number,
-    toFrame: number,
-  ) => void
-  removeEffectKeyframe: (
-    clipId: ClipId,
-    effectId: EffectId,
-    parameter: string,
-    frame: number,
-  ) => void
-  resetEffectAnimationTrack: (
-    clipId: ClipId,
-    effectId: EffectId,
-    parameter: string,
   ) => void
   /** Move one effect to an exact stack index. */
   reorderEffect: (clipId: ClipId, effectId: EffectId, targetIndex: number) => void
@@ -956,9 +861,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         error = 'The project or active sequence changed. Reopen the attribute dialog.'
         return state
       }
-      const result = command.kind === 'paste'
-        ? pasteClipAttributes(state.project, sequenceId, command.targetIds, command.template, command.options, randomSequenceId)
-        : resetClipAttributes(state.project, sequenceId, command.targetIds, command.groups, command.selectedEffectIds)
+      const result = resetClipAttributes(state.project, sequenceId, command.targetIds, command.groups, command.selectedEffectIds)
       if (!result.ok) { error = result.reason; return state }
       error = projectCommitError(state, result.project)
       return error || result.project === state.project ? state : pushProject(state, result.project)
@@ -1459,14 +1362,6 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         createTitleElementIdAllocator(state.project, () => `title-element_${crypto.randomUUID()}`)),
     )),
 
-  addCrossfade: (fromClipId, toClipId, durationFrames) =>
-    set((state) =>
-      commit(
-        state,
-        addCrossfade(state.doc, fromClipId, toClipId, durationFrames),
-      ),
-    ),
-
   addCrossfadeWithSourceBounds: (
     fromClipId,
     toClipId,
@@ -1483,19 +1378,6 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
           settings.durationFrames,
           catalog,
           settings.audio,
-        ),
-      ),
-    ),
-
-  setCrossfadeDuration: (trackId, transitionId, durationFrames) =>
-    set((state) =>
-      commit(
-        state,
-        setCrossfadeDuration(
-          state.doc,
-          trackId,
-          transitionId,
-          durationFrames,
         ),
       ),
     ),
@@ -1536,9 +1418,6 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   updateClipTransform: (clipId, patch) =>
     set((state) => commit(state, updateClipTransform(state.doc, clipId, patch))),
 
-  updateClipVisual: (clipId, patch) =>
-    set((state) => commit(state, updateClipVisual(state.doc, clipId, patch))),
-
   setManualLensCorrection: (clipId, model) =>
     set((state) => commit(
       state,
@@ -1549,30 +1428,6 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     set((state) => commit(
       state,
       updateClipVisualAtFrame(state.doc, clipId, timelineFrame, patch),
-    )),
-
-  setClipKeyframe: (clipId, property, keyframe) =>
-    set((state) => commit(
-      state,
-      setClipKeyframe(state.doc, clipId, property, keyframe),
-    )),
-
-  moveClipKeyframe: (clipId, property, fromFrame, toFrame) =>
-    set((state) => commit(
-      state,
-      moveClipKeyframe(state.doc, clipId, property, fromFrame, toFrame),
-    )),
-
-  removeClipKeyframe: (clipId, property, frame) =>
-    set((state) => commit(
-      state,
-      removeClipKeyframe(state.doc, clipId, property, frame),
-    )),
-
-  resetClipAnimationTrack: (clipId, property) =>
-    set((state) => commit(
-      state,
-      resetClipAnimationTrack(state.doc, clipId, property),
     )),
 
   applyDynamicZoom: (clipId, source, request) => {
@@ -1627,12 +1482,6 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
 
   updateTextClip: (clipId, patch) =>
     set((state) => commit(state, updateTextClip(state.doc, clipId, patch))),
-
-  setClipVolume: (clipId, volume) =>
-    set((state) => commit(state, setClipVolume(state.doc, clipId, volume))),
-
-  updateClipAudio: (clipId, patch) =>
-    set((state) => commit(state, updateClipAudio(state.doc, clipId, patch))),
 
   updateClipAudioAtFrame: (clipId, timelineFrame, patch) =>
     set((state) => commit(
@@ -1705,12 +1554,6 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       mergeCaptionWithNext(state.doc, trackId, itemId),
     )),
 
-  shiftCaptionItems: (trackId, fromItemId, deltaFrames) =>
-    set((state) => commit(
-      state,
-      shiftCaptionItems(state.doc, trackId, fromItemId, deltaFrames),
-    )),
-
   addEffect: (clipId, effect) =>
     set((state) => commit(state, addEffect(state.doc, clipId, effect))),
 
@@ -1730,37 +1573,6 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     set((state) => commit(
       state,
       updateEffectParamsAtFrame(state.doc, clipId, effectId, timelineFrame, patch),
-    )),
-
-  setEffectKeyframe: (clipId, effectId, parameter, keyframe) =>
-    set((state) => commit(
-      state,
-      setEffectKeyframe(state.doc, clipId, effectId, parameter, keyframe),
-    )),
-
-  moveEffectKeyframe: (clipId, effectId, parameter, fromFrame, toFrame) =>
-    set((state) => commit(
-      state,
-      moveEffectKeyframe(
-        state.doc,
-        clipId,
-        effectId,
-        parameter,
-        fromFrame,
-        toFrame,
-      ),
-    )),
-
-  removeEffectKeyframe: (clipId, effectId, parameter, frame) =>
-    set((state) => commit(
-      state,
-      removeEffectKeyframe(state.doc, clipId, effectId, parameter, frame),
-    )),
-
-  resetEffectAnimationTrack: (clipId, effectId, parameter) =>
-    set((state) => commit(
-      state,
-      resetEffectAnimationTrack(state.doc, clipId, effectId, parameter),
     )),
 
   reorderEffect: (clipId, effectId, targetIndex) =>

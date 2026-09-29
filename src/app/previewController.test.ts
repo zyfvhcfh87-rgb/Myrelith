@@ -716,7 +716,7 @@ describe('previewController', () => {
     initPreview(canvasEl(), deps)
     const clip = doc.tracks[0].clips[0]
 
-    useTransportStore.getState().setClipVisualPreview({
+    useTransportStore.getState().setOwnedClipVisualPreview('visual-gesture', {
       clipId: clip.id,
       transform: { ...clip.transform, x: 222 },
       visual: {
@@ -731,7 +731,7 @@ describe('previewController', () => {
     })
     expect(useDocumentStore.getState().doc).toBe(doc)
 
-    useTransportStore.getState().setClipVisualPreview(null)
+    useTransportStore.getState().setOwnedClipVisualPreview('visual-gesture', null)
     expect(bridge.docs.at(-1)).toBe(doc)
   })
 

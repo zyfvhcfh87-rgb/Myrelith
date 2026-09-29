@@ -103,7 +103,9 @@ function plan(replacementRequired = true): VideoStabilizationPlan {
 beforeEach(() => {
   const item = clip()
   useDocumentStore.getState().setDoc(doc(item))
-  useTransportStore.getState().setClipVisualPreview(null)
+  for (const owner of ['visual-gesture', 'stabilization', 'motion-tracking'] as const) {
+    useTransportStore.getState().setOwnedClipVisualPreview(owner, null)
+  }
   useTransportStore.getState().setPlayheadFrame(20)
   mocks.analyze.mockReset().mockResolvedValue({ clipId: item.id })
   mocks.apply.mockReset().mockReturnValue({ ok: true, changed: true, plan: plan() })

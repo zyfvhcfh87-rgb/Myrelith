@@ -5,6 +5,8 @@ import { titlePayloadBudget, TITLE_BUDGET_LIMITS } from '../domain/titleBudgets'
 import { createProjectFileSnapshot } from '../domain/projectFile'
 import { sequenceProjectWithinEditBudget } from '../domain/projectSequences'
 import { useDocumentStore } from '../state/documentStore'
+import { setClipVolume } from '../domain/operations'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import { useMediaStore } from '../state/mediaStore'
 import { ATTRIBUTE_ASSET_DESCRIPTOR, foundationProject, scalarKey } from '../test/animationFoundationFixtures'
 import { commitPortableProjectEdit } from './portableProjectEdit'
@@ -75,7 +77,7 @@ describe('all-owner animation admission before history mutation', () => {
   })
 
   test('a crop rejected by ordinary store admission preserves project, history and populated redo', () => {
-    useDocumentStore.getState().setClipVolume('clip', 0.5)
+    commitDocumentEdit(setClipVolume, 'clip', 0.5)
     useDocumentStore.getState().undo()
     const before = useDocumentStore.getState(), next = structuredClone(before.doc)
     next.tracks[0].clips[0].animation = { tracks: [
