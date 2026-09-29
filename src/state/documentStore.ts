@@ -767,18 +767,31 @@ function activeSequenceFor(
   return { activeSequenceId: root.id, doc: root }
 }
 
-function commitProject(
+/**
+ * Admit one whole-project edit. `null` means history-wide admission rejected
+ * it, so result-returning actions must not report success; an unchanged
+ * project is an accepted no-op that keeps `state`.
+ */
+function admitProject(
   state: DocumentState,
   project: SequenceProject,
   preferredActiveId = state.activeSequenceId,
-): Partial<DocumentState> | DocumentState {
-  if (project === state.project || projectCommitError(state, project)) return state
+): Partial<DocumentState> | DocumentState | null {
+  if (project === state.project) return state
+  if (projectCommitError(state, project)) return null
   return {
     project,
     ...activeSequenceFor(project, preferredActiveId),
     past: [...state.past, state.project].slice(-HISTORY_LIMIT),
     future: [],
   }
+}
+
+function commitProject(
+  state: DocumentState,
+  project: SequenceProject,
+): Partial<DocumentState> | DocumentState {
+  return admitProject(state, project) ?? state
 }
 
 function randomSequenceId(
@@ -1006,11 +1019,13 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         randomSequenceId,
       )
       if (result.failure || !result.sequenceId || !result.instanceId) return state
+      const next = admitProject(state, result.project)
+      if (!next) return state
       created = Object.freeze({
         sequenceId: result.sequenceId,
         instanceId: result.instanceId,
       })
-      return commitProject(state, result.project)
+      return next
     })
     return created
   },
@@ -1024,8 +1039,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         command,
         randomSequenceId,
       )
-      edited = result.failure === null
-      return result.failure ? state : commitProject(state, result.project)
+      const next = result.failure ? null : admitProject(state, result.project)
+      edited = next !== null
+      return next ?? state
     })
     return edited
   },
@@ -1044,12 +1060,14 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         randomSequenceId,
       )
       if (result.failure || !result.definitionId || !result.videoInstanceId) return state
+      const next = admitProject(state, result.project)
+      if (!next) return state
       created = Object.freeze({
         definitionId: result.definitionId,
         videoInstanceId: result.videoInstanceId,
         audioInstanceId: result.audioInstanceId,
       })
-      return commitProject(state, result.project)
+      return next
     })
     return created
   },
@@ -1063,8 +1081,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         command,
         randomSequenceId,
       )
-      edited = result.failure === null
-      return result.failure ? state : commitProject(state, result.project)
+      const next = result.failure ? null : admitProject(state, result.project)
+      edited = next !== null
+      return next ?? state
     })
     return edited
   },
@@ -1073,8 +1092,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     let edited = false
     set((state) => {
       const result = applyProjectMulticamDefinitionEdit(state.project, command)
-      edited = result.failure === null
-      return result.failure ? state : commitProject(state, result.project)
+      const next = result.failure ? null : admitProject(state, result.project)
+      edited = next !== null
+      return next ?? state
     })
     return edited
   },
@@ -1089,8 +1109,10 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         randomSequenceId,
       )
       if (result.failure || !result.sequenceId) return state
+      const next = admitProject(state, result.project)
+      if (!next) return state
       sequenceId = result.sequenceId
-      return commitProject(state, result.project)
+      return next
     })
     return sequenceId
   },
@@ -1099,10 +1121,11 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     let createdId: string | null = null
     set((state) => {
       const result = createProjectSequence(state.project, name, randomSequenceId)
-      createdId = result.sequenceId
-      return result.failure || !result.sequenceId
-        ? state
-        : commitProject(state, result.project, result.sequenceId)
+      const next = result.failure || !result.sequenceId
+        ? null
+        : admitProject(state, result.project, result.sequenceId)
+      if (next) createdId = result.sequenceId
+      return next ?? state
     })
     return createdId
   },
@@ -1116,10 +1139,11 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         name,
         randomSequenceId,
       )
-      duplicateId = result.sequenceId
-      return result.failure || !result.sequenceId
-        ? state
-        : commitProject(state, result.project, result.sequenceId)
+      const next = result.failure || !result.sequenceId
+        ? null
+        : admitProject(state, result.project, result.sequenceId)
+      if (next) duplicateId = result.sequenceId
+      return next ?? state
     })
     return duplicateId
   },
@@ -1128,8 +1152,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     let renamed = false
     set((state) => {
       const result = renameProjectSequence(state.project, sequenceId, name)
-      renamed = result.failure === null
-      return result.failure ? state : commitProject(state, result.project)
+      const next = result.failure ? null : admitProject(state, result.project)
+      renamed = next !== null
+      return next ?? state
     })
     return renamed
   },
@@ -1138,8 +1163,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     let deleted = false
     set((state) => {
       const result = deleteProjectSequence(state.project, sequenceId)
-      deleted = result.failure === null
-      return result.failure ? state : commitProject(state, result.project)
+      const next = result.failure ? null : admitProject(state, result.project)
+      deleted = next !== null
+      return next ?? state
     })
     return deleted
   },
@@ -1148,8 +1174,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     let chosen = false
     set((state) => {
       const result = chooseProjectRootSequence(state.project, sequenceId)
-      chosen = result.failure === null
-      return result.failure ? state : commitProject(state, result.project)
+      const next = result.failure ? null : admitProject(state, result.project)
+      chosen = next !== null
+      return next ?? state
     })
     return chosen
   },
@@ -1158,9 +1185,9 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     let matched = false
     set((state) => {
       const project = matchEmptyProjectFrameRate(state.project, rate)
-      if (!project) return state
-      matched = true
-      return commitProject(state, project)
+      const next = project ? admitProject(state, project) : null
+      matched = next !== null
+      return next ?? state
     })
     return matched
   },

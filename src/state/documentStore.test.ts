@@ -10,7 +10,9 @@ import { createColorAdjustEffect, createMaskEffect } from '../domain/effectStack
 import { createParametricEqEffect } from '../domain/audioEffectStack'
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import { sourceTimeRateFromPercent } from '../domain/sourceTimeMap'
+import { CAPTION_INTENT_LIMITS } from '../domain/captionIntent'
 import { clipWithAnimationKeyframeCount } from '../test/animationBudgetFixtures'
+import { opaqueCaptionBytes } from '../test/captionIntentFixtures'
 import {
   documentAtAggregateEffectBudget,
   effectBudgetInsertionClip,
@@ -286,6 +288,107 @@ describe('project-wide sequence history', () => {
     expect(getState().project.sequences.every(
       (sequence) => sequence.frameRate.num === 60,
     )).toBe(true)
+  })
+})
+
+describe('result-returning project actions respect history-wide admission', () => {
+  /** Caption intent retained outside history, one descriptor over the 32 MiB cap. */
+  function applyRetentionPressure(): void {
+    const style = opaqueCaptionBytes(CAPTION_INTENT_LIMITS.maxDescriptorBytes)
+    const count = Math.floor(
+      CAPTION_INTENT_LIMITS.maxRetainedIntentBytes / CAPTION_INTENT_LIMITS.maxDescriptorBytes,
+    ) + 1
+    useDocumentStore.setState({
+      retainedCaptionOwners: { pressure: Array.from({ length: count }, () => ({ style })) },
+    })
+  }
+  // The shared beforeEach setDoc would reject under leftover pressure.
+  afterEach(() => useDocumentStore.setState({ retainedCaptionOwners: {} }))
+
+  const multicamCommand = {
+    name: 'Concert',
+    startFrame: 600,
+    videoTrackId: 'V1',
+    audioTrackId: 'A1',
+    angles: [
+      { assetId: 'angle-wide', name: 'Wide', durationFrames: 100, syncFrame: 5 },
+      { assetId: 'angle-close', name: 'Close', durationFrames: 100, syncFrame: 10 },
+    ],
+    audioPolicy: { kind: 'fixed', angleIndex: 0 },
+  } as const
+  const compoundInstance = () => getState().createCompoundFromClips(['clipA'], 'Compound')!.instanceId
+  const multicam = () => getState().createMulticam(multicamCommand)!
+  const disposableSequence = () => {
+    const id = getState().createSequence('Disposable')!
+    getState().switchSequence(getState().project.rootSequenceId)
+    return id
+  }
+
+  const cases: ReadonlyArray<readonly [string, () => () => unknown]> = [
+    ['createCompoundFromClips', () => () => getState().createCompoundFromClips(['clipA'], 'Compound')],
+    ['editSequenceInstance', () => {
+      const instanceId = compoundInstance()
+      return () => getState().editSequenceInstance({ kind: 'move', instanceId, startFrame: 1000 })
+    }],
+    ['createMulticam', () => () => getState().createMulticam(multicamCommand)],
+    ['editMulticamInstance', () => {
+      const { videoInstanceId } = multicam()
+      return () => getState().editMulticamInstance({ kind: 'move', instanceId: videoInstanceId, startFrame: 1000 })
+    }],
+    ['editMulticamDefinition', () => {
+      multicam()
+      const definition = getState().project.multicams![0]
+      return () => getState().editMulticamDefinition({
+        kind: 'cut', definitionId: definition.id, frame: 30, angleId: definition.angles[1].id,
+      })
+    }],
+    ['makeSequenceInstanceIndependent', () => {
+      const instanceId = compoundInstance()
+      return () => getState().makeSequenceInstanceIndependent(instanceId)
+    }],
+    ['createSequence', () => () => getState().createSequence('Scene two')],
+    ['duplicateSequence', () => () => getState().duplicateSequence(getState().activeSequenceId, 'Copy')],
+    ['renameSequence', () => () => getState().renameSequence(getState().activeSequenceId, 'Renamed')],
+    ['deleteSequence', () => {
+      const id = disposableSequence()
+      return () => getState().deleteSequence(id)
+    }],
+    ['chooseRootSequence', () => {
+      const id = disposableSequence()
+      return () => getState().chooseRootSequence(id)
+    }],
+    ['matchProjectFrameRate', () => {
+      getState().setDoc({
+        ...makeDoc(),
+        tracks: makeDoc().tracks.map((track) => ({ ...track, clips: [], transitions: [] })),
+      })
+      return () => getState().matchProjectFrameRate({ num: 60, den: 1 })
+    }],
+  ]
+
+  test.each(cases)('%s reports failure when admission rejects the edit', (_name, arrange) => {
+    const act = arrange()
+    applyRetentionPressure()
+    const before = getState()
+
+    const rejected = act()
+
+    expect(rejected === null || rejected === false).toBe(true)
+    expect(getState()).toBe(before)
+    useDocumentStore.setState({ retainedCaptionOwners: {} })
+    const admitted = act()
+    expect(admitted === null || admitted === false).toBe(false)
+    expect(getState().past).toHaveLength(before.past.length + 1)
+    expect(getState().past.at(-1)).toBe(before.project)
+  })
+
+  test('an unchanged rename stays an accepted no-op under admission pressure', () => {
+    const { activeSequenceId, doc } = getState()
+    applyRetentionPressure()
+    const before = getState()
+
+    expect(getState().renameSequence(activeSequenceId, doc.name)).toBe(true)
+    expect(getState()).toBe(before)
   })
 })
 
