@@ -525,7 +525,8 @@ export function resolveCrossfadeGeometry(
   }
 }
 
-function windowsOverlap(
+/** Half-open overlap for two resolved crossfade windows. */
+export function crossfadeWindowsOverlap(
   left: { startFrame: number; endFrame: number },
   right: { startFrame: number; endFrame: number },
 ): boolean {
@@ -551,7 +552,7 @@ function overlapsAnotherTransition(
     )
     if (transition.durationFrames > otherTimelineMaximum) continue
     const otherWindow = transitionWindow(other)
-    if (otherWindow && windowsOverlap(window, otherWindow)) return true
+    if (otherWindow && crossfadeWindowsOverlap(window, otherWindow)) return true
   }
   return false
 }
@@ -1201,7 +1202,8 @@ export function evaluateCrossfadeUpdate(
   return resolveCrossfadePlan({ ...doc, tracks }, trackId, transitionId, catalog)
 }
 
-function clipOpacity(clip: Clip): number {
+/** Drawable clip opacity: 0 when non-finite or non-positive, at most 1. */
+export function clipOpacity(clip: Clip): number {
   if (!Number.isFinite(clip.opacity) || clip.opacity <= 0) return 0
   return Math.min(1, clip.opacity)
 }

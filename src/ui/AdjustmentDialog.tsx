@@ -7,14 +7,10 @@ import {
   secondsToFrames,
 } from '../state/editorUi'
 import { useTransportStore } from '../state/transportStore'
+import { integerDraft } from './integerDraft'
 
 interface AdjustmentDialogProps {
   onClose(): void
-}
-
-function integerDraft(value: string): number | null {
-  const parsed = Number(value)
-  return Number.isSafeInteger(parsed) ? parsed : null
 }
 
 export default function AdjustmentDialog({ onClose }: AdjustmentDialogProps) {

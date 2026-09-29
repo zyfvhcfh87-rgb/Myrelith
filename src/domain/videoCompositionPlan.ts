@@ -19,6 +19,7 @@ import {
 } from './captions'
 import { resolveCaptionPaint } from './captionPaint'
 import {
+  clipOpacity,
   createCrossfadePlanResolver,
   crossfadeFrameGroupAt,
   type CrossfadePlan,
@@ -172,11 +173,6 @@ export interface VideoCompositionPlan {
 
 export interface VideoCompositionPlanner {
   planFrame(frame: number): VideoCompositionPlan
-}
-
-function clipOpacity(clip: Clip): number {
-  if (!Number.isFinite(clip.opacity) || clip.opacity <= 0) return 0
-  return Math.min(1, clip.opacity)
 }
 
 function ordinaryItem(

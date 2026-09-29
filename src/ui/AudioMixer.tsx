@@ -12,28 +12,13 @@ import {
   trackBalance,
   trackVolume,
 } from '../state/editorUi'
+import { audioMeterScale, audioMeterValueText } from '../domain/audioMeter'
 import type { TrackId } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import {
   SILENT_AUDIO_METER_READOUT,
   useAudioMeterStore,
 } from '../state/audioMeterStore'
-
-function meterScale(db: number): number {
-  return Math.max(
-    0,
-    Math.min(
-      1,
-      (db - AUDIO_METER_FLOOR_DB)
-        / (AUDIO_METER_CEILING_DB - AUDIO_METER_FLOOR_DB),
-    ),
-  )
-}
-
-function dbText(db: number): string {
-  if (db <= AUDIO_METER_FLOOR_DB) return 'silent, below minus 60 dBFS'
-  return `${db >= 0 ? 'plus ' : 'minus '}${Math.abs(db).toFixed(1)} dBFS`
-}
 
 function MixerMeterLane({
   label,
@@ -55,12 +40,12 @@ function MixerMeterLane({
         aria-valuemin={AUDIO_METER_FLOOR_DB}
         aria-valuemax={AUDIO_METER_CEILING_DB}
         aria-valuenow={Number(db.toFixed(1))}
-        aria-valuetext={dbText(db)}
+        aria-valuetext={audioMeterValueText(db)}
         data-overload={overloaded || undefined}
       >
         <span
           className="mixer-meter-fill"
-          style={{ transform: `scaleY(${meterScale(db)})` }}
+          style={{ transform: `scaleY(${audioMeterScale(db)})` }}
           aria-hidden="true"
         />
       </div>

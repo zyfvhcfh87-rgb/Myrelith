@@ -202,6 +202,24 @@ export function audioMeterReadout(
   }
 }
 
+/** Displayed fraction of a meter lane: 0 at the floor, 1 at the ceiling. */
+export function audioMeterScale(db: number): number {
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      (db - AUDIO_METER_FLOOR_DB)
+        / (AUDIO_METER_CEILING_DB - AUDIO_METER_FLOOR_DB),
+    ),
+  )
+}
+
+/** Screen-reader value text for one meter reading. */
+export function audioMeterValueText(db: number): string {
+  if (db <= AUDIO_METER_FLOOR_DB) return 'silent, below minus 60 dBFS'
+  return `${db >= 0 ? 'plus ' : 'minus '}${Math.abs(db).toFixed(1)} dBFS`
+}
+
 /** Stop/seek clears moving levels and hold, but keeps a warning until reset. */
 export function silenceAudioMeterBallistics(
   state: AudioMeterBallisticsState,

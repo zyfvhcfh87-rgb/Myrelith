@@ -102,7 +102,7 @@ export function frameAtTimelineClientX(
     originFrame,
     zoom,
   )
-  return Math.min(maximum, Math.max(minimum, frame))
+  return clamp(frame, minimum, maximum)
 }
 
 /**

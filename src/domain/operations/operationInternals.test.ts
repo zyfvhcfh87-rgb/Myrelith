@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import type { Clip, Track, Transition } from '../schema'
 import { resolveCrossfadeGeometry } from '../crossfadePlan'
-import { crossfadeWindowsOverlap } from '../selectors'
+import { crossfadeWindowsOverlap } from '../crossfadePlan'
 import { defaultTextProps } from '../textOverlay'
 import { validTransitionIndexes } from './operationInternals'
 

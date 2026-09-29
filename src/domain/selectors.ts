@@ -17,7 +17,6 @@ import {
   createCrossfadeAudioWindowIndex,
   type CrossfadeAudioClipWindow,
   type CrossfadeAudioWindowIndex,
-  type CrossfadeGeometry,
 } from './crossfadePlan'
 import {
   clipSourceTimeMap,
@@ -309,12 +308,4 @@ export function projectOutputMediaAssetIds(
     )) ids.add(assetId)
   }
   return ids
-}
-
-/** Half-open overlap for two resolved crossfade windows. */
-export function crossfadeWindowsOverlap(
-  left: Pick<CrossfadeGeometry, 'startFrame' | 'endFrame'>,
-  right: Pick<CrossfadeGeometry, 'startFrame' | 'endFrame'>,
-): boolean {
-  return left.startFrame < right.endFrame && right.startFrame < left.endFrame
 }

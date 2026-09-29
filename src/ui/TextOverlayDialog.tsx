@@ -4,14 +4,10 @@ import { findClip } from '../domain/selectors'
 import { TEXT_OVERLAY_LIMITS } from '../domain/textOverlay'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
+import { integerDraft } from './integerDraft'
 
 interface TextOverlayDialogProps {
   onClose(): void
-}
-
-function integerDraft(value: string): number | null {
-  const parsed = Number(value)
-  return Number.isSafeInteger(parsed) ? parsed : null
 }
 
 export default function TextOverlayDialog({ onClose }: TextOverlayDialogProps) {

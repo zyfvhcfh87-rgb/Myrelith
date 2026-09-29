@@ -2,6 +2,8 @@ import type { CSSProperties } from 'react'
 import {
   AUDIO_METER_CEILING_DB,
   AUDIO_METER_FLOOR_DB,
+  audioMeterScale,
+  audioMeterValueText,
 } from '../domain/audioMeter'
 import { resetAudioMeterOverload } from '../app/transportController'
 import { useAudioMeterStore } from '../state/audioMeterStore'
@@ -12,22 +14,6 @@ interface MeterLaneProps {
   db: number
   overloaded: boolean
   master?: boolean
-}
-
-function meterScale(db: number): number {
-  return Math.max(
-    0,
-    Math.min(
-      1,
-      (db - AUDIO_METER_FLOOR_DB)
-        / (AUDIO_METER_CEILING_DB - AUDIO_METER_FLOOR_DB),
-    ),
-  )
-}
-
-function dbText(db: number): string {
-  if (db <= AUDIO_METER_FLOOR_DB) return 'silent, below minus 60 dBFS'
-  return `${db >= 0 ? 'plus ' : 'minus '}${Math.abs(db).toFixed(1)} dBFS`
 }
 
 function MeterLane({
@@ -47,12 +33,12 @@ function MeterLane({
         aria-valuemin={AUDIO_METER_FLOOR_DB}
         aria-valuemax={AUDIO_METER_CEILING_DB}
         aria-valuenow={Number(db.toFixed(1))}
-        aria-valuetext={dbText(db)}
+        aria-valuetext={audioMeterValueText(db)}
         data-overload={overloaded || undefined}
       >
         <span
           className="audio-meter-fill"
-          style={{ transform: `scaleX(${meterScale(db)})` } as CSSProperties}
+          style={{ transform: `scaleX(${audioMeterScale(db)})` } as CSSProperties}
           aria-hidden="true"
         />
         <span className="audio-meter-overload-zone" aria-hidden="true" />
