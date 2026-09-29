@@ -848,6 +848,21 @@ describe('mediaStore', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith(asset.objectUrl)
   })
 
+  test('offline descriptors never replace existing or earlier incoming entries', () => {
+    const kept = descriptorFor(makeAsset({ id: 'kept', fileName: 'kept.mov' }))
+    expect(getState().addOfflineDescriptors([kept])).toBe(true)
+    const before = getState().descriptors
+    const replacement = { ...kept, fileName: 'replacement.mov' }
+    expect(getState().addOfflineDescriptors([replacement, replacement])).toBe(false)
+    expect(getState().descriptors).toBe(before)
+
+    const first = descriptorFor(makeAsset({ id: 'new', fileName: 'first.mov' }))
+    expect(getState().addOfflineDescriptors([replacement, first, { ...first, fileName: 'second.mov' }])).toBe(true)
+    expect(before.size).toBe(1)
+    expect([...getState().descriptors.values()]).toEqual([kept, first])
+    expect(getState().descriptors.get('kept')).toBe(kept)
+  })
+
   test('offline OTIO descriptors skip duplicates and upgrade identity on connect', () => {
     const first = descriptorFor(makeAsset({ id: 'otio-1', fileName: 'titles.mov' }))
     const incomplete = {

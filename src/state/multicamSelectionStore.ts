@@ -1,15 +1,5 @@
 /** Session-only timeline selection for one linked multicam-item group. */
 
-import { create } from 'zustand'
+import { createInstanceSelectionStore } from './instanceSelectionStore'
 
-interface MulticamSelectionState {
-  selectedInstanceId: string | null
-  setSelectedInstanceId(instanceId: string | null): void
-}
-
-export const useMulticamSelectionStore = create<MulticamSelectionState>()(
-  (set) => ({
-    selectedInstanceId: null,
-    setSelectedInstanceId: (selectedInstanceId) => set({ selectedInstanceId }),
-  }),
-)
+export const useMulticamSelectionStore = createInstanceSelectionStore()

@@ -465,21 +465,14 @@ export const useMediaStore = create<MediaState>()((set) => ({
   addOfflineDescriptors: (incoming) => {
     let added = false
     set((state) => {
-      const extras: PortableAssetDescriptor[] = []
+      // Existing and earlier incoming descriptors win; copy only once one is new.
+      let descriptors: Map<string, PortableAssetDescriptor> | null = null
       for (const descriptor of incoming) {
-        if (
-          state.descriptors.has(descriptor.id)
-          || extras.some((item) => item.id === descriptor.id)
-        ) {
-          continue
-        }
-        extras.push(descriptor)
+        if ((descriptors ?? state.descriptors).has(descriptor.id)) continue
+        descriptors ??= new Map(state.descriptors)
+        descriptors.set(descriptor.id, descriptor)
       }
-      if (extras.length === 0) {
-        return state
-      }
-      const descriptors = new Map(state.descriptors)
-      for (const descriptor of extras) descriptors.set(descriptor.id, descriptor)
+      if (!descriptors) return state
       added = true
       return { descriptors }
     })
