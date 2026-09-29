@@ -16,7 +16,8 @@ import type { PluginRuntimeFailure } from '../../workers/plugin-runtime-protocol
 import { PLUGIN_IO_PAGE_BYTES, PLUGIN_PIXEL_POINTER } from '../../workers/plugin-runtime-protocol';
 import type { PluginRuntimeLifecycleObserver } from '../pluginRuntimeLifecycleObserver';
 import { PluginExportPreflightError, PluginRuntimeError, type PluginDescriptorMigrationActionPreflightRequest, type PluginDescriptorMigrationActionSession, type PluginDescriptorMigrationChainRequest, type PluginDescriptorMigrationChainSession, type PluginDescriptorMigrationResult, type PluginDescriptorMigrationTargetRequest, type PluginEditorSession, type PluginEffectApplyRequest, type PluginEffectApplyResult, type PluginExportEffectRequirement, type PluginExportPreflightFailure, type PluginExportPreflightRequest, type PluginExportSession, type PluginRuntimeController, type PluginRuntimeDiagnostic } from './contracts';
-import { FAILURE_DISABLE_THRESHOLD, FAILURE_MESSAGES, MAX_ACTIVE_CALLS, MAX_DIAGNOSTIC_PLUGINS, MAX_DIAGNOSTICS_PER_PLUGIN, MAX_MESSAGE_LENGTH, MAX_QUEUED_CALLS, MAX_RESIDENT_RUNTIMES, assertExportSurfaceCapacity, cacheKey, canonicalBytes, executionIdentityKey, hostFailure, linkedAbortSignal, matchBundle, publicFailure, resolutionFailure, type RuntimeEntry, type RuntimeOwner, type RuntimeReservation, type ScheduledCall } from './internals';
+import { FAILURE_DISABLE_THRESHOLD, FAILURE_MESSAGES, MAX_ACTIVE_CALLS, MAX_DIAGNOSTIC_PLUGINS, MAX_DIAGNOSTICS_PER_PLUGIN, MAX_MESSAGE_LENGTH, MAX_QUEUED_CALLS, MAX_RESIDENT_RUNTIMES, assertExportSurfaceCapacity, cacheKey, canonicalBytes, executionIdentityKey, knownFailure, matchBundle, publicFailure, resolutionFailure, runtimeError, type RuntimeEntry, type RuntimeOwner, type RuntimeReservation, type ScheduledCall } from './internals';
+import { linkedAbortSignal } from '../pluginControllerShared';
 
 export function createPluginRuntimeController(options: {
   readonly activationBundleResolver: PluginActivationBundleResolver
@@ -128,7 +129,7 @@ export function createPluginRuntimeController(options: {
       emitLifecycle()
       if (call.signal?.aborted) {
         call.signal.removeEventListener('abort', call.onAbort!)
-        call.reject(new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted)))
+        call.reject(runtimeError('aborted'))
         continue
       }
       startScheduledCall(call)
@@ -163,10 +164,10 @@ export function createPluginRuntimeController(options: {
     task: () => Promise<T>,
   ): Promise<T> => {
     if (tornDown) return Promise.reject(
-      new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed)),
+      runtimeError('closed'),
     )
     if (signal?.aborted) return Promise.reject(
-      new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted)),
+      runtimeError('aborted'),
     )
     return new Promise<T>((resolve, reject) => {
       let call!: ScheduledCall
@@ -176,7 +177,7 @@ export function createPluginRuntimeController(options: {
         scheduledCalls.splice(index, 1)
         emitLifecycle()
         signal!.removeEventListener('abort', onAbort!)
-        reject(new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted)))
+        reject(runtimeError('aborted'))
         dispatchScheduledCalls()
       } : undefined
       call = {
@@ -192,11 +193,7 @@ export function createPluginRuntimeController(options: {
         return
       }
       if (scheduledCalls.length >= MAX_QUEUED_CALLS) {
-        reject(new PluginRuntimeError(hostFailure(
-          'queue-full',
-          FAILURE_MESSAGES['queue-full'],
-          false,
-        )))
+        reject(runtimeError('queue-full', false))
         return
       }
       scheduledCalls.push(call)
@@ -208,12 +205,12 @@ export function createPluginRuntimeController(options: {
   function waitForPromise(promise: Promise<unknown>, signal?: AbortSignal): Promise<void> {
     if (!signal) return promise.then(() => undefined)
     if (signal.aborted) {
-      return Promise.reject(new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted)))
+      return Promise.reject(runtimeError('aborted'))
     }
     return new Promise<void>((resolve, reject) => {
       const onAbort = (): void => {
         signal.removeEventListener('abort', onAbort)
-        reject(new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted)))
+        reject(runtimeError('aborted'))
       }
       signal.addEventListener('abort', onAbort, { once: true })
       promise.then(
@@ -290,7 +287,7 @@ export function createPluginRuntimeController(options: {
           || left.entry.pluginId.localeCompare(right.entry.pluginId)
       ))
     if (candidates.length < evictionCount) {
-      throw new PluginRuntimeError(hostFailure('busy', FAILURE_MESSAGES.busy, false))
+      throw runtimeError('busy', false)
     }
     for (const eviction of candidates.slice(0, evictionCount)) {
       await removeEntryUnlocked(eviction.owner, eviction.entry.pluginId, 'runtime-lru-eviction')
@@ -317,13 +314,13 @@ export function createPluginRuntimeController(options: {
       capacityReserved: boolean,
     ): Promise<RuntimeEntry> => {
       if (closed || tornDown) {
-        throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+        throw runtimeError('closed')
       }
       if (reservation?.closed) {
-        throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+        throw runtimeError('closed')
       }
       if (signal?.aborted) {
-        throw new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted))
+        throw runtimeError('aborted')
       }
       const expectedIdentityKey = exactBundleIdentityKey(bundle)
       const expectedPinnedIdentity = pinnedIdentities.get(bundle.pluginId)
@@ -331,10 +328,7 @@ export function createPluginRuntimeController(options: {
       if (expectedPinnedIdentity !== undefined
         && (expectedPinnedIdentity !== expectedIdentityKey
           || existing?.identityKey !== expectedIdentityKey)) {
-        throw new PluginRuntimeError(hostFailure(
-          'stale-generation',
-          FAILURE_MESSAGES['stale-generation'],
-        ))
+        throw runtimeError('stale-generation')
       }
       if (existing?.identityKey === expectedIdentityKey) {
         existing.lastUsed = ++ownerUsageSequence
@@ -349,7 +343,7 @@ export function createPluginRuntimeController(options: {
       }
       if (!capacityReserved) await reserveCapacityUnlocked(1)
       if (reservation?.occupied) {
-        throw new PluginRuntimeError(hostFailure('busy', FAILURE_MESSAGES.busy, false))
+        throw runtimeError('busy', false)
       }
 
       const exactCacheKey = cacheKey(bundle)
@@ -365,13 +359,13 @@ export function createPluginRuntimeController(options: {
           || moduleBytes.buffer.byteLength !== moduleBytes.byteLength
           || Object.prototype.toString.call(moduleBytes.buffer) !== '[object ArrayBuffer]'
           || moduleBytes.byteLength !== exactCacheKey.moduleByteLength) {
-          throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
+          throw runtimeError('stale-plan')
         }
         rawModuleCache.put(exactCacheKey, moduleBytes)
         emitLifecycle()
       }
       if (moduleBytes.byteLength !== exactCacheKey.moduleByteLength) {
-        throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
+        throw runtimeError('stale-plan')
       }
       let session: PluginSandboxSession
       try {
@@ -395,7 +389,7 @@ export function createPluginRuntimeController(options: {
       }
       if (closed || tornDown) {
         await session.close('owner-closed-during-activation')
-        throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+        throw runtimeError('closed')
       }
       const activated: RuntimeEntry = {
         pluginId: bundle.pluginId,
@@ -441,12 +435,12 @@ export function createPluginRuntimeController(options: {
       async pinBundles(bundles, signal) {
         return withLifecycle(signal, async () => {
           if (closed || tornDown) {
-            throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+            throw runtimeError('closed')
           }
           const unique = new Map<string, VerifiedPluginActivationBundle>()
           for (const bundle of bundles) unique.set(bundle.pluginId, bundle)
           if (unique.size > MAX_RESIDENT_RUNTIMES) {
-            throw new PluginRuntimeError(hostFailure('busy', FAILURE_MESSAGES.busy, false))
+            throw runtimeError('busy', false)
           }
           const newEntryCount = [...unique.values()].filter((bundle) => (
             entries.get(bundle.pluginId)?.identityKey !== exactBundleIdentityKey(bundle)
@@ -505,10 +499,10 @@ export function createPluginRuntimeController(options: {
   const reserveMigrationSlot = (signal?: AbortSignal): Promise<RuntimeReservation> => (
     withLifecycle(signal, async () => {
       if (tornDown) {
-        throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+        throw runtimeError('closed')
       }
       if (signal?.aborted) {
-        throw new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted))
+        throw runtimeError('aborted')
       }
       await reserveCapacityUnlocked(1)
       const reservation: RuntimeReservation = { occupied: false, closed: false }
@@ -539,10 +533,7 @@ export function createPluginRuntimeController(options: {
     try {
       const authorizationSignal = signal ?? controllerAbort.signal
       if (await resolver.generation(authorizationSignal) !== bundle.catalogGeneration) {
-        throw new PluginRuntimeError(hostFailure(
-          'stale-generation',
-          FAILURE_MESSAGES['stale-generation'],
-        ))
+        throw runtimeError('stale-generation')
       }
       matchBundle(request, bundle)
       const expectedLength = request.stride * request.height
@@ -571,7 +562,7 @@ export function createPluginRuntimeController(options: {
         || request.frameRateDenominator < 1
         || !Number.isSafeInteger(request.requestId)
         || request.requestId < 0) {
-        throw new PluginRuntimeError(hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']))
+        throw runtimeError('invalid-input')
       }
       // The planner owns canonicalization. Runtime performs this one exact UTF-8 encoding only.
       const parameterBytes = canonicalBytes(request.canonicalParameterJson)
@@ -591,13 +582,10 @@ export function createPluginRuntimeController(options: {
         parameterBytes.fill(0)
       }
       if (result.rgbaBytes.byteLength !== request.rgbaBytes.byteLength) {
-        throw new PluginRuntimeError(hostFailure('invalid-output', FAILURE_MESSAGES['invalid-output']))
+        throw runtimeError('invalid-output')
       }
       if (await resolver.generation(authorizationSignal) !== bundle.catalogGeneration) {
-        throw new PluginRuntimeError(hostFailure(
-          'stale-generation',
-          FAILURE_MESSAGES['stale-generation'],
-        ))
+        throw runtimeError('stale-generation')
       }
       return Object.freeze({
         status: 'applied',
@@ -614,7 +602,7 @@ export function createPluginRuntimeController(options: {
   }
 
   const openEditorSession = (): PluginEditorSession => {
-    if (tornDown) throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+    if (tornDown) throw runtimeError('closed')
     const owner = createOwner()
     const latestByDescriptor = new Map<string, { requestId: number; abort: AbortController }>()
     const lastRequestIdByDescriptor = new Map<string, number>()
@@ -630,25 +618,25 @@ export function createPluginRuntimeController(options: {
       async apply(request, signal) {
         if (closed) return Object.freeze({
           status: 'failed',
-          failure: hostFailure('closed', FAILURE_MESSAGES.closed),
+          failure: knownFailure('closed'),
         })
         if (disabledPlugins.has(request.pluginId)) return Object.freeze({
           status: 'failed',
-          failure: hostFailure('session-disabled', FAILURE_MESSAGES['session-disabled'], false),
+          failure: knownFailure('session-disabled', false),
         })
         if (typeof request.descriptorId !== 'string'
           || request.descriptorId.length === 0
           || request.descriptorId.length > 128
           || !Number.isSafeInteger(request.requestId)
           || request.requestId < 0) {
-          const runtimeFailure = hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input'])
+          const runtimeFailure = knownFailure('invalid-input')
           recordDiagnostic(request.pluginId, 'editor', runtimeFailure, request.requestId)
           return Object.freeze({ status: 'failed', failure: runtimeFailure })
         }
         const lastRequestId = lastRequestIdByDescriptor.get(request.descriptorId)
         if (lastRequestId !== undefined && request.requestId <= lastRequestId) return Object.freeze({
           status: 'failed',
-          failure: hostFailure('stale-request', FAILURE_MESSAGES['stale-request'], false),
+          failure: knownFailure('stale-request', false),
         })
         lastRequestIdByDescriptor.set(request.descriptorId, request.requestId)
         const previous = latestByDescriptor.get(request.descriptorId)
@@ -672,10 +660,7 @@ export function createPluginRuntimeController(options: {
                   await owner.invalidate(request.pluginId, 'editor-plan-identity-changed')
                   bundle = await resolver.resolve(request.pluginId, linked.signal)
                   if ((invalidationEpochByPlugin.get(request.pluginId) ?? 0) !== invalidationEpoch) {
-                    throw new PluginRuntimeError(hostFailure(
-                      'stale-generation',
-                      FAILURE_MESSAGES['stale-generation'],
-                    ))
+                    throw runtimeError('stale-generation')
                   }
                   matchBundle(request, bundle)
                   resolvedBundles.set(request.pluginId, { bundle, invalidationEpoch })
@@ -684,10 +669,7 @@ export function createPluginRuntimeController(options: {
                 resolvedBundles.delete(request.pluginId)
                 bundle = await resolver.resolve(request.pluginId, linked.signal)
                 if ((invalidationEpochByPlugin.get(request.pluginId) ?? 0) !== invalidationEpoch) {
-                  throw new PluginRuntimeError(hostFailure(
-                    'stale-generation',
-                    FAILURE_MESSAGES['stale-generation'],
-                  ))
+                  throw runtimeError('stale-generation')
                 }
                 matchBundle(request, bundle)
                 resolvedBundles.set(request.pluginId, { bundle, invalidationEpoch })
@@ -743,7 +725,7 @@ export function createPluginRuntimeController(options: {
     request: PluginExportPreflightRequest,
     signal?: AbortSignal,
   ): Promise<PluginExportSession> => {
-    if (tornDown) throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+    if (tornDown) throw runtimeError('closed')
     const frozenBundles = new Map<string, VerifiedPluginActivationBundle>()
     const frozenIdentities = new Set<string>()
     const frozenRequirements = new Map<string, PluginExportEffectRequirement>()
@@ -755,7 +737,7 @@ export function createPluginRuntimeController(options: {
     try {
       for (const identity of request.requiredEffects) {
         if (preflightSignal.signal.aborted) {
-          throw new PluginRuntimeError(hostFailure('aborted', FAILURE_MESSAGES.aborted))
+          throw runtimeError('aborted')
         }
         if (failedPlugins.has(identity.pluginId)) continue
         const existing = frozenBundles.get(identity.pluginId)
@@ -841,14 +823,14 @@ export function createPluginRuntimeController(options: {
       async apply(applyRequest, applySignal) {
         if (closed) return Object.freeze({
           status: 'failed',
-          failure: hostFailure('closed', FAILURE_MESSAGES.closed),
+          failure: knownFailure('closed'),
         })
         const bundle = frozenBundles.get(applyRequest.pluginId)
         const identityKey = executionIdentityKey(applyRequest)
         const requirement = frozenRequirements.get(identityKey)
         if (!bundle || !frozenIdentities.has(identityKey) || !requirement) return Object.freeze({
           status: 'failed',
-          failure: hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']),
+          failure: knownFailure('stale-plan'),
         })
         if (applyRequest.width !== requirement.maximumSurfaceWidth
           || applyRequest.height !== requirement.maximumSurfaceHeight
@@ -856,7 +838,7 @@ export function createPluginRuntimeController(options: {
           || applyRequest.rgbaBytes.byteLength !== requirement.maximumSurfaceByteLength) {
           return Object.freeze({
             status: 'failed',
-            failure: hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']),
+            failure: knownFailure('invalid-input'),
           })
         }
         const linked = linkedAbortSignal([applySignal, controllerAbort.signal])
@@ -891,27 +873,27 @@ export function createPluginRuntimeController(options: {
   ): { readonly json: string; readonly value: Record<string, boolean | number | string> } => {
     if (bytes.byteLength < 2 || bytes.byteLength > 65_536
       || (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf)) {
-      throw new PluginRuntimeError(hostFailure('invalid-output', FAILURE_MESSAGES['invalid-output']))
+      throw runtimeError('invalid-output')
     }
     let source: string
     try {
       source = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     } catch {
-      throw new PluginRuntimeError(hostFailure('invalid-output', FAILURE_MESSAGES['invalid-output']))
+      throw runtimeError('invalid-output')
     }
     let parsed: unknown
     try {
       parsed = JSON.parse(source)
     } catch {
-      throw new PluginRuntimeError(hostFailure('invalid-output', FAILURE_MESSAGES['invalid-output']))
+      throw runtimeError('invalid-output')
     }
     if (!isPrimitiveRecord(parsed)) {
-      throw new PluginRuntimeError(hostFailure('invalid-output', FAILURE_MESSAGES['invalid-output']))
+      throw runtimeError('invalid-output')
     }
     const keys = Object.keys(parsed).sort()
     const canonical = `{${keys.map((key) => `${JSON.stringify(key)}:${JSON.stringify(parsed[key])}`).join(',')}}`
     if (canonical !== source) {
-      throw new PluginRuntimeError(hostFailure('invalid-output', FAILURE_MESSAGES['invalid-output']))
+      throw runtimeError('invalid-output')
     }
     return Object.freeze({ json: source, value: Object.freeze({ ...parsed }) })
   }
@@ -962,13 +944,13 @@ export function createPluginRuntimeController(options: {
     for (const step of contribution.migrations) {
       if (step.fromVersion < version) continue
       if (step.fromVersion !== version || step.toVersion <= step.fromVersion) {
-        throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
+        throw runtimeError('stale-plan')
       }
       steps.push(step)
       version = step.toVersion
     }
     if (version !== contribution.descriptorVersion) {
-      throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
+      throw runtimeError('stale-plan')
     }
     return Object.freeze([...steps])
   }
@@ -983,11 +965,11 @@ export function createPluginRuntimeController(options: {
     request: PluginDescriptorMigrationActionPreflightRequest,
     signal?: AbortSignal,
   ): Promise<PluginDescriptorMigrationActionSession> => {
-    if (tornDown) throw new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed))
+    if (tornDown) throw runtimeError('closed')
     if (!Array.isArray(request.targets)
       || request.targets.length === 0
       || request.targets.length > 1_024) {
-      throw new PluginRuntimeError(hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']))
+      throw runtimeError('invalid-input')
     }
     const descriptorIds = new Set<string>()
     const locallyValidated: Array<{
@@ -1002,7 +984,7 @@ export function createPluginRuntimeController(options: {
         || target.hasAnimatedParameters
         || !Number.isSafeInteger(target.fromDescriptorVersion)
         || target.fromDescriptorVersion < 1) {
-        throw new PluginRuntimeError(hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']))
+        throw runtimeError('invalid-input')
       }
       descriptorIds.add(target.descriptorId)
       const inputBytes = canonicalBytes(target.canonicalParameterJson)
@@ -1053,7 +1035,7 @@ export function createPluginRuntimeController(options: {
     }
 
     if (!reservation) {
-      throw new PluginRuntimeError(hostFailure('busy', FAILURE_MESSAGES.busy, false))
+      throw runtimeError('busy', false)
     }
     const actionReservation = reservation
     let closed = false
@@ -1111,7 +1093,7 @@ export function createPluginRuntimeController(options: {
           }
           const contribution = matchBundle(target, bundle)
           if (exactBundleIdentityKey(bundle) !== preparedTarget.bundleIdentityKey) {
-            throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
+            throw runtimeError('stale-plan')
           }
           const steps = completeMigrationChain(target, contribution)
           let currentBytes = canonicalBytes(preparedTarget.initial.json)
@@ -1140,7 +1122,7 @@ export function createPluginRuntimeController(options: {
             }
             if (currentVersion !== contribution.descriptorVersion
               || !matchesCurrentSchema(finalRecord.value, contribution)) {
-              throw new PluginRuntimeError(hostFailure('invalid-output', FAILURE_MESSAGES['invalid-output']))
+              throw runtimeError('invalid-output')
             }
             return Object.freeze({
               status: 'migrated' as const,
@@ -1178,14 +1160,14 @@ export function createPluginRuntimeController(options: {
       applyTarget(applyRequest, applySignal) {
         if (closed || running) return Promise.resolve(Object.freeze({
           status: 'failed',
-          failure: hostFailure('closed', FAILURE_MESSAGES.closed),
+          failure: knownFailure('closed'),
         }))
         if (!Number.isSafeInteger(applyRequest.targetIndex)
           || applyRequest.targetIndex !== nextTargetIndex
           || !Number.isSafeInteger(applyRequest.requestId)
           || applyRequest.requestId < 0
           || applyRequest.targetIndex >= prepared.length) {
-          const runtimeFailure = hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input'])
+          const runtimeFailure = knownFailure('invalid-input')
           const pluginId = prepared[nextTargetIndex]?.request.pluginId ?? prepared[0]!.request.pluginId
           recordDiagnostic(pluginId, 'migration', runtimeFailure, applyRequest.requestId)
           return closeAction(runtimeFailure.code).catch(() => undefined).then(() => Object.freeze({
@@ -1280,7 +1262,7 @@ export function createPluginRuntimeController(options: {
       recordDiagnostic(
         pluginId,
         'lifecycle',
-        hostFailure('stale-generation', FAILURE_MESSAGES['stale-generation']),
+        knownFailure('stale-generation'),
       )
     },
     teardown(reason) {
@@ -1291,7 +1273,7 @@ export function createPluginRuntimeController(options: {
         const sandboxTeardown = Promise.resolve().then(() => sandboxController.teardown(reason))
         for (const call of scheduledCalls.splice(0)) {
           call.signal?.removeEventListener('abort', call.onAbort!)
-          call.reject(new PluginRuntimeError(hostFailure('closed', FAILURE_MESSAGES.closed)))
+          call.reject(runtimeError('closed'))
         }
         emitLifecycle()
         await Promise.allSettled([...owners].map((owner) => owner.close(reason)))

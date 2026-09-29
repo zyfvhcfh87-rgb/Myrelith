@@ -63,8 +63,12 @@ import {
   createPluginDocumentGenerationController,
   type PluginDocumentGenerationController,
 } from './pluginDocumentGeneration'
+import {
+  boundedDetail,
+  returnOrCloseSession,
+  throwCleanupFailures,
+} from './pluginControllerShared'
 
-const MAX_PUBLIC_DETAIL_CHARACTERS = 512
 const FAILURE_POLICY = 'Preview bypasses a failed effect with a warning. Export stops unless you review a one-time bypass.'
 
 export type PluginAppControllerErrorCode =
@@ -331,12 +335,6 @@ interface AppOwnedOperation {
   readonly epoch: number
   readonly controller: AbortController
   readonly promise: Promise<unknown>
-}
-
-function boundedDetail(value: string): string {
-  return value.length <= MAX_PUBLIC_DETAIL_CHARACTERS
-    ? value
-    : `${value.slice(0, MAX_PUBLIC_DETAIL_CHARACTERS - 1)}\u2026`
 }
 
 function isExpectedAppCloseRejection(cause: unknown): boolean {
@@ -795,10 +793,7 @@ export function createPluginAppControllerOwner(
         cleanupFailures.push(cause)
       }
     }
-    if (cleanupFailures.length === 1) throw cleanupFailures[0]
-    if (cleanupFailures.length > 1) {
-      throw new AggregateError(cleanupFailures, 'Plugin inspection cleanup failed')
-    }
+    throwCleanupFailures(cleanupFailures, 'Plugin inspection cleanup failed')
   }
 
   const startExclusiveOperation = async <T>(options: {
@@ -889,7 +884,7 @@ export function createPluginAppControllerOwner(
         assertOpen()
         const expectedMutationEpoch = mutationEpoch
         const session = await composition.preflightExport(request, ownedSignal)
-        try {
+        return returnOrCloseSession(session, () => {
           assertOpen()
           if (expectedMutationEpoch !== mutationEpoch || ownedSignal.aborted) {
             throw new PluginAppControllerError(
@@ -897,18 +892,7 @@ export function createPluginAppControllerOwner(
               'Plugin management changed during export preflight',
             )
           }
-          return session
-        } catch (cause) {
-          try {
-            await session.close('stale-plugin-app')
-          } catch (cleanupCause) {
-            throw new AggregateError(
-              [cause, cleanupCause],
-              'Plugin export preflight and app cleanup both failed',
-            )
-          }
-          throw cause
-        }
+        }, 'stale-plugin-app', 'Plugin export preflight and app cleanup both failed')
       })
     },
   })
@@ -922,7 +906,7 @@ export function createPluginAppControllerOwner(
       assertOpen()
       const expectedMutationEpoch = mutationEpoch
       const session = await composition.preflightDescriptorMigrationAction(request, ownedSignal)
-      try {
+      return returnOrCloseSession(session, () => {
         assertOpen()
         if (expectedMutationEpoch !== mutationEpoch || ownedSignal.aborted) {
           throw new PluginAppControllerError(
@@ -930,18 +914,7 @@ export function createPluginAppControllerOwner(
             'Plugin management changed during descriptor migration preflight',
           )
         }
-        return session
-      } catch (cause) {
-        try {
-          await session.close('stale-plugin-app')
-        } catch (cleanupCause) {
-          throw new AggregateError(
-            [cause, cleanupCause],
-            'Plugin migration preflight and app cleanup both failed',
-          )
-        }
-        throw cause
-      }
+      }, 'stale-plugin-app', 'Plugin migration preflight and app cleanup both failed')
     },
   )
 
@@ -1029,10 +1002,7 @@ export function createPluginAppControllerOwner(
       } catch (cause) {
         cleanupFailures.push(cause)
       }
-      if (cleanupFailures.length === 1) throw cleanupFailures[0]
-      if (cleanupFailures.length > 1) {
-        throw new AggregateError(cleanupFailures, 'Plugin app cleanup failed')
-      }
+      throwCleanupFailures(cleanupFailures, 'Plugin app cleanup failed')
     })
     return terminalClosePromise
   }
@@ -1341,10 +1311,7 @@ export function createPluginAppControllerOwner(
         }
         try {
           const changed = await safeMode
-          if (cleanupFailures.length === 1) throw cleanupFailures[0]
-          if (cleanupFailures.length > 1) {
-            throw new AggregateError(cleanupFailures, 'Safe mode cleanup failed')
-          }
+          throwCleanupFailures(cleanupFailures, 'Safe mode cleanup failed')
           return changed
         } catch (cause) {
           if (cleanupFailures.length > 0 && !cleanupFailures.includes(cause)) {
@@ -1462,15 +1429,9 @@ export function createPluginAppAcceptanceSession(
 
   const close = (reason: string): Promise<void> => {
     if (terminalClosePromise) return terminalClosePromise
-    const completion = owner.close(reason).then(
-      () => {
-        if (acceptanceLease === lease) acceptanceLease = null
-      },
-      (cause: unknown) => {
-        if (acceptanceLease === lease) acceptanceLease = null
-        throw cause
-      },
-    )
+    const completion = owner.close(reason).finally(() => {
+      if (acceptanceLease === lease) acceptanceLease = null
+    })
     terminalClosePromise = completion
     return completion
   }
@@ -1506,15 +1467,9 @@ export function disposePluginAppController(reason: string): Promise<void> {
   const retiring = productionOwner
   productionOwner = null
   if (!retiring) return Promise.resolve()
-  const completion = retiring.close(reason).then(
-    () => {
-      if (productionClosePromise === completion) productionClosePromise = null
-    },
-    (cause: unknown) => {
-      if (productionClosePromise === completion) productionClosePromise = null
-      throw cause
-    },
-  )
+  const completion: Promise<void> = retiring.close(reason).finally(() => {
+    if (productionClosePromise === completion) productionClosePromise = null
+  })
   productionClosePromise = completion
   return completion
 }

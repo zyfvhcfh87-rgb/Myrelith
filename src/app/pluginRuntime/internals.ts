@@ -7,7 +7,7 @@ import { type PluginRawModuleCacheKey } from '../pluginRawModuleCache';
 import type { PluginRuntimeFailure, PluginRuntimeFailureCode } from '../../workers/plugin-runtime-protocol';
 import { PLUGIN_IO_PAGE_BYTES, PLUGIN_PIXEL_POINTER } from '../../workers/plugin-runtime-protocol';
 import { PLUGIN_WASM_OPCODE_TABLE_DIGESTS } from '../../workers/plugin-wasm/policyTables';
-import type { PluginWasmProfileSelection } from '../../domain/pluginWasmPolicy';
+import { selectPluginWasmProfile } from '../../domain/pluginWasmPolicy';
 import { PluginRuntimeError, type PluginExecutionIdentity, type PluginExportEffectRequirement, type PluginExportPreflightFailure } from './contracts';
 
 export const MAX_RESIDENT_RUNTIMES = 8
@@ -87,6 +87,22 @@ export const FAILURE_MESSAGES: Readonly<Record<PluginRuntimeFailureCode, string>
   timeout: 'The plugin operation exceeded its watchdog deadline.',
 })
 
+/** Host failure carrying the canonical public message for its code. */
+export function knownFailure(
+  code: PluginRuntimeFailureCode,
+  terminal = true,
+): PluginRuntimeFailure {
+  return hostFailure(code, FAILURE_MESSAGES[code], terminal)
+}
+
+/** Throwable form of knownFailure. */
+export function runtimeError(
+  code: PluginRuntimeFailureCode,
+  terminal = true,
+): PluginRuntimeError {
+  return new PluginRuntimeError(knownFailure(code, terminal))
+}
+
 export function publicFailure(value: unknown): PluginRuntimeFailure {
   if (value instanceof PluginRuntimeError) return value.failure
   if (value instanceof PluginSandboxError) {
@@ -97,7 +113,7 @@ export function publicFailure(value: unknown): PluginRuntimeFailure {
       value.failure.pluginCode,
     )
   }
-  return hostFailure('crashed', FAILURE_MESSAGES.crashed)
+  return knownFailure('crashed')
 }
 
 export const STALE_RESOLUTION_CODES = new Set([
@@ -115,26 +131,17 @@ export function resolutionFailure(value: unknown): PluginRuntimeFailure {
     return publicFailure(value)
   }
   if (value instanceof DOMException && value.name === 'AbortError') {
-    return hostFailure('aborted', FAILURE_MESSAGES.aborted)
+    return knownFailure('aborted')
   }
   if (typeof value === 'object' && value !== null && 'code' in value) {
     const code = (value as { readonly code?: unknown }).code
-    if (code === 'aborted') return hostFailure('aborted', FAILURE_MESSAGES.aborted)
+    if (code === 'aborted') return knownFailure('aborted')
     if (typeof code === 'string' && STALE_RESOLUTION_CODES.has(code)) {
-      return hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan'])
+      return knownFailure('stale-plan')
     }
-    return hostFailure('activation-failed', FAILURE_MESSAGES['activation-failed'])
+    return knownFailure('activation-failed')
   }
-  return hostFailure('activation-failed', FAILURE_MESSAGES['activation-failed'])
-}
-
-export function selectedPolicy(bundle: VerifiedPluginActivationBundle): PluginWasmProfileSelection {
-  return Object.freeze({
-    binaryPolicyVersion: 1,
-    profileId: bundle.contributions.some((contribution) => contribution.migrations.length > 0)
-      ? 'myrelith-wasm-migration-integer-v1'
-      : 'myrelith-wasm-render-general-v1',
-  })
+  return knownFailure('activation-failed')
 }
 
 export function contributionIdentityKey(bundle: VerifiedPluginActivationBundle): string {
@@ -153,11 +160,11 @@ export function contributionIdentityKey(bundle: VerifiedPluginActivationBundle):
 }
 
 export function cacheKey(bundle: VerifiedPluginActivationBundle): PluginRawModuleCacheKey {
-  const policy = selectedPolicy(bundle)
+  const policy = selectPluginWasmProfile(bundle)
   const permission = bundle.profile.permissions.find(
     (candidate) => candidate.id === 'myrelith.effect.video-frame.rgba8',
   )
-  if (!permission) throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
+  if (!permission) throw runtimeError('stale-plan')
   return {
     pluginId: bundle.pluginId,
     pluginVersion: bundle.version,
@@ -192,7 +199,7 @@ export function matchBundle(
     || contribution.contributionVersion !== identity.contributionVersion
     || contribution.descriptorVersion !== identity.descriptorVersion
     || contribution.entrypoint !== identity.entrypoint) {
-    throw new PluginRuntimeError(hostFailure('stale-plan', FAILURE_MESSAGES['stale-plan']))
+    throw runtimeError('stale-plan')
   }
   return contribution
 }
@@ -232,40 +239,19 @@ export function assertExportSurfaceCapacity(
     || !Number.isSafeInteger(pixelCapacity)
     || pixelCapacity < 0
     || expectedLength > pixelCapacity) {
-    throw new PluginRuntimeError(hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']))
+    throw runtimeError('invalid-input')
   }
 }
 
 export function canonicalBytes(canonicalParameterJson: string): Uint8Array {
   if (typeof canonicalParameterJson !== 'string') {
-    throw new PluginRuntimeError(hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']))
+    throw runtimeError('invalid-input')
   }
   const bytes = new TextEncoder().encode(canonicalParameterJson)
   if (bytes.byteLength < 2
     || bytes.byteLength > 65_536
     || (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf)) {
-    throw new PluginRuntimeError(hostFailure('invalid-input', FAILURE_MESSAGES['invalid-input']))
+    throw runtimeError('invalid-input')
   }
   return bytes
-}
-
-export function linkedAbortSignal(
-  signals: readonly (AbortSignal | undefined)[],
-): { readonly signal: AbortSignal; dispose(): void } {
-  const controller = new AbortController()
-  const active = signals.filter((signal): signal is AbortSignal => signal !== undefined)
-  const onAbort = (): void => controller.abort()
-  for (const signal of active) {
-    if (signal.aborted) {
-      controller.abort()
-      break
-    }
-    signal.addEventListener('abort', onAbort, { once: true })
-  }
-  return {
-    signal: controller.signal,
-    dispose() {
-      for (const signal of active) signal.removeEventListener('abort', onAbort)
-    },
-  }
 }

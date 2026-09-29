@@ -73,10 +73,6 @@ export interface PluginTrustBinding {
   readonly signerFingerprint: Sha256Identity
 }
 
-export interface PluginPackageBinding extends PluginTrustBinding {
-  readonly packageDigest: Sha256Identity
-}
-
 export interface PluginTrustPolicy {
   readonly builtInTrustedBindings: readonly PluginTrustBinding[]
   readonly revokedPackageDigests: readonly Sha256Identity[]

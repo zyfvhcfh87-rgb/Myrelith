@@ -45,8 +45,13 @@ import {
   createPluginStartupController,
   type PluginStartupSnapshot,
 } from './pluginStartupController'
+import {
+  boundedDetail,
+  freezePluginParameter,
+  returnOrCloseSession,
+  throwCleanupFailures,
+} from './pluginControllerShared'
 
-const MAX_ACTION_DETAIL_CHARACTERS = 512
 const COHERENT_REFRESH_ATTEMPTS = 3
 const PLUGIN_ID = /^(?:[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/u
 
@@ -240,12 +245,6 @@ interface CoherentManagementProjection {
   readonly contributionSnapshot: PluginVideoEffectContributionSnapshot
 }
 
-function boundedDetail(value: string): string {
-  return value.length <= MAX_ACTION_DETAIL_CHARACTERS
-    ? value
-    : `${value.slice(0, MAX_ACTION_DETAIL_CHARACTERS - 1)}\u2026`
-}
-
 function validatedPluginId(value: string): string {
   if (
     typeof value !== 'string'
@@ -376,22 +375,10 @@ function freezeDeclarationEntry(
     contributionVersion: source.contributionVersion,
     descriptorVersion: source.descriptorVersion,
     entrypoint: source.entrypoint,
-    parameters: Object.freeze(source.parameters.map(freezeParameter)),
+    parameters: Object.freeze(source.parameters.map(freezePluginParameter)),
     availability: source.availability,
     detail: boundedDetail(source.detail),
   })
-}
-
-function freezeParameter(
-  parameter: PluginDeclarationCatalogEntry['parameters'][number],
-): PluginDeclarationCatalogEntry['parameters'][number] {
-  if (parameter.kind === 'enum') {
-    return Object.freeze({
-      ...parameter,
-      options: Object.freeze(parameter.options.map((option) => Object.freeze({ ...option }))),
-    })
-  }
-  return Object.freeze({ ...parameter })
 }
 
 function freezeDeclarationCatalog(
@@ -603,6 +590,21 @@ export function createPluginCompositionController(
     const creationLifecycleToken = lifecycle.captureToken()
     const expectedLifecycle = lifecycleEpoch
     const expectedRuntime = runtimeEpoch
+    // Checked synchronously before each ownership step, so nothing can close
+    // or supersede composition between the check and that step.
+    const candidateIsCurrent = (): boolean => !closed
+      && !runtimeBlocked
+      && startup.getSnapshot().mode === 'normal'
+      && expectedLifecycle === lifecycleEpoch
+      && expectedRuntime === runtimeEpoch
+    const rejectStaleCandidate = async (
+      candidate: PluginRuntimeController,
+    ): Promise<never> => {
+      await disposeRuntimeCandidate(candidate, 'stale-plugin-composition')
+      if (runtimeBlocked) throw runtimeBlockedError()
+      if (closed || expectedLifecycle !== lifecycleEpoch) throw closedError()
+      throw staleRuntimeError()
+    }
     const candidatePromise = (async () => {
       const management = await ensureManagement()
       assertRuntimeAllowed()
@@ -612,16 +614,7 @@ export function createPluginCompositionController(
         management.activationBundles,
         dependencies.lifecycleObserver,
       )
-      if (closed
-        || runtimeBlocked
-        || startup.getSnapshot().mode !== 'normal'
-        || expectedLifecycle !== lifecycleEpoch
-        || expectedRuntime !== runtimeEpoch) {
-        await disposeRuntimeCandidate(candidate, 'stale-plugin-composition')
-        if (runtimeBlocked) throw runtimeBlockedError()
-        if (closed || expectedLifecycle !== lifecycleEpoch) throw closedError()
-        throw staleRuntimeError()
-      }
+      if (!candidateIsCurrent()) return rejectStaleCandidate(candidate)
       let registered: boolean
       try {
         registered = await lifecycle.registerDisposer(
@@ -639,16 +632,7 @@ export function createPluginCompositionController(
         if (runtimeBlocked) throw runtimeBlockedError()
         throw staleRuntimeError()
       }
-      if (closed
-        || runtimeBlocked
-        || startup.getSnapshot().mode !== 'normal'
-        || expectedLifecycle !== lifecycleEpoch
-        || expectedRuntime !== runtimeEpoch) {
-        await disposeRuntimeCandidate(candidate, 'stale-plugin-composition')
-        if (runtimeBlocked) throw runtimeBlockedError()
-        if (closed || expectedLifecycle !== lifecycleEpoch) throw closedError()
-        throw staleRuntimeError()
-      }
+      if (!candidateIsCurrent()) return rejectStaleCandidate(candidate)
       runtimeController = candidate
       return candidate
     })()
@@ -826,8 +810,7 @@ export function createPluginCompositionController(
           runtimeBlocked = true
           startup.enterSafeMode()
         }
-        if (cleanupFailures.length === 1) throw cleanupFailures[0]
-        throw new AggregateError(cleanupFailures, 'Plugin runtime cleanup failed')
+        throwCleanupFailures(cleanupFailures, 'Plugin runtime cleanup failed')
       }
     })().finally(() => {
       if (runtimeDisposalPromise === disposal) runtimeDisposalPromise = null
@@ -850,10 +833,7 @@ export function createPluginCompositionController(
       }
     }
     inspection = null
-    if (cleanupFailures.length === 1) throw cleanupFailures[0]
-    if (cleanupFailures.length > 1) {
-      throw new AggregateError(cleanupFailures, 'Plugin inspection cleanup failed')
-    }
+    throwCleanupFailures(cleanupFailures, 'Plugin inspection cleanup failed')
   }
 
   const invalidateLoadedRuntime = async (pluginId: string, reason: string): Promise<void> => {
@@ -1154,21 +1134,10 @@ export function createPluginCompositionController(
       assertRuntimeAllowed()
       if (expectedRuntimeEpoch !== runtimeEpoch) throw staleRuntimeError()
       const session = await runtime.preflightExport(request, signal)
-      try {
+      return returnOrCloseSession(session, () => {
         assertRuntimeAllowed()
         if (expectedRuntimeEpoch !== runtimeEpoch) throw staleRuntimeError()
-        return session
-      } catch (cause) {
-        try {
-          await session.close('stale-plugin-composition')
-        } catch (cleanupCause) {
-          throw new AggregateError(
-            [cause, cleanupCause],
-            'Plugin export preflight and cleanup both failed',
-          )
-        }
-        throw cause
-      }
+      }, 'stale-plugin-composition', 'Plugin export preflight and cleanup both failed')
     },
     async preflightDescriptorMigrationAction(request, signal) {
       const expectedRuntimeEpoch = runtimeEpoch
@@ -1176,21 +1145,10 @@ export function createPluginCompositionController(
       assertRuntimeAllowed()
       if (expectedRuntimeEpoch !== runtimeEpoch) throw staleRuntimeError()
       const actionSession = await runtime.preflightDescriptorMigrationAction(request, signal)
-      try {
+      return returnOrCloseSession(actionSession, () => {
         assertRuntimeAllowed()
         if (expectedRuntimeEpoch !== runtimeEpoch) throw staleRuntimeError()
-        return actionSession
-      } catch (cause) {
-        try {
-          await actionSession.close('stale-plugin-composition')
-        } catch (cleanupCause) {
-          throw new AggregateError(
-            [cause, cleanupCause],
-            'Plugin migration preflight and cleanup both failed',
-          )
-        }
-        throw cause
-      }
+      }, 'stale-plugin-composition', 'Plugin migration preflight and cleanup both failed')
     },
     close(reason) {
       if (closed) return terminalClosePromise ?? runtimeDisposalPromise ?? Promise.resolve()
@@ -1209,10 +1167,7 @@ export function createPluginCompositionController(
         const cleanupFailures: unknown[] = []
         if (runtimeResult.status === 'rejected') cleanupFailures.push(runtimeResult.reason)
         if (inspectionResult.status === 'rejected') cleanupFailures.push(inspectionResult.reason)
-        if (cleanupFailures.length === 1) throw cleanupFailures[0]
-        if (cleanupFailures.length > 1) {
-          throw new AggregateError(cleanupFailures, 'Plugin composition cleanup failed')
-        }
+        throwCleanupFailures(cleanupFailures, 'Plugin composition cleanup failed')
       })()
       return terminalClosePromise
     },

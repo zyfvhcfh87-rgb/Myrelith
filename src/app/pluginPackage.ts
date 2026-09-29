@@ -5,6 +5,7 @@ import {
   type PluginCompatibilityResult,
   type PluginManifestV1,
 } from '../domain/pluginManifest'
+import { deepFreeze } from './pluginControllerShared'
 
 export const PLUGIN_PACKAGE_LIMITS = Object.freeze({
   maxArchiveBytes: 32 * 1024 * 1024,
@@ -646,12 +647,6 @@ function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
     offset += chunk.byteLength
   }
   return output
-}
-
-function deepFreeze<T>(value: T): T {
-  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value
-  for (const nested of Object.values(value)) deepFreeze(nested)
-  return Object.freeze(value)
 }
 
 function bigEndianU32(value: number): Uint8Array {
