@@ -19,6 +19,7 @@ export interface ProjectControllerDeps {
   ): Promise<MediaProbeResult>
   disposeExport(): Promise<void>
   disposeTransport(): Promise<void>
+  disposeVoiceoverCapture?(): Promise<void>
   disposePreview(): Promise<void>
   disposePlugins(): Promise<void>
   disposeMediaVisuals(): void

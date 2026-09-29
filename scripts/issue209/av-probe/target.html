@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Capture Target</title>
+<style>html,body{margin:0;height:100%;background:#000}</style>
+<script>
+// Every second: the page turns white and a 1 kHz beep starts in the same animation frame.
+const context = new AudioContext()
+let flashes = 0
+function flash() {
+  requestAnimationFrame(() => {
+    document.body.style.background = '#fff'
+    const osc = context.createOscillator(); const gain = context.createGain()
+    osc.frequency.value = 1000; gain.gain.value = 0.5
+    osc.connect(gain).connect(context.destination)
+    osc.start(); osc.stop(context.currentTime + 0.08)
+    flashes++
+    setTimeout(() => { document.body.style.background = '#000' }, 120)
+  })
+}
+// Starts only once capture is running; the capturer suppresses local playback.
+window.startFlashing = () => { void context.resume(); setInterval(flash, 1000) }
+window.__flashes = () => flashes
+</script>

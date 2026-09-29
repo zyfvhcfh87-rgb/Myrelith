@@ -14,6 +14,8 @@ import { disposeLoadedPlugins } from '../pluginLifecycle';
 import { pickLocalProjectFile, requestLocalProjectPermission } from '../localProjectStorage';
 import { getRecentProjectRecord, getRecoveryJournalRecord, rememberRecentProjectRecord } from '../projectLibraryController';
 import { createLocalProjectBindingId } from '../localProjectProvenance';
+import { teardownVoiceoverForProjectChange } from '../voiceoverCaptureOwner';
+import { teardownAvCaptureForProjectChange } from '../avCaptureOwner';
 import type { ProjectControllerDeps } from './contracts';
 
 export const projectControllerRealDeps: ProjectControllerDeps = {
@@ -24,6 +26,13 @@ export const projectControllerRealDeps: ProjectControllerDeps = {
   readText: (file) => file.text(),
   inspectMedia: inspectMediaFileCompatibility,
   disposeExport: disposeLoadedExport,
+  // Every local capture (voiceover, camera, screen) drains before teardown;
+  // both owners are always asked, and the first failure blocks the exit.
+  disposeVoiceoverCapture: async () => {
+    const results = await Promise.allSettled([teardownVoiceoverForProjectChange(), teardownAvCaptureForProjectChange()])
+    const failed = results.find((result) => result.status === 'rejected')
+    if (failed) throw failed.reason
+  },
   disposeTransport: async () => {
     await disposeSourcePlayback()
     await disposeTransport()

@@ -82,6 +82,8 @@ export interface MediaImportDeps {
   ): Promise<MediaProbeResult>
   getDocument(): TimelineDoc
   getProjectId(): string
+  /** Detect reopening/replacing a project that reuses the same portable id. */
+  getProjectGeneration?(): number
   getSequences(): readonly TimelineDoc[]
   replaceProjectRate(rate: FrameRate): void
   hasAsset(assetId: string): boolean
@@ -110,6 +112,7 @@ const realDeps: MediaImportDeps = {
   inspect: inspectMediaFileCompatibility,
   getDocument: () => useDocumentStore.getState().doc,
   getProjectId: () => useDocumentStore.getState().project.id,
+  getProjectGeneration: () => useDocumentStore.getState().projectGeneration,
   getSequences: () => useDocumentStore.getState().project.sequences,
   replaceProjectRate: (rate) => {
     const state = useDocumentStore.getState()
@@ -300,6 +303,14 @@ async function importSelectedMedia(
   activeImport = operation
   const startingDocument = deps.getDocument()
   const startingProjectId = deps.getProjectId()
+  const startingProjectGeneration = deps.getProjectGeneration?.()
+  const projectIsStillOpen = (): boolean => (
+    deps.getProjectId() === startingProjectId
+    && (
+      startingProjectGeneration === undefined
+      || deps.getProjectGeneration?.() === startingProjectGeneration
+    )
+  )
   let analyzed: MediaAsset | null = null
   let probeReturned = false
   let committed = false
@@ -333,7 +344,7 @@ async function importSelectedMedia(
     }
 
     const decisionDocument = deps.getDocument()
-    if (deps.getProjectId() !== startingProjectId) {
+    if (!projectIsStillOpen()) {
       throw new Error('the active project changed while the file was being analyzed')
     }
 
@@ -444,6 +455,9 @@ async function importSelectedMedia(
     )
     if (commitValidation.kind === 'stale-project-settings') {
       throw new Error('the project settings changed while the import decision was open')
+    }
+    if (!projectIsStillOpen()) {
+      throw new Error('the active project changed while the file was being analyzed')
     }
 
     if (deps.hasAsset(itemId)) {

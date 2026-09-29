@@ -324,6 +324,8 @@ export async function leaveActiveProject(
     // cross the slower export/audio teardown below.
     await deps.pauseProjectPersistence()
     if (generation !== operationGeneration) return { status: 'cancelled' }
+    await deps.disposeVoiceoverCapture?.()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
     await deps.disposeExport()
     await deps.disposeTransport()
     if (generation !== operationGeneration) return { status: 'cancelled' }
@@ -373,6 +375,8 @@ async function activateProject(
       throw new Error('The local project binding is unavailable')
     }
     await deps.pauseProjectPersistence()
+    if (generation !== operationGeneration) return { status: 'cancelled' }
+    await deps.disposeVoiceoverCapture?.()
     if (generation !== operationGeneration) return { status: 'cancelled' }
     // Export and audio are the asynchronous consumers. They must release the
     // old Blobs before mediaStore revokes their URLs.

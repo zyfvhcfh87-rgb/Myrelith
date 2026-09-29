@@ -18,11 +18,14 @@ import { useProjectSessionStore } from '../state/projectSessionStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
 import EditorCommandPalette from './EditorCommandPalette'
 import { useOptionalPluginUi } from './plugins/PluginUiHooks'
+import VoiceoverIndicator from './VoiceoverIndicator'
+import { useVoiceoverSetupStore } from '../state/voiceoverCaptureStore'
 
 const ExportDialog = lazy(() => import('./ExportDialog'))
 const CollectMediaDialog = lazy(() => import('./CollectMediaDialog'))
 const CaptionEditor = lazy(() => import('./CaptionEditor'))
 const OtioInterchangeDialog = lazy(() => import('./OtioInterchangeDialog'))
+const RecordPanel = lazy(() => import('./RecordPanel'))
 
 function saveStatus(
   phase: 'idle' | 'saving' | 'error',
@@ -68,6 +71,8 @@ export default function Toolbar() {
   const captionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const otioButtonRef = useRef<HTMLButtonElement | null>(null)
   const commandButtonRef = useRef<HTMLButtonElement | null>(null)
+  const voiceoverButtonRef = useRef<HTMLButtonElement | null>(null)
+  const voiceoverOpen = useVoiceoverSetupStore((state) => state.panelOpen)
   const commandReturnFocusRef = useRef<HTMLElement | null>(null)
   const projectName = useProjectSessionStore((state) => state.activeProjectName)
   const projectFile = useProjectSessionStore(
@@ -128,6 +133,11 @@ export default function Toolbar() {
   const closeOtio = (): void => {
     setOtioOpen(false)
     requestAnimationFrame(() => otioButtonRef.current?.focus())
+  }
+
+  const closeVoiceover = (): void => {
+    useVoiceoverSetupStore.setState({ panelOpen: false })
+    requestAnimationFrame(() => voiceoverButtonRef.current?.focus())
   }
 
   const openProjects = async (): Promise<void> => {
@@ -269,6 +279,12 @@ export default function Toolbar() {
             Plugins
           </button>
         )}
+        <VoiceoverIndicator
+          buttonRef={voiceoverButtonRef}
+          open={voiceoverOpen}
+          disabled={closing}
+          onOpen={() => useVoiceoverSetupStore.setState({ panelOpen: !voiceoverOpen })}
+        />
         <button
           ref={exportButtonRef}
           type="button"
@@ -310,6 +326,15 @@ export default function Toolbar() {
           onClose={closeCollect}
         >
           <CollectMediaDialog onClose={closeCollect} />
+        </LazySurfaceBoundary>
+      )}
+      {voiceoverOpen && !closing && (
+        <LazySurfaceBoundary
+          loadingLabel="Loading recording controls…"
+          failureTitle="Recording controls could not load"
+          onClose={closeVoiceover}
+        >
+          <RecordPanel onClose={closeVoiceover} />
         </LazySurfaceBoundary>
       )}
       {exportOpen && (

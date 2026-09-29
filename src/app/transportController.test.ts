@@ -27,8 +27,10 @@ import { useTransportStore } from '../state/transportStore'
 import { useAudioMeterStore } from '../state/audioMeterStore'
 import { mediaResourceAdmission } from './mediaResourceAdmission'
 import {
+  armVoiceoverTransport,
   configureTransport,
   disposeTransport,
+  getPlaybackClockContext,
   pause,
   pauseAndDrainPlayback,
   play,
@@ -310,6 +312,7 @@ function makeDoc(durationFrames = 120): TimelineDoc {
 function makeFakeDeps() {
   const clock = {
     currentTime: 0,
+    sampleRate: 48_000,
     resume: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
   }
@@ -478,6 +481,93 @@ describe('play / pause', () => {
 })
 
 describe('live audio integration', () => {
+  test('voiceover uses the audible playback anchor and a seek interrupts the take', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const audioSession = makeAudioSession(1)
+    fake.startAudio.mockResolvedValueOnce(audioSession)
+    const interrupted = vi.fn()
+    const clock = getPlaybackClockContext() as AudioContext
+
+    const lease = await armVoiceoverTransport({
+      context: clock, startFrame: 15, countInFrames: 0, onInterrupted: interrupted,
+    })
+
+    expect(lease.anchorSample).toBe(48_000)
+    expect(lease.countInStartSample).toBe(48_000)
+    expect(fake.startAudio.mock.calls[0][4].minimumStartLeadSeconds).toBe(0.25)
+    fake.clock.currentTime = 1.5
+    fake.pump()
+    expect(transport().playheadFrame).toBe(30)
+    transport().setPlayheadFrame(31)
+    expect(interrupted).toHaveBeenCalledExactlyOnceWith('transport-changed')
+    expect(transport().isPlaying).toBe(false)
+    await vi.waitFor(() => expect(audioSession.stop).toHaveBeenCalledOnce())
+    lease.release()
+  })
+
+  test('the play/pause toggle during a voiceover take requests a stop instead of interrupting', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    fake.startAudio.mockResolvedValueOnce(makeAudioSession(1))
+    const interrupted = vi.fn()
+    const stopRequested = vi.fn()
+    const clock = getPlaybackClockContext() as AudioContext
+    const lease = await armVoiceoverTransport({
+      context: clock, startFrame: 15, countInFrames: 0, onInterrupted: interrupted,
+      onStopRequested: stopRequested,
+    })
+    togglePlayback()
+    expect(stopRequested).toHaveBeenCalledOnce()
+    expect(interrupted).not.toHaveBeenCalled()
+    expect(transport().isPlaying).toBe(true)
+    lease.release()
+  })
+
+  test('muted voiceover playback never starts timeline audio but keeps the shared anchor', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const clock = getPlaybackClockContext() as AudioContext
+    const lease = await armVoiceoverTransport({
+      context: clock, startFrame: 15, countInFrames: 0, mutePlayback: true, onInterrupted: vi.fn(),
+    })
+    expect(fake.startAudio).not.toHaveBeenCalled()
+    expect(Number.isSafeInteger(lease.anchorSample)).toBe(true)
+    expect(lease.anchorSample).toBeGreaterThanOrEqual(12_000)
+    lease.release()
+  })
+
+  test('pre-roll for a negative latency offset extends the arming lead', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const clock = getPlaybackClockContext() as AudioContext
+    fake.startAudio.mockResolvedValueOnce(makeAudioSession(1))
+    const lease = await armVoiceoverTransport({
+      context: clock, startFrame: 15, countInFrames: 0, preRollSamples: 24_000, onInterrupted: vi.fn(),
+    })
+    expect(fake.startAudio.mock.calls[0][4].minimumStartLeadSeconds).toBe(0.75)
+    lease.release()
+    await expect(armVoiceoverTransport({
+      context: clock, startFrame: 15, countInFrames: 0, preRollSamples: -1, onInterrupted: vi.fn(),
+    })).rejects.toThrow(RangeError)
+  })
+
+  test('an edit during voiceover audio priming retires the late session', async () => {
+    useDocumentStore.getState().setDoc(makeAudibleDoc())
+    const priming = deferred<TimelineAudioPlaybackSession>()
+    const lateSession = makeAudioSession(1)
+    fake.startAudio.mockImplementationOnce(() => priming.promise)
+    const interrupted = vi.fn()
+    const clock = getPlaybackClockContext() as AudioContext
+    const pending = armVoiceoverTransport({
+      context: clock, startFrame: 15, countInFrames: 0, onInterrupted: interrupted,
+    })
+    await vi.waitFor(() => expect(fake.startAudio).toHaveBeenCalledOnce())
+
+    useDocumentStore.getState().setDoc(makeAudibleDoc(60))
+    expect(interrupted).toHaveBeenCalledExactlyOnceWith('destination-changed')
+    priming.resolve(lateSession)
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(lateSession.stop).toHaveBeenCalledOnce()
+    expect(transport().isPlaying).toBe(false)
+  })
+
   test('refuses to resolve a video-only asset for audio playback before fetching', async () => {
     useDocumentStore.getState().setDoc(makeAudibleDoc())
     const videoOnly = {

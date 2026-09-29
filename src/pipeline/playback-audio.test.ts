@@ -393,6 +393,7 @@ function makePlaybackHarness(options: PlaybackHarnessOptions = {}): {
   deps: PlaybackAudioDeps
 } {
   const context = {
+    sampleRate: 48_000,
     createBuffer: (
       numberOfChannels: number,
       length: number,
@@ -1073,6 +1074,22 @@ describe('startTimelineAudioPlayback scheduling', () => {
     expect(scheduledMid.duration).toBeCloseTo(0.5)
     expect(scheduledMid.volume).toBe(0.25)
 
+    await session.stop()
+  })
+
+  test('reserves a sample-aligned future anchor for a voiceover count-in', async () => {
+    const doc = makeDoc([makeTrack('A1', 'audio', [
+      makeClip('voiceover-bed', 0, 20, { assetId: 'bed' }),
+    ])])
+    const h = makePlaybackHarness({ currentTime: 5.000001 })
+    h.media.enqueue('bed', makeCursor([decodedBuffer('bed-buffer', 0, 1)]).cursor)
+
+    const session = await startTimelineAudioPlayback(
+      h.context, doc, 0, h.resolveAsset, { minimumStartLeadSeconds: 0.75 }, h.deps,
+    )
+
+    expect(session.anchorTime).toBe(Math.ceil(5.750001 * 48_000) / 48_000)
+    expect(h.output.scheduled[0]?.when).toBe(session.anchorTime)
     await session.stop()
   })
 

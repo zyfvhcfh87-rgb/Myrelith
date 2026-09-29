@@ -316,6 +316,21 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
             'pipeline/motionAnalysisProtocol.ts',
           ]).has(toName)
         )
+        || (
+          fromName === 'workers/voiceover-wav.worker.ts'
+          && new Set([
+            'pipeline/voiceoverWavDraft.ts',
+            'pipeline/voiceoverWavProtocol.ts',
+          ]).has(toName)
+        )
+        || (
+          fromName === 'workers/av-capture.worker.ts'
+          && new Set([
+            'pipeline/avCaptureRecorder.ts',
+            'pipeline/avCaptureProtocol.ts',
+            'pipeline/fragmentedMp4Recovery.ts',
+          ]).has(toName)
+        )
       if (!sanctioned) {
         violations.push(`${edgeLabel(edge)} is not a sanctioned runtime cross-import`)
       }

@@ -7,7 +7,10 @@
  * entering Zustand or the serialized `.myrelith` contract.
  */
 
-import { legacyDocumentIdForBinding } from './localProjectProvenance'
+import {
+  legacyDocumentIdForBinding,
+  legacyLocalProjectBindingId,
+} from './localProjectProvenance'
 
 export type LocalMediaPermission = 'granted' | 'denied' | 'prompt'
 
@@ -122,6 +125,8 @@ export interface LocalMediaHandleTransaction {
 
 export interface LocalMediaHandleStore {
   get(key: string): Promise<unknown>
+  /** Read every key/value pair for cross-project ownership checks. */
+  entries(): Promise<readonly { key: string; value: unknown }[]>
   set(key: string, value: LocalMediaFileHandle): Promise<void>
   delete(key: string): Promise<void>
   /**
@@ -143,6 +148,14 @@ export interface LocalMediaHandleRegistry {
     handle: LocalMediaFileHandle,
   ): Promise<void>
   forget(projectBindingId: string, assetId: string): Promise<void>
+  /** Every remembered source handle, including handles from other projects. */
+  list(): Promise<readonly LocalMediaHandleReference[]>
+}
+
+export interface LocalMediaHandleReference {
+  readonly projectBindingId: string | null
+  readonly assetId: string | null
+  readonly handle: LocalMediaFileHandle
 }
 
 // Stable legacy database identity: changing it would orphan remembered grants.
@@ -206,6 +219,41 @@ export function createLocalMediaHandleRegistry(
   }
 
   return {
+    async list() {
+      const entries = await store.entries()
+      const references: LocalMediaHandleReference[] = []
+      for (const entry of entries) {
+        if (!isFileHandle(entry.value)) continue
+        let projectBindingId: string | null = null
+        let assetId: string | null = null
+        try {
+          const key = JSON.parse(entry.key) as unknown
+          if (
+            Array.isArray(key)
+            && key.length === 3
+            && key[0] === 'v2'
+            && typeof key[1] === 'string'
+            && typeof key[2] === 'string'
+          ) {
+            projectBindingId = key[1]
+            assetId = key[2]
+          } else if (
+            Array.isArray(key)
+            && key.length === 2
+            && typeof key[0] === 'string'
+            && typeof key[1] === 'string'
+          ) {
+            projectBindingId = legacyLocalProjectBindingId(key[0])
+            assetId = key[1]
+          }
+        } catch {
+          // Preserve an unrecognized handle as an unknown owner. Draft recovery
+          // fails closed if such a handle points into its shared directory.
+        }
+        references.push({ projectBindingId, assetId, handle: entry.value })
+      }
+      return references
+    },
     async load(projectBindingId, assetId) {
       const owner = ownershipKey(projectBindingId, assetId)
       const key = registryKey(projectBindingId, assetId)
@@ -258,6 +306,34 @@ class IndexedDbMediaHandleStore implements LocalMediaHandleStore {
 
   get(key: string): Promise<unknown> {
     return this.withStore('readonly', (store) => store.get(key))
+  }
+
+  async entries(): Promise<readonly { key: string; value: unknown }[]> {
+    const database = await this.open()
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, 'readonly')
+      const objectStore = transaction.objectStore(STORE_NAME)
+      const keysRequest = objectStore.getAllKeys()
+      const valuesRequest = objectStore.getAll()
+      let keys: IDBValidKey[] = []
+      let values: unknown[] = []
+      keysRequest.onsuccess = () => { keys = keysRequest.result }
+      valuesRequest.onsuccess = () => { values = valuesRequest.result }
+      keysRequest.onerror = () => reject(
+        keysRequest.error ?? new Error('Could not list remembered media'),
+      )
+      valuesRequest.onerror = () => reject(
+        valuesRequest.error ?? new Error('Could not list remembered media'),
+      )
+      transaction.oncomplete = () => resolve(keys.flatMap((key, index) => (
+        typeof key === 'string' && index < values.length
+          ? [{ key, value: values[index] }]
+          : []
+      )))
+      transaction.onabort = () => reject(
+        transaction.error ?? new Error('Remembered media listing was aborted'),
+      )
+    })
   }
 
   async set(key: string, value: LocalMediaFileHandle): Promise<void> {

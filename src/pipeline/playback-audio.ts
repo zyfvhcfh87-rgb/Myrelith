@@ -386,6 +386,8 @@ export type TimelineAudioPlaybackWarning =
 
 export interface StartTimelineAudioOptions {
   signal?: AbortSignal
+  /** Reserve a future count-in window before playback begins. */
+  minimumStartLeadSeconds?: number
   onWarning?: (warning: TimelineAudioPlaybackWarning) => void
   sourceBoundsCatalog?: SourceBoundsCatalog
   /** Pre-expanded project graph; absent preserves the one-document seam. */
@@ -2265,7 +2267,14 @@ export async function startTimelineAudioPlayback(
     const initialEvents = await prepareInterval(fromTime, initialEnd)
     if (options.signal?.aborted) throw abortedError()
 
-    anchorTime = output.currentTime() + deps.startLeadSeconds
+    const minimumLead = options.minimumStartLeadSeconds ?? 0
+    if (!Number.isFinite(minimumLead) || minimumLead < 0) {
+      throw new RangeError('Requested playback start lead must be non-negative')
+    }
+    const scheduled = output.currentTime() + Math.max(deps.startLeadSeconds, minimumLead)
+    anchorTime = options.minimumStartLeadSeconds === undefined
+      ? scheduled
+      : Math.ceil(scheduled * context.sampleRate) / context.sampleRate
     scheduleEvents(initialEvents)
     scheduledThroughTime = initialEnd
     queuePump()
