@@ -1,7 +1,7 @@
 /** Own a reviewed download until cancel, project change, or editor close. */
-import { useDocumentStore } from '../state/documentStore'
 import { CaptionEditSession } from './captionEditingController'
 import { captionFileController, type CaptionDownloadFormat, type CaptionFileController } from './captionFileController'
+import { watchProjectScope } from './captionProjectScope'
 
 export interface CaptionExportSnapshot {
   readonly revision: number
@@ -25,14 +25,7 @@ export class CaptionExportController {
   getSnapshot = (): CaptionExportSnapshot => this.snapshot
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
-    if (!this.stop) {
-      let previous = useDocumentStore.getState()
-      this.stop = useDocumentStore.subscribe(next => {
-        const changed = next.project !== previous.project || next.projectGeneration !== previous.projectGeneration || next.activeSequenceId !== previous.activeSequenceId
-        previous = next
-        if (changed) this.cancel()
-      })
-    }
+    if (!this.stop) this.stop = watchProjectScope(this.cancel)
     return () => { this.listeners.delete(listener); if (!this.listeners.size) { this.stop?.(); this.stop = null; this.cancel() } }
   }
   private publish(snapshot: CaptionExportSnapshot): void { this.snapshot = Object.freeze(snapshot); for (const listener of this.listeners) listener() }

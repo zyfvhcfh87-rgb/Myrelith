@@ -3,8 +3,8 @@ import { captionBatchSelectedIds, type CaptionBatchOperation, type CaptionBatchS
 import { findCaptionTrack } from '../domain/captions'
 import { isCaptionStyleField, type CaptionStyleDescriptor, type CaptionStyleValue } from '../domain/captionStyle'
 import type { CaptionItem } from '../domain/schema'
-import { useDocumentStore } from '../state/documentStore'
 import { CaptionEditSession, type CaptionEditReview } from './captionEditingController'
+import { watchProjectScope } from './captionProjectScope'
 import { CAPTION_STYLE_LABELS, captionStyleValueLabel } from './captionStylePresentation'
 
 export interface CaptionReviewSnapshot {
@@ -44,15 +44,7 @@ export class CaptionReviewController {
   getSnapshot = (): CaptionReviewSnapshot => this.snapshot
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
-    if (!this.unsubscribeStore) {
-      let current = useDocumentStore.getState()
-      this.unsubscribeStore = useDocumentStore.subscribe((next) => {
-        const changed = next.project !== current.project || next.projectGeneration !== current.projectGeneration
-          || next.activeSequenceId !== current.activeSequenceId
-        current = next
-        if (changed) this.cancel()
-      })
-    }
+    if (!this.unsubscribeStore) this.unsubscribeStore = watchProjectScope(this.cancel)
     return () => {
       this.listeners.delete(listener)
       if (this.listeners.size === 0) {

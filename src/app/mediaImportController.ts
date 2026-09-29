@@ -37,7 +37,7 @@ import {
   supportsLocalMediaHandles,
   type LocalMediaFileHandle,
 } from './localMediaHandles'
-import { compatibilityItemForAsset } from './mediaCompatibilityController'
+import { checkingCompatibilityItem, compatibilityItemForAsset } from './mediaCompatibilityController'
 import {
   createMediaImportPrompt,
   requiresMediaImportRateDecision,
@@ -193,23 +193,6 @@ function unexpectedCompatibility(
   }
 }
 
-function checkingItem(
-  id: string,
-  requestId: string,
-  file: File,
-): MediaCompatibilityItem {
-  return {
-    id,
-    requestId,
-    fileName: file.name,
-    declaredMimeType: file.type,
-    size: file.size,
-    lastModified: file.lastModified,
-    status: 'checking',
-    report: null,
-  }
-}
-
 function settleCancelledCompatibility(
   operation: ActiveImport,
   preserveFallback: boolean,
@@ -283,7 +266,7 @@ async function importSelectedMedia(
     }
   }
   const requestId = deps.createRequestId()
-  if (!deps.startCompatibility(checkingItem(itemId, requestId, file))) {
+  if (!deps.startCompatibility(checkingCompatibilityItem(itemId, requestId, file))) {
     return {
       status: 'failed',
       message: `Could not start a compatibility check for "${file.name}".`,
