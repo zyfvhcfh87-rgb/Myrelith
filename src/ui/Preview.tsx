@@ -1,7 +1,7 @@
 /**
  * ui/Preview.tsx — Program monitor. Phase 3.4.
  *
- * A dumb canvas: pixels are painted by the decode worker (the canvas is
+ * A dumb canvas: pixels are painted by the render worker (the canvas is
  * transferred on first mount), scrubbing is driven by app/previewController
  * reacting to transportStore. This component hands the canvas and measured
  * monitor viewport to the controller, exposes the session-only quality mode,

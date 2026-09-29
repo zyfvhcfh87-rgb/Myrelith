@@ -10,7 +10,7 @@ import { createTimelineDoc, type ProjectSettings } from '../../domain/projectSet
 import type { MediaCompatibilityItem, MediaCompatibilityReport, MediaCompatibilityStatus } from '../../domain/mediaCompatibility';
 import type { FrameRate, MediaAsset, TimelineDoc } from '../../domain/schema';
 import type { MediaCollection } from '../../domain/mediaCollections';
-import { errorMessage as messageFrom } from '../../domain/errors';
+import { errorMessage } from '../../domain/errors';
 import { useDocumentStore } from '../../state/documentStore';
 import { useMediaStore } from '../../state/mediaStore';
 import { INITIAL_ACTIVE_MEDIA_RELINK, INITIAL_PROJECT_SESSION_STATE, type MediaRelinkAmbiguitySummary, type ResumeProjectSummary, useProjectSessionStore } from '../../state/projectSessionStore';
@@ -128,7 +128,7 @@ function compatibilityFailureReport(
     durationMicroseconds: null,
     tracks: [],
     reason: 'decode-failed',
-    detail: `Could not check "${fileName}": ${messageFrom(cause)}`,
+    detail: `Could not check "${fileName}": ${errorMessage(cause)}`,
   }
 }
 
@@ -368,7 +368,7 @@ export async function leaveActiveProject(
     return { status: 'ready' }
   } catch (cause) {
     if (generation !== operationGeneration) return { status: 'cancelled' }
-    const message = `Could not return to Projects: ${messageFrom(cause)}`
+    const message = `Could not return to Projects: ${errorMessage(cause)}`
     deps.resumeProjectPersistence()
     useProjectSessionStore.setState({ phase: 'error', error: message })
     return { status: 'failed', message }
@@ -426,7 +426,7 @@ async function activateProject(
       clearActiveLocalProjectBindingId()
     }
     if (generation !== operationGeneration) return { status: 'cancelled' }
-    const message = `Could not open the project: ${messageFrom(cause)}`
+    const message = `Could not open the project: ${errorMessage(cause)}`
     deps.resumeProjectPersistence()
     useProjectSessionStore.setState({ phase: 'error', error: message })
     return { status: 'failed', message }
@@ -445,7 +445,7 @@ export async function createNewProject(
   try {
     document = createTimelineDoc(name, settings, deps.createDocumentId())
   } catch (cause) {
-    const message = `Could not create the project: ${messageFrom(cause)}`
+    const message = `Could not create the project: ${errorMessage(cause)}`
     useProjectSessionStore.setState({
       screen: 'new-project',
       phase: 'error',
@@ -660,7 +660,7 @@ async function readProjectCandidateFile(
     return await prepareProjectCandidate(serialized, source, generation, deps)
   } catch (cause) {
     if (generation !== operationGeneration) return { status: 'cancelled' }
-    return failProjectRead(`Could not read "${file.name}": ${messageFrom(cause)}`)
+    return failProjectRead(`Could not read "${file.name}": ${errorMessage(cause)}`)
   }
 }
 
@@ -693,7 +693,7 @@ export async function openCollectedProject(
       useProjectSessionStore.setState({ phase: 'idle', error: null })
       return { status: 'cancelled' }
     }
-    return failProjectRead(`Could not open the collected project: ${messageFrom(cause)}`)
+    return failProjectRead(`Could not open the collected project: ${errorMessage(cause)}`)
   }
 }
 
@@ -741,7 +741,7 @@ export async function chooseProjectFile(
       useProjectSessionStore.setState({ phase: 'idle', error: null })
       return { status: 'cancelled' }
     }
-    const message = `Could not choose a project: ${messageFrom(cause)}`
+    const message = `Could not choose a project: ${errorMessage(cause)}`
     useProjectSessionStore.setState({ phase: 'error', error: message })
     return { status: 'failed', message }
   }
@@ -772,7 +772,7 @@ async function finishRecentProjectOpen(
     }, generation, deps)
   } catch (cause) {
     if (generation !== operationGeneration) return { status: 'cancelled' }
-    return failProjectRead(`Could not open "${record.fileName}": ${messageFrom(cause)}`)
+    return failProjectRead(`Could not open "${record.fileName}": ${errorMessage(cause)}`)
   }
 }
 
@@ -832,7 +832,7 @@ export async function openRecoveryProject(
     }
   }
   if (generation !== operationGeneration) return { status: 'cancelled' }
-  return failProjectRead(`Could not open the recovery copy: ${messageFrom(lastError)}`)
+  return failProjectRead(`Could not open the recovery copy: ${errorMessage(lastError)}`)
 }
 
 function activeRelinkIsCurrent(work: ActiveMediaRelinkWork): boolean {
@@ -1326,7 +1326,7 @@ async function restoreRememberedDescriptor(
     ) forgetStaleHandle(pending, descriptor, deps)
     return {
       status: 'failed',
-      message: `Could not reopen "${descriptor.fileName}": ${messageFrom(cause)}. Reconnect it manually.`,
+      message: `Could not reopen "${descriptor.fileName}": ${errorMessage(cause)}. Reconnect it manually.`,
     }
   }
 }
@@ -1415,7 +1415,7 @@ async function restoreCollectedMedia(
       if (!pendingIsCurrent(pending, generation)) return { status: 'cancelled' }
       if (isMediaProbeCancellation(cause)) return { status: 'cancelled' }
       errors.push(
-        `Could not reopen collected "${descriptor.fileName}": ${messageFrom(cause)}.`,
+        `Could not reopen collected "${descriptor.fileName}": ${errorMessage(cause)}.`,
       )
     }
   }
@@ -1475,7 +1475,7 @@ async function restoreRememberedMedia(
       permission = await deps.queryMediaPermission(entry.handle)
     } catch (cause) {
       errors.push(
-        `Could not check access to "${entry.descriptor.fileName}": ${messageFrom(cause)}.`,
+        `Could not check access to "${entry.descriptor.fileName}": ${errorMessage(cause)}.`,
       )
       continue
     }
@@ -1645,7 +1645,7 @@ async function connectProjectMediaSelections(
           )
         }
       }
-      errors.push(messageFrom(cause))
+      errors.push(errorMessage(cause))
     }
   }
 
@@ -1699,7 +1699,7 @@ export async function chooseProjectMedia(
   } catch (cause) {
     if (!pendingIsCurrent(pending, generation)) return { status: 'cancelled' }
     if (isLocalMediaPickerCancellation(cause)) return { status: 'ready' }
-    const message = `Could not choose source media: ${messageFrom(cause)}`
+    const message = `Could not choose source media: ${errorMessage(cause)}`
     publishResumeCandidate(pending, message)
     return { status: 'failed', message }
   }
@@ -1810,7 +1810,7 @@ export async function chooseActiveAssetMedia(
   } catch (cause) {
     if (!activeMediaPickerIsCurrent(context)) return { status: 'cancelled' }
     if (isLocalMediaPickerCancellation(cause)) return { status: 'ready' }
-    const message = `Could not choose source media: ${messageFrom(cause)}`
+    const message = `Could not choose source media: ${errorMessage(cause)}`
     publishRelinkErrors([message])
     return { status: 'failed', message }
   }
@@ -1888,7 +1888,7 @@ export async function connectActiveMediaFolder(
       if (!isMediaProbeCancellation(cause)) {
         work.skippedCount++
         work.errors.push(
-          `Could not inspect "${selection.relativePath}": ${messageFrom(cause)}`,
+          `Could not inspect "${selection.relativePath}": ${errorMessage(cause)}`,
         )
       }
     }
@@ -1913,7 +1913,7 @@ export function connectActiveMediaFolderFiles(
       deps,
     )
   } catch (cause) {
-    const message = `Could not scan the media folder: ${messageFrom(cause)}`
+    const message = `Could not scan the media folder: ${errorMessage(cause)}`
     publishRelinkErrors([message])
     return Promise.resolve({ status: 'failed', message })
   }
@@ -1950,7 +1950,7 @@ export async function chooseActiveMediaFolder(
       })
       return { status: 'ready' }
     }
-    const message = `Could not scan the media folder: ${messageFrom(cause)}`
+    const message = `Could not scan the media folder: ${errorMessage(cause)}`
     publishRelinkErrors([message])
     return { status: 'failed', message }
   }
@@ -2050,7 +2050,7 @@ async function restoreRequestedMediaAndActivate(
     if (permission.status === 'rejected') {
       pending.rememberedHandles.delete(request.descriptor.id)
       errors.push(
-        `Could not request access to "${request.descriptor.fileName}": ${messageFrom(permission.reason)}.`,
+        `Could not request access to "${request.descriptor.fileName}": ${errorMessage(permission.reason)}.`,
       )
       continue
     }

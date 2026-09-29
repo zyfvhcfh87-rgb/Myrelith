@@ -4,13 +4,11 @@ import type { MediaCompatibilityItem } from './mediaCompatibility'
 import {
   advanceSourcePlayhead,
   clearSourceIn,
-  clearSourceMarks,
   jumpSourceToEnd,
   jumpSourceToIn,
   jumpSourceToOut,
   jumpSourceToStart,
   openSourceMonitor,
-  parkSourcePlayback,
   requestMonitorPlayback,
   resetSourceSession,
   scrubSourcePlayhead,
@@ -271,7 +269,6 @@ describe('source marks and playhead', () => {
       outFrameExclusive: null,
       shuttleStep: 0,
     })
-    expect(clearSourceMarks(marked).inFrame).toBeNull()
     const clearedIn = clearSourceIn(marked)
     expect(clearSourceIn(clearedIn)).toBe(clearedIn)
   })
@@ -333,7 +330,6 @@ describe('JKL shuttle', () => {
     )
     expect(reverse.playheadFrame).toBe(0)
     expect(reverse.shuttleStep).toBe(0)
-    expect(parkSourcePlayback(opened()).playheadFrame).toBe(599)
     const idle = opened()
     expect(stopSourcePlayback(idle)).toBe(idle)
   })

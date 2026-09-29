@@ -68,14 +68,6 @@ export interface PluginWorkerMigrateRequest {
   readonly canonicalInputBytes: ArrayBuffer
 }
 
-export interface PluginWorkerCloseRequest {
-  readonly protocolVersion: typeof PLUGIN_RUNTIME_PROTOCOL_VERSION
-  readonly kind: 'close'
-  readonly generation: number
-  readonly requestId: number
-  readonly reason: string
-}
-
 export interface PluginWorkerReadyResponse {
   readonly protocolVersion: typeof PLUGIN_RUNTIME_PROTOCOL_VERSION
   readonly kind: 'ready'

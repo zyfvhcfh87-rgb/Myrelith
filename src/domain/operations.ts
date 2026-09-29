@@ -45,7 +45,6 @@ export {
   removeClipKeyframe,
   removeEffectKeyframe,
   resetClipAnimationTrack,
-  resetEffectAnimationTrack,
   setClipKeyframe,
   setEffectKeyframe,
 } from './operations/animation'

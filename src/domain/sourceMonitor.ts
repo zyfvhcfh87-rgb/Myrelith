@@ -332,15 +332,6 @@ export function stopSourcePlayback(
   return withSession(session, { shuttleStep: 0 })
 }
 
-export function parkSourcePlayback(
-  session: SourceMonitorSession,
-): SourceMonitorSession {
-  return withSession(session, {
-    playheadFrame: sourceMonitorLastFrame(session),
-    shuttleStep: 0,
-  })
-}
-
 export function jumpSourceToStart(
   session: SourceMonitorSession,
 ): SourceMonitorSession {
@@ -396,12 +387,6 @@ export function clearSourceOut(
   session: SourceMonitorSession,
 ): SourceMonitorSession {
   return withSession(session, { outFrameExclusive: null })
-}
-
-export function clearSourceMarks(
-  session: SourceMonitorSession,
-): SourceMonitorSession {
-  return withSession(session, { inFrame: null, outFrameExclusive: null })
 }
 
 export function resetSourceSession(

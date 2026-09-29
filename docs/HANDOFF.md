@@ -1135,9 +1135,9 @@ surface; it is not a second zoom and never enters document history.
   `clipAnimation.ts` (Issue #43's canonical bounded track validation, immutable
   keyframe edits, and deterministic hold/linear/cubic-Bézier evaluation for the
   six supported scalar visual properties),
-  `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
-  with all ordinary and transition still samples fixed at source frame 0,
-  `resolveCrossfade` (compatibility facade over the canonical planner),
+  `selectors.ts` (`docDurationFrames`, `activeClipAt`; still samples stay at
+  source frame 0 through `sourceTimeMap.sourceFrameAtTimelineFrame`, and
+  crossfade geometry comes from `crossfadePlan.resolveCrossfadeGeometry`;
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
   derived reads, never stored), `linking.ts` (4.3.8 linked-pair wrappers around
   the base ops — same delta to every `linkGroupId` member, atomic rollback;

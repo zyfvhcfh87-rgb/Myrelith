@@ -9,7 +9,6 @@ import {
   removeAnimationTrack,
   moveEffectAnimationKeyframe,
   removeEffectAnimationKeyframe,
-  removeEffectAnimationTracks,
   upsertAnimationKeyframe,
   upsertEffectAnimationKeyframe,
 } from '../clipAnimation';
@@ -327,25 +326,4 @@ export function removeEffectKeyframe(
   return animation
     ? replaceClipAnimation(doc, target.loc, animation)
     : reject(doc, op, 'keyframe not found')
-}
-
-export function resetEffectAnimationTrack(
-  doc: TimelineDoc,
-  clipId: ClipId,
-  effectId: EffectId,
-  parameter: string,
-): TimelineDoc {
-  const op = 'resetEffectAnimationTrack'
-  const target = effectAnimationEditLocation(doc, clipId, effectId, parameter, op)
-  if (!target) return doc
-  if (!effectAnimationTrack(clipAnimation(target.loc.clip), effectId, parameter)) return doc
-  return replaceClipAnimation(
-    doc,
-    target.loc,
-    removeEffectAnimationTracks(
-      clipAnimation(target.loc.clip),
-      effectId,
-      new Set([parameter]),
-    ),
-  )
 }

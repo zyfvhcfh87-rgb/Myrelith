@@ -1210,6 +1210,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   lazy export controller. It may call a disposer only after that controller has
   registered itself; project exit must never import export code just to learn
   that no export was started.
+- `app/editorRuntimeLifecycle.ts` is the same kind of seam for the editor-only
+  runtime owners (preview, transport, source playback/preview, multicam
+  monitor, voiceover and camera/screen capture, media visuals, media import).
+  Each registers its teardown when its module evaluates; the editor chunk
+  evaluates them all before a project activates. `projectController/dependencies.ts`
+  owns the teardown order and skips owners that never loaded. Media inspection
+  (Mediabunny, still images, codec fallbacks) loads on first use. The launcher
+  graph must not statically reach these runtimes or any `mediabunny` import;
+  `src/test/architecture.test.ts` enforces this.
 - `app/launcher.css` eagerly imports launcher and lazy-state rules;
   `app/layout.css` is the lazy editor stylesheet manifest. Together their
   `styles/` imports retain the original global cascade order. Changing either
