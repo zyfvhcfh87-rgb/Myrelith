@@ -310,6 +310,29 @@ describe('media codec fallback registry', () => {
     expect(loadProres).toHaveBeenCalledTimes(2)
   })
 
+  test('an abort raised while starting a check still observes that check', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason) }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const registry = createMediaCodecFallbackRegistry(loaders())
+      const controller = new AbortController()
+      const pending = registry.ensureDecodable({
+        codec: 'avc',
+        canDecode: () => {
+          controller.abort()
+          return Promise.reject(new Error('late browser failure'))
+        },
+      }, controller.signal)
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+      await new Promise((resolve) => { setTimeout(resolve, 0) })
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
   test('cancellation settles before an in-flight load and cannot publish success', async () => {
     let registered = false
     let release!: () => void

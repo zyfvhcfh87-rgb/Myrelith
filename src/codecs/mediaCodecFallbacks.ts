@@ -239,7 +239,10 @@ function awaitWithAbort<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   if (!signal) return operation
-  if (signal.aborted) return Promise.reject(abortError(DECODER_CHECK_CANCELLED))
+  if (signal.aborted) {
+    void operation.catch(() => {})
+    return Promise.reject(abortError(DECODER_CHECK_CANCELLED))
+  }
 
   return new Promise<T>((resolve, reject) => {
     let settled = false
