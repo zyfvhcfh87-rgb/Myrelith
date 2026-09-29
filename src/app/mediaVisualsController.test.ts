@@ -13,13 +13,15 @@ import {
 import { StaticImageThumbnailError } from '../pipeline/static-image-thumbnail'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { useTransportStore } from '../state/transportStore'
 import { resetMediaCompatibilityController } from './mediaCompatibilityController'
 import type { VisualsDeps } from './mediaVisualsController'
 import {
   disposeMediaVisuals,
   getMediaVisualSchedulerSnapshot,
   initMediaVisuals,
-  mediaVisualPriorityForAsset,
+  mediaVisualPriority,
+  mediaVisualPriorityContext,
   setMediaVisualPoolViewport,
   setMediaVisualTimelineViewport,
   waitForMediaVisualsIdle,
@@ -617,44 +619,56 @@ describe('mediaVisualsController', () => {
     } as unknown as TimelineDoc
     const viewport = { startFrame: 120, endFrame: 140 }
 
-    expect(mediaVisualPriorityForAsset(
+    const priority = (
+      assetId: string,
+      selectedClipId: string | null,
+      window: { startFrame: number; endFrame: number } | null,
+      pool?: ReadonlySet<string>,
+    ) => mediaVisualPriority(
+      assetId,
+      mediaVisualPriorityContext(document, selectedClipId, window, pool),
+    )
+
+    expect(priority('selected-asset', 'selected-clip', viewport)).toBe('selected')
+    expect(priority('visible-asset', 'selected-clip', viewport)).toBe('visible')
+    expect(priority('background-asset', 'selected-clip', viewport)).toBe('background')
+    expect(priority('visible-asset', null, { startFrame: 150, endFrame: 200 }))
+      .toBe('background')
+    expect(priority('pool-asset', null, null, new Set(['pool-asset']))).toBe('visible')
+    expect(priority(
       'selected-asset',
-      document,
-      'selected-clip',
-      viewport,
-    )).toBe('selected')
-    expect(mediaVisualPriorityForAsset(
-      'visible-asset',
-      document,
-      'selected-clip',
-      viewport,
-    )).toBe('visible')
-    expect(mediaVisualPriorityForAsset(
-      'background-asset',
-      document,
-      'selected-clip',
-      viewport,
-    )).toBe('background')
-    expect(mediaVisualPriorityForAsset(
-      'visible-asset',
-      document,
-      null,
-      { startFrame: 150, endFrame: 200 },
-    )).toBe('background')
-    expect(mediaVisualPriorityForAsset(
-      'pool-asset',
-      document,
-      null,
-      null,
-      new Set(['pool-asset']),
-    )).toBe('visible')
-    expect(mediaVisualPriorityForAsset(
-      'selected-asset',
-      document,
       'selected-clip',
       viewport,
       new Set(['selected-asset']),
     )).toBe('selected')
+  })
+
+  test('a project open derives every queued priority from one timeline pass', () => {
+    for (let index = 0; index < 20; index += 1) addAsset(`batch-${index}.mp4`, 'video/mp4')
+    const originalDocument = useDocumentStore.getState().doc
+    let trackReads = 0
+    const instrumentedDocument = { ...originalDocument }
+    Object.defineProperty(instrumentedDocument, 'tracks', {
+      enumerable: true,
+      get: () => {
+        trackReads += 1
+        return originalDocument.tracks
+      },
+    })
+    try {
+      useDocumentStore.getState().setDoc(instrumentedDocument)
+      useTransportStore.getState().setSelectedClip('missing-clip')
+      setMediaVisualTimelineViewport({ startFrame: 0, endFrame: 30 })
+      trackReads = 0
+
+      initMediaVisuals(fakeDeps(), { scheduler: { yieldControl: async () => {} } })
+
+      expect(getMediaVisualSchedulerSnapshot()?.enqueuedCount).toBe(20)
+      expect(trackReads).toBe(1)
+    } finally {
+      useTransportStore.getState().setSelectedClip(null)
+      useDocumentStore.getState().setDoc(originalDocument)
+    }
   })
 
   test('publishes visible Media Pool rows without rescanning completed assets', async () => {

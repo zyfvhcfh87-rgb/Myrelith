@@ -7,7 +7,6 @@
 
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
-import { findClip } from '../domain/selectors'
 import {
   mediaAssetDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
@@ -148,41 +147,17 @@ function connectedAssetStillMatches(asset: MediaAsset): boolean {
   return useMediaStore.getState().assets.get(asset.id)?.objectUrl === asset.objectUrl
 }
 
-export function mediaVisualPriorityForAsset(
-  assetId: AssetId,
-  document: TimelineDoc,
-  selectedClipId: string | null,
-  viewport: MediaVisualTimelineViewport | null,
-  poolVisibleAssetIds: ReadonlySet<AssetId> = EMPTY_VISIBLE_ASSETS,
-): MediaJobPriority {
-  const selected = selectedClipId ? findClip(document, selectedClipId) : null
-  if (selected?.assetId === assetId) return 'selected'
-  if (poolVisibleAssetIds.has(assetId)) return 'visible'
-  if (!viewport || viewport.endFrame <= viewport.startFrame) return 'background'
-
-  for (const track of document.tracks) {
-    for (const clip of track.clips) {
-      if (
-        clip.assetId === assetId
-        && clip.timelineRange.startFrame < viewport.endFrame
-        && clip.timelineRange.startFrame + clip.timelineRange.durationFrames
-          > viewport.startFrame
-      ) return 'visible'
-    }
-  }
-  return 'background'
-}
-
-interface MediaVisualPriorityContext {
+export interface MediaVisualPriorityContext {
   readonly selectedAssetId: AssetId | null
   readonly visibleAssetIds: ReadonlySet<AssetId>
 }
 
-function mediaVisualPriorityContext(
+/** One pass over the timeline answers the priority of every asset. */
+export function mediaVisualPriorityContext(
   document: TimelineDoc,
   selectedClipId: string | null,
   viewport: MediaVisualTimelineViewport | null,
-  poolVisibleAssetIds: ReadonlySet<AssetId>,
+  poolVisibleAssetIds: ReadonlySet<AssetId> = EMPTY_VISIBLE_ASSETS,
 ): MediaVisualPriorityContext {
   let selectedAssetId: AssetId | null = null
   const visibleAssetIds = new Set<AssetId>()
@@ -190,7 +165,8 @@ function mediaVisualPriorityContext(
 
   for (const track of document.tracks) {
     for (const clip of track.clips) {
-      if (selectedClipId !== null && clip.id === selectedClipId) {
+      // The first clip with the id wins, matching findClip.
+      if (selectedAssetId === null && selectedClipId !== null && clip.id === selectedClipId) {
         selectedAssetId = clip.assetId
       }
       if (
@@ -205,7 +181,7 @@ function mediaVisualPriorityContext(
   return { selectedAssetId, visibleAssetIds }
 }
 
-function priorityFromContext(
+export function mediaVisualPriority(
   assetId: AssetId,
   context: MediaVisualPriorityContext,
 ): MediaJobPriority {
@@ -214,9 +190,8 @@ function priorityFromContext(
   return 'background'
 }
 
-function currentPriority(assetId: AssetId): MediaJobPriority {
-  return mediaVisualPriorityForAsset(
-    assetId,
+function currentPriorityContext(): MediaVisualPriorityContext {
+  return mediaVisualPriorityContext(
     useDocumentStore.getState().doc,
     useTransportStore.getState().selectedClipId,
     state.viewport,
@@ -232,14 +207,9 @@ function reprioritizeQueuedJobs(): void {
     .map(([id]) => id)
   if (queuedIds.length === 0) return
 
-  const context = mediaVisualPriorityContext(
-    useDocumentStore.getState().doc,
-    useTransportStore.getState().selectedClipId,
-    state.viewport,
-    state.poolVisibleAssetIds,
-  )
+  const context = currentPriorityContext()
   for (const id of queuedIds) {
-    scheduler.reprioritize(id, priorityFromContext(id, context))
+    scheduler.reprioritize(id, mediaVisualPriority(id, context))
   }
 }
 
@@ -425,6 +395,9 @@ function scan(deps: VisualsDeps): void {
     state.jobs.delete(id)
   }
 
+  // Built once per scan, and only when something is enqueued: a batch import
+  // must not rescan the timeline for every new asset.
+  let priorities: MediaVisualPriorityContext | null = null
   for (const [id, asset] of media.assets) {
     if (state.jobs.has(id) || media.visuals.has(id)) continue
     const record: AssetJobRecord = {
@@ -437,7 +410,7 @@ function scan(deps: VisualsDeps): void {
     scheduler.enqueue({
       id,
       generation: record.generation,
-      priority: currentPriority(id),
+      priority: mediaVisualPriority(id, priorities ??= currentPriorityContext()),
       resources: { decoderSlots: visualTaskCount(asset) },
       run: async (context) => {
         record.status = 'running'
@@ -521,12 +494,6 @@ export function getMediaVisualSchedulerSnapshot(): MediaJobSchedulerSnapshot | n
 
 export function waitForMediaVisualsIdle(): Promise<MediaJobSchedulerSnapshot | null> {
   return state.scheduler?.whenIdle() ?? Promise.resolve(null)
-}
-
-export function subscribeMediaVisualScheduler(
-  listener: (snapshot: MediaJobSchedulerSnapshot) => void,
-): () => void {
-  return state.scheduler?.subscribe(listener) ?? (() => {})
 }
 
 /** Tear down tests/HMR and abort every queued or active generation. */
