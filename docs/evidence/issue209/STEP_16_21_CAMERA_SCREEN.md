@@ -71,8 +71,13 @@ Date: 2026-09-29. Built only on the substrate proven in
     an explanation, and Discard deletes the file.
   - A reload mid-camera-take badges one draft. Nothing is imported until
     Recover, which keeps the complete fragments.
-- All Issue #209 Chromium specs, the full Vitest suite, the runner checks,
-  build, lint and diff check: see the final commit.
+- Final gate after the review fixes:
+  - full Vitest: 5,596 tests in 425 files
+  - runner: 28/28
+  - `npm run build` passed
+  - `npm run lint`: 5 existing warnings only
+  - `git diff --check` passed
+  - all 17 Issue #209 Chromium specs passed
 
 ## Qualification and limits
 
@@ -85,3 +90,48 @@ Date: 2026-09-29. Built only on the substrate proven in
 - One audio source per screen take (no display + microphone mix).
 - Captures import with the ordinary frame-rate decision because live capture
   is variable-rate.
+
+## Final review (Step 21) and fixes
+
+An independent review of the complete camera/screen diff found nine defects.
+All are fixed and covered:
+
+1. **One ending or silent source stalled the muxer.** Mediabunny's
+   fragmented interleaver writes nothing while any open track has an empty
+   queue, so the other track piled up in worker memory and nothing reached
+   disk. Now either source ending self-stops at once. A watchdog re-encodes
+   one retained clone of the last frame every second while the picture is
+   static, and ends the take for review if audio falls more than 2 s behind
+   video. The 60-minute limit is checked on the audio clock too. A new
+   real-Chromium test records a never-changing tab with a microphone: bytes
+   keep growing on disk mid-take, and video and audio both run past 4.5 s,
+   within 1.1 s of each other.
+2. **The clock bridge chose the wrong lag for perfectly regular frames.**
+   Neighbouring lags were equally dense and the tie went to the lowest (the
+   reviewer reproduced +100 ms). Delivery times now bound the offset from
+   below (a frame cannot arrive before capture). The smallest causal dense
+   cluster wins, and without delivery times an ambiguous result is refused.
+3. **A static screen's only frame could lose the race to the first audio.**
+   One clone is now kept and becomes the base once audio exists.
+4. **A worker crash during recording went unnoticed.** The bridge now reports
+   `onCrash`, the owner interrupts (`worker-lost`), and Stop recovers the
+   complete fragments.
+5. **Tab capture focused the shared tab, hiding the editor**, which stops
+   `requestVideoFrameCallback` and forced the estimated fallback.
+   `CaptureController.setFocusBehavior('no-focus-change')` is now set.
+   `play()` is raced against the calibration timeout.
+6. **A failed start left an empty draft** and could not cancel streams locked
+   by the recorder. The worker now aborts through the recorder and deletes the
+   file.
+7. **Leaks:** held audio is closed if a replay throws, and a frame still in
+   flight when calibration times out is closed.
+8. **An unrecoverable take could reach review via retry.** Takes now track
+   `finalized`; with nothing playable, they fail with a plain message and the
+   empty file is removed.
+9. **Keep versus project exit:** project exit waits for a committed Keep, and
+   the original is remembered under the binding pinned when Keep started.
+
+While fixing (1), a first attempt cloned the frame *after* encoding. Closing a
+`VideoSample` closes its frame, so every take failed. The clone is now taken
+before encoding. The tab flash/beep take was rerun after these changes:
+9/9 paired, audio 65.5 ms after picture, spread 9.8 ms (unchanged).

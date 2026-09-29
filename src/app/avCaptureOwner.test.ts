@@ -37,11 +37,14 @@ function harness(options: {
   audioInDisplay?: boolean
   project?: { projectId: string; projectGeneration: number }
   conflict?: string | null
+  unrecoverable?: boolean
+  importGate?: Promise<void>
 } = {}) {
   const video = new FakeTrack('video', 'Camera')
   const audio = new FakeTrack('audio', 'Mic')
   const calls: string[] = []
-  const bridges: Array<{ onProgress: ((p: unknown) => void) | null; onSelfStop: ((reason: 'source-ended' | 'limit') => void) | null }> = []
+  const bridges: Array<{ onProgress: ((p: unknown) => void) | null; onSelfStop: ((reason: 'source-ended' | 'limit') => void) | null
+    onCrash: (() => void) | null; isClosed: boolean }> = []
   let project = options.project ?? { projectId: 'p', projectGeneration: 1 }
   const lock = { held: 0, released: 0 }
   let discardFailures = options.discardFailures ?? 0
@@ -59,6 +62,7 @@ function harness(options: {
       const bridge = {
         onProgress: null as ((p: unknown) => void) | null,
         onSelfStop: null as ((reason: 'source-ended' | 'limit') => void) | null,
+        onCrash: null as (() => void) | null,
         isClosed: false,
         start: vi.fn(async (request: { videoClockOffsetUs: number; audio: unknown }) => {
           calls.push(`start:${request.videoClockOffsetUs}:${request.audio ? 'audio' : 'silent'}`)
@@ -72,7 +76,15 @@ function harness(options: {
         abort: vi.fn(async () => { calls.push('abort'); return { type: 'abort' as const } }),
         file: vi.fn(async () => { calls.push('file'); return { type: 'file' as const, file: new File(['x'], 'c.mp4'), handle: {} as FileSystemFileHandle } }),
         discardId: vi.fn(async () => { calls.push('discard'); if (discardFailures-- > 0) throw new Error('remove failed') }),
-        recover: vi.fn(async () => { calls.push('recover'); return { pcmBytes: 2_097_152, committedBytes: 2_097_152, discardedTailBytes: 10 } }),
+        recover: vi.fn(async () => {
+          calls.push('recover')
+          if (options.unrecoverable) {
+            const error = new Error('No complete media fragment was written')
+            error.name = 'UnrecoverableCapture'
+            throw error
+          }
+          return { pcmBytes: 2_097_152, committedBytes: 2_097_152, discardedTailBytes: 10 }
+        }),
         close: vi.fn(() => { bridge.isClosed = true }),
       }
       bridges.push(bridge)
@@ -82,7 +94,8 @@ function harness(options: {
     preflight: () => null,
     startConflict: () => options.conflict ?? null,
     holdDraftLock: async () => { lock.held++; return () => { lock.released++ } },
-    importCapture: vi.fn(async () => ({ status: 'imported' as const, assetId: 'asset-1' })),
+    importCapture: vi.fn(async () => { await options.importGate; return { status: 'imported' as const, assetId: 'asset-1' } }),
+    projectBinding: () => `binding:${project.projectId}`,
     rememberOriginal: vi.fn(async () => {}),
     publish: vi.fn(),
   }
@@ -208,5 +221,42 @@ describe('camera/screen capture owner', () => {
     const h = harness({ conflict: 'Finish the voiceover take first.' })
     expect(h.owner.start({ mode: 'camera' })).toEqual({ status: 'rejected', reason: 'Finish the voiceover take first.' })
     expect(h.calls).toEqual([])
+  })
+
+  test('a worker crash mid-take interrupts it and Stop keeps the complete fragments', async () => {
+    const h = harness()
+    await h.recording()
+    h.bridges[0]!.isClosed = true
+    h.bridges[0]!.onCrash?.()
+    await h.owner.whenIdle()
+    expect(h.owner.status.session).toMatchObject({ phase: 'review', interruption: 'worker-lost' })
+    expect(h.calls).toContain('recover')
+    expect(h.calls).not.toContain('stop')
+  })
+
+  test('a take with nothing playable ends as a failure and removes its empty file', async () => {
+    const h = harness({ stopFails: true, unrecoverable: true })
+    await h.recording()
+    await h.owner.stop()
+    await h.owner.whenIdle()
+    expect(h.owner.status.session).toMatchObject({ phase: 'failed', failure: 'writer-failed' })
+    expect(h.owner.status.diagnostic).toMatch(/Nothing playable/)
+    expect(h.calls).toContain('discard')
+  })
+
+  test('project exit waits for a committed Keep and remembers the original under the pinned project', async () => {
+    const gate = deferred<void>()
+    const h = harness({ importGate: gate.promise })
+    await h.recording()
+    await h.owner.stop()
+    const keeping = h.owner.keepTake()
+    await vi.waitFor(() => expect(h.deps.importCapture).toHaveBeenCalledOnce())
+    const teardown = h.owner.teardownForProjectChange()
+    h.setProject({ projectId: 'next', projectGeneration: 2 })
+    gate.resolve()
+    await keeping
+    await teardown
+    expect(h.owner.status.session).toMatchObject({ phase: 'kept', assetId: 'asset-1' })
+    expect(h.deps.rememberOriginal).toHaveBeenCalledWith('asset-1', expect.anything(), 'binding:p')
   })
 })

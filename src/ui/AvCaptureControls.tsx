@@ -33,6 +33,7 @@ const INTERRUPTION_TEXT: Record<AvCaptureInterruption, string> = {
   'source-ended': 'Sharing or the camera stopped, so the recording ended there. Everything up to that point was kept.',
   'page-frozen': 'The browser paused this page, so recording stopped. Everything written so far was kept.',
   limit: 'The take reached its size or length limit (60 minutes, 4 GiB) and stopped there.',
+  'worker-lost': 'The recording process stopped unexpectedly. Everything completely written was kept.',
 }
 
 function phaseText(session: AvCaptureSession | null, mode: AvCaptureMode): string {

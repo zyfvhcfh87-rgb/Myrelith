@@ -45,6 +45,7 @@ export async function calibrateVideoClock(track: MediaStreamTrack, minMs = 600, 
   const stamps: number[] = []
   const deliveries: number[] = []
   let done = false
+  let pending: Promise<ReadableStreamReadResult<VideoFrame>> | null = null
   const reader = new Processor({ track: forStamps }).readable.getReader()
   try {
     document.body.append(element)
@@ -53,26 +54,34 @@ export async function calibrateVideoClock(track: MediaStreamTrack, minMs = 600, 
       if (!done) element.requestVideoFrameCallback(onFrame)
     }
     if ('requestVideoFrameCallback' in element) element.requestVideoFrameCallback(onFrame)
-    await element.play().catch(() => {})
     const started = performance.now()
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), maxMs))
+    // play() can stall (e.g. a hidden page); it must not extend calibration.
+    await Promise.race([element.play().catch(() => {}), timeout])
     while (performance.now() - started < maxMs) {
-      const next = await Promise.race([reader.read(), timeout])
-      if (!next || next.done) break
+      const read = reader.read()
+      const next = await Promise.race([read, timeout])
+      if (!next) {
+        // The timeout won: a frame may still arrive for this read; close it.
+        pending = read
+        break
+      }
+      if (next.done) break
       deliveries.push(Math.round(performance.now() * 1000))
       stamps.push(next.value.timestamp)
       next.value.close()
-      if (performance.now() - started >= minMs && estimateAvClockBridge(stamps, captures)) break
+      if (performance.now() - started >= minMs && estimateAvClockBridge(stamps, captures, deliveries)) break
     }
   } finally {
     done = true
     void reader.cancel().catch(() => {})
+    void pending?.then((result) => result.value?.close(), () => {})
     forVideo.stop()
     forStamps.stop()
     element.srcObject = null
     element.remove()
   }
-  const bridge = estimateAvClockBridge(stamps, captures)
+  const bridge = estimateAvClockBridge(stamps, captures, deliveries)
   if (bridge) return { offsetUs: bridge.offsetUs, method: 'capture-time', pairs: bridge.pairs, spreadUs: bridge.spreadUs }
   if (stamps.length === 0) throw new Error('The video source delivered no frames')
   // Fallback: a frame cannot arrive before it was captured, so the largest

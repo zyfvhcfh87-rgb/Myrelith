@@ -26,7 +26,8 @@ import { localMediaHandleRegistry } from './localMediaHandles'
 import { cancelMediaImport, importMediaFromHandle, type MediaImportResult } from './mediaImportController'
 
 type Bridge = Pick<AvCaptureBridge, 'start' | 'stop' | 'abort' | 'file' | 'discardId' | 'recover' | 'close'>
-  & { onProgress: AvCaptureBridge['onProgress']; onSelfStop: AvCaptureBridge['onSelfStop']; readonly isClosed: boolean }
+  & { onProgress: AvCaptureBridge['onProgress']; onSelfStop: AvCaptureBridge['onSelfStop']
+    onCrash?: AvCaptureBridge['onCrash']; readonly isClosed: boolean }
 
 export interface AvCaptureStartOptions {
   readonly mode: AvCaptureMode
@@ -50,7 +51,9 @@ export interface AvCaptureDeps {
   startConflict(): string | null
   holdDraftLock?(sessionId: string): Promise<() => void>
   importCapture(file: File, handle: FileSystemFileHandle): Promise<MediaImportResult>
-  rememberOriginal(assetId: string, handle: FileSystemFileHandle): Promise<void>
+  /** The local project binding at the moment Keep started (pinned). */
+  projectBinding(): string | null
+  rememberOriginal(assetId: string, handle: FileSystemFileHandle, projectBindingId: string | null): Promise<void>
   cancelImport?(): void
   publish(status: AvCaptureStatus): void
   subscribePageEvents?(onFrozen: () => void): () => void
@@ -64,7 +67,10 @@ interface Active {
   audioTrack: MediaStreamTrack | null
   bridge: Bridge | null
   recording: boolean
+  /** The file is a finished or recovered, playable MP4. */
+  finalized: boolean
   draftMayExist: boolean
+  keepTask: Promise<void> | null
   preparing: Promise<void> | null
   cleanup: Promise<void>
   releaseLock: (() => void) | null
@@ -145,7 +151,7 @@ export class AvCaptureOwner {
     const begun = beginAvCaptureSession(this.active?.state ?? null, id, options.mode, this.deps.projectContext())
     if (!begun) return { status: 'rejected', reason: 'A recording is already active.' }
     const active: Active = { state: begun.state, options, streams: [], videoTrack: null, audioTrack: null,
-      bridge: null, recording: false, draftMayExist: false, preparing: null, cleanup: Promise.resolve(),
+      bridge: null, recording: false, finalized: false, draftMayExist: false, keepTask: null, preparing: null, cleanup: Promise.resolve(),
       releaseLock: null, keepCancelled: false, keepImportPending: false, status: { ...EMPTY_STATUS } }
     this.active = active
     this.publish()
@@ -266,6 +272,9 @@ export class AvCaptureOwner {
       bridge.onSelfStop = (reason) => {
         if (this.active === active) void this.interrupt(reason === 'limit' ? 'limit' : 'source-ended')
       }
+      bridge.onCrash = () => {
+        if (this.active === active && active.recording) void this.interrupt('worker-lost')
+      }
       const settings = video.getSettings()
       const audio = active.audioTrack
       const audioSettings = audio?.getSettings()
@@ -299,34 +308,52 @@ export class AvCaptureOwner {
   private async close(active: Active, effect: AvCaptureEffect): Promise<void> {
     try {
       await active.preparing?.catch(() => {})
-      const bridge = active.bridge
-      if (effect.kind === 'stop' && active.recording && bridge && !bridge.isClosed) {
-        try {
-          const { result } = await bridge.stop()
-          active.recording = false
-          active.status.clockNote = result.clockNote
-          this.progress(active, result)
-          if (result.reason === 'limit') active.status.diagnostic = 'The take reached its size or length limit and stopped there.'
-        } catch (cause) {
-          // The container could not be finalized: keep every complete fragment.
-          active.recording = false
-          const recoveredBytes = await this.recoverFlushed(active)
-          active.status.diagnostic = `Recording stopped unexpectedly (${message(cause)}); ` +
-            `kept the ${(recoveredBytes / 1_048_576).toFixed(1)} MiB that was completely written.`
+      let bridge = active.bridge
+      let unplayable = false
+      if (effect.kind === 'stop' && active.draftMayExist && !active.finalized) {
+        let stopError: unknown = null
+        if (active.recording && bridge && !bridge.isClosed) {
+          try {
+            const { result } = await bridge.stop()
+            active.finalized = true
+            active.status.clockNote = result.clockNote
+            this.progress(active, result)
+            if (result.reason === 'limit') active.status.diagnostic = 'The take reached its size or length limit and stopped there.'
+          } catch (cause) { stopError = cause }
+        }
+        active.recording = false
+        if (!active.finalized) {
+          // The worker was lost, finalize failed, or this is a retry: keep
+          // every complete fragment, or report that nothing playable exists.
+          try {
+            const recoveredBytes = await this.recoverFlushed(active)
+            active.finalized = true
+            active.status.diagnostic = `${stopError ? `Recording stopped unexpectedly (${message(stopError)}); ` : ''}` +
+              `kept the ${(recoveredBytes / 1_048_576).toFixed(1)} MiB that was completely written.`
+          } catch (cause) {
+            if (!(cause instanceof Error && cause.name === 'UnrecoverableCapture')) throw cause
+            unplayable = true
+            active.status.diagnostic = 'Nothing playable was written before the recording stopped.'
+          }
+          bridge = active.bridge
         }
       } else if (active.recording && bridge && !bridge.isClosed) {
         await bridge.abort()
         active.recording = false
       }
       stopStreams(active.streams)
-      if (effect.kind === 'discard' && active.draftMayExist) {
+      if ((effect.kind === 'discard' || unplayable) && active.draftMayExist) {
         const remover = bridge && !bridge.isClosed ? bridge : this.deps.createBridge()
         try { await remover.discardId(active.state.sessionId) } finally { if (remover !== bridge) remover.close() }
         active.draftMayExist = false
       }
-      if (effect.kind !== 'stop') { bridge?.close(); active.bridge = null }
+      if (effect.kind !== 'stop' || unplayable) { bridge?.close(); active.bridge = null }
       // Not awaited: this task is itself `active.cleanup`, which dispatch returns.
-      void this.dispatch(active, { sessionId: effect.sessionId, operation: effect.operation, kind: 'closed' })
+      if (unplayable) {
+        void this.dispatch(active, { sessionId: effect.sessionId, operation: effect.operation, kind: 'failed', reason: 'writer-failed' })
+      } else {
+        void this.dispatch(active, { sessionId: effect.sessionId, operation: effect.operation, kind: 'closed' })
+      }
     } catch (cause) {
       stopStreams(active.streams)
       active.status.diagnostic = message(cause)
@@ -342,8 +369,16 @@ export class AvCaptureOwner {
     return (await recovery.recover(active.state.sessionId)).pcmBytes
   }
 
-  private async keep(active: Active, operation: number): Promise<void> {
-    const live = () => this.live(active, 'keeping', operation) && !active.keepCancelled
+  private keep(active: Active, operation: number): Promise<void> {
+    const task = this.keepNow(active, operation)
+    active.keepTask = task
+    void task.finally(() => { if (active.keepTask === task) active.keepTask = null }).catch(() => {})
+    return task
+  }
+
+  private async keepNow(active: Active, operation: number): Promise<void> {
+    const current = () => this.live(active, 'keeping', operation)
+    const binding = this.deps.projectBinding()
     try {
       const project = this.deps.projectContext()
       if (project.projectId !== active.state.projectId || project.projectGeneration !== active.state.projectGeneration) {
@@ -352,22 +387,28 @@ export class AvCaptureOwner {
       const bridge = active.bridge && !active.bridge.isClosed ? active.bridge : this.deps.createBridge()
       active.bridge = bridge
       const { file, handle } = await bridge.file(active.state.sessionId)
-      if (!live()) return
+      // A project switch before import keeps the draft; nothing enters either project.
+      if (!current() || active.keepCancelled) {
+        if (current()) throw new Error('The project changed; the recording was kept as a draft to recover.')
+        return
+      }
       active.keepImportPending = true
       let imported: MediaImportResult
       try { imported = await this.deps.importCapture(file, handle) }
       finally { active.keepImportPending = false }
-      if (!live()) return
+      if (!current()) return
       if (imported.status !== 'imported') {
         throw new Error(imported.status === 'failed' ? imported.message : `The recording was not imported (${imported.status})`)
       }
-      try { await this.deps.rememberOriginal(imported.assetId, handle) }
+      // The asset now exists in the pinned project: finish Keep even if its
+      // teardown has begun, remembering the original under that project.
+      try { await this.deps.rememberOriginal(imported.assetId, handle, binding) }
       catch (cause) { active.status.diagnostic = `Recording kept, but its browser file grant could not be saved: ${message(cause)}` }
       bridge.close()
       active.bridge = null
       await this.dispatch(active, { sessionId: active.state.sessionId, operation, kind: 'kept', assetId: imported.assetId })
     } catch (cause) {
-      if (!live()) return
+      if (!current()) return
       active.status.diagnostic = message(cause)
       await this.dispatch(active, { sessionId: active.state.sessionId, operation, kind: 'keep-failed' })
     }
@@ -409,6 +450,8 @@ export class AvCaptureOwner {
     if (!active) return
     active.keepCancelled = true
     if (active.keepImportPending) this.deps.cancelImport?.()
+    // Let a Keep whose import already committed finish in its own project.
+    await active.keepTask?.catch(() => {})
     await this.dispatch(active, { sessionId: active.state.sessionId, kind: 'project-replaced' })
     await active.cleanup
     if (active.state.phase === 'cleanup-failed') throw new Error(active.status.diagnostic ?? 'Capture cleanup failed')
@@ -442,12 +485,21 @@ export function getAvCaptureOwner(): AvCaptureOwner {
         width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
       audio: microphoneId === 'none' ? false : microphone(microphoneId),
     }),
-    requestDisplay: (withAudio) => navigator.mediaDevices.getDisplayMedia({
-      video: { width: { max: 1920 }, height: { max: 1080 }, frameRate: { ideal: 30 } },
-      audio: withAudio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
-      // Recording Myrelith itself would mirror the editor into the take.
-      selfBrowserSurface: 'exclude', surfaceSwitching: 'include', systemAudio: withAudio ? 'include' : 'exclude',
-    } as DisplayMediaStreamOptions),
+    requestDisplay: (withAudio) => {
+      // Keep the editor focused: switching to the shared tab would hide this
+      // page, and hidden pages cannot measure the exact A/V clock bridge.
+      const Controller = (globalThis as unknown as { CaptureController?: new () => { setFocusBehavior?(behavior: string): void } })
+        .CaptureController
+      const controller = Controller ? new Controller() : null
+      try { controller?.setFocusBehavior?.('no-focus-change') } catch { /* unsupported: the default applies */ }
+      return navigator.mediaDevices.getDisplayMedia({
+        video: { width: { max: 1920 }, height: { max: 1080 }, frameRate: { ideal: 30 } },
+        audio: withAudio ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
+        // Recording Myrelith itself would mirror the editor into the take.
+        selfBrowserSurface: 'exclude', surfaceSwitching: 'include', systemAudio: withAudio ? 'include' : 'exclude',
+        ...(controller ? { controller } : {}),
+      } as DisplayMediaStreamOptions)
+    },
     requestMicrophone: (deviceId) => navigator.mediaDevices.getUserMedia({ audio: microphone(deviceId), video: false }),
     calibrate: (track) => calibrateVideoClock(track),
     createProcessor: <T>(track: MediaStreamTrack) => {
@@ -472,8 +524,8 @@ export function getAvCaptureOwner(): AvCaptureOwner {
         () => new Promise<void>((release) => resolve(release))).catch(reject)
     }),
     importCapture: (file, handle) => importMediaFromHandle(file, handle),
-    rememberOriginal: async (assetId, handle) => {
-      const binding = getActiveLocalProjectBindingId()
+    projectBinding: getActiveLocalProjectBindingId,
+    rememberOriginal: async (assetId, handle, binding) => {
       if (!binding) throw new Error('The local project binding is unavailable')
       await localMediaHandleRegistry.remember(binding, assetId, handle)
     },

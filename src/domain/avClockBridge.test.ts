@@ -30,8 +30,12 @@ describe('A/V clock bridge', () => {
 
   test('a stream already on page time bridges to an offset near zero', () => {
     const captureMs = [10, 43, 77, 110, 143, 177, 210]
-    const bridge = estimateAvClockBridge(captureMs.map((ms) => ms * 1000 + 2_000), captureMs.map((ms) => ms * 1000))
-    expect(bridge?.offsetUs).toBe(2_000)
+    const stamps = captureMs.map((ms) => ms * 1000 + 2_000)
+    const captures = captureMs.map((ms) => ms * 1000)
+    // Near-regular spacing is ambiguous without delivery times…
+    expect(estimateAvClockBridge(stamps, captures)).toBeNull()
+    // …and exact once each frame's (1 ms later) delivery is known.
+    expect(estimateAvClockBridge(stamps, captures, captures.map((us) => us + 1_000))?.offsetUs).toBe(2_000)
   })
 
   test('refuses a bridge from too few or unrelated frames', () => {
@@ -39,5 +43,27 @@ describe('A/V clock bridge', () => {
     expect(estimateAvClockBridge([1_000_000], [0, 33_000, 66_000, 99_000, 132_000, 165_000])).toBeNull()
     const random = [5_123, 81_777, 190_010, 260_500, 399_999, 450_101]
     expect(estimateAvClockBridge(random.map((value) => value * 7), random)).toBeNull()
+  })
+
+  test('perfectly regular frames: causality picks the true lag, not an earlier one', () => {
+    // 21 frames at exactly 50 ms; the <video> starts presenting 2 frames late.
+    const offset = 5_000_000
+    const captureTimes = Array.from({ length: 21 }, (_, index) => 1_000_000 + index * 50_000)
+    const stamps = captureTimes.map((capture) => capture + offset)
+    const presented = captureTimes.slice(2)
+    // Each frame reaches the page 3 ms after capture.
+    const deliveries = captureTimes.map((capture) => capture + 3_000)
+    const bridge = estimateAvClockBridge(stamps, presented, deliveries)
+    expect(bridge?.offsetUs).toBe(offset)
+    // Without delivery times the same data is ambiguous and refused.
+    expect(estimateAvClockBridge(stamps, presented)).toBeNull()
+  })
+
+  test('refuses when every dense pairing would mean delivery before capture', () => {
+    const captureTimes = Array.from({ length: 10 }, (_, index) => index * 40_000 + 7_000 * (index % 3))
+    const stamps = captureTimes.map((capture) => capture + 1_000_000)
+    // Deliveries claim frames arrived 10 ms before their capture: impossible.
+    const deliveries = captureTimes.map((capture) => capture - 10_000)
+    expect(estimateAvClockBridge(stamps, captureTimes, deliveries)).toBeNull()
   })
 })

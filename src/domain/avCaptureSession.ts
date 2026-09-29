@@ -8,7 +8,7 @@
  */
 
 export type AvCaptureMode = 'camera' | 'screen'
-export type AvCaptureInterruption = 'source-ended' | 'page-frozen' | 'limit'
+export type AvCaptureInterruption = 'source-ended' | 'page-frozen' | 'limit' | 'worker-lost'
 export type AvCaptureFailure =
   | 'permission-denied' | 'permission-dismissed' | 'unsupported' | 'device-unavailable'
   | 'screen-permission' | 'writer-failed' | 'project-replaced'

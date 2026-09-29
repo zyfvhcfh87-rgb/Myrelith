@@ -164,3 +164,52 @@ test('a camera take cut off by a reload is recovered from its complete fragments
   expect(asset).toMatchObject({ kind: 'video', hasAudio: true })
   expect(asset!.durationFrames).toBeGreaterThanOrEqual(30)
 })
+
+test('a static shared tab with a microphone keeps writing to disk and holds its last picture', async ({ page, context }) => {
+  await createProject(page)
+  const target = await context.newPage()
+  // Never changes after the first paint: the capture may deliver almost no frames.
+  await target.setContent('<title>Capture Target</title><h1 style="font:48px sans-serif">Static slide</h1>')
+  await page.bringToFront()
+  const panel = await openTab(page, 'Screen')
+  await panel.getByLabel('Microphone', { exact: true }).check()
+  await panel.getByRole('button', { name: 'Choose screen and record' }).click()
+  await expect(panel.getByRole('status')).toContainText('Recording', { timeout: 15_000 })
+  const readProgress = () => page.evaluate(async () => {
+    const storePath = '/src/state/avCaptureStore.ts'
+    const { useAvCaptureStore } = await import(storePath)
+    const progress = useAvCaptureStore.getState().progress as { bytes: number; durationUs: number } | null
+    return progress ? { bytes: progress.bytes, durationUs: progress.durationUs } : { bytes: 0, durationUs: 0 }
+  })
+  const progressAt = async (seconds: number) => {
+    let latest = { bytes: 0, durationUs: 0 }
+    await expect.poll(async () => { latest = await readProgress(); return latest.durationUs },
+      { timeout: 20_000 }).toBeGreaterThanOrEqual(seconds * 1_000_000)
+    return latest
+  }
+  const early = await progressAt(2)
+  const later = await progressAt(5)
+  // Fragments keep reaching disk while the picture is static (bounded memory, crash-safe).
+  expect(later.bytes).toBeGreaterThan(early.bytes)
+  await panel.getByRole('button', { name: 'Stop' }).click()
+  await expect(panel.getByRole('status')).toContainText('Recording ready to review', { timeout: 15_000 })
+  const reopened = await page.evaluate(async () => {
+    const mediabunnyPath = performance.getEntriesByType('resource').map((entry) => entry.name)
+      .find((name) => /\/deps\/mediabunny\.js/.test(name))!
+    const { ALL_FORMATS, BlobSource, Input } = await import(mediabunnyPath)
+    const root = await navigator.storage.getDirectory()
+    const directory = await root.getDirectoryHandle('myrelith-captures-v1')
+    let file: File | null = null
+    for await (const entry of (directory as unknown as { values(): AsyncIterable<FileSystemFileHandle> }).values()) file = await entry.getFile()
+    const input = new Input({ source: new BlobSource(file!), formats: ALL_FORMATS })
+    const video = await input.getPrimaryVideoTrack()
+    const audio = await input.getPrimaryAudioTrack()
+    return { video: await video?.computeDuration(), audio: await audio?.computeDuration() }
+  })
+  // The last picture is held to the end, matching the narration.
+  expect(reopened.audio).toBeGreaterThan(4.5)
+  expect(reopened.video).toBeGreaterThan(4.5)
+  expect(Math.abs(reopened.video! - reopened.audio!)).toBeLessThan(1.1)
+  await panel.getByRole('button', { name: 'Discard' }).click()
+  await expect(panel.getByRole('status')).toContainText('Recording discarded', { timeout: 10_000 })
+})

@@ -87,6 +87,8 @@ async function start(request: Extract<AvCaptureRequest, { type: 'start' }>): Pro
   validId(request.id)
   if (session) throw new Error('A capture is already recording')
   let file: AvSyncFile | null = null
+  let created: { dir: FileSystemDirectoryHandle; name: string } | null = null
+  let recorder: AvCaptureRecorder | null = null
   const cancelStreams = () => { void request.video.cancel().catch(() => {}); void request.audio?.cancel().catch(() => {}) }
   try {
     const { width, height } = request.videoSettings
@@ -96,7 +98,9 @@ async function start(request: Extract<AvCaptureRequest, { type: 'start' }>): Pro
     const name = `${request.id}.mp4`
     try { await dir.getFileHandle(name); throw new Error('Capture draft already exists') }
     catch (cause) { if (!(cause instanceof DOMException && cause.name === 'NotFoundError')) throw cause }
-    file = await openSync(await dir.getFileHandle(name, { create: true }))
+    const handle = await dir.getFileHandle(name, { create: true })
+    created = { dir, name }
+    file = await openSync(handle)
     let video: ReadableStream<VideoFrame> = request.video
     let audio: ReadableStream<AudioData> | null = request.audio && encoding.audio ? request.audio : null
     if (request.audio && !audio) void request.audio.cancel().catch(() => {})
@@ -109,16 +113,20 @@ async function start(request: Extract<AvCaptureRequest, { type: 'start' }>): Pro
       taps = { video: videoTap, audio: audioTap }
     }
     if (!Number.isSafeInteger(request.videoClockOffsetUs)) throw new RangeError('Invalid video clock offset')
-    const recorder = new AvCaptureRecorder({ video, audio, file, encoding, videoClockOffsetUs: request.videoClockOffsetUs,
+    recorder = new AvCaptureRecorder({ video, audio, file, encoding, videoClockOffsetUs: request.videoClockOffsetUs,
       onProgress: (progress) => post({ type: 'progress', progress }),
       onSelfStop: (reason) => post({ type: 'self-stop', reason }) })
     session = { id: request.id, recorder, file, taps }
     await recorder.start()
     return { type: 'start', encoding, width, height }
   } catch (cause) {
-    cancelStreams()
+    // The recorder locks the streams with its readers; only it can cancel them.
+    if (recorder) await recorder.abort().catch(() => {})
+    else cancelStreams()
     try { file?.close() } catch { /* closed */ }
     session = null
+    // A take that never started holds no media: leave no empty draft behind.
+    if (created) await created.dir.removeEntry(created.name).catch(() => {})
     throw cause
   }
 }
@@ -159,7 +167,11 @@ async function run(request: AvCaptureRequest): Promise<AvCaptureResult> {
           const read = sync.read(bytes, { at })
           return bytes.subarray(0, read)
         } })
-        if (scan.status !== 'recoverable') throw new Error(scan.reason)
+        if (scan.status !== 'recoverable') {
+          const error = new Error(scan.reason)
+          error.name = 'UnrecoverableCapture'
+          throw error
+        }
         if (scan.validBytes < size) { sync.truncate(scan.validBytes); sync.flush() }
         return { type: 'recover', validBytes: scan.validBytes, fragments: scan.fragments, discardedBytes: scan.discardedBytes }
       } finally { sync.close() }
@@ -205,8 +217,8 @@ async function run(request: AvCaptureRequest): Promise<AvCaptureResult> {
   }
 }
 
-// Stop/abort must not wait behind a long-running start, but every other
-// request is serialized so OPFS handles are never opened concurrently.
+// Every request is serialized so OPFS handles are never opened concurrently.
+// A stop queued behind a start is fine: start returns as soon as recording runs.
 let tail: Promise<void> = Promise.resolve()
 globalThis.onmessage = ({ data }: MessageEvent<AvCaptureRequest>) => {
   const execute = async () => {

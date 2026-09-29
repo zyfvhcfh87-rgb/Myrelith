@@ -19,6 +19,8 @@ export class AvCaptureBridge {
   private recoveredId: string | null = null
   onProgress: ((progress: AvRecorderProgress) => void) | null = null
   onSelfStop: ((reason: Exclude<AvRecorderEnd, 'stopped'>) => void) | null = null
+  /** The worker died on its own (not `close()`); a recording in it is gone. */
+  onCrash: (() => void) | null = null
 
   constructor(worker?: Worker) {
     this.worker = worker ?? new Worker(new URL('../workers/av-capture.worker.ts', import.meta.url), { type: 'module' })
@@ -26,6 +28,7 @@ export class AvCaptureBridge {
     this.worker.onerror = (event) => {
       event.preventDefault?.()
       this.failAll(new Error('The capture worker stopped unexpectedly'))
+      this.onCrash?.()
     }
   }
 
