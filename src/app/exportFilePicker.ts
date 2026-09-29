@@ -11,6 +11,7 @@ import {
   parseExportSettings,
   type ExportSettingsUnion,
 } from '../domain/deliveryProduct'
+import { hasErrorName } from './fileSystemAccess'
 
 export interface ExportSaveFilePickerOptions {
   readonly suggestedName: string
@@ -62,13 +63,6 @@ function browserHost(): ExportFilePickerHost {
   return window as Window & ExportFilePickerHost
 }
 
-function namedError(cause: unknown, name: string): boolean {
-  return typeof cause === 'object'
-    && cause !== null
-    && 'name' in cause
-    && cause.name === name
-}
-
 class OneShotExportFileDestination implements ExportFileDestinationCapability {
   readonly #fileName: string
   #handle: FileSystemFileHandle | null
@@ -106,8 +100,8 @@ export function getExportFilePickerAvailability(
 }
 
 function pickerFailure(cause: unknown): ExportFilePickerResult | never {
-  if (namedError(cause, 'AbortError')) return { status: 'cancelled' }
-  if (namedError(cause, 'SecurityError')) {
+  if (hasErrorName(cause, 'AbortError')) return { status: 'cancelled' }
+  if (hasErrorName(cause, 'SecurityError')) {
     return { status: 'security-error', reason: SECURITY_ERROR_REASON }
   }
   throw cause

@@ -5,6 +5,7 @@ import {
   loadCollectedArchive,
   prepareCollectDestination,
   readFileAtRelativePath,
+  readOptionalTextFile,
   streamCopyBlob,
   writeBlobAtRelativePath,
   writeCollectManifest,
@@ -200,6 +201,20 @@ describe('collect-media archive I/O', () => {
     const inspection = await inspectCollectDestination(destination)
     expect(inspection.hasIncompleteMarker).toBe(true)
     expect(inspection.kind).toBe('incomplete')
+  })
+
+  it('treats a file removed between lookup and read as absent', async () => {
+    const destination = new MemoryDirectory()
+    const vanishing = new MemoryFileHandle('marker.txt')
+    vanishing.getFile = async () => { throw missing('marker.txt') }
+    destination.files.set('marker.txt', vanishing)
+    const denied = new MemoryFileHandle('denied.txt')
+    denied.getFile = async () => { throw new DOMException('denied', 'NotAllowedError') }
+    destination.files.set('denied.txt', denied)
+    const archive = destination as unknown as CollectMediaDirectoryHandle
+
+    await expect(readOptionalTextFile(archive, 'marker.txt')).resolves.toBeNull()
+    await expect(readOptionalTextFile(archive, 'denied.txt')).rejects.toThrow('denied')
   })
 })
 

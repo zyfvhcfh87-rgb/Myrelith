@@ -19,6 +19,7 @@ import {
   type DerivedAnalysisCacheEntry,
 } from '../domain/analysisCache'
 import { audioFeatureKeyPreimage, type AudioFeatureIdentity } from '../domain/multicamAlignmentProvenance'
+import { writeFileHandle } from './fileSystemAccess'
 
 const DERIVED_DIRECTORY = 'myrelith-derived'
 const ANALYSIS_DIRECTORY = 'analysis-cache-v1'
@@ -168,18 +169,7 @@ export class AnalysisStorage {
     }
     const directory = await this.directory(true)
     const handle = await directory.getFileHandle(MANIFEST_FILE, { create: true })
-    const writable = await handle.createWritable({ keepExistingData: false })
-    try {
-      await writable.write(serialized)
-      await writable.close()
-    } catch (cause) {
-      try {
-        await writable.abort(cause)
-      } catch {
-        // Preserve the manifest write failure.
-      }
-      throw cause
-    }
+    await writeFileHandle(handle, serialized)
   }
 
   private serialize<T>(operation: () => Promise<T>): Promise<T> {
@@ -227,16 +217,9 @@ export class AnalysisStorage {
     const fileName = `${cacheKey}.${token}.bin`
     const directory = await this.directory(true)
     const handle = await directory.getFileHandle(fileName, { create: true })
-    const writable = await handle.createWritable({ keepExistingData: false })
     try {
-      await writable.write(bytes)
-      await writable.close()
+      await writeFileHandle(handle, bytes)
     } catch (cause) {
-      try {
-        await writable.abort(cause)
-      } catch {
-        // Preserve the result write failure.
-      }
       await this.removeFile(fileName).catch(() => undefined)
       throw cause
     }

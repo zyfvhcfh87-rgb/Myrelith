@@ -1,6 +1,8 @@
 /** Origin-local, transactional plugin package storage. Never import from project state. */
 
 import { PLUGIN_MANIFEST_LIMITS } from '../domain/pluginManifest'
+import { createCachedDatabase, requestInTransaction } from './indexedDbAccess'
+import { createKeyedSerialQueue } from './keyedSerialQueue'
 import { PLUGIN_PACKAGE_LIMITS } from './pluginPackage'
 import {
   PLUGIN_DIAGNOSTIC_CODES,
@@ -235,7 +237,12 @@ function parseDiagnostic(value: unknown): PluginDiagnosticEvent | null {
   })
 }
 
-export function parseInstalledPluginRecord(value: unknown): InstalledPluginRecord {
+/**
+ * Validate and rebuild a stored record. The result never aliases `value`'s
+ * nested objects; its archive is a private copy unless `copyArchive` is false,
+ * which only a transaction-local check may use (see `validateTransientRecord`).
+ */
+function parseRecord(value: unknown, copyArchive: boolean): InstalledPluginRecord {
   if (!isRecord(value) || !hasExactKeys(value, RECORD_KEYS)) {
     throw new LocalPluginStorageError('Stored plugin record has an invalid shape')
   }
@@ -314,34 +321,27 @@ export function parseInstalledPluginRecord(value: unknown): InstalledPluginRecor
     trust,
     grants: Object.freeze(grants as PluginPermissionGrant[]),
     diagnostics: Object.freeze(diagnostics as PluginDiagnosticEvent[]),
-    archiveBytes: value.archiveBytes.slice(),
+    archiveBytes: copyArchive ? value.archiveBytes.slice() : value.archiveBytes,
   }
   return Object.freeze(record)
 }
 
-function cloneRecord(record: InstalledPluginRecord): InstalledPluginRecord {
-  return parseInstalledPluginRecord({
-    ...record,
-    trust: { ...record.trust },
-    grants: record.grants.map((grant) => ({ ...grant })),
-    diagnostics: record.diagnostics.map((event) => ({ ...event })),
-    archiveBytes: record.archiveBytes.slice(),
-  })
+/** Parsing rebuilds every nested object and copies the archive exactly once. */
+export function parseInstalledPluginRecord(value: unknown): InstalledPluginRecord {
+  return parseRecord(value, true)
+}
+
+/**
+ * Validate a record that lives only inside one IndexedDB callback (a fresh
+ * structured clone) without copying its archive. The result aliases `value`'s
+ * archive bytes, so it must not escape that callback.
+ */
+function validateTransientRecord(value: unknown): InstalledPluginRecord {
+  return parseRecord(value, false)
 }
 
 export function createLocalPluginStorage(backend: LocalPluginStorageBackend): LocalPluginStorage {
-  const tails = new Map<string, Promise<void>>()
-
-  function enqueue<T>(pluginId: string, operation: () => Promise<T>): Promise<T> {
-    const previous = tails.get(pluginId) ?? Promise.resolve()
-    const result = previous.then(operation)
-    const tail = result.then(() => undefined, () => undefined)
-    tails.set(pluginId, tail)
-    void tail.then(() => {
-      if (tails.get(pluginId) === tail) tails.delete(pluginId)
-    })
-    return result
-  }
+  const enqueue = createKeyedSerialQueue()
 
   function parseRecordSnapshot(
     pluginId: string,
@@ -400,7 +400,8 @@ export function createLocalPluginStorage(backend: LocalPluginStorageBackend): Lo
         if (pluginId !== next.pluginId) {
           throw new LocalPluginStorageError('Plugin registry key does not match the record id')
         }
-        const retained = cloneRecord(next)
+        // Never retain the caller's record or archive buffer.
+        const retained = parseInstalledPluginRecord(next)
         return backend.compareAndSwap(pluginId, expected, retained, catalogAffecting)
       })
     },
@@ -410,64 +411,29 @@ export function createLocalPluginStorage(backend: LocalPluginStorageBackend): Lo
   }
 }
 
-let pluginDatabase: Promise<IDBDatabase> | null = null
-
-function openPluginDatabase(): Promise<IDBDatabase> {
-  if (pluginDatabase) return pluginDatabase
-  pluginDatabase = new Promise<IDBDatabase>((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      reject(new LocalPluginStorageError('IndexedDB is unavailable in this browser'))
-      return
-    }
-    const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(STORE_NAME)) {
-        request.result.createObjectStore(STORE_NAME)
-      }
-      if (!request.result.objectStoreNames.contains(TRUST_POLICY_STORE_NAME)) {
-        request.result.createObjectStore(TRUST_POLICY_STORE_NAME)
-      }
-      if (!request.result.objectStoreNames.contains(MANAGEMENT_STORE_NAME)) {
-        request.result.createObjectStore(MANAGEMENT_STORE_NAME)
-      }
-    }
-    request.onsuccess = () => {
-      const database = request.result
-      database.onversionchange = () => {
-        database.close()
-        pluginDatabase = null
-      }
-      resolve(database)
-    }
-    request.onerror = () => reject(
-      request.error ?? new LocalPluginStorageError('Could not open the local plugin registry'),
-    )
-    request.onblocked = () => reject(
-      new LocalPluginStorageError('The local plugin registry is blocked by another tab'),
-    )
-  })
-  void pluginDatabase.catch(() => { pluginDatabase = null })
-  return pluginDatabase
-}
+const openPluginDatabase = createCachedDatabase({
+  name: DATABASE_NAME,
+  version: DATABASE_VERSION,
+  stores: [STORE_NAME, TRUST_POLICY_STORE_NAME, MANAGEMENT_STORE_NAME],
+  unavailableMessage: 'IndexedDB is unavailable in this browser',
+  openFailedMessage: 'Could not open the local plugin registry',
+  blockedMessage: 'The local plugin registry is blocked by another tab',
+  createError: (message) => new LocalPluginStorageError(message),
+})
 
 class IndexedDbPluginStorageBackend implements LocalPluginStorageBackend {
   async getGeneration(): Promise<unknown> {
-    const database = await openPluginDatabase()
-    return new Promise<unknown>((resolve, reject) => {
-      const transaction = database.transaction(MANAGEMENT_STORE_NAME, 'readonly')
-      const request = transaction
-        .objectStore(MANAGEMENT_STORE_NAME)
-        .get(MANAGEMENT_GENERATION_KEY)
-      let generation: unknown
-      request.onsuccess = () => { generation = request.result }
-      request.onerror = () => reject(
-        request.error ?? new LocalPluginStorageError('Plugin generation read failed'),
-      )
-      transaction.oncomplete = () => resolve(generation)
-      transaction.onabort = () => reject(
-        transaction.error ?? new LocalPluginStorageError('Plugin generation read aborted'),
-      )
-    })
+    return requestInTransaction(
+      await openPluginDatabase(),
+      MANAGEMENT_STORE_NAME,
+      'readonly',
+      (store) => store.get(MANAGEMENT_GENERATION_KEY),
+      {
+        requestFailed: 'Plugin generation read failed',
+        aborted: 'Plugin generation read aborted',
+        createError: (message) => new LocalPluginStorageError(message),
+      },
+    )
   }
 
   async getWithGeneration(pluginId: string): Promise<RawPluginRecordSnapshot> {
@@ -542,7 +508,8 @@ class IndexedDbPluginStorageBackend implements LocalPluginStorageBackend {
       const commitIfReady = () => {
         if (!recordsReady || !generationReady) return
         try {
-          const records = read.result.map(parseInstalledPluginRecord)
+          // Checking revisions and limits must not copy every stored archive.
+          const records = read.result.map(validateTransientRecord)
           const current = records.find((record) => record.pluginId === pluginId)
           if ((current?.packageDigest ?? null) !== (expected?.packageDigest ?? null)
             || (current?.revision ?? null) !== (expected?.revision ?? null)) return
@@ -564,7 +531,9 @@ class IndexedDbPluginStorageBackend implements LocalPluginStorageBackend {
           if (aggregateContributions > PLUGIN_REGISTRY_LIMITS.maxAggregateContributions) {
             throw new LocalPluginStorageError('The plugin declaration catalog limit was reached')
           }
-          store.put(cloneRecord(next), pluginId)
+          // The facade already parsed `next` into a private copy, and put()
+          // stores its own structured clone.
+          store.put(next, pluginId)
           if (catalogAffecting) {
             generationStore.put(
               nextManagementGeneration(generationRead.result),
@@ -618,7 +587,7 @@ class IndexedDbPluginStorageBackend implements LocalPluginStorageBackend {
         if (!recordReady || !generationReady) return
         try {
           if (read.result === undefined) return
-          const current = parseInstalledPluginRecord(read.result)
+          const current = validateTransientRecord(read.result)
           if (current.packageDigest !== expected.packageDigest
             || current.revision !== expected.revision) return
           store.delete(pluginId)
@@ -657,20 +626,17 @@ class IndexedDbPluginStorageBackend implements LocalPluginStorageBackend {
 
 class IndexedDbPluginTrustPolicyStore implements PluginTrustPolicyStore {
   async load(): Promise<unknown> {
-    const database = await openPluginDatabase()
-    return new Promise<unknown>((resolve, reject) => {
-      const transaction = database.transaction(TRUST_POLICY_STORE_NAME, 'readonly')
-      const request = transaction.objectStore(TRUST_POLICY_STORE_NAME).get(TRUST_POLICY_KEY)
-      let result: unknown
-      request.onsuccess = () => { result = request.result }
-      request.onerror = () => reject(
-        request.error ?? new LocalPluginStorageError('Plugin trust policy read failed'),
-      )
-      transaction.oncomplete = () => resolve(result)
-      transaction.onabort = () => reject(
-        transaction.error ?? new LocalPluginStorageError('Plugin trust policy read aborted'),
-      )
-    })
+    return requestInTransaction(
+      await openPluginDatabase(),
+      TRUST_POLICY_STORE_NAME,
+      'readonly',
+      (store) => store.get(TRUST_POLICY_KEY),
+      {
+        requestFailed: 'Plugin trust policy read failed',
+        aborted: 'Plugin trust policy read aborted',
+        createError: (message) => new LocalPluginStorageError(message),
+      },
+    )
   }
 
   async compareAndSwap(
