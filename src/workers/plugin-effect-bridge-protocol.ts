@@ -1,6 +1,7 @@
 /** Typed, bounded RPC between the render worker and its main-thread effect host. */
 
 import { utf8ByteLength } from '../domain/documentMemory'
+import { hasExactKeys, isRecord } from '../domain/guards'
 import { PLUGIN_MANIFEST_LIMITS } from '../domain/pluginManifest'
 import type { PluginVideoEffectExecutionPlan } from '../domain/pluginVideoEffectStagePlan'
 
@@ -93,17 +94,6 @@ export interface PluginEffectBridgeHandler {
 
 type UnknownRecord = Record<string, unknown>
 
-function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function exactKeys(value: UnknownRecord, keys: readonly string[]): boolean {
-  const actual = Object.keys(value).sort()
-  const expected = [...keys].sort()
-  return actual.length === expected.length
-    && actual.every((key, index) => key === expected[index])
-}
-
 function isPositiveSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) > 0
 }
@@ -118,7 +108,7 @@ function isArrayBuffer(value: unknown): value is ArrayBuffer {
 }
 
 function isExecutionPlan(value: unknown): value is PluginVideoEffectExecutionPlan {
-  if (!isRecord(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'catalogGeneration',
     'signerFingerprint',
     'packageDigest',
@@ -172,11 +162,11 @@ export function isPluginEffectBridgeWorkerMessage(
 ): value is PluginEffectBridgeWorkerMessage {
   if (!isRecord(value) || !validIdentity(value)) return false
   if (value.type === 'pluginEffectCancel') {
-    return exactKeys(value, [
+    return hasExactKeys(value, [
       'type', 'protocolVersion', 'generation', 'renderRequestId', 'effectRequestId',
     ])
   }
-  if (value.type !== 'pluginEffectApply' || !exactKeys(value, [
+  if (value.type !== 'pluginEffectApply' || !hasExactKeys(value, [
     'type',
     'protocolVersion',
     'generation',
@@ -218,12 +208,12 @@ export function isPluginEffectBridgeHostMessage(
 ): value is PluginEffectBridgeHostMessage {
   if (!isRecord(value) || !validIdentity(value)) return false
   if (value.type === 'pluginEffectBypassed') {
-    return exactKeys(value, [
+    return hasExactKeys(value, [
       'type', 'protocolVersion', 'generation', 'renderRequestId', 'effectRequestId',
     ])
   }
   return value.type === 'pluginEffectApplied'
-    && exactKeys(value, [
+    && hasExactKeys(value, [
       'type',
       'protocolVersion',
       'generation',

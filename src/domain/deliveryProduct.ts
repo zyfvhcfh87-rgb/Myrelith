@@ -14,7 +14,6 @@ import {
   exportProfileIncludesAudio,
   hasExactlyKeys,
   isOneOf,
-  isRecord,
   validateExportProfile,
   type ExportAudioChannelLayout,
   type ExportBitrateMode,
@@ -29,6 +28,7 @@ import {
   MAX_EXPORT_DURATION_SECONDS,
   MAX_EXPORT_FRAME_COUNT,
 } from './exportWorkBudget'
+import { isRecord } from './guards'
 import { framesToSeconds } from './time'
 
 export type DeliveryKind = 'image-sequence' | 'audio-only' | 'alpha-video'

@@ -10,6 +10,7 @@
 import { addCrossfade } from './operations'
 import { createDefaultClip } from './operations/creation'
 import { defaultMasterAudio } from './audioMixer'
+import { isRecord } from './guards'
 import type { PortableAssetDescriptor } from './projectFile/projectTypes'
 import { PROJECT_FILE_LIMITS } from './projectFile/projectTypes'
 import { MAX_PROJECT_NAME_CHARACTERS } from './projectLimits'
@@ -197,10 +198,6 @@ const AUDIO_EXTENSIONS = new Set([
   '.wav', '.mp3', '.aac', '.m4a', '.flac', '.ogg', '.opus', '.aif', '.aiff', '.ac3',
 ])
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.mxf', '.mkv', '.webm', '.m4v'])
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function lossLog(): LossLog {
   return { entries: [], omitted: 0 }

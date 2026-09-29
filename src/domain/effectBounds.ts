@@ -1,5 +1,6 @@
 /** Shared portable and live-edit bounds for durable effect descriptors. */
 
+import { isRecord } from './guards'
 import type { EffectDescriptor, EffectParamValue, TimelineDoc } from './schema'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
@@ -65,10 +66,6 @@ export interface EffectBudgetUsage {
   readonly effects: number
   readonly params: number
   readonly stringCharacters: number
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function boundedRequiredStringError(

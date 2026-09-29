@@ -1,5 +1,6 @@
 /** Exact domain-separated cache identities for bounded multicam audio features. */
 import type { AnalysisSourceFingerprint } from './analysisCache'
+import { hasExactKeys, isBoundedString, isRecord } from './guards'
 import { isLocalProjectBindingId } from './localProjectBinding'
 import type { FrameRate } from './schema'
 import { MULTICAM_ALIGNMENT_LIMITS as LIMITS, alignmentRateIsSupported } from './multicamAlignment'
@@ -29,19 +30,6 @@ export interface AudioPairIdentity {
   readonly definitionDigest: string
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  const keys = Object.keys(value)
-  return keys.length === expected.length && keys.every((key) => expected.includes(key))
-}
-
-function boundedString(value: unknown, maximum: number): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= maximum
-}
-
 function digest(value: unknown): value is string {
   return typeof value === 'string' && value.length === 64 && /^[a-f0-9]+$/.test(value)
 }
@@ -52,7 +40,7 @@ function integer(value: unknown, minimum: number, maximum: number): value is num
 
 /** Exact ordered JSON tuple. The app owner hashes its UTF-8 bytes with SHA-256. */
 export function audioFeatureKeyPreimage(value: unknown): string {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'projectBindingId', 'assetId', 'sourceFingerprint', 'audioStreamIndex', 'audioTrackId',
     'decodePolicyDigest', 'timestampOrigin', 'inputSampleRate', 'channels',
     'startSample', 'sourceSampleCount', 'binCount',
@@ -60,10 +48,10 @@ export function audioFeatureKeyPreimage(value: unknown): string {
   const source = value.sourceFingerprint
   if (
     !isLocalProjectBindingId(value.projectBindingId)
-    || !boundedString(value.assetId, 256) || !boundedString(value.audioTrackId, 256)
-    || !record(source) || !exactKeys(source, ['algorithm', 'digest', 'fileName', 'size', 'lastModified'])
+    || !isBoundedString(value.assetId, 256) || !isBoundedString(value.audioTrackId, 256)
+    || !isRecord(source) || !hasExactKeys(source, ['algorithm', 'digest', 'fileName', 'size', 'lastModified'])
     || source.algorithm !== 'sha256-sampled-v1' || !digest(source.digest)
-    || !boundedString(source.fileName, 4_096) || !integer(source.size, 0, Number.MAX_SAFE_INTEGER)
+    || !isBoundedString(source.fileName, 4_096) || !integer(source.size, 0, Number.MAX_SAFE_INTEGER)
     || !integer(source.lastModified, 0, 8_640_000_000_000_000)
     || !integer(value.audioStreamIndex, 0, 255) || !digest(value.decodePolicyDigest)
     || value.timestampOrigin !== 'source-presentation-zero-continuous-v1'
@@ -87,13 +75,13 @@ export function audioFeatureKeyPreimage(value: unknown): string {
 
 /** Results bind order/sign, project mapping, every quality policy, and the proposal snapshot. */
 export function audioPairKeyPreimage(value: unknown): string {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'referenceFeatureKey', 'targetFeatureKey', 'projectRate', 'maxLagBins', 'definitionDigest',
   ])) throw new TypeError('Invalid audio pair identity')
   const rate = value.projectRate
   if (
     !digest(value.referenceFeatureKey) || !digest(value.targetFeatureKey)
-    || !digest(value.definitionDigest) || !record(rate) || !exactKeys(rate, ['num', 'den'])
+    || !digest(value.definitionDigest) || !isRecord(rate) || !hasExactKeys(rate, ['num', 'den'])
     || typeof rate.num !== 'number' || typeof rate.den !== 'number'
     || !alignmentRateIsSupported({ num: rate.num, den: rate.den })
     || !integer(value.maxLagBins, LIMITS.minLagBins, LIMITS.maxLagBins)

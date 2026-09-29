@@ -1,5 +1,6 @@
 /** Origin-local, transactional plugin package storage. Never import from project state. */
 
+import { hasExactKeys, isRecord, isSha256Hex } from '../domain/guards'
 import { PLUGIN_MANIFEST_LIMITS } from '../domain/pluginManifest'
 import { createCachedDatabase, requestInTransaction } from './indexedDbAccess'
 import { createKeyedSerialQueue } from './keyedSerialQueue'
@@ -68,7 +69,6 @@ const ACTIVATION_STATES = new Set<PluginActivationState>([
   'revoked',
 ])
 const DIAGNOSTIC_CODES = new Set<PluginDiagnosticCode>(PLUGIN_DIAGNOSTIC_CODES)
-const BARE_SHA256 = /^[0-9a-f]{64}$/
 const PLUGIN_ID = /^(?:[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/u
 const CAPABILITY_ID = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)+$/u
 const PACKAGE_PATH_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
@@ -140,15 +140,6 @@ export interface LocalPluginStorage {
     expected: PluginStorageRevision,
     catalogAffecting?: boolean,
   ): Promise<boolean>
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const actual = Object.keys(value)
-  return actual.length === keys.length && keys.every((key) => actual.includes(key))
 }
 
 function boundedString(value: unknown, min: number, max: number): value is string {
@@ -266,8 +257,7 @@ function parseRecord(value: unknown, copyArchive: boolean): InstalledPluginRecor
     || value.modulePath.split('/').some(
       (segment) => segment === '.' || segment === '..' || !PACKAGE_PATH_SEGMENT.test(segment),
     )
-    || typeof value.moduleSha256 !== 'string'
-    || !BARE_SHA256.test(value.moduleSha256)
+    || !isSha256Hex(value.moduleSha256)
     || !Number.isSafeInteger(value.moduleByteLength)
     || (value.moduleByteLength as number) <= 0
     || (value.moduleByteLength as number) > PLUGIN_PACKAGE_LIMITS.maxExpandedEntryBytes

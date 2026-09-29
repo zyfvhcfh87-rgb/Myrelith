@@ -8,6 +8,7 @@
  */
 
 import { hasErrorName } from '../domain/errors'
+import { isBoundedString, isPlainRecord } from '../domain/guards'
 import {
   LEGACY_PROJECT_FILE_EXTENSION,
   parseProjectFile,
@@ -163,26 +164,6 @@ const MAX_FILE_NAME_CHARACTERS = PROJECT_FILE_LIMITS.maxFileNameCharacters
 const MAX_JOURNAL_ID_CHARACTERS = MAX_DOCUMENT_ID_CHARACTERS
 const MAX_DATE_TIMESTAMP = 8_640_000_000_000_000
 
-type JsonRecord = Record<string, unknown>
-
-function isRecord(value: unknown): value is JsonRecord {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return false
-  }
-  const prototype = Object.getPrototypeOf(value)
-  return prototype === Object.prototype || prototype === null
-}
-
-function isBoundedString(
-  value: unknown,
-  maximumCharacters: number,
-  allowEmpty = false,
-): value is string {
-  return typeof value === 'string'
-    && (allowEmpty || value.length > 0)
-    && value.length <= maximumCharacters
-}
-
 function isTimestamp(value: unknown): value is number {
   return typeof value === 'number'
     && Number.isSafeInteger(value)
@@ -219,7 +200,7 @@ function isProjectFileHandle(value: unknown): value is LocalProjectFileHandle {
 }
 
 function normalizeRecentProject(value: unknown): RecentProjectRecord | null {
-  if (!isRecord(value) || value.version !== LOCAL_PROJECT_RECORD_VERSION) {
+  if (!isPlainRecord(value) || value.version !== LOCAL_PROJECT_RECORD_VERSION) {
     return null
   }
   if (!isBoundedString(value.documentId, MAX_DOCUMENT_ID_CHARACTERS)) return null
@@ -265,7 +246,7 @@ function normalizeRecoveryGeneration(
   fallbackBindingId: string,
 ): NormalizedRecoveryGeneration | null {
   if (
-    !isRecord(value)
+    !isPlainRecord(value)
     || !isBoundedString(value.snapshotId, MAX_JOURNAL_ID_CHARACTERS)
     || !isTimestamp(value.capturedAt)
   ) {
@@ -308,7 +289,7 @@ function normalizeRecoveryJournal(
   value: unknown,
   maximumGenerations: number,
 ): RecoveryJournalRecord | null {
-  if (!isRecord(value) || value.version !== LOCAL_PROJECT_RECORD_VERSION) {
+  if (!isPlainRecord(value) || value.version !== LOCAL_PROJECT_RECORD_VERSION) {
     return null
   }
   if (!isBoundedString(value.journalId, MAX_JOURNAL_ID_CHARACTERS)) return null

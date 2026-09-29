@@ -1,6 +1,7 @@
 import type { FrameRate, MediaSourceBounds, SourceTimestampBounds } from '../schema';
 import { LENS_CORRECTION_MODEL_VERSION, lensCorrectionValidationError, type LensCorrectionIntent, type ManualLensCorrectionModel } from '../lensCorrection';
 import { PROJECT_FILE_LIMITS, ProjectFileError } from './projectTypes';
+import { isPlainRecord } from '../guards';
 
 export type JsonRecord = Record<string, unknown>
 
@@ -8,16 +9,8 @@ export function fail(path: string, problem: string): never {
   throw new ProjectFileError(`${path}: ${problem}`)
 }
 
-export function isRecord(value: unknown): value is JsonRecord {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return false
-  }
-  const prototype = Object.getPrototypeOf(value)
-  return prototype === Object.prototype || prototype === null
-}
-
 export function record(value: unknown, path: string): JsonRecord {
-  if (!isRecord(value)) fail(path, 'expected an object')
+  if (!isPlainRecord(value)) fail(path, 'expected an object')
   return value
 }
 

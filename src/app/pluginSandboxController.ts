@@ -14,6 +14,7 @@ import type {
   PluginWasmModuleFacts,
 } from '../workers/plugin-wasm/moduleParser'
 import type { PluginRuntimeLifecycleObserver } from './pluginRuntimeLifecycleObserver'
+import { hasExactKeys, isRecord } from '../domain/guards'
 
 export const PLUGIN_SANDBOX_BROKER_MARKER = 'MYRELITH_PLUGIN_SANDBOX_BROKER_V1'
 export const PLUGIN_ACTIVATION_DEADLINE_MS = 5_000
@@ -134,17 +135,6 @@ function zeroWorkerResponsePayloads(value: unknown): void {
   zeroAttachedArrayBuffers([...new Set(buffers)])
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  const actual = Object.keys(value).sort()
-  const sortedExpected = [...expected].sort()
-  return actual.length === sortedExpected.length
-    && actual.every((key, index) => key === sortedExpected[index])
-}
-
 const PLUGIN_RUNTIME_FAILURE_CODES = new Set<PluginRuntimeFailure['code']>([
   'aborted',
   'activation-failed',
@@ -166,7 +156,7 @@ const PLUGIN_RUNTIME_FAILURE_CODES = new Set<PluginRuntimeFailure['code']>([
 function isPluginRuntimeFailure(value: unknown): value is PluginRuntimeFailure {
   if (!isRecord(value)) return false
   const hasPluginCode = Object.prototype.hasOwnProperty.call(value, 'pluginCode')
-  if (!exactKeys(value, hasPluginCode
+  if (!hasExactKeys(value, hasPluginCode
     ? ['code', 'message', 'terminal', 'pluginCode']
     : ['code', 'message', 'terminal'])) return false
   return typeof value.code === 'string'
@@ -185,27 +175,27 @@ function isWorkerSuccessResponse(
 ): boolean {
   if (value.kind !== expectedKind) return false
   if (expectedKind === 'ready') {
-    return exactKeys(value, ['protocolVersion', 'kind', 'generation', 'requestId', 'facts'])
+    return hasExactKeys(value, ['protocolVersion', 'kind', 'generation', 'requestId', 'facts'])
       && isRecord(value.facts)
   }
   if (expectedKind === 'rendered') {
-    return exactKeys(value, [
+    return hasExactKeys(value, [
       'protocolVersion', 'kind', 'generation', 'requestId', 'identity', 'rgbaBytes',
     ]) && typeof value.identity === 'boolean' && isArrayBuffer(value.rgbaBytes)
   }
   if (expectedKind === 'migrated') {
-    return exactKeys(value, [
+    return hasExactKeys(value, [
       'protocolVersion', 'kind', 'generation', 'requestId', 'canonicalOutputBytes',
     ]) && isArrayBuffer(value.canonicalOutputBytes)
   }
-  return exactKeys(value, ['protocolVersion', 'kind', 'generation', 'requestId'])
+  return hasExactKeys(value, ['protocolVersion', 'kind', 'generation', 'requestId'])
 }
 
 function isPluginWasmModuleFacts(
   value: unknown,
   expectations: PluginWasmModuleExpectations,
 ): value is PluginWasmModuleFacts {
-  if (!isRecord(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'policy',
     'opcodeTableDigest',
     'importedMemory',
@@ -215,9 +205,9 @@ function isPluginWasmModuleFacts(
     'dataSegmentCount',
     'exportedFunctions',
   ]) || !isRecord(value.policy)
-    || !exactKeys(value.policy, ['binaryPolicyVersion', 'profileId'])
+    || !hasExactKeys(value.policy, ['binaryPolicyVersion', 'profileId'])
     || !isRecord(value.importedMemory)
-    || !exactKeys(value.importedMemory, ['minimumPages', 'maximumPages'])
+    || !hasExactKeys(value.importedMemory, ['minimumPages', 'maximumPages'])
     || !Array.isArray(value.exportedFunctions)) return false
   const counts = [
     value.definedFunctionCount,
@@ -414,12 +404,12 @@ export async function createBrowserPluginSandboxBroker(
     controlChannel.port1.onmessage = (event): void => {
       const value = event.data
       if (!isRecord(value) || value.nonce !== nonce || value.generation !== request.generation) return
-      if (exactKeys(value, ['kind', 'nonce', 'generation'])
+      if (hasExactKeys(value, ['kind', 'nonce', 'generation'])
         && value.kind === 'worker-created') {
         reportOwnership({ ...ownership, candidateWorkerCount: 1, privatePortCount: 4 })
         return
       }
-      if (exactKeys(value, ['kind', 'nonce', 'generation'])
+      if (hasExactKeys(value, ['kind', 'nonce', 'generation'])
         && value.kind === 'worker-terminated') {
         acknowledgeTermination?.()
         return
@@ -430,7 +420,7 @@ export async function createBrowserPluginSandboxBroker(
         rejectAndTerminate(failure('crashed', typeof value.message === 'string' ? value.message : 'Plugin worker crashed.'))
         return
       }
-      if (!exactKeys(value, ['kind', 'nonce', 'generation', 'runtimePort'])
+      if (!hasExactKeys(value, ['kind', 'nonce', 'generation', 'runtimePort'])
         || value.kind !== 'worker-ready'
         || !(value.runtimePort instanceof MessagePort)) return
       window.clearTimeout(timer)
@@ -462,7 +452,7 @@ export async function createBrowserPluginSandboxBroker(
 
   controlChannel.port1.onmessage = (event): void => {
     const value = event.data
-    if (isRecord(value) && exactKeys(value, ['kind', 'nonce', 'generation'])
+    if (isRecord(value) && hasExactKeys(value, ['kind', 'nonce', 'generation'])
       && value.kind === 'worker-terminated'
       && value.nonce === nonce && value.generation === request.generation) {
       acknowledgeTermination?.()
@@ -724,7 +714,7 @@ export function createPluginSandboxController(options: {
       }
       const current = pending
       if (response.kind === 'failure') {
-        if (!exactKeys(response, [
+        if (!hasExactKeys(response, [
           'protocolVersion', 'kind', 'generation', 'requestId', 'failure',
         ]) || !isPluginRuntimeFailure(response.failure)) {
           zeroWorkerResponsePayloads(response)

@@ -1,3 +1,4 @@
+import { isSha256Hex } from '../domain/guards'
 import {
   PLUGIN_MANIFEST_LIMITS,
   negotiatePluginCompatibility,
@@ -560,7 +561,7 @@ function signatureEnvelope(bytes: Uint8Array): SignatureEnvelope {
     const record = candidate as Readonly<Record<string, JsonValue>>
     exactKeys(record, ['length', 'path', 'sha256'], 'signature-invalid', `signature.json.entries[${index}]`)
     const sha256 = stringValue(record.sha256, 'signature-invalid', `signature.json.entries[${index}].sha256`)
-    if (!/^[0-9a-f]{64}$/u.test(sha256)) {
+    if (!isSha256Hex(sha256)) {
       fail('signature-invalid', `signature.json.entries[${index}].sha256 must be lowercase SHA-256 hex.`)
     }
     return {

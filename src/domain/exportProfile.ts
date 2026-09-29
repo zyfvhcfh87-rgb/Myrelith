@@ -6,6 +6,7 @@
  * settings and are combined with one validated profile at the pipeline edge.
  */
 
+import { isRecord } from './guards'
 import type { TimelineDoc } from './schema'
 
 export type ExportPresetId = 'compatibility' | 'web' | 'modern' | 'hevc'
@@ -104,10 +105,6 @@ const ALLOWED_CODEC_PAIRS = Object.freeze([
 ] as const)
 
 // Exact-shape helpers shared with the delivery-product parsers.
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 export function hasExactlyKeys(
   value: Record<string, unknown>,
   expected: readonly string[],

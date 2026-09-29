@@ -1,3 +1,4 @@
+import { hasExactKeys, isBoundedString, isRecord, isSha256Hex } from './guards'
 import type { FrameRate } from './schema'
 import { MAX_DOCUMENT_ID_CHARACTERS } from './projectLimits'
 import {
@@ -151,23 +152,6 @@ function positiveSafeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function exactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const keys = Object.keys(value)
-  return keys.length === expected.length
-    && keys.every((key) => expected.includes(key))
-}
-
-function boundedString(value: unknown, maximum: number): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= maximum
-}
-
 function greatestCommonDivisor(left: number, right: number): number {
   let a = left
   let b = right
@@ -184,7 +168,7 @@ function nonNegativeSafeInteger(value: unknown): value is number {
 }
 
 function validRate(value: unknown): value is FrameRate {
-  if (!record(value) || !exactKeys(value, ['num', 'den'])) return false
+  if (!isRecord(value) || !hasExactKeys(value, ['num', 'den'])) return false
   const rate = value as Partial<FrameRate>
   return positiveSafeInteger(rate.num)
     && rate.num <= MAX_PROXY_RATE_PART
@@ -195,7 +179,7 @@ function validRate(value: unknown): value is FrameRate {
 }
 
 function validParameters(value: unknown): value is ProxyGenerationParameters {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'container',
     'videoCodec',
     'bitrate',
@@ -219,7 +203,7 @@ function validParameters(value: unknown): value is ProxyGenerationParameters {
 }
 
 function validFingerprint(value: unknown): value is ProxyOriginalFingerprint {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'algorithm',
     'digest',
     'fileName',
@@ -228,16 +212,15 @@ function validFingerprint(value: unknown): value is ProxyOriginalFingerprint {
   ])) return false
   const fingerprint = value as Partial<ProxyOriginalFingerprint>
   return fingerprint.algorithm === 'sha256-sampled-v1'
-    && typeof fingerprint.digest === 'string'
-    && /^[a-f0-9]{64}$/.test(fingerprint.digest)
-    && boundedString(fingerprint.fileName, MAX_PROXY_FILE_NAME_CHARACTERS)
+    && isSha256Hex(fingerprint.digest)
+    && isBoundedString(fingerprint.fileName, MAX_PROXY_FILE_NAME_CHARACTERS)
     && nonNegativeSafeInteger(fingerprint.size)
     && nonNegativeSafeInteger(fingerprint.lastModified)
     && fingerprint.lastModified <= MAX_PROXY_TIMESTAMP
 }
 
 function validEntry(value: unknown, legacy = false): value is ProxyCacheEntry {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'cacheKey',
     ...(legacy ? [] : ['projectBindingId']),
     'assetId',
@@ -255,14 +238,13 @@ function validEntry(value: unknown, legacy = false): value is ProxyCacheEntry {
     'lastUsedAt',
   ])) return false
   const entry = value as Partial<ProxyCacheEntry>
-  return typeof entry.cacheKey === 'string'
-    && /^[a-f0-9]{64}$/.test(entry.cacheKey)
+  return isSha256Hex(entry.cacheKey)
     && (
       legacy
       || entry.projectBindingId === null
       || isLocalProjectBindingId(entry.projectBindingId)
     )
-    && boundedString(entry.assetId, MAX_DOCUMENT_ID_CHARACTERS)
+    && isBoundedString(entry.assetId, MAX_DOCUMENT_ID_CHARACTERS)
     && validFingerprint(entry.original)
     && validParameters(entry.parameters)
     && entry.generatorVersion === PROXY_GENERATOR_VERSION
@@ -290,7 +272,7 @@ function validEntry(value: unknown, legacy = false): value is ProxyCacheEntry {
 
 /** Invalid or future manifests fail closed to an empty disposable cache. */
 export function parseProxyCacheManifest(value: unknown): ProxyCacheManifest {
-  if (!record(value) || !exactKeys(value, ['schemaVersion', 'entries'])) {
+  if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion', 'entries'])) {
     throw new TypeError('Proxy cache manifest must be an object')
   }
   const schemaVersion = value.schemaVersion

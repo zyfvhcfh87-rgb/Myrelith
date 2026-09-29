@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { exactKeys, jsonDigest, textDigest } from './analysisRuntime'
+import { jsonDigest, textDigest } from './analysisRuntime'
 
 describe('analysis runtime helpers', () => {
   test('hashing serialized JSON equals hashing its parsed value (durable projection digests)', async () => {
@@ -12,11 +12,5 @@ describe('analysis runtime helpers', () => {
       list: [null, true, 0, [], {}],
     })
     expect(await textDigest(snapshot)).toBe(await jsonDigest(JSON.parse(snapshot)))
-  })
-
-  test('exact key checks ignore order but not extra or missing keys', () => {
-    expect(exactKeys({ a: 1, b: 2 }, ['b', 'a'])).toBe(true)
-    expect(exactKeys({ a: 1 }, ['a', 'b'])).toBe(false)
-    expect(exactKeys({ a: 1, b: 2, c: 3 }, ['a', 'b'])).toBe(false)
   })
 })

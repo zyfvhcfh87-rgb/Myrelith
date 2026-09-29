@@ -7,6 +7,7 @@ import { resolveClipAnimationAtFrame } from './clipAnimation'
 import { COLOR_LUT_TYPE } from './colorLut'
 import { colorLutCatalogError, colorLutsForEffects, isColorLutV1, type PortableColorLut } from './colorLutCatalog'
 import { utf8ByteLength } from './documentMemory'
+import { isRecord } from './guards'
 
 export const EFFECT_PRESET_LIMITS = Object.freeze({ presets: 100, name: 80, effects: 32, presetBytes: 2 * 1024 * 1024, libraryBytes: 8 * 1024 * 1024 })
 export interface EffectPreset { readonly id: string; readonly name: string; readonly effects: readonly EffectDescriptor[]; readonly colorLuts: readonly PortableColorLut[] }
@@ -22,9 +23,6 @@ export type PresetLibraryMutation =
   | { kind: 'delete'; id: string }
 
 const bytes = (text: string): number => utf8ByteLength(text)
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
 }
@@ -39,7 +37,7 @@ function resourceString(value: string): boolean {
 const resourceKey = /^(?:url|uri|src|assetId|mediaId|package|packageBytes|signature|grant|grants|permissions|code|wasm|wasmBytes|module|script|file|handle)$/iu
 
 export function effectPresetError(value: unknown): string | null {
-  if (!record(value) || !exactKeys(value, ['id', 'name', 'effects', 'colorLuts'])) return 'Preset fields must be exactly id, name, effects and colorLuts.'
+  if (!isRecord(value) || !exactKeys(value, ['id', 'name', 'effects', 'colorLuts'])) return 'Preset fields must be exactly id, name, effects and colorLuts.'
   if (typeof value.id !== 'string' || !/^[a-z0-9_-]{1,128}$/iu.test(value.id)) return 'Preset identity is invalid.'
   const nameError = presetNameError(value.name)
   if (nameError) return nameError
@@ -77,12 +75,12 @@ export function readEffectPresetLibrary(raw: unknown): { library: EffectPresetLi
   if (typeof raw !== 'string' || raw.length > EFFECT_PRESET_LIMITS.libraryBytes || bytes(raw) > EFFECT_PRESET_LIMITS.libraryBytes) return unavailable('The local preset library exceeds 8 MiB or has an invalid storage format. It remains untouched.')
   let parsed: unknown
   try { parsed = JSON.parse(raw) } catch { return unavailable('The local preset library is corrupt. It remains untouched.') }
-  if (record(parsed) && Number.isSafeInteger(parsed.version) && parsed.version !== 1 && parsed.version !== 2) return unavailable('This preset library version is unsupported. It is read-only and remains untouched.')
-  if (!record(parsed) || !exactKeys(parsed, ['version', 'presets']) || (parsed.version !== 1 && parsed.version !== 2)) return unavailable('The library envelope is invalid. It remains untouched.')
+  if (isRecord(parsed) && Number.isSafeInteger(parsed.version) && parsed.version !== 1 && parsed.version !== 2) return unavailable('This preset library version is unsupported. It is read-only and remains untouched.')
+  if (!isRecord(parsed) || !exactKeys(parsed, ['version', 'presets']) || (parsed.version !== 1 && parsed.version !== 2)) return unavailable('The library envelope is invalid. It remains untouched.')
   if (!Array.isArray(parsed.presets) || parsed.presets.length > EFFECT_PRESET_LIMITS.presets) return unavailable('The local preset library exceeds 100 entries or is invalid. It remains untouched.')
   const legacy = parsed.version === 1
   const entries = parsed.presets.map((value: unknown) => {
-    if (!legacy || !record(value) || !exactKeys(value, ['id', 'name', 'effects'])) return value
+    if (!legacy || !isRecord(value) || !exactKeys(value, ['id', 'name', 'effects'])) return value
     const candidate = { ...value, colorLuts: [] }
     // Only valid v1 records migrate. Corrupt siblings retain their exact raw
     // shape, including records that exceeded v1's smaller per-preset bound.
@@ -116,8 +114,8 @@ export function mutateEffectPresetLibrary(raw: unknown, mutation: PresetLibraryM
     const error = effectPresetError(mutation.preset)
     if (error) throw new Error(error)
     if (presets.length >= EFFECT_PRESET_LIMITS.presets) throw new Error('The local library already contains 100 presets.')
-    if (presets.some((value) => record(value) && value.id === mutation.preset.id)) throw new Error('Preset identity already exists.')
-    if (presets.some((value) => record(value) && typeof value.name === 'string' && value.name.toLowerCase() === mutation.preset.name.toLowerCase())) throw new Error('A preset already uses this name.')
+    if (presets.some((value) => isRecord(value) && value.id === mutation.preset.id)) throw new Error('Preset identity already exists.')
+    if (presets.some((value) => isRecord(value) && typeof value.name === 'string' && value.name.toLowerCase() === mutation.preset.name.toLowerCase())) throw new Error('A preset already uses this name.')
     presets.push(mutation.preset)
   } else {
     const preset = view.presets.find((entry) => entry.id === mutation.id)
@@ -127,7 +125,7 @@ export function mutateEffectPresetLibrary(raw: unknown, mutation: PresetLibraryM
     else {
       const error = presetNameError(mutation.name)
       if (error) throw new Error(error)
-      if (presets.some((value) => value !== preset && record(value) && typeof value.name === 'string' && value.name.toLowerCase() === mutation.name.toLowerCase())) throw new Error('A preset already uses this name.')
+      if (presets.some((value) => value !== preset && isRecord(value) && typeof value.name === 'string' && value.name.toLowerCase() === mutation.name.toLowerCase())) throw new Error('A preset already uses this name.')
       presets[index] = { ...preset, name: mutation.name }
     }
   }

@@ -1,4 +1,5 @@
 /** Pure normalized timecode validation and arithmetic; metadata trust belongs to the app adapter. */
+import { hasExactKeys, isRecord } from './guards'
 import type { FrameRate } from './schema'
 import { alignmentRateIsSupported } from './multicamAlignment'
 
@@ -22,24 +23,15 @@ export type TimecodeParseResult =
   | { readonly state: 'valid'; readonly evidence: TimecodeEvidence; readonly frameCount: number }
   | { readonly state: 'unavailable'; readonly reason: TimecodeFailure }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const ownKeys = Object.keys(value)
-  return ownKeys.length === keys.length && ownKeys.every((key) => keys.includes(key))
-}
-
 /** Validating this normalized record cannot establish that its semantic claims are true. */
 export function parseTimecode(value: unknown): TimecodeParseResult {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'format', 'label', 'rate', 'counting', 'origin', 'continuity', 'dayOffset', 'clockDomain',
   ]) || value.format !== 'normalized-timecode-v1') {
     return { state: 'unavailable', reason: 'invalid-record' }
   }
   if (
-    !record(value.rate) || !exactKeys(value.rate, ['num', 'den'])
+    !isRecord(value.rate) || !hasExactKeys(value.rate, ['num', 'den'])
     || typeof value.rate.num !== 'number' || typeof value.rate.den !== 'number'
     || !alignmentRateIsSupported({ num: value.rate.num, den: value.rate.den })
   ) return { state: 'unavailable', reason: 'unknown-rate' }

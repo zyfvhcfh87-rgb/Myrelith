@@ -7,6 +7,7 @@ import {
 } from '../domain/analysisCache'
 import { clipVisualSettings } from '../domain/clipInspector'
 import { errorMessage } from '../domain/errors'
+import { hasExactKeys, isRecord } from '../domain/guards'
 import {
   DEFAULT_MOTION_ANALYSIS_BUDGET,
   MOTION_ANALYSIS_ALGORITHM_VERSION,
@@ -59,9 +60,7 @@ import {
 } from './motionAnalysisController'
 import { getMotionAnalysisController } from './motionAnalysisRuntime'
 import {
-  exactKeys,
   finite,
-  isRecord,
   jsonDigest,
   monotonicNow,
   releaseBytes,
@@ -111,7 +110,7 @@ function parseFailure(value: unknown): MotionTrackingAnalysisFailure | null | un
   if (value === null) return null
   if (
     !isRecord(value)
-    || !exactKeys(value, ['localFrame', 'code', 'detail'])
+    || !hasExactKeys(value, ['localFrame', 'code', 'detail'])
     || !safeInteger(value.localFrame)
     || value.localFrame < 0
     || !['lost-point', 'lost-box', 'low-confidence'].includes(String(value.code))
@@ -136,7 +135,7 @@ export function parseMotionTrackingAnalysis(
   }
   if (
     !isRecord(value)
-    || !exactKeys(value, [
+    || !hasExactKeys(value, [
       'version', 'kind', 'direction', 'selectionLocalFrame', 'width', 'height', 'samples', 'failure',
     ])
     || value.version !== MOTION_TRACKING_RESULT_VERSION
@@ -168,7 +167,7 @@ export function parseMotionTrackingAnalysis(
       : ['timestampUs', 'sourceTimeTicks', 'localFrame', 'x', 'y', 'confidence']
     if (
       !isRecord(candidate)
-      || !exactKeys(candidate, expected)
+      || !hasExactKeys(candidate, expected)
       || !safeInteger(candidate.timestampUs)
       || !safeInteger(candidate.sourceTimeTicks)
       || candidate.sourceTimeTicks < 0

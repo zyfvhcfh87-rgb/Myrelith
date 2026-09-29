@@ -11,7 +11,7 @@ import {
   hasSupportedProjectFileExtension,
   PROJECT_FILE_EXTENSION,
 } from './projectFile'
-import { isRecord } from './projectFile/validationPrimitives'
+import { isPlainRecord, isSha256Hex } from './guards'
 import type { SequenceProject } from './projectSequences'
 import { isSupportedTextFontFamily } from './textOverlay'
 
@@ -123,7 +123,6 @@ export class CollectMediaError extends Error {
 }
 
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i
-const DIGEST_PATTERN = /^[a-f0-9]{64}$/
 const FINGERPRINT_ALGORITHMS = new Set<CollectMediaFingerprintAlgorithm>([
   'sha256-sampled-v1',
 ])
@@ -550,7 +549,7 @@ function readPolicy(
   value: unknown,
   path: string,
 ): CollectMediaInclusionPolicy {
-  if (!isRecord(value)) fail(path, 'expected an object')
+  if (!isPlainRecord(value)) fail(path, 'expected an object')
   exactKeys(value, ['includeProxies', 'includeTitleTemplates'], [], path)
   if (typeof value.includeProxies !== 'boolean') {
     fail(`${path}.includeProxies`, 'expected a boolean')
@@ -569,7 +568,7 @@ function readFingerprint(
   path: string,
 ): CollectMediaFingerprint | null {
   if (value === null) return null
-  if (!isRecord(value)) fail(path, 'expected an object or null')
+  if (!isPlainRecord(value)) fail(path, 'expected an object or null')
   exactKeys(value, ['algorithm', 'digest'], [], path)
   if (
     typeof value.algorithm !== 'string'
@@ -577,7 +576,7 @@ function readFingerprint(
   ) {
     fail(`${path}.algorithm`, 'unsupported fingerprint algorithm')
   }
-  if (typeof value.digest !== 'string' || !DIGEST_PATTERN.test(value.digest)) {
+  if (!isSha256Hex(value.digest)) {
     fail(`${path}.digest`, 'expected a 64-character lowercase hex digest')
   }
   return {
@@ -614,7 +613,7 @@ function readItem(
   value: unknown,
   path: string,
 ): CollectMediaManifestItem {
-  if (!isRecord(value)) fail(path, 'expected an object')
+  if (!isPlainRecord(value)) fail(path, 'expected an object')
   exactKeys(value, [
     'id',
     'kind',
@@ -681,7 +680,7 @@ function readItem(
 }
 
 export function parseCollectMediaManifest(value: unknown): CollectMediaManifest {
-  if (!isRecord(value)) fail('$', 'expected an object')
+  if (!isPlainRecord(value)) fail('$', 'expected an object')
   exactKeys(value, [
     'format',
     'formatVersion',

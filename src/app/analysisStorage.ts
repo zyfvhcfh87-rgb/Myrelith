@@ -19,6 +19,7 @@ import {
   type DerivedAnalysisCacheEntry,
 } from '../domain/analysisCache'
 import { errorMessage } from '../domain/errors'
+import { isSha256Hex } from '../domain/guards'
 import { audioFeatureKeyPreimage, type AudioFeatureIdentity } from '../domain/multicamAlignmentProvenance'
 import { writeFileHandle } from './fileSystemAccess'
 
@@ -192,7 +193,7 @@ export class AnalysisStorage {
     bytes: Uint8Array<ArrayBuffer>,
     audioIdentity?: AudioFeatureIdentity,
   ): Promise<StagedAnalysisResult> {
-    if (!/^[a-f0-9]{64}$/.test(cacheKey)) throw new TypeError('Invalid analysis cache key')
+    if (!isSha256Hex(cacheKey)) throw new TypeError('Invalid analysis cache key')
     if (
       bytes.byteOffset !== 0
       || bytes.byteLength !== bytes.buffer.byteLength

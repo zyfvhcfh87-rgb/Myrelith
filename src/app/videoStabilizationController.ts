@@ -7,6 +7,7 @@ import {
 } from '../domain/analysisCache'
 import { clipVisualSettings } from '../domain/clipInspector'
 import { errorMessage } from '../domain/errors'
+import { hasExactKeys, isRecord } from '../domain/guards'
 import {
   DEFAULT_MOTION_ANALYSIS_BUDGET,
   estimateGlobalMotion,
@@ -44,9 +45,7 @@ import {
 } from './motionAnalysisController'
 import { getMotionAnalysisController } from './motionAnalysisRuntime'
 import {
-  exactKeys,
   finite,
-  isRecord,
   jsonDigest,
   monotonicNow,
   releaseBytes,
@@ -98,7 +97,7 @@ function nonNegativeSafeInteger(value: unknown): value is number {
 }
 
 function estimate(value: unknown): value is GlobalMotionEstimate {
-  if (!isRecord(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'transform',
     'matchCount',
     'inlierCount',
@@ -108,7 +107,7 @@ function estimate(value: unknown): value is GlobalMotionEstimate {
   ])) return false
   const transform = value.transform
   return isRecord(transform)
-    && exactKeys(transform, ['a', 'b', 'tx', 'ty'])
+    && hasExactKeys(transform, ['a', 'b', 'tx', 'ty'])
     && finite(transform.a)
     && finite(transform.b)
     && finite(transform.tx)
@@ -143,7 +142,7 @@ export function parseVideoStabilizationAnalysis(
   }
   if (
     !isRecord(value)
-    || !exactKeys(value, ['version', 'width', 'height', 'samples'])
+    || !hasExactKeys(value, ['version', 'width', 'height', 'samples'])
     || value.version !== VIDEO_STABILIZATION_RESULT_VERSION
     || !nonNegativeSafeInteger(value.width)
     || value.width <= 0
@@ -163,7 +162,7 @@ export function parseVideoStabilizationAnalysis(
     const sourceTimeTicks = isRecord(sample) ? sample.sourceTimeTicks : null
     if (
       !isRecord(sample)
-      || !exactKeys(sample, ['timestampUs', 'sourceTimeTicks', 'estimateFromPrevious'])
+      || !hasExactKeys(sample, ['timestampUs', 'sourceTimeTicks', 'estimateFromPrevious'])
       || typeof timestampUs !== 'number'
       || !Number.isSafeInteger(timestampUs)
       || timestampUs < previousTimestamp

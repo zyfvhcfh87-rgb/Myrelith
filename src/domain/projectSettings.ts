@@ -6,6 +6,7 @@
  * freshly generated document id when it creates a real project.
  */
 
+import { isRecord } from './guards'
 import type { FrameRate, TimelineDoc, Track } from './schema'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
@@ -231,10 +232,6 @@ export function formatProjectCanvas(width: number, height: number): string {
     ? `${aspectRatio.label} ${aspectRatio.ratioLabel}`
     : 'Custom'
   return `${label} · ${width} × ${height}`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function hasExactlyKeys(
