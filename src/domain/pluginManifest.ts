@@ -241,12 +241,13 @@ const NUMBER_PARAMETER_KEYS = new Set([
 const BOOLEAN_PARAMETER_KEYS = new Set(['key', 'name', 'kind', 'default'])
 const ENUM_PARAMETER_KEYS = new Set(['key', 'name', 'kind', 'default', 'options'])
 const ENUM_OPTION_KEYS = new Set(['value', 'name'])
-const PLUGIN_ID = /^(?:[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/u
+/** Identifier grammar shared with the frozen contribution catalog snapshot. */
+export const PLUGIN_ID_PATTERN = /^(?:[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/u
+export const PLUGIN_LOCAL_IDENTIFIER_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/u
+export const PLUGIN_ENTRYPOINT_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/u
+export const PLUGIN_SEMANTIC_VERSION_PATTERN = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u
 const DOTTED_CAPABILITY_ID = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)+$/u
-const LOCAL_IDENTIFIER = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/u
-const ENTRYPOINT = /^[A-Za-z_][A-Za-z0-9_]*$/u
 const PACKAGE_PATH_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u
-const SEMANTIC_VERSION = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u
 
 class ManifestValidationFailure extends Error {
   readonly path: string
@@ -292,12 +293,42 @@ function hasControlCharacter(value: string): boolean {
   return false
 }
 
+/**
+ * Display/identity text rule shared with the frozen contribution catalog:
+ * a non-blank string of at most `maximum` characters with no control
+ * characters. Returns the first problem, or null when the text is valid.
+ */
+export function pluginBoundedTextProblem(value: unknown, maximum: number): string | null {
+  if (typeof value !== 'string') return 'must be a string'
+  if (value.length === 0 || value.trim().length === 0) return 'must not be empty'
+  if (value.length > maximum) return `must contain at most ${maximum} characters`
+  if (hasControlCharacter(value)) return 'must not contain control characters'
+  return null
+}
+
 function boundedText(value: unknown, path: string, maximum: number): string {
-  if (typeof value !== 'string') fail(path, 'must be a string')
-  if (value.length === 0 || value.trim().length === 0) fail(path, 'must not be empty')
-  if (value.length > maximum) fail(path, `must contain at most ${maximum} characters`)
-  if (hasControlCharacter(value)) fail(path, 'must not contain control characters')
-  return value
+  const problem = pluginBoundedTextProblem(value, maximum)
+  if (problem) fail(path, problem)
+  return value as string
+}
+
+/**
+ * Range rules for a number parameter whose four values are already finite
+ * and bounded. `field` names the offending member (null: the range itself).
+ */
+export function pluginNumberParameterRangeProblem(
+  minimum: number,
+  maximum: number,
+  defaultValue: number,
+  step: number,
+): { readonly field: 'default' | 'step' | null; readonly message: string } | null {
+  if (minimum >= maximum) return { field: null, message: 'number parameter min must be less than max' }
+  if (defaultValue < minimum || defaultValue > maximum) return { field: 'default', message: 'must be inside the declared range' }
+  if (step <= 0 || step > maximum - minimum) return { field: 'step', message: 'must be positive and no larger than the declared range' }
+  if (!(minimum + step > minimum) || !(maximum - step < maximum)) {
+    return { field: 'step', message: 'must make representable progress from both declared endpoints' }
+  }
+  return null
 }
 
 function safeInteger(value: unknown, path: string, minimum: number, maximum: number): number {
@@ -328,13 +359,13 @@ function versionRange(value: unknown, path: string): PluginVersionRange {
 
 function pluginId(value: unknown, path: string): string {
   const id = boundedText(value, path, PLUGIN_MANIFEST_LIMITS.maxPluginIdCharacters)
-  if (!PLUGIN_ID.test(id)) fail(path, 'must be a lowercase reverse-DNS identifier')
+  if (!PLUGIN_ID_PATTERN.test(id)) fail(path, 'must be a lowercase reverse-DNS identifier')
   return id
 }
 
 function localIdentifier(value: unknown, path: string): string {
   const id = boundedText(value, path, PLUGIN_MANIFEST_LIMITS.maxIdentifierCharacters)
-  if (!LOCAL_IDENTIFIER.test(id)) fail(path, 'must be a lowercase local identifier')
+  if (!PLUGIN_LOCAL_IDENTIFIER_PATTERN.test(id)) fail(path, 'must be a lowercase local identifier')
   return id
 }
 
@@ -364,7 +395,7 @@ function packageEntryPath(value: unknown, path: string): string {
 
 function semanticVersion(value: unknown, path: string): string {
   const version = boundedText(value, path, PLUGIN_MANIFEST_LIMITS.maxVersionCharacters)
-  if (!SEMANTIC_VERSION.test(version)) fail(path, 'must be a valid semantic version')
+  if (!PLUGIN_SEMANTIC_VERSION_PATTERN.test(version)) fail(path, 'must be a valid semantic version')
   return version
 }
 
@@ -374,7 +405,7 @@ function wasmEntrypoint(value: unknown, path: string): string {
     path,
     PLUGIN_MANIFEST_LIMITS.maxEntrypointCharacters,
   )
-  if (!ENTRYPOINT.test(entrypoint)) fail(path, 'must be a WebAssembly export name')
+  if (!PLUGIN_ENTRYPOINT_PATTERN.test(entrypoint)) fail(path, 'must be a WebAssembly export name')
   return entrypoint
 }
 
@@ -441,11 +472,9 @@ function parameter(value: unknown, path: string): PluginParameter {
     const maximum = boundedEffectNumber(item.max, `${path}.max`)
     const defaultValue = boundedEffectNumber(item.default, `${path}.default`)
     const step = finiteNumber(item.step, `${path}.step`)
-    if (minimum >= maximum) fail(path, 'number parameter min must be less than max')
-    if (defaultValue < minimum || defaultValue > maximum) fail(`${path}.default`, 'must be inside the declared range')
-    if (step <= 0 || step > maximum - minimum) fail(`${path}.step`, 'must be positive and no larger than the declared range')
-    if (!(minimum + step > minimum) || !(maximum - step < maximum)) {
-      fail(`${path}.step`, 'must make representable progress from both declared endpoints')
+    const rangeProblem = pluginNumberParameterRangeProblem(minimum, maximum, defaultValue, step)
+    if (rangeProblem) {
+      fail(rangeProblem.field ? `${path}.${rangeProblem.field}` : path, rangeProblem.message)
     }
     return {
       key,

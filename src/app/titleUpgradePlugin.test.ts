@@ -5,7 +5,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { legacyTitleProject, replaceFirstTitleClip } from '../test/titleOwnerFixtures'
 import { scalarKey } from '../test/animationFoundationFixtures'
-import { createPluginVideoEffectContributionSnapshot, resolveVideoEffectStagePlan } from '../domain/pluginVideoEffectStagePlan'
+import { createPluginVideoEffectContributionSnapshot, createVideoEffectStagePlanner } from '../domain/pluginVideoEffectStagePlan'
 import { upgradeLegacyTextTitle } from '../domain/titleUpgrade'
 import { createMaskEffect } from '../domain/effectStack'
 import { resolveClipAnimationAtFrame } from '../domain/clipAnimation'
@@ -59,7 +59,7 @@ describe('legacy plugin animation upgrade compatibility', () => {
   })
   test('refuses a potentially active bound lane without changing pixels intent, history or consuming identities', () => {
     const project = projectWithPlugin(), clip = project.sequences[0].tracks[0].clips[0]
-    const beforeStages = [0, 5, 10].map((frame) => resolveVideoEffectStagePlan(clip, frame, plugins))
+    const beforeStages = [0, 5, 10].map((frame) => createVideoEffectStagePlanner(plugins).planClip(clip, frame))
     expect(beforeStages[1]?.stages[0]).toMatchObject({ execution: { parameterRecord: { strength: 0.5 } } })
     useDocumentStore.getState().setProject(project)
     useMediaStore.setState({ descriptors: new Map(), collections: [] })
@@ -73,7 +73,7 @@ describe('legacy plugin animation upgrade compatibility', () => {
     expect(useDocumentStore.getState()).toBe(before)
     expect(before.future).toEqual([edited])
     expect(allocate).not.toHaveBeenCalled()
-    expect([0, 5, 10].map((frame) => resolveVideoEffectStagePlan(before.doc.tracks[0].clips[0], frame, plugins))).toEqual(beforeStages)
+    expect([0, 5, 10].map((frame) => createVideoEffectStagePlanner(plugins).planClip(before.doc.tracks[0].clips[0], frame))).toEqual(beforeStages)
     // Pure refusal does not depend on which catalog happens to be installed.
     expect(upgradeLegacyTextTitle(project, 'root', clip.id, allocate).ok).toBe(false)
   })
