@@ -1,7 +1,7 @@
 import { WorkerVideoSourceOpenError, openWorkerVideoSource } from './video-source'
 import {
   decodeMotionAnalysisWindows,
-  extractMotionAnalysisGrayFrame,
+  createMotionAnalysisGrayFrameExtractor,
 } from '../pipeline/motionAnalysisDecode'
 import {
   type MotionAnalysisWorkerCompleteReply,
@@ -82,7 +82,7 @@ async function run(message: MotionAnalysisWorkerRunMessage): Promise<void> {
     endTimestampUs: message.endTimestampUs,
     samplingIntervalFrames: message.samplingIntervalFrames,
     sampleTimestampsUs: message.sampleTimestampsUs,
-    extractGrayFrame: extractMotionAnalysisGrayFrame,
+    extractGrayFrame: createMotionAnalysisGrayFrameExtractor(),
     sendWindow: (window) => sendWindow(
       message.requestId,
       window.windowIndex,

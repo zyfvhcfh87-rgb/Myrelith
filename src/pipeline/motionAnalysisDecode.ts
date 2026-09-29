@@ -129,19 +129,43 @@ export function motionAnalysisOrientationPlan(
   }
 }
 
-export function extractMotionAnalysisGrayFrame(
+/**
+ * Grayscale extractor for one decode request. It keeps one readback canvas
+ * while the analysis size is unchanged instead of allocating a canvas and a
+ * willReadFrequently context per sampled frame. Clearing before each draw
+ * makes every readback match a fresh transparent canvas.
+ */
+export function createMotionAnalysisGrayFrameExtractor(): MotionAnalysisDecodeRequest['extractGrayFrame'] {
+  let surface: {
+    readonly canvas: OffscreenCanvas
+    readonly context: OffscreenCanvasRenderingContext2D
+  } | null = null
+  return (frame, timestampUs, displayWidth, displayHeight, rotation) => {
+    if (typeof OffscreenCanvas !== 'function') throw new Error('OffscreenCanvas is unavailable')
+    const size = motionAnalysisDisplaySize(displayWidth, displayHeight)
+    if (
+      !surface
+      || surface.canvas.width !== size.width
+      || surface.canvas.height !== size.height
+    ) {
+      const canvas = new OffscreenCanvas(size.width, size.height)
+      const context = canvas.getContext('2d', { willReadFrequently: true })
+      if (!context) throw new Error('OffscreenCanvas 2D readback is unavailable')
+      surface = { canvas, context }
+    }
+    return readGrayFrame(surface.context, frame, timestampUs, size, rotation)
+  }
+}
+
+function readGrayFrame(
+  context: OffscreenCanvasRenderingContext2D,
   frame: VideoFrame,
   timestampUs: number,
-  displayWidth: number,
-  displayHeight: number,
+  size: { width: number; height: number },
   rotation: MotionAnalysisSourceRotation,
 ): MotionAnalysisGrayFrame {
-  if (typeof OffscreenCanvas !== 'function') throw new Error('OffscreenCanvas is unavailable')
-  const size = motionAnalysisDisplaySize(displayWidth, displayHeight)
-  const canvas = new OffscreenCanvas(size.width, size.height)
-  const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context) throw new Error('OffscreenCanvas 2D readback is unavailable')
   const orientation = motionAnalysisOrientationPlan(size.width, size.height, rotation)
+  context.clearRect(0, 0, size.width, size.height)
   context.save()
   try {
     context.translate(orientation.translateX, orientation.translateY)
