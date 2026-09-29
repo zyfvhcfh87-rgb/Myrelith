@@ -117,6 +117,7 @@ import {
 } from './proxyController'
 import { mediaResourceAdmission, type MediaResourceLease } from './mediaResourceAdmission'
 import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
@@ -289,7 +290,7 @@ const realDeps: PreviewDeps = {
   createProjectVisualPlanner: createProjectVideoCompositionPlanner,
   transferCanvas: (canvas) => canvas.transferControlToOffscreen(),
   init: (bridge, offscreen) => (bridge as RenderWorkerBridge).init(offscreen),
-  fetchBlob: (url) => fetch(url).then((r) => r.blob()),
+  fetchBlob: (url) => fetchObjectUrlBlob(url),
   now: () => performance.now(),
   afterPresentationBoundary: () => new Promise((resolve) => {
     // The worker draw may resolve between browser frames. The first callback

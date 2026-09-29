@@ -41,7 +41,7 @@ import {
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
 import { mediaResourceAdmission, type MediaResourceLease } from './mediaResourceAdmission'
-import { createMediaBlobFetcher } from './playbackAudioShared'
+import { createMediaBlobFetcher } from './objectUrlBlob'
 import { sourceReviewDocument } from './sourceReviewDocument'
 import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 

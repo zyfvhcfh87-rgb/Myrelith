@@ -11,6 +11,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useLoudnessStore } from '../state/loudnessStore'
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 
 let generation = 0
 let active: AbortController | null = null
@@ -25,11 +26,11 @@ function createResolver(signal: AbortSignal): ExportAssetResolver {
     if (!asset) {
       return Promise.reject(new Error(`Media asset "${assetId}" is missing`))
     }
-    const pending = fetch(asset.objectUrl, { signal })
-      .then((response) => {
-        if (!response.ok) throw new Error(`Failed to read ${asset.fileName}`)
-        return response.blob()
-      })
+    const pending = fetchObjectUrlBlob(
+      asset.objectUrl,
+      signal,
+      () => `Failed to read ${asset.fileName}`,
+    )
       .then((blob) => ({
         blob,
         budget: mediaAssetDecoderBudget(asset, blob.size),

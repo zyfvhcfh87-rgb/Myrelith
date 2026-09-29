@@ -50,10 +50,10 @@ import {
   reportMediaRuntimeFailure,
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
+import { createMediaBlobFetcher } from './objectUrlBlob'
 import { beginPreviewPlaybackDrain } from './previewController'
 import {
   PlaybackTasks,
-  createMediaBlobFetcher,
   createPlaybackAssetResolver,
   descriptorSourceBoundsCatalog,
   playbackAudioWarningMessage,

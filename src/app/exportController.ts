@@ -92,6 +92,7 @@ import {
 import { preflightExportProfile } from './exportCapabilitiesController'
 import type { ExportFileDestinationCapability } from './exportFilePicker'
 import { registerLoadedExportDisposer } from './exportLifecycle'
+import { createMediaBlobFetcher } from './objectUrlBlob'
 import { drainPreviewPlayback } from './previewController'
 import { drainSourcePreviewPlayback } from './sourceMonitorPreviewController'
 import { pauseAndDrainPlayback } from './transportController'
@@ -174,15 +175,7 @@ const realDeps: ExportControllerDeps = {
     ])
   },
   preflightProfile: preflightExportProfile,
-  fetchBlob: async (url) => {
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(
-        `Could not read export media (${response.status} ${response.statusText})`,
-      )
-    }
-    return response.blob()
-  },
+  fetchBlob: createMediaBlobFetcher('export media'),
   createMediaSource: createMediabunnyExportMediaSource,
   createPipelineDeps: (
     resolveAsset,

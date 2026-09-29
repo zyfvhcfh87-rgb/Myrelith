@@ -32,6 +32,7 @@ import {
   proxyStorage,
 } from './proxyStorage'
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 import { fingerprintLocalMediaSource, sha256Hex } from './sourceFingerprint'
 
 const PROXY_JOB_PREFIX = 'proxy:'
@@ -54,11 +55,7 @@ export interface ProxyControllerDeps {
 
 const realDeps: ProxyControllerDeps = {
   storage: proxyStorage,
-  fetchBlob: async (url, signal) => {
-    const response = await fetch(url, { signal })
-    if (!response.ok) throw new Error(`Media source returned HTTP ${response.status}`)
-    return response.blob()
-  },
+  fetchBlob: fetchObjectUrlBlob,
   now: () => Date.now(),
   probeEncoderSupport: probeProxyEncoderSupport,
   probeInputSupport: probeProxyInputSupport,

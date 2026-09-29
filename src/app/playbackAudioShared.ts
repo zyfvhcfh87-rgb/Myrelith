@@ -21,19 +21,6 @@ import {
 import { useMediaStore } from '../state/mediaStore'
 import type { MediaResourceLease } from './mediaResourceAdmission'
 
-/** Read a connected source's Blob; `label` names the reader in HTTP failures. */
-export function createMediaBlobFetcher(label: string): (url: string) => Promise<Blob> {
-  return async (url) => {
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(
-        `Could not read ${label} (${response.status} ${response.statusText})`,
-      )
-    }
-    return response.blob()
-  }
-}
-
 /** Production audio start; the injected clock is the real AudioContext. */
 export function startPlaybackAudio(
   context: PlaybackClock,

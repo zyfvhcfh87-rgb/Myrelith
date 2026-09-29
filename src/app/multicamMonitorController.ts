@@ -10,6 +10,7 @@ import { useTransportStore } from '../state/transportStore'
 import { derivedDataIsClearing, registerDerivedDataOwner } from './derivedDataOwners'
 import { mediaResourceAdmission } from './mediaResourceAdmission'
 import { createMulticamMonitorSession, type MonitorContext } from './multicamMonitorSession'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 import { subscribePreviewRenderCompletions } from './previewController'
 import { getProxyPreviewSource } from './proxyController'
 import { getAudioPlaybackDiagnostics, getPlaybackClockContext } from './transportController'
@@ -74,9 +75,11 @@ async function prepareSources(context: MonitorContext, ids: readonly string[], s
     if (!asset || !bounds || bounds.status !== 'exact' || asset.width === null || asset.height === null) throw new Error(`${angle.name}: reconnect the original or generate a fresh editing proxy.`)
     if (context.definition.angles.length > 4) throw new Error('Five to eight angles require fresh 720p editing proxies.')
     monitorSourceReservation(asset.width, asset.height)
-    const response = await fetch(asset.objectUrl, { signal })
-    if (!response.ok) throw new Error(`${angle.name}: the original could not be read.`)
-    const blob = await response.blob()
+    const blob = await fetchObjectUrlBlob(
+      asset.objectUrl,
+      signal,
+      () => `${angle.name}: the original could not be read.`,
+    )
     signal.throwIfAborted()
     if (useMediaStore.getState().assets.get(angle.assetId) !== asset) throw new Error(`${angle.name}: the original changed while preparing previews.`)
     sources.push({ id, blob, representation: 'original', width: asset.width, height: asset.height,

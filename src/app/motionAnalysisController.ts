@@ -33,6 +33,7 @@ import {
   analysisStorage,
   type AnalysisStorage,
 } from './analysisStorage'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 import { fingerprintLocalMediaSource, sha256Hex } from './sourceFingerprint'
 
 export type MotionAnalysisFailureCode =
@@ -121,11 +122,11 @@ function createRealDeps(): MotionAnalysisControllerDeps {
     scheduler: new MediaJobScheduler({
       budget: { maxConcurrentJobs: 1, maxDecoderSlots: 1 },
     }),
-    fetchBlob: async (url, signal) => {
-      const response = await fetch(url, { signal })
-      if (!response.ok) throw new Error(`Could not read source bytes (${response.status})`)
-      return response.blob()
-    },
+    fetchBlob: (url, signal) => fetchObjectUrlBlob(
+      url,
+      signal,
+      (response) => `Could not read source bytes (${response.status})`,
+    ),
     fingerprint: fingerprintLocalMediaSource,
     now: () => Date.now(),
   }

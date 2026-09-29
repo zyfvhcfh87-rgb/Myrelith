@@ -16,6 +16,7 @@ import { fingerprintLocalMediaSource } from './sourceFingerprint'
 import { MediaJobScheduler } from './mediaJobScheduler'
 import { mediaResourceAdmission } from './mediaResourceAdmission'
 import { registerDerivedDataOwner, derivedDataIsClearing } from './derivedDataOwners'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 import { registerSpeechRetirement, speechEssentialAdmissionPending, type SpeechRetirementReason } from './speechRetirement'
 import { SpeechWorkerJob, type SpeechWorkerPort } from './speechWorkerJob'
 
@@ -38,7 +39,7 @@ export interface SpeechControllerPort {
   createWorker?: () => SpeechWorkerPort
 }
 const realPort: SpeechControllerPort = { installed: installedSpeechModel, install: installSpeechModel, remove: removeSpeechModel,
-  async fetchBlob(url, signal) { const response = await fetch(url, { signal }); if (!response.ok) throw new Error('Connected source cannot be read'); return response.blob() }, fingerprint: fingerprintLocalMediaSource }
+  fetchBlob: (url, signal) => fetchObjectUrlBlob(url, signal, () => 'Connected source cannot be read'), fingerprint: fingerprintLocalMediaSource }
 const projectScope = () => { const state = useDocumentStore.getState(); return { project: state.project, generation: state.projectGeneration, sequence: state.activeSequenceId } }
 interface ActiveSpeech { scope: { project: object; generation: number; sequence: string }; abort: AbortController; done: Promise<void>; job: SpeechWorkerJob | null }
 interface ReviewOwner { session: CaptionEditSession; track: CaptionTrack }

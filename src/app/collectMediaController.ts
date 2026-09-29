@@ -56,6 +56,7 @@ import { projectFileName } from './projectPersistenceController'
 import { proxyStorage } from './proxyStorage'
 import { fingerprintLocalMediaSource } from './sourceFingerprint'
 import { localTitleTemplateStorage } from './localTitleTemplateStorage'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 
 export type CollectMediaPhase =
   | 'idle'
@@ -146,11 +147,7 @@ const realDeps: CollectMediaControllerDeps = {
   ),
   queryMediaPermission: queryLocalMediaPermission,
   readHandleFile: (handle) => handle.getFile(),
-  fetchBlob: async (url, signal) => {
-    const response = await fetch(url, { signal })
-    if (!response.ok) throw new Error(`Media source returned HTTP ${response.status}`)
-    return response.blob()
-  },
+  fetchBlob: fetchObjectUrlBlob,
   listProxyStates: () => useProxyStore.getState().assets.values(),
   readProxyFile: (entry) => proxyStorage.readEntryFile(entry),
   loadTitleLibrary: () => localTitleTemplateStorage.load(),

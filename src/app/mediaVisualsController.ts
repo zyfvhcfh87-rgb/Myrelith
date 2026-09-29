@@ -47,6 +47,7 @@ import {
   reportMediaRuntimeFailure,
 } from './mediaCompatibilityController'
 import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 
 export interface VisualsDeps {
   fetchBlob: (url: string, signal: AbortSignal) => Promise<Blob>
@@ -77,13 +78,7 @@ export interface MediaVisualsControllerOptions {
 }
 
 const realDeps: VisualsDeps = {
-  fetchBlob: async (url, signal) => {
-    const response = await fetch(url, { signal })
-    if (!response.ok) {
-      throw new Error(`Media source returned HTTP ${response.status}`)
-    }
-    return response.blob()
-  },
+  fetchBlob: fetchObjectUrlBlob,
   generateFilmstrip,
   generateWaveform,
   generateStaticImageThumbnail,
