@@ -5,6 +5,105 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
+## Codebase cleanup and optimization (2026-09-29)
+
+Branch `claude/codebase-cleanup-optimize-5b8816`, based on `b3252f8`. Ten
+read-only reviewers covered every source directory; twelve implementation
+packages then ran in isolated worktrees and were merged by one lead. No
+feature or project-format change.
+
+- **Size:** non-test source went from 172,776 to 168,926 lines (+7.6k/−11.7k).
+  Vitest went from 5,600 to 5,700 cases: 81 tests of deleted code were removed,
+  and new regression and parity tests were added.
+- **Launcher bundle:** initial JS went from 1,774 kB raw / 489 kB gzip to 840 /
+  238. That is below #55's 891 / 242.
+  - `app/editorRuntimeLifecycle.ts` lets editor-only owners register their
+    teardown when they load.
+  - Media inspection (Mediabunny) loads on first use.
+  - `architecture.test.ts` fails if the launcher regains either.
+- **Retired:** the runtime-dead chunk-batch decode/render path
+  (`decode.worker.ts`, `DecodeWorkerBridge`, `pipeline/decode.ts`, the
+  render-legacy delegates/protocol, `frame-cache.ts`), about 4k lines.
+- **Shared helpers (one owner each, import them instead of copying):**
+  - `domain/errors.ts`: `errorMessage`, `runtimeFailureDetail`, `abortError`,
+    `throwIfAborted`, `hasErrorName`, `truncateText`.
+  - `domain/guards.ts`: `isRecord`, `isPlainRecord`, `hasExactKeys`,
+    `isBoundedString`, `isSha256Hex`.
+  - `domain/numeric.ts`: `clamp`, safe-integer and finite checks,
+    `ceilDivide`.
+  - `domain/bytes.ts`: `bytesToHex`.
+  - `domain/fileNames.ts`: `windowsSafeFileStem`.
+  - `app/objectUrlBlob.ts`.
+  - App-level shared modules: `playbackAudioShared`, `pluginControllerShared`,
+    `indexedDbAccess`, `keyedSerialQueue`, `fileSystemAccess`,
+    `analysisRuntime`, `asyncLease`, `captionProjectScope`.
+  - Worker-level shared modules: `workers/opfsDraftWorker`, `settledResults`.
+- **Hot paths:**
+  - Every commit no longer re-measures the whole undo history: 2,000 cues × 100
+    history went from ~140–210 ms to ~13 ms per edit.
+  - Crossfade planning is per document: 800 transitions went from ~2 s to
+    under 1 ms.
+  - Transition validation and multi-clip moves are indexed.
+  - Audio folds per block instead of per sample, and WAV export streams.
+  - Color correction runs ~3× faster per frame. Loudness metering runs ~10×
+    faster: one minute of stereo went from 1.6 s to 0.16 s.
+  - Inspector, Multicam, Sequence and Mixer panels no longer re-render every
+    playback frame. `ui/panelRenderIsolation.test.tsx` pins this, extending
+    invariant 6.
+  - Program no longer rebuilds per proxy-progress tick or on unrelated
+    media-store changes.
+- **Bugs fixed (each has a regression test):**
+  - no-op undo entries from clicking a trim, slip or slide handle
+  - instances in hidden or locked lanes captured drags
+  - stale track-target buttons
+  - store actions reported success when history admission rejected the edit
+  - ripple head trim left keyframes on the wrong source frames
+  - Reset Audio did nothing on keyframed volume
+  - zero-delta trim, slip and slide returned a new document
+  - overlapping caption cues were skipped in nested export checks
+  - mixed adjustment edits were partially applied
+  - very slow measured frame rates became 0/1
+  - the Source Monitor kept its playback quality profile after stopping
+  - IndexedDB stayed closed after another tab upgraded it
+  - AV-capture replies could hang when unreadable
+  - unhandled rejections from the multicam lease and the decoder fallback
+  - collect-media missed a vanished file
+- **Behavior notes:**
+  - Program preview media fetches now check `response.ok`, reporting
+    `resource-unavailable` instead of `decode-failed`.
+  - Proxy progress text updates per whole percent.
+  - Provisional files over 1 GiB show GiB.
+- **Honest notes:**
+  - Locally on Node 26, one plugin test fails unless
+    `NODE_OPTIONS=--no-experimental-webstorage` is set: Node's built-in
+    `localStorage` hides jsdom's. CI (Node 24) is unaffected.
+  - 19 Playwright cases already fail on untouched `b3252f8`, for example:
+    title parity needs `.tmp/issue200-baseline`; issue-197 video bus expects
+    schema 21; project-setup-overflow fails 5×.
+  - The first merged run also showed 31 extra failures. All of them passed on a
+    warm rerun; they came from first-launch Vite dependency re-optimization.
+  - The final full run matches the baseline: the same 19 failures, and no new
+    ones.
+  - `issue-209-av-capture-ui` found the app's Mediabunny through resource
+    timing. Mediabunny now loads lazily, after Chromium's default 250-entry
+    buffer is full, so the spec now enlarges that buffer.
+  - The deleted legacy tests pinned raw `VideoDecoder` reset/backpressure
+    behavior. No live path calls `reset()` any more, and the lesson stays below.
+- **Left for the owner:**
+  - `sequenceEditController` roll uses connected `assets`, not `descriptors`,
+    so offline seams are rejected.
+  - Playback holds the lower sample inside a decoded buffer while export
+    interpolates; this matters when source and project sample rates differ.
+  - Lift/extract rejects a locked partner anywhere on the track.
+  - `titleComposition.prepareTitle` re-reads unfrozen titles every frame.
+  - `seamTransitionsRemainValid` is O(T·C).
+  - `openAsset`'s `rate` is unused.
+  - The inline export-block "Review bypass" button drops focus.
+  - `sequenceProjectWithinEditBudget` still re-validates captions on each
+    commit.
+  - The single-key keyframe ops in `domain/operations/animation.ts` are now
+    test-only.
+
 ## Post-MVP issue #209 — local voiceover, camera and screen capture (2026-09-29)
 
 The plan and per-step checkpoints are in [ISSUE_209_PLAN.md](ISSUE_209_PLAN.md);

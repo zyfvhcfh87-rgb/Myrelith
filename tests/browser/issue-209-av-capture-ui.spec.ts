@@ -16,6 +16,10 @@ function collectProblems(page: Page, problems: string[]): void {
 }
 
 async function createProject(page: Page): Promise<void> {
+  // The decode checks find the app's own pre-bundled Mediabunny in resource
+  // timing. It now loads lazily, after the dev server's first 250 module
+  // requests would have filled Chromium's default resource-timing buffer.
+  await page.addInitScript(() => performance.setResourceTimingBufferSize(5_000))
   await page.goto('/')
   await page.getByRole('button', { name: 'Start a new project' }).click()
   await page.getByRole('textbox', { name: 'Project name' }).fill('Capture QA')
