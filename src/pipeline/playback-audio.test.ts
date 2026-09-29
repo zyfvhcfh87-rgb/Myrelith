@@ -16,7 +16,16 @@ import type {
   Track,
   Transition,
 } from '../domain/schema'
-import { createLimiterEffect } from '../domain/audioEffectStack'
+import {
+  createAudioEffectChain,
+  createLimiterEffect,
+} from '../domain/audioEffectStack'
+import { clipAudioGainsAtLocalFrame } from '../domain/audioMixPlan'
+import {
+  PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES,
+  processAudioBufferWithChain,
+} from '../domain/audioDsp'
+import { clipLocalFrameAtSeconds } from '../domain/time'
 import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
@@ -2133,6 +2142,79 @@ describe('createWebAudioPlaybackOutput ownership', () => {
     // The balance stage was baked ahead of DSP, so only the meter splitter exists.
     expect(h.splitters).toHaveLength(1)
 
+    output.stop()
+  })
+
+  test('bakes animated clip gains before clip effects exactly like per-sample gains', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    const rate = 4_800
+    const leftSource = Float32Array.from({ length: 2_400 }, (_, index) => Math.sin(index / 7))
+    const rightSource = Float32Array.from({ length: 2_400 }, (_, index) => Math.cos(index / 5))
+    const limiter = createLimiterEffect('afx-animated-limiter')
+    limiter.params.ceilingDb = -3
+    const request: ScheduledPlaybackAudio = {
+      clipId: 'clip-with-animated-input-gain',
+      buffer: makePlanarAudioBuffer([leftSource, rightSource], rate),
+      timelineStartTime: 0.25,
+      when: 10,
+      offset: 0.1,
+      duration: 0.3,
+      volume: 0.8,
+      envelope: null,
+      balance: 0,
+      leftGain: 1,
+      rightGain: 1,
+      clipTimelineStartFrame: 2,
+      frameRate: F10,
+      volumeAnimation: {
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 0.2, easing: { type: 'linear' } },
+          { frame: 6, value: 1.5, easing: { type: 'linear' } },
+        ],
+      },
+      balanceAnimation: {
+        property: 'balance',
+        keyframes: [
+          { frame: 1, value: -0.75, easing: { type: 'linear' } },
+          { frame: 5, value: 0.5, easing: { type: 'linear' } },
+        ],
+      },
+      audioEffects: [limiter],
+    }
+    output.schedule(request)
+
+    // Reference: the former slice + fresh gain object per sample.
+    const start = Math.floor(request.offset * rate)
+    const count = Math.round(request.duration * rate)
+    const left = leftSource.slice(start, start + count)
+    const right = rightSource.slice(start, start + count)
+    for (let index = 0; index < count; index++) {
+      const gains = clipAudioGainsAtLocalFrame(
+        {
+          volume: request.volume,
+          balance: 0,
+          volumeAnimation: request.volumeAnimation!,
+          balanceAnimation: request.balanceAnimation!,
+        },
+        clipLocalFrameAtSeconds(2, request.timelineStartTime + index / rate, F10),
+      )
+      left[index] *= gains.volume * gains.leftGain
+      right[index] *= gains.volume * gains.rightGain
+    }
+    processAudioBufferWithChain(
+      left,
+      right,
+      createAudioEffectChain([limiter], rate),
+      PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES,
+    )
+
+    const processed = h.sources[0]?.buffer
+    expect(processed?.length).toBe(count)
+    expect(Array.from(processed!.getChannelData(0))).toEqual(Array.from(left))
+    expect(Array.from(processed!.getChannelData(1))).toEqual(Array.from(right))
+    expect(h.sources[0]?.start).toHaveBeenCalledWith(10, 0, count / rate)
     output.stop()
   })
 

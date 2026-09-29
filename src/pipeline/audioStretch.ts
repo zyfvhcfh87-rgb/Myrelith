@@ -39,11 +39,12 @@ export const AUDIO_RAMP_SILENCE_FADE_MILLISECONDS = 3
 
 const SUPPORTED_SAMPLE_RATES = new Set([44_100, 48_000, 96_000])
 
+export function isSupportedStretchSampleRate(sampleRate: number): boolean {
+  return Number.isSafeInteger(sampleRate) && SUPPORTED_SAMPLE_RATES.has(sampleRate)
+}
+
 function assertSupportedSampleRate(sampleRate: number): void {
-  if (
-    !Number.isSafeInteger(sampleRate)
-    || !SUPPORTED_SAMPLE_RATES.has(sampleRate)
-  ) {
+  if (!isSupportedStretchSampleRate(sampleRate)) {
     throw new RangeError('Audio stretch sample rate must be 44100, 48000, or 96000')
   }
 }
@@ -100,6 +101,52 @@ function containingAudioFrame(sample: number, doc: RampAudioDocument): number {
   return frame
 }
 
+/** Timeline and source sample bounds of one ramped timeline frame. */
+interface RampFrameSourceSpan {
+  readonly frameStartSample: number
+  readonly frameEndSample: number
+  readonly sourceStartSample: number
+  readonly sourceEndSample: number
+}
+
+function frameSourceSpan(
+  ramp: RampedAudioStretch,
+  doc: RampAudioDocument,
+  clipTimelineStartFrame: number,
+  frame: number,
+): RampFrameSourceSpan {
+  const frameStartSample = audioSampleBoundary(frame, doc)
+  const frameEndSample = audioSampleBoundary(frame + 1, doc)
+  const localFrame = frame - clipTimelineStartFrame
+  return {
+    frameStartSample,
+    frameEndSample,
+    sourceStartSample: audioSampleFromSourceTicks(
+      sourceTicksAtTimelineOffset(ramp.sourceTimeMap, localFrame),
+      doc.frameRate,
+      doc.audioSampleRate,
+    ),
+    sourceEndSample: audioSampleFromSourceTicks(
+      sourceTicksAtTimelineOffset(ramp.sourceTimeMap, localFrame + 1),
+      doc.frameRate,
+      doc.audioSampleRate,
+    ),
+  }
+}
+
+/** Linear source position of a timeline sample inside its frame's span. */
+function sourceSampleInSpan(
+  span: RampFrameSourceSpan,
+  absoluteTimelineSample: number,
+): number {
+  const frameSamples = span.frameEndSample - span.frameStartSample
+  const fraction = frameSamples <= 0
+    ? 0
+    : (absoluteTimelineSample - span.frameStartSample) / frameSamples
+  return span.sourceStartSample
+    + (span.sourceEndSample - span.sourceStartSample) * fraction
+}
+
 function rampSourceSampleAtTimelineSample(
   ramp: RampedAudioStretch,
   doc: RampAudioDocument,
@@ -107,24 +154,10 @@ function rampSourceSampleAtTimelineSample(
   absoluteTimelineSample: number,
 ): number {
   const frame = containingAudioFrame(absoluteTimelineSample, doc)
-  const frameStartSample = audioSampleBoundary(frame, doc)
-  const frameEndSample = audioSampleBoundary(frame + 1, doc)
-  const localFrame = frame - clipTimelineStartFrame
-  const sourceStartSample = audioSampleFromSourceTicks(
-    sourceTicksAtTimelineOffset(ramp.sourceTimeMap, localFrame),
-    doc.frameRate,
-    doc.audioSampleRate,
+  return sourceSampleInSpan(
+    frameSourceSpan(ramp, doc, clipTimelineStartFrame, frame),
+    absoluteTimelineSample,
   )
-  const sourceEndSample = audioSampleFromSourceTicks(
-    sourceTicksAtTimelineOffset(ramp.sourceTimeMap, localFrame + 1),
-    doc.frameRate,
-    doc.audioSampleRate,
-  )
-  const frameSamples = frameEndSample - frameStartSample
-  const fraction = frameSamples <= 0
-    ? 0
-    : (absoluteTimelineSample - frameStartSample) / frameSamples
-  return sourceStartSample + (sourceEndSample - sourceStartSample) * fraction
 }
 
 function assertRampAudioMappingArgs(args: RampAudioMappingArgs): void {
@@ -200,10 +233,7 @@ class RampSourceMapper {
   private readonly fadeSamples: number
   private readonly silenceRanges: readonly RampSilenceSampleRange[]
   private cachedFrame = -1
-  private cachedFrameStartSample = 0
-  private cachedFrameEndSample = 0
-  private cachedSourceStartSample = 0
-  private cachedSourceEndSample = 0
+  private cachedSpan: RampFrameSourceSpan | null = null
 
   constructor(args: RampAudioMappingArgs) {
     this.ramp = args.ramp
@@ -275,28 +305,16 @@ class RampSourceMapper {
       throw new RangeError('Ramp timeline sample exceeds the safe integer range')
     }
     const frame = containingAudioFrame(absoluteTimelineSample, this.doc)
-    if (frame !== this.cachedFrame) {
+    if (!this.cachedSpan || frame !== this.cachedFrame) {
+      this.cachedSpan = frameSourceSpan(
+        this.ramp,
+        this.doc,
+        this.clipTimelineStartFrame,
+        frame,
+      )
       this.cachedFrame = frame
-      this.cachedFrameStartSample = audioSampleBoundary(frame, this.doc)
-      this.cachedFrameEndSample = audioSampleBoundary(frame + 1, this.doc)
-      const localFrame = frame - this.clipTimelineStartFrame
-      this.cachedSourceStartSample = audioSampleFromSourceTicks(
-        sourceTicksAtTimelineOffset(this.ramp.sourceTimeMap, localFrame),
-        this.doc.frameRate,
-        this.doc.audioSampleRate,
-      )
-      this.cachedSourceEndSample = audioSampleFromSourceTicks(
-        sourceTicksAtTimelineOffset(this.ramp.sourceTimeMap, localFrame + 1),
-        this.doc.frameRate,
-        this.doc.audioSampleRate,
-      )
     }
-    const frameSamples = this.cachedFrameEndSample - this.cachedFrameStartSample
-    const fraction = frameSamples <= 0
-      ? 0
-      : (absoluteTimelineSample - this.cachedFrameStartSample) / frameSamples
-    return this.cachedSourceStartSample
-      + (this.cachedSourceEndSample - this.cachedSourceStartSample) * fraction
+    return sourceSampleInSpan(this.cachedSpan, absoluteTimelineSample)
   }
 }
 

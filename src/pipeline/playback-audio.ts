@@ -34,7 +34,6 @@ import type {
   TrackId,
 } from '../domain/schema'
 import {
-  clipAudioGainsAtLocalFrame,
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
   isRampedAudioClipPlan,
@@ -46,6 +45,8 @@ import {
   type TimelineAudioRampedClipPlan,
   type TimelineAudioMixPlan,
   type TimelineAudioTrackBus,
+  writeClipAudioGainsAtLocalFrame,
+  type MutableClipAudioGains,
 } from '../domain/audioMixPlan'
 import { timelineAudioMixerGraph } from '../domain/audioMixer'
 import { createAudioEffectChain } from '../domain/audioEffectStack'
@@ -77,6 +78,7 @@ import {
   audioStretchSourceLeadSamples,
   createConstantRateAudioStretcher,
   createRampedAudioStretcher,
+  isSupportedStretchSampleRate,
   rampedAudioSourceSampleAtOutputSample,
   type ConstantRateAudioStretcher,
   type StereoPcm,
@@ -886,8 +888,7 @@ export function createMediabunnyPlaybackAudioSource(
     let iterator: AsyncIterator<PlaybackAudioBuffer, void>
     try {
       const stretchSampleRate = request.stretchSampleRate ?? asset.sampleRate
-      const supportedStretchRate = [44_100, 48_000, 96_000]
-        .includes(stretchSampleRate)
+      const supportedStretchRate = isSupportedStretchSampleRate(stretchSampleRate)
       const startTime = request.stretchLead && supportedStretchRate
         ? Math.max(
             0,
@@ -1010,23 +1011,27 @@ export function createEqualPowerPlaybackCurve(
   return values
 }
 
-function playbackClipGainsAtTime(
+/**
+ * Writes the clip gains at one timeline time into `target`, which callers
+ * reuse across samples. Unanimated requests carry precomputed stereo gains.
+ */
+function writePlaybackClipGainsAtTime(
   request: ScheduledPlaybackAudio,
   timelineTime: number,
-): ReturnType<typeof clipAudioGainsAtLocalFrame> {
+  target: MutableClipAudioGains,
+): void {
   if (
     request.clipTimelineStartFrame === undefined
     || request.frameRate === undefined
     || (request.volumeAnimation == null && request.balanceAnimation == null)
   ) {
-    return {
-      volume: request.volume,
-      balance: request.balance ?? 0,
-      leftGain: request.leftGain ?? 1,
-      rightGain: request.rightGain ?? 1,
-    }
+    target.volume = request.volume
+    target.balance = request.balance ?? 0
+    target.leftGain = request.leftGain ?? 1
+    target.rightGain = request.rightGain ?? 1
+    return
   }
-  return clipAudioGainsAtLocalFrame(
+  writeClipAudioGainsAtLocalFrame(
     {
       volume: request.volume,
       balance: request.balance ?? 0,
@@ -1038,6 +1043,7 @@ function playbackClipGainsAtTime(
       timelineTime,
       request.frameRate,
     ),
+    target,
   )
 }
 
@@ -1102,11 +1108,12 @@ function playbackHasShapedGain(request: ScheduledPlaybackAudio): boolean {
 
 function samplePlaybackGainCurve(request: ScheduledPlaybackAudio): Float32Array {
   const values = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+  const gains = { volume: 1, balance: 0, leftGain: 1, rightGain: 1 }
   for (let index = 0; index < values.length; index++) {
     const timelineTime = request.timelineStartTime
       + request.duration * index / (values.length - 1)
-    values[index] = playbackClipGainsAtTime(request, timelineTime).volume
-      * playbackEnvelopeAtTime(request, timelineTime)
+    writePlaybackClipGainsAtTime(request, timelineTime, gains)
+    values[index] = gains.volume * playbackEnvelopeAtTime(request, timelineTime)
   }
   return values
 }
@@ -1279,28 +1286,48 @@ function processScheduledClipBuffer(
   const rightSource = buffer.numberOfChannels > 1
     ? buffer.getChannelData(1)
     : leftSource
-  const left = leftSource.slice(start, start + count)
-  const right = rightSource.slice(start, start + count)
+  const processed = context.createBuffer(2, count, rate)
+  const left = processed.getChannelData(0)
+  const right = processed.getChannelData(1)
+  left.set(leftSource.subarray(start, start + count))
+  right.set(rightSource.subarray(start, start + count))
   // Clip gain, fades/crossfades, and balance are part of the clip input to
   // its effect stack. Bake those sample-accurate stages before stateful DSP,
   // matching TimelineAudioMixer's export order exactly.
+  const gains = { volume: 1, balance: 0, leftGain: 1, rightGain: 1 }
   for (let index = 0; index < count; index++) {
     const timelineTime = request.timelineStartTime + index / rate
-    const gains = playbackClipGainsAtTime(request, timelineTime)
+    writePlaybackClipGainsAtTime(request, timelineTime, gains)
     const envelope = playbackEnvelopeAtTime(request, timelineTime)
     left[index] *= envelope * gains.volume * gains.leftGain
     right[index] *= envelope * gains.volume * gains.rightGain
   }
   processAudioBufferWithChain(left, right, chain, PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES)
-  const processed = context.createBuffer(2, count, rate)
-  processed.getChannelData(0).set(left)
-  processed.getChannelData(1).set(right)
   return {
     buffer: processed,
     offset: 0,
     duration: count / rate,
     preprocessed: true,
   }
+}
+
+/** Splitter -> one gain per channel -> merger; callers set or automate gains. */
+function createStereoGainStage(context: AudioContext): {
+  input: AudioNode
+  output: AudioNode
+  left: GainNode
+  right: GainNode
+  nodes: AudioNode[]
+} {
+  const splitter = context.createChannelSplitter(2)
+  const left = context.createGain()
+  const right = context.createGain()
+  const merger = context.createChannelMerger(2)
+  splitter.connect(left, 0)
+  splitter.connect(right, 1)
+  left.connect(merger, 0, 0)
+  right.connect(merger, 0, 1)
+  return { input: splitter, output: merger, left, right, nodes: [splitter, left, right, merger] }
 }
 
 function createBalanceStage(
@@ -1313,17 +1340,10 @@ function createBalanceStage(
     passthrough.gain.value = 1
     return { input: passthrough, output: passthrough, nodes: [passthrough] }
   }
-  const splitter = context.createChannelSplitter(2)
-  const left = context.createGain()
-  const right = context.createGain()
-  const merger = context.createChannelMerger(2)
-  left.gain.value = leftGain
-  right.gain.value = rightGain
-  splitter.connect(left, 0)
-  splitter.connect(right, 1)
-  left.connect(merger, 0, 0)
-  right.connect(merger, 0, 1)
-  return { input: splitter, output: merger, nodes: [splitter, left, right, merger] }
+  const stage = createStereoGainStage(context)
+  stage.left.gain.value = leftGain
+  stage.right.gain.value = rightGain
+  return stage
 }
 
 interface TrackPlaybackBus {
@@ -1481,6 +1501,11 @@ export function createWebAudioPlaybackOutput(
     if (clipInputPreprocessed) gain.gain.value = 1
     else scheduleNodeGain(gain.gain, request)
     source.connect(gain)
+    const destination = (
+      request.trackId !== undefined
+        ? trackBuses.get(request.trackId)?.input
+        : undefined
+    ) ?? clipDestination
     const balanceNodes: AudioNode[] = []
     if (
       !clipInputPreprocessed
@@ -1493,44 +1518,28 @@ export function createWebAudioPlaybackOutput(
         )
       )
     ) {
-      const splitter = context.createChannelSplitter(2)
-      const left = context.createGain()
-      const right = context.createGain()
-      const merger = context.createChannelMerger(2)
+      const balance = createStereoGainStage(context)
       if (request.balanceAnimation != null) {
         const leftCurve = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
         const rightCurve = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+        const gains = { volume: 1, balance: 0, leftGain: 1, rightGain: 1 }
         for (let index = 0; index < leftCurve.length; index++) {
           const timelineTime = request.timelineStartTime
             + request.duration * index / (leftCurve.length - 1)
-          const gains = playbackClipGainsAtTime(request, timelineTime)
+          writePlaybackClipGainsAtTime(request, timelineTime, gains)
           leftCurve[index] = gains.leftGain
           rightCurve[index] = gains.rightGain
         }
-        left.gain.setValueCurveAtTime(leftCurve, request.when, request.duration)
-        right.gain.setValueCurveAtTime(rightCurve, request.when, request.duration)
+        balance.left.gain.setValueCurveAtTime(leftCurve, request.when, request.duration)
+        balance.right.gain.setValueCurveAtTime(rightCurve, request.when, request.duration)
       } else {
-        left.gain.value = request.leftGain ?? 1
-        right.gain.value = request.rightGain ?? 1
+        balance.left.gain.value = request.leftGain ?? 1
+        balance.right.gain.value = request.rightGain ?? 1
       }
-      gain.connect(splitter)
-      splitter.connect(left, 0)
-      splitter.connect(right, 1)
-      left.connect(merger, 0, 0)
-      right.connect(merger, 0, 1)
-      const destination = (
-        request.trackId !== undefined
-          ? trackBuses.get(request.trackId)?.input
-          : undefined
-      ) ?? clipDestination
-      merger.connect(destination)
-      balanceNodes.push(splitter, left, right, merger)
+      gain.connect(balance.input)
+      balance.output.connect(destination)
+      balanceNodes.push(...balance.nodes)
     } else {
-      const destination = (
-        request.trackId !== undefined
-          ? trackBuses.get(request.trackId)?.input
-          : undefined
-      ) ?? clipDestination
       gain.connect(destination)
     }
 
@@ -1850,19 +1859,19 @@ export async function startTimelineAudioPlayback(
       admittedStretchClips.delete(plan.clipId)
       if (stopped) return null
       failedClips.add(plan.clipId)
-      const reason =
+      const classified =
         cause instanceof MediaAssetRuntimeError
         && cause.assetId === plan.assetId
         && cause.failure.surface === 'audio-playback'
-          ? cause.failure.reason
-          : 'decode-failed'
-      const trackKind =
-        cause instanceof MediaAssetRuntimeError
-        && cause.assetId === plan.assetId
-        && cause.failure.surface === 'audio-playback'
-          ? cause.failure.trackKind
-          : 'audio'
-      warnMedia(plan, 'source-open', cause, reason, trackKind)
+          ? cause.failure
+          : null
+      warnMedia(
+        plan,
+        'source-open',
+        cause,
+        classified ? classified.reason : 'decode-failed',
+        classified ? classified.trackKind : 'audio',
+      )
       return null
     }
   }
@@ -1887,10 +1896,7 @@ export async function startTimelineAudioPlayback(
       const wrapped = state.pending
       const buffer = wrapped.buffer
       const sampleRate = buffer.sampleRate
-      if (
-        !Number.isSafeInteger(sampleRate)
-        || ![44_100, 48_000, 96_000].includes(sampleRate)
-      ) {
+      if (!isSupportedStretchSampleRate(sampleRate)) {
         throw new RangeError(
           'Audio stretch sample rate must be 44100, 48000, or 96000',
         )
