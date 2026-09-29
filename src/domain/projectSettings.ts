@@ -326,17 +326,23 @@ function validateNonEmptyText(
 
 const INITIAL_TRACKS_PER_KIND = 4
 
-function emptyTrack(id: string, kind: Track['kind']): Track {
+/** The one fully populated empty lane every new-track path creates. */
+export function createEmptyTrack(
+  id: string,
+  kind: Track['kind'],
+  name = id,
+  hidden = false,
+): Track {
   return {
     id,
     kind,
-    name: id,
+    name,
     clips: [],
     sequenceInstances: [],
     multicamInstances: [],
     adjustments: [],
     transitions: [],
-    hidden: false,
+    hidden,
     muted: false,
     solo: false,
     locked: false,
@@ -350,7 +356,7 @@ function emptyTrack(id: string, kind: Track['kind']): Track {
 function emptyTracks(prefix: 'V' | 'A', kind: Track['kind']): Track[] {
   return Array.from(
     { length: INITIAL_TRACKS_PER_KIND },
-    (_, index) => emptyTrack(`${prefix}${index + 1}`, kind),
+    (_, index) => createEmptyTrack(`${prefix}${index + 1}`, kind),
   )
 }
 

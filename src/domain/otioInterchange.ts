@@ -8,18 +8,12 @@
  */
 
 import { addCrossfade } from './operations'
+import { createDefaultClip } from './operations/creation'
 import { defaultMasterAudio } from './audioMixer'
-import { DEFAULT_BLEND_MODE } from './blendModes'
-import { defaultClipAnimation } from './clipAnimation'
-import {
-  defaultClipAudioSettings,
-  defaultClipTransform,
-  defaultClipVisualSettings,
-} from './clipInspector'
 import type { PortableAssetDescriptor } from './projectFile/projectTypes'
 import { PROJECT_FILE_LIMITS } from './projectFile/projectTypes'
 import { MAX_PROJECT_NAME_CHARACTERS } from './projectLimits'
-import { createTimelineDoc, type ProjectSettings } from './projectSettings'
+import { createEmptyTrack, createTimelineDoc, type ProjectSettings } from './projectSettings'
 import type {
   AssetKind,
   Clip,
@@ -417,59 +411,6 @@ function sourceBoundsForKind(kind: AssetKind): MediaSourceBounds {
   return {
     video: { status: 'unknown' },
     audio: null,
-  }
-}
-
-function emptyTrack(id: string, kind: TrackKind, name: string, hidden: boolean): Track {
-  return {
-    id,
-    kind,
-    name,
-    clips: [],
-    sequenceInstances: [],
-    multicamInstances: [],
-    adjustments: [],
-    transitions: [],
-    hidden,
-    muted: false,
-    solo: false,
-    locked: false,
-    volume: 1,
-    balance: 0,
-    videoEffects: [],
-    audioEffects: [],
-  }
-}
-
-function buildClip(
-  id: string,
-  assetId: string,
-  name: string,
-  start: number,
-  duration: number,
-  sourceStart: number,
-  still: boolean,
-): Clip {
-  const sourceDuration = still ? 1 : duration
-  const sourceStartFrame = still ? 0 : sourceStart
-  return {
-    id,
-    assetId,
-    name,
-    sourceMode: still ? 'still' : 'timed',
-    sourceRange: { startFrame: sourceStartFrame, durationFrames: sourceDuration },
-    sourceTimeMap: defaultSourceTimeMap(sourceStartFrame, sourceDuration),
-    timelineRange: { startFrame: start, durationFrames: duration },
-    transform: defaultClipTransform(),
-    opacity: 1,
-    blendMode: DEFAULT_BLEND_MODE,
-    volume: 1,
-    lensCorrection: null,
-    visual: defaultClipVisualSettings(),
-    audio: defaultClipAudioSettings(),
-    animation: defaultClipAnimation(),
-    effects: [],
-    audioEffects: [],
   }
 }
 
@@ -1062,7 +1003,7 @@ function importOneTimeline(
         markers: shiftMarkers(placed.markers, null, offset),
       }
     }
-    const track = emptyTrack(
+    const track = createEmptyTrack(
       factory('track'),
       kind,
       boundedName(readOptionalString(trackValue.name), kind === 'video' ? 'V' : 'A'),
@@ -1070,16 +1011,14 @@ function importOneTimeline(
     )
     for (const clip of placed.clips) {
       if (!clip.asset) continue
-      const still = clip.asset.descriptor.kind === 'image'
-      track.clips.push(buildClip(
-        factory('clip'),
-        clip.asset.descriptor.id,
-        clip.name,
-        clip.start,
-        clip.duration,
-        clip.sourceStart,
-        still,
-      ))
+      track.clips.push(createDefaultClip({
+        id: factory('clip'),
+        assetId: clip.asset.descriptor.id,
+        name: clip.name,
+        still: clip.asset.descriptor.kind === 'image',
+        sourceStartFrame: clip.sourceStart,
+        timelineRange: { startFrame: clip.start, durationFrames: clip.duration },
+      }))
     }
     importedTracks.push(track)
     totalClips += track.clips.length

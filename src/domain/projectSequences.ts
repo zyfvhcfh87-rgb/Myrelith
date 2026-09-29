@@ -586,6 +586,15 @@ function allocateId(
   return null
 }
 
+/** Reserve every project id once, then mint fresh ids for one multi-entity edit. */
+export function createProjectIdAllocator(
+  project: SequenceProject,
+  factory: SequenceIdFactory,
+): (kind: SequenceEntityKind, sourceId?: string) => string | null {
+  const used = collectUsedIds(project)
+  return (kind, sourceId) => allocateId(used, factory, kind, sourceId)
+}
+
 /** Reserve live and dangling effect targets across every sequence before a batch. */
 export function createProjectEffectIdAllocator(
   project: SequenceProject,
@@ -624,6 +633,14 @@ function remapDuplicateIds(
   const clipIds = new Map<string, string>()
   const effectIds = new Map<EffectId, EffectId>()
   const linkGroupIds = new Map<string, string>()
+  // Every member of one source link group joins the same fresh group.
+  const remapLinkGroup = (sourceId: string): string | null => {
+    const existing = linkGroupIds.get(sourceId)
+    if (existing) return existing
+    const id = allocateId(used, factory, 'link-group', sourceId)
+    if (id) linkGroupIds.set(sourceId, id)
+    return id
+  }
   for (const effects of videoBusStacks(duplicate)) for (const effect of effects) {
     const id = allocateId(used, factory, 'effect', effect.id)
     if (!id) return null
@@ -662,17 +679,8 @@ function remapDuplicateIds(
         } catch { return null }
       }
       if (clip.linkGroupId) {
-        let linkGroupId = linkGroupIds.get(clip.linkGroupId)
-        if (!linkGroupId) {
-          linkGroupId = allocateId(
-            used,
-            factory,
-            'link-group',
-            clip.linkGroupId,
-          ) ?? undefined
-          if (!linkGroupId) return null
-          linkGroupIds.set(clip.linkGroupId, linkGroupId)
-        }
+        const linkGroupId = remapLinkGroup(clip.linkGroupId)
+        if (!linkGroupId) return null
         clip.linkGroupId = linkGroupId
       }
       for (const effect of clip.effects) {
@@ -701,17 +709,8 @@ function remapDuplicateIds(
       if (!instanceId) return null
       instance.id = instanceId
       if (instance.linkGroupId) {
-        let linkGroupId = linkGroupIds.get(instance.linkGroupId)
-        if (!linkGroupId) {
-          linkGroupId = allocateId(
-            used,
-            factory,
-            'link-group',
-            instance.linkGroupId,
-          ) ?? undefined
-          if (!linkGroupId) return null
-          linkGroupIds.set(instance.linkGroupId, linkGroupId)
-        }
+        const linkGroupId = remapLinkGroup(instance.linkGroupId)
+        if (!linkGroupId) return null
         instance.linkGroupId = linkGroupId
       }
     }
@@ -725,17 +724,8 @@ function remapDuplicateIds(
       if (!instanceId) return null
       instance.id = instanceId
       if (instance.linkGroupId) {
-        let linkGroupId = linkGroupIds.get(instance.linkGroupId)
-        if (!linkGroupId) {
-          linkGroupId = allocateId(
-            used,
-            factory,
-            'link-group',
-            instance.linkGroupId,
-          ) ?? undefined
-          if (!linkGroupId) return null
-          linkGroupIds.set(instance.linkGroupId, linkGroupId)
-        }
+        const linkGroupId = remapLinkGroup(instance.linkGroupId)
+        if (!linkGroupId) return null
         instance.linkGroupId = linkGroupId
       }
     }

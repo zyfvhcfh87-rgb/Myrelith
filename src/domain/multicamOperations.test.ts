@@ -131,6 +131,34 @@ describe('multicam project edit seam', () => {
     expect(rejected).toEqual({ project: lockedProject, failure: 'track-locked' })
   })
 
+  test('instance edits rebuild only the lanes that hold the edited members', () => {
+    const base = project()
+    base.sequences[0].tracks.push(track('V2', 'video'))
+    const created = createMulticamFromAssets(base, 'root', {
+      name: 'Concert',
+      startFrame: 20,
+      videoTrackId: 'V1',
+      audioTrackId: 'A1',
+      angles: [
+        { assetId: 'wide', name: 'Wide', durationFrames: 120, syncFrame: 0 },
+        { assetId: 'close', name: 'Close', durationFrames: 120, syncFrame: 0 },
+      ],
+      audioPolicy: { kind: 'follow-video' },
+    }, idFactory())
+    const untouched = created.project.sequences[0].tracks[2]
+    for (const command of [
+      { kind: 'move', instanceId: created.videoInstanceId!, startFrame: 200 },
+      { kind: 'split', instanceId: created.videoInstanceId!, frame: 30 },
+      { kind: 'duplicate', instanceId: created.videoInstanceId!, startFrame: 300 },
+      { kind: 'delete', instanceId: created.videoInstanceId! },
+    ] as const) {
+      const edited = applyMulticamInstanceEdit(created.project, 'root', command, idFactory())
+      expect(edited.failure).toBeNull()
+      expect(edited.project.sequences[0].tracks[2]).toBe(untouched)
+      expect(edited.project.sequences[0].tracks[0]).not.toBe(created.project.sequences[0].tracks[0])
+    }
+  })
+
   test('trims linked items with one exact parent and definition-local range', () => {
     const created = createMulticamFromAssets(project(), 'root', {
       name: 'Concert',

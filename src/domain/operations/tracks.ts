@@ -16,6 +16,7 @@ import {
   DEFAULT_NORMALIZE_TARGET_LUFS,
   normalizeGainFromLufs,
 } from '../audioLoudness';
+import { createEmptyTrack } from '../projectSettings';
 import { locateClip, reject, withoutLinkGroupId, withTrack } from './operationInternals';
 
 export { MAX_CLIP_VOLUME }
@@ -61,25 +62,7 @@ export function addTrack(doc: TimelineDoc, kind: TrackKind): TimelineDoc {
       if (m) max = Math.max(max, Number(m[1]))
     }
   }
-  const label = `${prefix}${max + 1}`
-  const track: Track = {
-    id: label,
-    kind,
-    name: label,
-    clips: [],
-    sequenceInstances: [],
-    multicamInstances: [],
-    adjustments: [],
-    transitions: [],
-    hidden: false,
-    muted: false,
-    solo: false,
-    locked: false,
-    volume: 1,
-    balance: 0,
-    videoEffects: [],
-    audioEffects: [],
-  }
+  const track = createEmptyTrack(`${prefix}${max + 1}`, kind)
 
   let lastOfKind = -1
   for (let t = 0; t < doc.tracks.length; t++) {
