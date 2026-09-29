@@ -57,6 +57,36 @@ describe('delivery products', () => {
     expect(sanitizeDeliveryPrefix('../evil/name.png')).toBe('-evil-name')
   })
 
+  test('prefix sanitizing matches its original step order on awkward names', () => {
+    // The pre-refactor implementation, kept verbatim as an oracle.
+    const original = (value: string): string => {
+      let base = value.trim().replace(/[. ]+$/g, '')
+      base = base.replace(/[<>:"/\\|?*]/g, '-')
+      base = base.replace(/^\.+/g, '')
+      base = base.replace(/\.png$/i, '')
+      base = Array.from(base, (character) =>
+        character.charCodeAt(0) < 32 ? '-' : character,
+      ).join('')
+      base = Array.from(base).slice(0, 80).join('').replace(/[. ]+$/g, '')
+      if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i.test(base)) {
+        base = `myrelith-${base}`
+      }
+      return base || 'frame'
+    }
+    const pieces = [
+      '', ' ', '.', '..', '<', '/', 'con', 'COM1', 'clock$', 'name', '\u0001',
+      '\u{1f3ac}', '.png', '.PNG', ' .', 'x'.repeat(79),
+    ]
+    for (const first of pieces) {
+      for (const second of pieces) {
+        for (const third of pieces) {
+          const value = `${first}${second}${third}`
+          expect(sanitizeDeliveryPrefix(value)).toBe(original(value))
+        }
+      }
+    }
+  })
+
   test('rejects inverted codec/container pairs without substituting another format', () => {
     expect(() => validateDeliveryProfile({
       ...DEFAULT_AUDIO_ONLY_PROFILE,

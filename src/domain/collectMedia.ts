@@ -6,6 +6,7 @@
  * manifest, and completeness that cannot be inferred from a partial copy.
  */
 
+import { WINDOWS_RESERVED_FILE_NAME } from './fileNames'
 import type { PortableAssetDescriptor } from './projectFile'
 import {
   hasSupportedProjectFileExtension,
@@ -122,7 +123,6 @@ export class CollectMediaError extends Error {
   }
 }
 
-const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i
 const FINGERPRINT_ALGORITHMS = new Set<CollectMediaFingerprintAlgorithm>([
   'sha256-sampled-v1',
 ])
@@ -192,7 +192,7 @@ export function isSafeCollectPathSegment(value: string): boolean {
   if (value === '.' || value === '..') return false
   if (value.endsWith('.') || value.endsWith(' ')) return false
   if (hasUnsafePathCharacter(value)) return false
-  if (WINDOWS_RESERVED.test(value)) return false
+  if (WINDOWS_RESERVED_FILE_NAME.test(value)) return false
   return true
 }
 
@@ -209,7 +209,7 @@ export function sanitizeCollectFileName(fileName: string): string {
   )).join('')
   stem = stem.replace(/[. ]+$/g, '').replace(/^\.+/g, '')
   stem = Array.from(stem).slice(0, 80).join('').replace(/[. ]+$/g, '')
-  if (!stem || WINDOWS_RESERVED.test(stem + extension)) stem = 'media'
+  if (!stem || WINDOWS_RESERVED_FILE_NAME.test(stem + extension)) stem = 'media'
   const candidate = `${stem}${extension}`
   return isSafeCollectPathSegment(candidate) ? candidate : 'media.bin'
 }

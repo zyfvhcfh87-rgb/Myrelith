@@ -8,6 +8,7 @@
  */
 
 import { errorMessage, hasErrorName } from '../domain/errors'
+import { windowsSafeFileStem } from '../domain/fileNames'
 import {
   createProjectFileSnapshot,
   PROJECT_FILE_EXTENSION,
@@ -176,21 +177,13 @@ const realDeps: ProjectPersistenceDeps = {
 
 /** Windows-safe, extension-stable default for both picker and fallback. */
 export function projectFileName(projectName: string): string {
-  let base = projectName
-    .trim()
-    .replace(/[. ]+$/g, '')
-    .replace(/\.(?:myrelith|webcut)$/i, '')
-  base = base.replace(/[<>:"/\\|?*]/g, '-')
-  base = Array.from(base, (character) => (
-    character.charCodeAt(0) < 32 ? '-' : character
-  )).join('')
-  base = Array.from(base).slice(0, 80).join('').replace(/[. ]+$/g, '')
-  if (
-    /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i
-      .test(base)
-  ) {
-    base = `myrelith-${base}`
-  }
+  const base = windowsSafeFileStem(
+    projectName
+      .trim()
+      .replace(/[. ]+$/g, '')
+      .replace(/\.(?:myrelith|webcut)$/i, ''),
+    80,
+  )
   return `${base || 'untitled-project'}${PROJECT_FILE_EXTENSION}`
 }
 

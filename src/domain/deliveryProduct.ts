@@ -28,6 +28,7 @@ import {
   MAX_EXPORT_DURATION_SECONDS,
   MAX_EXPORT_FRAME_COUNT,
 } from './exportWorkBudget'
+import { windowsSafeFileStem } from './fileNames'
 import { isRecord } from './guards'
 import { framesToSeconds } from './time'
 
@@ -209,21 +210,14 @@ export function exportSettingsSummary(settings: Readonly<ExportSettingsUnion>): 
 }
 
 export function sanitizeDeliveryPrefix(value: string): string {
-  let base = value.trim().replace(/[. ]+$/g, '')
-  base = base.replace(/[<>:"/\\|?*]/g, '-')
-  base = base.replace(/^\.+/g, '')
-  base = base.replace(/\.png$/i, '')
-  base = Array.from(base, (character) =>
-    character.charCodeAt(0) < 32 ? '-' : character,
-  ).join('')
-  base = Array.from(base).slice(0, MAX_PREFIX_CHARACTERS).join('').replace(/[. ]+$/g, '')
-  if (
-    /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i
-      .test(base)
-  ) {
-    base = `myrelith-${base}`
-  }
-  return base || 'frame'
+  // Stripping leading dots and ".png" first is equivalent: the character
+  // replacements inside windowsSafeFileStem never touch '.', 'p', 'n' or 'g'.
+  const base = value
+    .trim()
+    .replace(/[. ]+$/g, '')
+    .replace(/^\.+/g, '')
+    .replace(/\.png$/i, '')
+  return windowsSafeFileStem(base, MAX_PREFIX_CHARACTERS) || 'frame'
 }
 
 export function imageSequencePadWidth(endFrameExclusive: number): number {
