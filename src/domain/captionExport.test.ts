@@ -122,6 +122,14 @@ describe('caption export availability', () => {
     expect(firstCaptionExportBlocker(project(root, child), root.id, (_doc, _track, item) => { observed.push(item.id); return null })).toBeNull()
     expect(observed).toEqual(['cue-19999'])
   })
+  it('checks a long cue that overlaps shorter later cues inside a nested range', () => {
+    const child = doc('child', [captions('cc', [cue('A', 0, 100), cue('B', 10, 10), cue('C', 30, 10)])])
+    const root = doc('root', [], [track('v', [instance('inst', child.id, 0, 50, 20)])])
+    const observed: [string, number, number][] = []
+    expect(firstCaptionExportBlocker(project(root, child), root.id, (_doc, _track, item, index, size) => {
+      observed.push([item.id, index, size]); return null })).toBeNull()
+    expect(observed).toEqual([['A', 0, 1]])
+  })
   it('does not mutate source documents or unknown intent', () => {
     const root = doc('root', [captions('cc', [cue('future', 0, 1, true)])]), input = project(root)
     const before = JSON.stringify(input)

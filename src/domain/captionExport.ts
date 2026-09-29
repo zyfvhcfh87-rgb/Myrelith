@@ -20,10 +20,25 @@ export type CaptionPaintError = (doc: TimelineDoc, track: CaptionTrack, cue: Cap
 interface ActiveCue { track: CaptionTrack; cue: CaptionItem; trackIndex: number }
 interface StackChange { entry: ActiveCue; active: boolean }
 
-/** Tracks contain sorted, non-overlapping cues. Binary-search the interval;
- * sweep only intersecting cue boundaries, never scan all cues at every frame.
+/** Running maximum of cue end frames in track order. Cues are sorted by start
+ * but may overlap (up to the active-caption limit), so raw ends are not
+ * monotone; this prefix maximum is, and can drive a binary search.
  */
-function stackChanges(sequence: TimelineDoc, range: FrameInterval): Map<number, StackChange[]> {
+function maxEndsByIndex(track: CaptionTrack): number[] {
+  const ends: number[] = []
+  let furthest = Number.NEGATIVE_INFINITY
+  for (const cue of track.items) {
+    furthest = Math.max(furthest, rangeEnd(cue.range))
+    ends.push(furthest)
+  }
+  return ends
+}
+
+/** Binary-search the first cue that can reach the interval; sweep only
+ * intersecting cue boundaries, never scan all cues at every frame.
+ */
+function stackChanges(sequence: TimelineDoc, range: FrameInterval,
+  maxEnds: (track: CaptionTrack) => readonly number[]): Map<number, StackChange[]> {
   const events = new Map<number, StackChange[]>()
   const put = (frame: number, change: StackChange) => {
     const bucket = events.get(frame)
@@ -32,15 +47,18 @@ function stackChanges(sequence: TimelineDoc, range: FrameInterval): Map<number, 
   }
   for (const [trackIndex, track] of (sequence.captionTracks ?? []).entries()) {
     if (track.hidden) continue
+    const ends = maxEnds(track)
     let low = 0, high = track.items.length
     while (low < high) {
       const middle = Math.floor((low + high) / 2)
-      if (rangeEnd(track.items[middle]!.range) <= range.start) low = middle + 1
+      if (ends[middle]! <= range.start) low = middle + 1
       else high = middle
     }
     for (let index = low; index < track.items.length; index++) {
       const cue = track.items[index]!
       if (cue.range.startFrame >= range.end) break
+      // A short cue nested inside an earlier long one can end before the range.
+      if (rangeEnd(cue.range) <= range.start) continue
       const entry = { track, cue, trackIndex }
       put(Math.max(range.start, cue.range.startFrame), { entry, active: true })
       if (rangeEnd(cue.range) < range.end) put(rangeEnd(cue.range), { entry, active: false })
@@ -60,6 +78,13 @@ export function firstCaptionExportBlocker(project: SequenceProject, sequenceId: 
   const root = sequences.get(sequenceId)
   if (!root) throw new RangeError('The caption export sequence is unavailable.')
   const seen = new Map<string, FrameInterval[]>()
+  // Owned by this call over the immutable validated project input.
+  const maxEndsByTrack = new Map<CaptionTrack, number[]>()
+  const maxEnds = (track: CaptionTrack) => {
+    let ends = maxEndsByTrack.get(track)
+    if (!ends) maxEndsByTrack.set(track, ends = maxEndsByIndex(track))
+    return ends
+  }
   const queue = [{ id: sequenceId, start: 0, end: docDurationFrames(root) }]
   for (let index = 0; index < queue.length; index++) {
     const next = queue[index]!
@@ -67,7 +92,7 @@ export function firstCaptionExportBlocker(project: SequenceProject, sequenceId: 
     const sequence = sequences.get(next.id)
     if (!sequence) throw new RangeError('A referenced caption export sequence is unavailable.')
     for (const range of admitSequenceFrameRange(seen, next.id, next)) {
-      const changes = stackChanges(sequence, range)
+      const changes = stackChanges(sequence, range, maxEnds)
       const activeById = new Map<string, ActiveCue>()
       for (const [frame, events] of [...changes].sort(([a], [b]) => a - b)) {
         for (const event of events) {
