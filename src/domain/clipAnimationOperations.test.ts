@@ -2,13 +2,17 @@ import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc, Track } from './schema'
 import { defaultClipAnimation, resolveClipAnimationAtFrame } from './clipAnimation'
+import { DEFAULT_CLIP_AUDIO_SETTINGS } from './clipInspector'
+import { defaultTextProps } from './textOverlay'
 import {
   moveClipKeyframe,
   removeClipKeyframe,
   resetClipAnimationTrack,
+  rippleTrim,
   setClipKeyframe,
   splitClipAtFrame,
   trimClip,
+  updateClipAudioAtFrame,
   updateClipVisualAtFrame,
 } from './operations'
 
@@ -156,6 +160,86 @@ describe('clip animation document operations', () => {
     expect(resolveClipAnimationAtFrame(right, 25).transform.x).toBe(expectedAt25)
     expect(resolveClipAnimationAtFrame(findClip(trimmed), 25).transform.x)
       .toBe(expectedAt25)
+  })
+
+  test('ripple head trim re-bases keyframes exactly like trim', () => {
+    const animated = clip()
+    animated.animation = {
+      tracks: [{
+        property: 'position-x',
+        keyframes: [
+          { frame: 0, sourceTimeTicks: 0, value: 0, easing: linear },
+          { frame: 20, sourceTimeTicks: 20_000_000, value: 100, easing: linear },
+        ],
+      }],
+    }
+    const original = doc([animated])
+    const expectedAt25 = resolveClipAnimationAtFrame(animated, 25).transform.x
+    const trimmed = findClip(trimClip(original, 'clip-1', 'start', 5))
+    const rippled = findClip(rippleTrim(original, 'clip-1', 'start', 5))
+
+    // The ripple keeps the timeline start, so old frame 25 now sits at 20.
+    expect(resolveClipAnimationAtFrame(rippled, 20).transform.x).toBe(expectedAt25)
+    expect(rippled.animation).toEqual(trimmed.animation)
+    expect(rippled.animation?.tracks[0].keyframes).toEqual([
+      { frame: -5, sourceTimeTicks: 0, value: 0, easing: linear },
+      { frame: 15, sourceTimeTicks: 20_000_000, value: 100, easing: linear },
+    ])
+  })
+
+  test('ripple head trim re-anchors procedural text keys like trim', () => {
+    const title: Clip = {
+      ...clip(),
+      assetId: 'text:clip-1',
+      text: defaultTextProps(1920, 1080),
+      animation: {
+        tracks: [{
+          property: 'opacity',
+          keyframes: [
+            { frame: 0, sourceTimeTicks: 0, value: 1, easing: linear },
+            { frame: 20, sourceTimeTicks: 20_000_000, value: 0.5, easing: linear },
+          ],
+        }],
+      },
+    }
+    const original = doc([title])
+    const trimmed = findClip(trimClip(original, 'clip-1', 'start', 5))
+    const rippled = findClip(rippleTrim(original, 'clip-1', 'start', 5))
+
+    expect(rippled.animation).toEqual(trimmed.animation)
+    expect(rippled.animation?.tracks[0].keyframes[1]).toEqual(
+      { frame: 15, sourceTimeTicks: 15_000_000, value: 0.5, easing: linear },
+    )
+  })
+
+  test('audio reset on default settings still keys an animated volume', () => {
+    const keyed = setClipKeyframe(
+      setClipKeyframe(doc([clip()], 'audio'), 'clip-1', 'volume', {
+        frame: 0,
+        value: 0.2,
+        easing: linear,
+      }),
+      'clip-1',
+      'volume',
+      { frame: 20, value: 0.4, easing: linear },
+    )
+    // Inspector "Reset audio" at timeline frame 20 (clip-local frame 10).
+    const reset = updateClipAudioAtFrame(keyed, 'clip-1', 20, {
+      volume: 1,
+      audio: { ...DEFAULT_CLIP_AUDIO_SETTINGS },
+    })
+
+    expect(reset).not.toBe(keyed)
+    expect(findClip(reset).audio ?? DEFAULT_CLIP_AUDIO_SETTINGS)
+      .toEqual(DEFAULT_CLIP_AUDIO_SETTINGS)
+    expect(findClip(reset).animation?.tracks[0].keyframes.map(
+      (keyframe) => [keyframe.frame, keyframe.value],
+    )).toEqual([[0, 0.2], [10, 1], [20, 0.4]])
+    // A genuinely invalid static half still rejects the whole edit.
+    expect(updateClipAudioAtFrame(keyed, 'clip-1', 20, {
+      volume: 1,
+      audio: { fadeInFrames: 1_000 },
+    })).toBe(keyed)
   })
 
   test('rejects incompatible, locked, and out-of-range animated edits', () => {

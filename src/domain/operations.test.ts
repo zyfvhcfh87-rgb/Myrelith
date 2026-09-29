@@ -897,6 +897,17 @@ describe('cross-cutting guarantees', () => {
     expect(JSON.parse(JSON.stringify(out))).toEqual(out)
   })
 
+  test('zero-delta geometry edits are silent same-reference no-ops', () => {
+    const doc = makeDoc()
+    expect(trimClip(doc, 'clipB', 'start', 0)).toBe(doc)
+    expect(trimClip(doc, 'clipB', 'end', 0)).toBe(doc)
+    expect(rippleTrim(doc, 'clipB', 'start', 0)).toBe(doc)
+    expect(rippleTrim(doc, 'clipB', 'end', 0)).toBe(doc)
+    expect(slipClip(doc, 'clipB', 0)).toBe(doc)
+    expect(slideClip(doc, 'clipB', 0)).toBe(doc)
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
   test('clips stay sorted by start frame after any successful op', () => {
     const doc = makeDoc()
     const ops: TimelineDoc[] = [

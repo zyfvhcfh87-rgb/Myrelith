@@ -20,6 +20,11 @@ import { locateClip, reject, withoutLinkGroupId, withTrack } from './operationIn
 
 export { MAX_CLIP_VOLUME }
 
+/** Clip, track, and master gain share one [0, MAX_CLIP_VOLUME] UI clamp. */
+export function clampVolume(volume: number): number {
+  return Math.min(MAX_CLIP_VOLUME, Math.max(0, volume))
+}
+
 /** Per-track toggle flags (timeline header buttons). */
 export interface TrackFlagsPatch {
   hidden?: boolean
@@ -281,7 +286,7 @@ export function setClipVolume(
     return reject(doc, op, `volume must be a finite number, got ${volume}`)
   }
 
-  const clamped = Math.min(MAX_CLIP_VOLUME, Math.max(0, volume))
+  const clamped = clampVolume(volume)
   if (clamped === loc.clip.volume) return doc
 
   const clips = loc.track.clips.slice()
@@ -323,7 +328,7 @@ export function setTrackMixer(
 
   const volume = patch.volume === undefined
     ? trackVolume(track)
-    : Math.min(MAX_CLIP_VOLUME, Math.max(0, patch.volume))
+    : clampVolume(patch.volume)
   const balance = patch.balance === undefined
     ? trackBalance(track)
     : Math.min(MAX_AUDIO_BALANCE, Math.max(MIN_AUDIO_BALANCE, patch.balance))
@@ -356,7 +361,7 @@ export function setMasterAudio(
   const current = masterAudioSettings(doc)
   const volume = patch.volume === undefined
     ? current.volume
-    : Math.min(MAX_CLIP_VOLUME, Math.max(0, patch.volume))
+    : clampVolume(patch.volume)
   const balance = patch.balance === undefined
     ? current.balance
     : Math.min(MAX_AUDIO_BALANCE, Math.max(MIN_AUDIO_BALANCE, patch.balance))
