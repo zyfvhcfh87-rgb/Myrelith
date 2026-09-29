@@ -65,22 +65,22 @@ import {
   type SequenceEditAcceptedPlan,
 } from '../domain/threePointEdit'
 import {
-  addCaptionItem as addCaptionCue,
-  addCaptionTrack as addCaptionLane,
+  addCaptionItem,
+  addCaptionTrack,
   mergeCaptionWithNext,
-  removeCaptionItem as deleteCaptionCue,
-  removeCaptionTrack as deleteCaptionLane,
+  removeCaptionItem,
+  removeCaptionTrack,
   replaceCaptionItems,
   splitCaptionItem,
-  updateCaptionItem as updateCaptionCue,
-  updateCaptionTrack as updateCaptionLane,
+  updateCaptionItem,
+  updateCaptionTrack,
 } from '../domain/captions'
 import type { TimelineMarkerPatch } from '../domain/timelineMarkers'
 import {
-  addTimelineMarker as addMarker,
-  deleteTimelineMarker as deleteMarker,
-  duplicateTimelineMarker as duplicateMarker,
-  updateTimelineMarker as updateMarker,
+  addTimelineMarker,
+  deleteTimelineMarker,
+  duplicateTimelineMarker,
+  updateTimelineMarker,
 } from '../domain/timelineMarkers'
 import type {
   ClipAudioPatch,
@@ -139,7 +139,7 @@ import {
   updateTextClip,
 } from '../domain/operations'
 import {
-  linkClips as linkClipsInDocument,
+  linkClips,
   linkedMoveClip,
   linkedMoveClips,
   linkedRippleDelete,
@@ -163,25 +163,25 @@ import {
 import type { ManualLensCorrectionModel } from '../domain/lensCorrection'
 import { setManualLensCorrection } from '../domain/lensCorrectionOperations'
 import {
-  addAdjustmentEffect as addAdjustmentEffectToDocument,
-  clearAdjustmentEffectAnimation as clearAdjustmentEffectAnimationInDocument,
-  clearAdjustmentOpacityAnimation as clearAdjustmentOpacityAnimationInDocument,
-  duplicateAdjustment as duplicateAdjustmentInDocument,
-  insertAdjustment as insertAdjustmentIntoDocument,
-  moveAdjustment as moveAdjustmentInDocument,
-  removeAdjustment as removeAdjustmentFromDocument,
-  removeAdjustmentEffect as removeAdjustmentEffectFromDocument,
-  renameAdjustment as renameAdjustmentInDocument,
-  reorderAdjustmentEffect as reorderAdjustmentEffectInDocument,
-  resetAdjustmentEffect as resetAdjustmentEffectInDocument,
-  setAdjustmentEffectEnabled as setAdjustmentEffectEnabledInDocument,
-  setAdjustmentEffectKeyframe as setAdjustmentEffectKeyframeInDocument,
-  setAdjustmentEnabled as setAdjustmentEnabledInDocument,
-  setAdjustmentOpacityAtFrame as setAdjustmentOpacityAtFrameInDocument,
-  setAdjustmentOpacityKeyframe as setAdjustmentOpacityKeyframeInDocument,
-  splitAdjustmentAtFrame as splitAdjustmentAtFrameInDocument,
-  trimAdjustment as trimAdjustmentInDocument,
-  updateAdjustmentEffectParamsAtFrame as updateAdjustmentEffectParamsAtFrameInDocument,
+  addAdjustmentEffect,
+  clearAdjustmentEffectAnimation,
+  clearAdjustmentOpacityAnimation,
+  duplicateAdjustment,
+  insertAdjustment,
+  moveAdjustment,
+  removeAdjustment,
+  removeAdjustmentEffect,
+  renameAdjustment,
+  reorderAdjustmentEffect,
+  resetAdjustmentEffect,
+  setAdjustmentEffectEnabled,
+  setAdjustmentEffectKeyframe,
+  setAdjustmentEnabled,
+  setAdjustmentOpacityAtFrame,
+  setAdjustmentOpacityKeyframe,
+  splitAdjustmentAtFrame,
+  trimAdjustment,
+  updateAdjustmentEffectParamsAtFrame,
 } from '../domain/adjustmentItems'
 import {
   chooseProjectRootSequence,
@@ -718,6 +718,29 @@ function randomSequenceId(
   return `${kind.replace('-', '_')}_${crypto.randomUUID()}`
 }
 
+/** Session-owned retention, navigation and history that a project replacement clears. */
+function projectReplacementReset(): Pick<DocumentState,
+  | 'retainedClipboardColorLuts' | 'retainedAttributePathTracks' | 'retainedKeyPathTracks'
+  | 'retainedTitleClipboardOwners' | 'retainedTitleClipboardElements' | 'retainedTitleClipboardKeys'
+  | 'sequenceNavigation' | 'past' | 'future'> {
+  return {
+    retainedClipboardColorLuts: [],
+    retainedAttributePathTracks: [],
+    retainedKeyPathTracks: [],
+    retainedTitleClipboardOwners: [],
+    retainedTitleClipboardElements: [],
+    retainedTitleClipboardKeys: [],
+    sequenceNavigation: [],
+    past: [],
+    future: [],
+  }
+}
+
+/** Project-unique ids for title elements that a split or sequence edit copies. */
+function titleElementIds(project: SequenceProject) {
+  return createTitleElementIdAllocator(project, () => `title-element_${crypto.randomUUID()}`)
+}
+
 const INITIAL_DOCUMENT = createTimelineDoc(
   'Untitled',
   DEFAULT_PROJECT_SETTINGS,
@@ -725,930 +748,613 @@ const INITIAL_DOCUMENT = createTimelineDoc(
 )
 const INITIAL_PROJECT = sequenceProjectFromTimeline(INITIAL_DOCUMENT)
 
-export const useDocumentStore = create<DocumentState>()((set) => ({
-  retainedCaptionOwners: {},
-  retainCaptionOwners: (ownerId, owners) => {
-    let error: string | null = null
-    set((state) => {
-      // Old owner copies remain charged until replacement is admitted.
-      error = captionRetentionError(state, undefined, owners, heldCaptionUsage)
-      return error ? state : { retainedCaptionOwners: { ...state.retainedCaptionOwners, [ownerId]: owners } }
-    })
-    return error
-  },
-  releaseCaptionOwners: (ownerId) => set((state) => {
-    if (!Object.hasOwn(state.retainedCaptionOwners, ownerId)) return state
-    const { [ownerId]: _released, ...remaining } = state.retainedCaptionOwners
-    return { retainedCaptionOwners: remaining }
-  }),
-  retainedClipboardColorLuts: [],
-  retainedAttributePathTracks: [],
-  retainedKeyPathTracks: [],
-  retainedTitleClipboardOwners: [],
-  retainedTitleClipboardElements: [],
-  retainedTitleClipboardKeys: [],
-  commitAnimationEdit: (expectedProject, generation, sequenceId, next) => {
-    let error: string | null = null
-    set((state) => {
-      if (state.project !== expectedProject || state.projectGeneration !== generation || state.activeSequenceId !== sequenceId) { error = 'The animation project or active sequence changed.'; return state }
-      if (next === expectedProject) return state
-      if (!sequenceProjectWithinEditBudget(next)) { error = 'The animation edit exceeds project limits.'; return state }
-      error = projectCommitError(state, next)
-      return error ? state : pushProject(state, next)
-    })
-    return error
-  },
-  commitProjectEdit: (expectedProject, generation, next) => {
-    let error: string | null = null
-    set((state) => {
-      if (state.project !== expectedProject || state.projectGeneration !== generation) { error = 'The project changed. Reopen the editing controls.'; return state }
-      if (!sequenceProjectWithinEditBudget(next)) { error = 'The edit exceeds project limits.'; return state }
-      error = projectCommitError(state, next)
-      return error || next === state.project ? state : pushProject(state, next)
-    })
-    return error
-  },
-  project: INITIAL_PROJECT,
-  projectGeneration: 0,
-  activeSequenceId: INITIAL_DOCUMENT.id,
-  sequenceNavigation: [],
-  doc: INITIAL_DOCUMENT,
-  past: [],
-  future: [],
+export const useDocumentStore = create<DocumentState>()((set) => {
+  /**
+   * Bind one pure active-document operation as an action. A rejected edit
+   * returns the same doc, so commit keeps the state and pushes no history.
+   */
+  const edit = <A extends unknown[]>(operation: (doc: TimelineDoc, ...args: A) => TimelineDoc) =>
+    (...args: A): void => set((state) => commit(state, operation(state.doc, ...args)))
 
-  setProject: (project, activeSequenceId = project.rootSequenceId) => set((state) => {
-    const error = captionProjectIntentError(project) ?? project.sequences.map(captionDocumentValidationError).find(Boolean)
-      ?? captionRetentionError({ ...state, project, past: [], future: [] })
-    if (error) throw new RangeError(error)
-    return {
-      project,
-      projectGeneration: state.projectGeneration + 1,
-      retainedClipboardColorLuts: [],
-      retainedAttributePathTracks: [],
-      retainedKeyPathTracks: [],
-      retainedTitleClipboardOwners: [],
-      retainedTitleClipboardElements: [],
-      retainedTitleClipboardKeys: [],
-      ...activeSequenceFor(project, activeSequenceId),
-      sequenceNavigation: [],
-      past: [],
-      future: [],
-    }
-  }),
+  return {
+    retainedCaptionOwners: {},
+    retainCaptionOwners: (ownerId, owners) => {
+      let error: string | null = null
+      set((state) => {
+        // Old owner copies remain charged until replacement is admitted.
+        error = captionRetentionError(state, undefined, owners, heldCaptionUsage)
+        return error ? state : { retainedCaptionOwners: { ...state.retainedCaptionOwners, [ownerId]: owners } }
+      })
+      return error
+    },
+    releaseCaptionOwners: (ownerId) => set((state) => {
+      if (!Object.hasOwn(state.retainedCaptionOwners, ownerId)) return state
+      const { [ownerId]: _released, ...remaining } = state.retainedCaptionOwners
+      return { retainedCaptionOwners: remaining }
+    }),
+    retainedClipboardColorLuts: [],
+    retainedAttributePathTracks: [],
+    retainedKeyPathTracks: [],
+    retainedTitleClipboardOwners: [],
+    retainedTitleClipboardElements: [],
+    retainedTitleClipboardKeys: [],
+    commitAnimationEdit: (expectedProject, generation, sequenceId, next) => {
+      let error: string | null = null
+      set((state) => {
+        if (state.project !== expectedProject || state.projectGeneration !== generation || state.activeSequenceId !== sequenceId) { error = 'The animation project or active sequence changed.'; return state }
+        if (next === expectedProject) return state
+        if (!sequenceProjectWithinEditBudget(next)) { error = 'The animation edit exceeds project limits.'; return state }
+        error = projectCommitError(state, next)
+        return error ? state : pushProject(state, next)
+      })
+      return error
+    },
+    commitProjectEdit: (expectedProject, generation, next) => {
+      let error: string | null = null
+      set((state) => {
+        if (state.project !== expectedProject || state.projectGeneration !== generation) { error = 'The project changed. Reopen the editing controls.'; return state }
+        if (!sequenceProjectWithinEditBudget(next)) { error = 'The edit exceeds project limits.'; return state }
+        error = projectCommitError(state, next)
+        return error || next === state.project ? state : pushProject(state, next)
+      })
+      return error
+    },
+    project: INITIAL_PROJECT,
+    projectGeneration: 0,
+    activeSequenceId: INITIAL_DOCUMENT.id,
+    sequenceNavigation: [],
+    doc: INITIAL_DOCUMENT,
+    past: [],
+    future: [],
 
-  setDoc: (doc) => set((state) => {
-    const project = sequenceProjectFromTimeline(doc)
-    const error = captionDocumentValidationError(doc) ?? captionProjectIntentError(project)
-      ?? captionRetentionError({ ...state, project, past: [], future: [] })
-    if (error) throw new RangeError(error)
-    return {
-      project,
-      projectGeneration: state.projectGeneration + 1,
-      retainedClipboardColorLuts: [],
-      retainedAttributePathTracks: [],
-      retainedKeyPathTracks: [],
-      retainedTitleClipboardOwners: [],
-      retainedTitleClipboardElements: [],
-      retainedTitleClipboardKeys: [],
-      activeSequenceId: doc.id,
-      sequenceNavigation: [],
-      doc,
-      past: [],
-      future: [],
-    }
-  }),
-
-
-  setDocWithHistory: (doc) =>
-    set((state) => commit(state, doc)),
-
-  commitMaskEdit: (expectedProject, generation, sequenceId, doc) => {
-    let error: string | null = null
-    set((state) => {
-      if (state.project !== expectedProject || state.projectGeneration !== generation || state.activeSequenceId !== sequenceId || doc.id !== sequenceId) {
-        error = 'The project changed. Start the mask edit again.'; return state
-      }
-      // replaceProjectSequence returns a changed candidate only within the edit budget.
-      const candidate = replaceProjectSequence(state.project, sequenceId, doc)
-      if (candidate === state.project && (doc !== state.doc || !sequenceProjectWithinEditBudget(candidate))) {
-        error = 'The mask edit exceeds project limits.'; return state
-      }
-      error = projectCommitError(state, candidate)
-      return error || candidate === state.project ? state : pushProject(state, candidate, { doc })
-    })
-    return error
-  },
-
-  editVideoBus: (expectedProject, target, command) => {
-    let error: string | null = null
-    set((state) => {
-      if (state.project !== expectedProject || state.activeSequenceId !== target.sequenceId) {
-        error = 'The project or active sequence changed. Reopen the video-bus controls.'
-        return state
-      }
-      const result = editVideoBus(state.project, target, command, randomSequenceId)
-      if (!result.ok) { error = result.reason; return state }
-      error = projectCommitError(state, result.project)
-      return error || result.project === state.project ? state : pushProject(state, result.project)
-    })
-    return error
-  },
-
-  applyClipAttributes: (expectedProject, sequenceId, command) => {
-    let error: string | null = null
-    set((state) => {
-      if (state.project !== expectedProject || state.activeSequenceId !== sequenceId) {
-        error = 'The project or active sequence changed. Reopen the attribute dialog.'
-        return state
-      }
-      const result = resetClipAttributes(state.project, sequenceId, command.targetIds, command.groups, command.selectedEffectIds)
-      if (!result.ok) { error = result.reason; return state }
-      error = projectCommitError(state, result.project)
-      return error || result.project === state.project ? state : pushProject(state, result.project)
-    })
-    return error
-  },
-
-  switchSequence: (sequenceId) => {
-    let switched = false
-    set((state) => {
-      const doc = sequenceById(state.project, sequenceId)
-      if (!doc || sequenceId === state.activeSequenceId) return state
-      switched = true
-      return { activeSequenceId: sequenceId, doc, sequenceNavigation: [] }
-    })
-    return switched
-  },
-
-  openSequenceInstance: (instanceId, parentPlayheadFrame) => {
-    let childPlayheadFrame: number | null = null
-    set((state) => {
-      const instance = state.doc.tracks.flatMap((track) => (
-        track.sequenceInstances ?? []
-      )).find((candidate) => candidate.id === instanceId)
-      if (!instance) return state
-      const doc = sequenceById(state.project, instance.sequenceId)
-      if (!doc) return state
-      const offset = parentPlayheadFrame >= instance.timelineRange.startFrame
-        && parentPlayheadFrame < instance.timelineRange.startFrame
-          + instance.timelineRange.durationFrames
-        ? parentPlayheadFrame - instance.timelineRange.startFrame
-        : 0
-      childPlayheadFrame = instance.sourceStartFrame + offset
+    setProject: (project, activeSequenceId = project.rootSequenceId) => set((state) => {
+      const error = captionProjectIntentError(project) ?? project.sequences.map(captionDocumentValidationError).find(Boolean)
+        ?? captionRetentionError({ ...state, project, past: [], future: [] })
+      if (error) throw new RangeError(error)
       return {
+        project,
+        projectGeneration: state.projectGeneration + 1,
+        ...projectReplacementReset(),
+        ...activeSequenceFor(project, activeSequenceId),
+      }
+    }),
+
+    setDoc: (doc) => set((state) => {
+      const project = sequenceProjectFromTimeline(doc)
+      const error = captionDocumentValidationError(doc) ?? captionProjectIntentError(project)
+        ?? captionRetentionError({ ...state, project, past: [], future: [] })
+      if (error) throw new RangeError(error)
+      return {
+        project,
+        projectGeneration: state.projectGeneration + 1,
+        ...projectReplacementReset(),
         activeSequenceId: doc.id,
         doc,
-        sequenceNavigation: [
-          ...state.sequenceNavigation,
-          Object.freeze({
-            sequenceId: state.activeSequenceId,
-            playheadFrame: Math.max(0, Math.round(parentPlayheadFrame)),
-          }),
-        ],
       }
-    })
-    return childPlayheadFrame
-  },
+    }),
 
-  returnToParentSequence: () => {
-    let returned: SequenceNavigationEntry | null = null
-    set((state) => {
-      const parent = state.sequenceNavigation.at(-1)
-      if (!parent) return state
-      const doc = sequenceById(state.project, parent.sequenceId)
-      if (!doc) return { ...state, sequenceNavigation: [] }
-      returned = parent
-      return {
-        activeSequenceId: parent.sequenceId,
-        doc,
-        sequenceNavigation: state.sequenceNavigation.slice(0, -1),
-      }
-    })
-    return returned
-  },
+    setDocWithHistory: (doc) =>
+      set((state) => commit(state, doc)),
 
-  createCompoundFromClips: (selectedClipIds, name) => {
-    let created: Readonly<{ sequenceId: string; instanceId: string }> | null = null
-    set((state) => {
-      const result = createCompoundSequenceFromClips(
-        state.project,
-        state.activeSequenceId,
-        selectedClipIds,
-        name,
-        randomSequenceId,
-      )
-      if (result.failure || !result.sequenceId || !result.instanceId) return state
-      const next = admitProject(state, result.project)
-      if (!next) return state
-      created = Object.freeze({
-        sequenceId: result.sequenceId,
-        instanceId: result.instanceId,
+    commitMaskEdit: (expectedProject, generation, sequenceId, doc) => {
+      let error: string | null = null
+      set((state) => {
+        if (state.project !== expectedProject || state.projectGeneration !== generation || state.activeSequenceId !== sequenceId || doc.id !== sequenceId) {
+          error = 'The project changed. Start the mask edit again.'; return state
+        }
+        // replaceProjectSequence returns a changed candidate only within the edit budget.
+        const candidate = replaceProjectSequence(state.project, sequenceId, doc)
+        if (candidate === state.project && (doc !== state.doc || !sequenceProjectWithinEditBudget(candidate))) {
+          error = 'The mask edit exceeds project limits.'; return state
+        }
+        error = projectCommitError(state, candidate)
+        return error || candidate === state.project ? state : pushProject(state, candidate, { doc })
       })
-      return next
-    })
-    return created
-  },
+      return error
+    },
 
-  editSequenceInstance: (command) => {
-    let edited = false
-    set((state) => {
-      const result = applyProjectSequenceInstanceEdit(
-        state.project,
-        state.activeSequenceId,
-        command,
-        randomSequenceId,
-      )
-      const next = result.failure ? null : admitProject(state, result.project)
-      edited = next !== null
-      return next ?? state
-    })
-    return edited
-  },
-
-  createMulticam: (command) => {
-    let created: Readonly<{
-      definitionId: string
-      videoInstanceId: string
-      audioInstanceId: string | null
-    }> | null = null
-    set((state) => {
-      const result = createMulticamFromAssets(
-        state.project,
-        state.activeSequenceId,
-        command,
-        randomSequenceId,
-      )
-      if (result.failure || !result.definitionId || !result.videoInstanceId) return state
-      const next = admitProject(state, result.project)
-      if (!next) return state
-      created = Object.freeze({
-        definitionId: result.definitionId,
-        videoInstanceId: result.videoInstanceId,
-        audioInstanceId: result.audioInstanceId,
+    editVideoBus: (expectedProject, target, command) => {
+      let error: string | null = null
+      set((state) => {
+        if (state.project !== expectedProject || state.activeSequenceId !== target.sequenceId) {
+          error = 'The project or active sequence changed. Reopen the video-bus controls.'
+          return state
+        }
+        const result = editVideoBus(state.project, target, command, randomSequenceId)
+        if (!result.ok) { error = result.reason; return state }
+        error = projectCommitError(state, result.project)
+        return error || result.project === state.project ? state : pushProject(state, result.project)
       })
-      return next
-    })
-    return created
-  },
+      return error
+    },
 
-  editMulticamInstance: (command) => {
-    let edited = false
-    set((state) => {
-      const result = applyProjectMulticamInstanceEdit(
-        state.project,
-        state.activeSequenceId,
-        command,
-        randomSequenceId,
-      )
-      const next = result.failure ? null : admitProject(state, result.project)
-      edited = next !== null
-      return next ?? state
-    })
-    return edited
-  },
+    applyClipAttributes: (expectedProject, sequenceId, command) => {
+      let error: string | null = null
+      set((state) => {
+        if (state.project !== expectedProject || state.activeSequenceId !== sequenceId) {
+          error = 'The project or active sequence changed. Reopen the attribute dialog.'
+          return state
+        }
+        const result = resetClipAttributes(state.project, sequenceId, command.targetIds, command.groups, command.selectedEffectIds)
+        if (!result.ok) { error = result.reason; return state }
+        error = projectCommitError(state, result.project)
+        return error || result.project === state.project ? state : pushProject(state, result.project)
+      })
+      return error
+    },
 
-  editMulticamDefinition: (command) => {
-    let edited = false
-    set((state) => {
-      const result = applyProjectMulticamDefinitionEdit(state.project, command)
-      const next = result.failure ? null : admitProject(state, result.project)
-      edited = next !== null
-      return next ?? state
-    })
-    return edited
-  },
+    switchSequence: (sequenceId) => {
+      let switched = false
+      set((state) => {
+        const doc = sequenceById(state.project, sequenceId)
+        if (!doc || sequenceId === state.activeSequenceId) return state
+        switched = true
+        return { activeSequenceId: sequenceId, doc, sequenceNavigation: [] }
+      })
+      return switched
+    },
 
-  makeSequenceInstanceIndependent: (instanceId) => {
-    let sequenceId: string | null = null
-    set((state) => {
-      const result = makeProjectSequenceInstanceIndependent(
-        state.project,
-        state.activeSequenceId,
-        instanceId,
-        randomSequenceId,
-      )
-      if (result.failure || !result.sequenceId) return state
-      const next = admitProject(state, result.project)
-      if (!next) return state
-      sequenceId = result.sequenceId
-      return next
-    })
-    return sequenceId
-  },
+    openSequenceInstance: (instanceId, parentPlayheadFrame) => {
+      let childPlayheadFrame: number | null = null
+      set((state) => {
+        const instance = state.doc.tracks.flatMap((track) => (
+          track.sequenceInstances ?? []
+        )).find((candidate) => candidate.id === instanceId)
+        if (!instance) return state
+        const doc = sequenceById(state.project, instance.sequenceId)
+        if (!doc) return state
+        const offset = parentPlayheadFrame >= instance.timelineRange.startFrame
+          && parentPlayheadFrame < instance.timelineRange.startFrame
+            + instance.timelineRange.durationFrames
+          ? parentPlayheadFrame - instance.timelineRange.startFrame
+          : 0
+        childPlayheadFrame = instance.sourceStartFrame + offset
+        return {
+          activeSequenceId: doc.id,
+          doc,
+          sequenceNavigation: [
+            ...state.sequenceNavigation,
+            Object.freeze({
+              sequenceId: state.activeSequenceId,
+              playheadFrame: Math.max(0, Math.round(parentPlayheadFrame)),
+            }),
+          ],
+        }
+      })
+      return childPlayheadFrame
+    },
 
-  createSequence: (name) => {
-    let createdId: string | null = null
-    set((state) => {
-      const result = createProjectSequence(state.project, name, randomSequenceId)
-      const next = result.failure || !result.sequenceId
-        ? null
-        : admitProject(state, result.project, result.sequenceId)
-      if (next) createdId = result.sequenceId
-      return next ?? state
-    })
-    return createdId
-  },
+    returnToParentSequence: () => {
+      let returned: SequenceNavigationEntry | null = null
+      set((state) => {
+        const parent = state.sequenceNavigation.at(-1)
+        if (!parent) return state
+        const doc = sequenceById(state.project, parent.sequenceId)
+        if (!doc) return { sequenceNavigation: [] }
+        returned = parent
+        return {
+          activeSequenceId: parent.sequenceId,
+          doc,
+          sequenceNavigation: state.sequenceNavigation.slice(0, -1),
+        }
+      })
+      return returned
+    },
 
-  duplicateSequence: (sequenceId, name) => {
-    let duplicateId: string | null = null
-    set((state) => {
-      const result = duplicateProjectSequence(
-        state.project,
-        sequenceId,
-        name,
-        randomSequenceId,
-      )
-      const next = result.failure || !result.sequenceId
-        ? null
-        : admitProject(state, result.project, result.sequenceId)
-      if (next) duplicateId = result.sequenceId
-      return next ?? state
-    })
-    return duplicateId
-  },
+    createCompoundFromClips: (selectedClipIds, name) => {
+      let created: Readonly<{ sequenceId: string; instanceId: string }> | null = null
+      set((state) => {
+        const result = createCompoundSequenceFromClips(
+          state.project,
+          state.activeSequenceId,
+          selectedClipIds,
+          name,
+          randomSequenceId,
+        )
+        if (result.failure || !result.sequenceId || !result.instanceId) return state
+        const next = admitProject(state, result.project)
+        if (!next) return state
+        created = Object.freeze({
+          sequenceId: result.sequenceId,
+          instanceId: result.instanceId,
+        })
+        return next
+      })
+      return created
+    },
 
-  renameSequence: (sequenceId, name) => {
-    let renamed = false
-    set((state) => {
-      const result = renameProjectSequence(state.project, sequenceId, name)
-      const next = result.failure ? null : admitProject(state, result.project)
-      renamed = next !== null
-      return next ?? state
-    })
-    return renamed
-  },
+    editSequenceInstance: (command) => {
+      let edited = false
+      set((state) => {
+        const result = applyProjectSequenceInstanceEdit(
+          state.project,
+          state.activeSequenceId,
+          command,
+          randomSequenceId,
+        )
+        const next = result.failure ? null : admitProject(state, result.project)
+        edited = next !== null
+        return next ?? state
+      })
+      return edited
+    },
 
-  deleteSequence: (sequenceId) => {
-    let deleted = false
-    set((state) => {
-      const result = deleteProjectSequence(state.project, sequenceId)
-      const next = result.failure ? null : admitProject(state, result.project)
-      deleted = next !== null
-      return next ?? state
-    })
-    return deleted
-  },
+    createMulticam: (command) => {
+      let created: Readonly<{
+        definitionId: string
+        videoInstanceId: string
+        audioInstanceId: string | null
+      }> | null = null
+      set((state) => {
+        const result = createMulticamFromAssets(
+          state.project,
+          state.activeSequenceId,
+          command,
+          randomSequenceId,
+        )
+        if (result.failure || !result.definitionId || !result.videoInstanceId) return state
+        const next = admitProject(state, result.project)
+        if (!next) return state
+        created = Object.freeze({
+          definitionId: result.definitionId,
+          videoInstanceId: result.videoInstanceId,
+          audioInstanceId: result.audioInstanceId,
+        })
+        return next
+      })
+      return created
+    },
 
-  chooseRootSequence: (sequenceId) => {
-    let chosen = false
-    set((state) => {
-      const result = chooseProjectRootSequence(state.project, sequenceId)
-      const next = result.failure ? null : admitProject(state, result.project)
-      chosen = next !== null
-      return next ?? state
-    })
-    return chosen
-  },
+    editMulticamInstance: (command) => {
+      let edited = false
+      set((state) => {
+        const result = applyProjectMulticamInstanceEdit(
+          state.project,
+          state.activeSequenceId,
+          command,
+          randomSequenceId,
+        )
+        const next = result.failure ? null : admitProject(state, result.project)
+        edited = next !== null
+        return next ?? state
+      })
+      return edited
+    },
 
-  matchProjectFrameRate: (rate) => {
-    let matched = false
-    set((state) => {
-      const project = matchEmptyProjectFrameRate(state.project, rate)
-      const next = project ? admitProject(state, project) : null
-      matched = next !== null
-      return next ?? state
-    })
-    return matched
-  },
+    editMulticamDefinition: (command) => {
+      let edited = false
+      set((state) => {
+        const result = applyProjectMulticamDefinitionEdit(state.project, command)
+        const next = result.failure ? null : admitProject(state, result.project)
+        edited = next !== null
+        return next ?? state
+      })
+      return edited
+    },
 
-  splitClipAtPlayhead: (playheadFrame) =>
-    set((state) => {
-      let next = state.doc
-      const allocateTitleId = createTitleElementIdAllocator(state.project, () => `title-element_${crypto.randomUUID()}`)
-      // Collect targets from the CURRENT doc; left halves keep their ids, so
-      // each original clip is split at most once even as `next` evolves.
-      // A linked group is split via whichever member is visited first; mark
-      // it in `splitGroups` BEFORE calling (win or lose) so a partner from
-      // the same group is skipped outright instead of re-attempting a split
-      // linkedSplitClipAtFrame already resolved — the op is atomic per
-      // group, so a second call would just reject again and double the warn.
-      const splitGroups = new Set<string>()
-      for (const track of state.doc.tracks) {
-        if (track.locked) continue
-        for (const clip of track.clips) {
-          const tl = clip.timelineRange
-          if (playheadFrame > tl.startFrame && playheadFrame < rangeEnd(tl)) {
-            if (clip.linkGroupId) {
-              if (splitGroups.has(clip.linkGroupId)) continue
-              splitGroups.add(clip.linkGroupId)
+    makeSequenceInstanceIndependent: (instanceId) => {
+      let sequenceId: string | null = null
+      set((state) => {
+        const result = makeProjectSequenceInstanceIndependent(
+          state.project,
+          state.activeSequenceId,
+          instanceId,
+          randomSequenceId,
+        )
+        if (result.failure || !result.sequenceId) return state
+        const next = admitProject(state, result.project)
+        if (!next) return state
+        sequenceId = result.sequenceId
+        return next
+      })
+      return sequenceId
+    },
+
+    createSequence: (name) => {
+      let createdId: string | null = null
+      set((state) => {
+        const result = createProjectSequence(state.project, name, randomSequenceId)
+        const next = result.failure || !result.sequenceId
+          ? null
+          : admitProject(state, result.project, result.sequenceId)
+        if (next) createdId = result.sequenceId
+        return next ?? state
+      })
+      return createdId
+    },
+
+    duplicateSequence: (sequenceId, name) => {
+      let duplicateId: string | null = null
+      set((state) => {
+        const result = duplicateProjectSequence(
+          state.project,
+          sequenceId,
+          name,
+          randomSequenceId,
+        )
+        const next = result.failure || !result.sequenceId
+          ? null
+          : admitProject(state, result.project, result.sequenceId)
+        if (next) duplicateId = result.sequenceId
+        return next ?? state
+      })
+      return duplicateId
+    },
+
+    renameSequence: (sequenceId, name) => {
+      let renamed = false
+      set((state) => {
+        const result = renameProjectSequence(state.project, sequenceId, name)
+        const next = result.failure ? null : admitProject(state, result.project)
+        renamed = next !== null
+        return next ?? state
+      })
+      return renamed
+    },
+
+    deleteSequence: (sequenceId) => {
+      let deleted = false
+      set((state) => {
+        const result = deleteProjectSequence(state.project, sequenceId)
+        const next = result.failure ? null : admitProject(state, result.project)
+        deleted = next !== null
+        return next ?? state
+      })
+      return deleted
+    },
+
+    chooseRootSequence: (sequenceId) => {
+      let chosen = false
+      set((state) => {
+        const result = chooseProjectRootSequence(state.project, sequenceId)
+        const next = result.failure ? null : admitProject(state, result.project)
+        chosen = next !== null
+        return next ?? state
+      })
+      return chosen
+    },
+
+    matchProjectFrameRate: (rate) => {
+      let matched = false
+      set((state) => {
+        const project = matchEmptyProjectFrameRate(state.project, rate)
+        const next = project ? admitProject(state, project) : null
+        matched = next !== null
+        return next ?? state
+      })
+      return matched
+    },
+
+    splitClipAtPlayhead: (playheadFrame) =>
+      set((state) => {
+        let next = state.doc
+        const allocateTitleId = titleElementIds(state.project)
+        // Collect targets from the CURRENT doc; left halves keep their ids, so
+        // each original clip is split at most once even as `next` evolves.
+        // A linked group is split via whichever member is visited first; mark
+        // it in `splitGroups` BEFORE calling (win or lose) so a partner from
+        // the same group is skipped outright instead of re-attempting a split
+        // linkedSplitClipAtFrame already resolved — the op is atomic per
+        // group, so a second call would just reject again and double the warn.
+        const splitGroups = new Set<string>()
+        for (const track of state.doc.tracks) {
+          if (track.locked) continue
+          for (const clip of track.clips) {
+            const tl = clip.timelineRange
+            if (playheadFrame > tl.startFrame && playheadFrame < rangeEnd(tl)) {
+              if (clip.linkGroupId) {
+                if (splitGroups.has(clip.linkGroupId)) continue
+                splitGroups.add(clip.linkGroupId)
+              }
+              next = linkedSplitClipAtFrame(next, clip.id, playheadFrame, allocateTitleId)
             }
-            next = linkedSplitClipAtFrame(next, clip.id, playheadFrame, allocateTitleId)
           }
         }
-      }
-      return commit(state, next)
-    }),
+        return commit(state, next)
+      }),
 
-  insertClip: (trackId, clip) =>
-    set((state) => commit(state, insertClip(state.doc, trackId, clip))),
+    insertClip: edit(insertClip),
 
-  insertClips: (inserts) =>
-    set((state) => {
-      let next = state.doc
-      for (const { trackId, clip } of inserts) {
-        const after = insertClip(next, trackId, clip)
-        // Any rejection (insertClip already warned why) aborts the WHOLE
-        // batch: return the untouched state so no history entry appears.
-        if (after === next) return state
-        next = after
-      }
-      return commit(state, next)
-    }),
+    insertClips: (inserts) =>
+      set((state) => {
+        let next = state.doc
+        for (const { trackId, clip } of inserts) {
+          const after = insertClip(next, trackId, clip)
+          // Any rejection (insertClip already warned why) aborts the WHOLE
+          // batch: return the untouched state so no history entry appears.
+          if (after === next) return state
+          next = after
+        }
+        return commit(state, next)
+      }),
 
-  insertAdjustment: (trackId, item) =>
-    set((state) => commit(
-      state,
-      insertAdjustmentIntoDocument(state.doc, trackId, item),
-    )),
+    insertAdjustment: edit(insertAdjustment),
+    moveAdjustment: edit(moveAdjustment),
+    trimAdjustment: edit(trimAdjustment),
+    splitAdjustmentAt: edit(splitAdjustmentAtFrame),
+    duplicateAdjustment: edit(duplicateAdjustment),
+    removeAdjustment: edit(removeAdjustment),
+    setAdjustmentEnabled: edit(setAdjustmentEnabled),
+    renameAdjustment: edit(renameAdjustment),
+    setAdjustmentOpacityAtFrame: edit(setAdjustmentOpacityAtFrame),
+    setAdjustmentOpacityKeyframe: edit(setAdjustmentOpacityKeyframe),
+    clearAdjustmentOpacityAnimation: edit(clearAdjustmentOpacityAnimation),
+    addAdjustmentEffect: edit(addAdjustmentEffect),
+    setAdjustmentEffectEnabled: edit(setAdjustmentEffectEnabled),
+    updateAdjustmentEffectParamsAtFrame: edit(updateAdjustmentEffectParamsAtFrame),
+    setAdjustmentEffectKeyframe: edit(setAdjustmentEffectKeyframe),
+    clearAdjustmentEffectAnimation: edit(clearAdjustmentEffectAnimation),
+    reorderAdjustmentEffect: edit(reorderAdjustmentEffect),
+    resetAdjustmentEffect: edit(resetAdjustmentEffect),
+    removeAdjustmentEffect: edit(removeAdjustmentEffect),
 
-  moveAdjustment: (adjustmentId, toTrackId, toFrame) =>
-    set((state) => commit(
-      state,
-      moveAdjustmentInDocument(state.doc, adjustmentId, toTrackId, toFrame),
-    )),
+    splitClipAt: (clipId, frame) =>
+      set((state) => commit(state, linkedSplitClipAtFrame(state.doc, clipId, frame, titleElementIds(state.project)))),
 
-  trimAdjustment: (adjustmentId, edge, deltaFrames) =>
-    set((state) => commit(
-      state,
-      trimAdjustmentInDocument(state.doc, adjustmentId, edge, deltaFrames),
-    )),
+    trimClip: edit(linkedTrimClip),
+    rippleTrim: edit(linkedRippleTrim),
+    retimeClip: edit(linkedRetimeClip),
+    retimeClips: edit(linkedRetimeClips),
+    setClipSpeedPoint: edit(linkedSetClipSpeedPoint),
+    removeClipSpeedPoint: edit(linkedRemoveClipSpeedPoint),
+    clearClipSpeedRamp: edit(linkedClearClipSpeedRamp),
+    slipClip: edit(linkedSlipClip),
+    slideClip: edit(linkedSlideClip),
+    moveClip: edit(linkedMoveClip),
+    moveClips: edit(linkedMoveClips),
+    rippleDelete: edit(linkedRippleDelete),
 
-  splitAdjustmentAt: (adjustmentId, frame) =>
-    set((state) => commit(
-      state,
-      splitAdjustmentAtFrameInDocument(state.doc, adjustmentId, frame),
-    )),
-
-  duplicateAdjustment: (adjustmentId, toFrame) =>
-    set((state) => commit(
-      state,
-      duplicateAdjustmentInDocument(state.doc, adjustmentId, toFrame),
-    )),
-
-  removeAdjustment: (adjustmentId) =>
-    set((state) => commit(
-      state,
-      removeAdjustmentFromDocument(state.doc, adjustmentId),
-    )),
-
-  setAdjustmentEnabled: (adjustmentId, enabled) =>
-    set((state) => commit(
-      state,
-      setAdjustmentEnabledInDocument(state.doc, adjustmentId, enabled),
-    )),
-
-  renameAdjustment: (adjustmentId, name) =>
-    set((state) => commit(
-      state,
-      renameAdjustmentInDocument(state.doc, adjustmentId, name),
-    )),
-
-  setAdjustmentOpacityAtFrame: (adjustmentId, timelineFrame, opacity) =>
-    set((state) => commit(
-      state,
-      setAdjustmentOpacityAtFrameInDocument(
-        state.doc,
-        adjustmentId,
-        timelineFrame,
-        opacity,
-      ),
-    )),
-
-  setAdjustmentOpacityKeyframe: (adjustmentId, keyframe) =>
-    set((state) => commit(
-      state,
-      setAdjustmentOpacityKeyframeInDocument(state.doc, adjustmentId, keyframe),
-    )),
-
-  clearAdjustmentOpacityAnimation: (adjustmentId) =>
-    set((state) => commit(
-      state,
-      clearAdjustmentOpacityAnimationInDocument(state.doc, adjustmentId),
-    )),
-
-  addAdjustmentEffect: (adjustmentId, effect) =>
-    set((state) => commit(
-      state,
-      addAdjustmentEffectToDocument(state.doc, adjustmentId, effect),
-    )),
-
-  setAdjustmentEffectEnabled: (adjustmentId, effectId, enabled) =>
-    set((state) => commit(
-      state,
-      setAdjustmentEffectEnabledInDocument(
-        state.doc,
-        adjustmentId,
-        effectId,
-        enabled,
-      ),
-    )),
-
-  updateAdjustmentEffectParamsAtFrame: (
-    adjustmentId,
-    effectId,
-    timelineFrame,
-    patch,
-  ) => set((state) => commit(
-    state,
-    updateAdjustmentEffectParamsAtFrameInDocument(
-      state.doc,
-      adjustmentId,
-      effectId,
-      timelineFrame,
-      patch,
-    ),
-  )),
-
-  setAdjustmentEffectKeyframe: (
-    adjustmentId,
-    effectId,
-    parameter,
-    keyframe,
-  ) => set((state) => commit(
-    state,
-    setAdjustmentEffectKeyframeInDocument(
-      state.doc,
-      adjustmentId,
-      effectId,
-      parameter,
-      keyframe,
-    ),
-  )),
-
-  clearAdjustmentEffectAnimation: (adjustmentId, effectId, parameter) =>
-    set((state) => commit(
-      state,
-      clearAdjustmentEffectAnimationInDocument(
-        state.doc,
-        adjustmentId,
-        effectId,
-        parameter,
-      ),
-    )),
-
-  reorderAdjustmentEffect: (adjustmentId, effectId, targetIndex) =>
-    set((state) => commit(
-      state,
-      reorderAdjustmentEffectInDocument(
-        state.doc,
-        adjustmentId,
-        effectId,
-        targetIndex,
-      ),
-    )),
-
-  resetAdjustmentEffect: (adjustmentId, effectId) =>
-    set((state) => commit(
-      state,
-      resetAdjustmentEffectInDocument(state.doc, adjustmentId, effectId),
-    )),
-
-  removeAdjustmentEffect: (adjustmentId, effectId) =>
-    set((state) => commit(
-      state,
-      removeAdjustmentEffectFromDocument(state.doc, adjustmentId, effectId),
-    )),
-
-  splitClipAt: (clipId, frame) =>
-    set((state) => commit(state, linkedSplitClipAtFrame(state.doc, clipId, frame,
-      createTitleElementIdAllocator(state.project, () => `title-element_${crypto.randomUUID()}`)))),
-
-  trimClip: (clipId, edge, deltaFrames) =>
-    set((state) => commit(state, linkedTrimClip(state.doc, clipId, edge, deltaFrames))),
-
-  rippleTrim: (clipId, edge, deltaFrames) =>
-    set((state) => commit(state, linkedRippleTrim(state.doc, clipId, edge, deltaFrames))),
-
-  retimeClip: (clipId, rate) =>
-    set((state) => commit(state, linkedRetimeClip(state.doc, clipId, rate))),
-
-  retimeClips: (clipIds, rate) =>
-    set((state) => commit(state, linkedRetimeClips(state.doc, clipIds, rate))),
-
-  setClipSpeedPoint: (clipId, frame, rate, easing) =>
-    set((state) => commit(
-      state,
-      linkedSetClipSpeedPoint(state.doc, clipId, frame, rate, easing),
-    )),
-
-  removeClipSpeedPoint: (clipId, frame) =>
-    set((state) => commit(
-      state,
-      linkedRemoveClipSpeedPoint(state.doc, clipId, frame),
-    )),
-
-  clearClipSpeedRamp: (clipId) =>
-    set((state) => commit(state, linkedClearClipSpeedRamp(state.doc, clipId))),
-
-  slipClip: (clipId, deltaFrames) =>
-    set((state) => commit(state, linkedSlipClip(state.doc, clipId, deltaFrames))),
-
-  slideClip: (clipId, deltaFrames) =>
-    set((state) => commit(state, linkedSlideClip(state.doc, clipId, deltaFrames))),
-
-  moveClip: (clipId, toTrackId, toFrame) =>
-    set((state) => commit(state, linkedMoveClip(state.doc, clipId, toTrackId, toFrame))),
-
-  moveClips: (clipIds, deltaFrames) =>
-    set((state) => commit(state, linkedMoveClips(state.doc, clipIds, deltaFrames))),
-
-  rippleDelete: (clipId) =>
-    set((state) => commit(state, linkedRippleDelete(state.doc, clipId))),
-
-  applySequenceEdit: (plan, asset, catalog) =>
-    set((state) => commit(
-      state,
-      applySequenceEditToDocument(state.doc, plan, asset, catalog,
-        createTitleElementIdAllocator(state.project, () => `title-element_${crypto.randomUUID()}`)),
-    )),
-
-  addCrossfadeWithSourceBounds: (
-    fromClipId,
-    toClipId,
-    settings,
-    catalog,
-  ) =>
-    set((state) =>
-      commit(
+    applySequenceEdit: (plan, asset, catalog) =>
+      set((state) => commit(
         state,
-        addExactCrossfade(
-          state.doc,
-          fromClipId,
-          toClipId,
-          settings.durationFrames,
-          catalog,
-          settings.audio,
+        applySequenceEditToDocument(state.doc, plan, asset, catalog, titleElementIds(state.project)),
+      )),
+
+    addCrossfadeWithSourceBounds: (
+      fromClipId,
+      toClipId,
+      settings,
+      catalog,
+    ) =>
+      set((state) =>
+        commit(
+          state,
+          addExactCrossfade(
+            state.doc,
+            fromClipId,
+            toClipId,
+            settings.durationFrames,
+            catalog,
+            settings.audio,
+          ),
         ),
       ),
-    ),
 
-  setCrossfadeSettings: (trackId, transitionId, settings, catalog) =>
-    set((state) =>
-      commit(
-        state,
-        setCrossfadeSettingsWithSourceBounds(
+    setCrossfadeSettings: edit(setCrossfadeSettingsWithSourceBounds),
+    removeTransition: edit(removeTransition),
+    linkClips: edit(linkClips),
+    unlinkClip: edit(unlinkClip),
+    updateClipTransform: edit(updateClipTransform),
+    setManualLensCorrection: edit(setManualLensCorrection),
+    updateClipVisualAtFrame: edit(updateClipVisualAtFrame),
+
+    applyDynamicZoom: (clipId, source, request) => {
+      let result: ClipFramingOperationResult | undefined
+      set((state) => {
+        result = applyDynamicZoomWithResult(state.doc, clipId, source, request)
+        return commit(state, result.doc)
+      })
+      return result!
+    },
+
+    applyVideoStabilization: (clipId, plan, replaceExisting) => {
+      let result: ClipFramingOperationResult | undefined
+      set((state) => {
+        result = applyVideoStabilizationWithResult(
           state.doc,
-          trackId,
-          transitionId,
-          settings,
-          catalog,
-        ),
-      ),
-    ),
+          clipId,
+          plan,
+          replaceExisting,
+        )
+        return commit(state, result.doc)
+      })
+      return result!
+    },
 
-  removeTransition: (trackId, transitionId) =>
-    set((state) =>
-      commit(
-        state,
-        removeTransition(state.doc, trackId, transitionId),
-      ),
-    ),
+    applyMotionTracking: (plan, replaceExisting) => {
+      let result: ClipFramingOperationResult | undefined
+      set((state) => {
+        result = applyMotionTrackingWithResult(state.doc, plan, replaceExisting)
+        return commit(state, result.doc)
+      })
+      return result!
+    },
 
-  linkClips: (videoClipId, audioClipId) =>
-    set((state) =>
-      commit(
-        state,
-        linkClipsInDocument(state.doc, videoClipId, audioClipId),
-      ),
-    ),
+    resetVideoStabilization: (clipId) => {
+      let result: ClipFramingOperationResult | undefined
+      set((state) => {
+        result = resetVideoStabilizationWithResult(state.doc, clipId)
+        return commit(state, result.doc)
+      })
+      return result!
+    },
 
-  unlinkClip: (clipId) =>
-    set((state) => commit(state, unlinkClip(state.doc, clipId))),
+    resetClipFramingAnimation: (clipId) => {
+      let result: ClipFramingOperationResult | undefined
+      set((state) => {
+        result = resetClipFramingAnimationWithResult(state.doc, clipId)
+        return commit(state, result.doc)
+      })
+      return result!
+    },
 
-  updateClipTransform: (clipId, patch) =>
-    set((state) => commit(state, updateClipTransform(state.doc, clipId, patch))),
+    updateTextClip: edit(updateTextClip),
+    updateClipAudioAtFrame: edit(updateClipAudioAtFrame),
+    addTrack: edit(addTrack),
+    setTrackFlags: edit(setTrackFlags),
+    setTrackMixer: edit(setTrackMixer),
+    setMasterAudio: edit(setMasterAudio),
+    renameTrack: edit(renameTrack),
+    removeTrack: edit(removeTrack),
+    addTimelineMarker: edit(addTimelineMarker),
+    updateTimelineMarker: edit(updateTimelineMarker),
+    duplicateTimelineMarker: edit(duplicateTimelineMarker),
+    deleteTimelineMarker: edit(deleteTimelineMarker),
+    addCaptionTrack: edit(addCaptionTrack),
+    updateCaptionTrack: edit(updateCaptionTrack),
+    deleteCaptionTrack: edit(removeCaptionTrack),
+    addCaptionItem: edit(addCaptionItem),
+    updateCaptionItem: edit(updateCaptionItem),
+    deleteCaptionItem: edit(removeCaptionItem),
+    replaceCaptionItems: edit(replaceCaptionItems),
 
-  setManualLensCorrection: (clipId, model) =>
-    set((state) => commit(
-      state,
-      setManualLensCorrection(state.doc, clipId, model),
-    )),
+    splitCaptionItem: (trackId, itemId, frame, rightItemId) =>
+      set((state) => {
+        if (sequenceProjectReservedIds(state.project).has(rightItemId)) throw new RangeError('The split caption identity is already reserved in the project')
+        return commit(state, splitCaptionItem(state.doc, trackId, itemId, frame, rightItemId))
+      }),
 
-  updateClipVisualAtFrame: (clipId, timelineFrame, patch) =>
-    set((state) => commit(
-      state,
-      updateClipVisualAtFrame(state.doc, clipId, timelineFrame, patch),
-    )),
+    mergeCaptionWithNext: edit(mergeCaptionWithNext),
+    addEffect: edit(addEffect),
+    setEffectEnabled: edit(setEffectEnabled),
+    updateEffectParams: edit(updateEffectParams),
+    updateEffectParamsAtFrame: edit(updateEffectParamsAtFrame),
+    reorderEffect: edit(reorderEffect),
+    resetEffect: edit(resetEffect),
+    removeEffect: edit(removeEffect),
+    addAudioEffect: edit(addAudioEffect),
+    setAudioEffectEnabled: edit(setAudioEffectEnabled),
+    updateAudioEffectParams: edit(updateAudioEffectParams),
+    reorderAudioEffect: edit(reorderAudioEffect),
+    resetAudioEffect: edit(resetAudioEffect),
+    removeAudioEffect: edit(removeAudioEffect),
+    applyAudioEffectPreset: edit(applyAudioEffectPreset),
+    normalizeMasterLoudness: edit(normalizeMasterLoudness),
 
-  applyDynamicZoom: (clipId, source, request) => {
-    let result: ClipFramingOperationResult | undefined
-    set((state) => {
-      result = applyDynamicZoomWithResult(state.doc, clipId, source, request)
-      return commit(state, result.doc)
-    })
-    return result!
-  },
+    undo: () =>
+      set((state) => {
+        const previous = state.past[state.past.length - 1]
+        if (!previous || captionRetentionError(state, undefined, [], heldCaptionUsage)
+          || previous.sequences.some((sequence) => captionDocumentValidationError(sequence))) return state
+        return {
+          project: previous,
+          ...activeSequenceFor(previous, state.activeSequenceId),
+          past: state.past.slice(0, -1),
+          future: [state.project, ...state.future].slice(0, HISTORY_LIMIT),
+        }
+      }),
 
-  applyVideoStabilization: (clipId, plan, replaceExisting) => {
-    let result: ClipFramingOperationResult | undefined
-    set((state) => {
-      result = applyVideoStabilizationWithResult(
-        state.doc,
-        clipId,
-        plan,
-        replaceExisting,
-      )
-      return commit(state, result.doc)
-    })
-    return result!
-  },
-
-  applyMotionTracking: (plan, replaceExisting) => {
-    let result: ClipFramingOperationResult | undefined
-    set((state) => {
-      result = applyMotionTrackingWithResult(state.doc, plan, replaceExisting)
-      return commit(state, result.doc)
-    })
-    return result!
-  },
-
-  resetVideoStabilization: (clipId) => {
-    let result: ClipFramingOperationResult | undefined
-    set((state) => {
-      result = resetVideoStabilizationWithResult(state.doc, clipId)
-      return commit(state, result.doc)
-    })
-    return result!
-  },
-
-  resetClipFramingAnimation: (clipId) => {
-    let result: ClipFramingOperationResult | undefined
-    set((state) => {
-      result = resetClipFramingAnimationWithResult(state.doc, clipId)
-      return commit(state, result.doc)
-    })
-    return result!
-  },
-
-  updateTextClip: (clipId, patch) =>
-    set((state) => commit(state, updateTextClip(state.doc, clipId, patch))),
-
-  updateClipAudioAtFrame: (clipId, timelineFrame, patch) =>
-    set((state) => commit(
-      state,
-      updateClipAudioAtFrame(state.doc, clipId, timelineFrame, patch),
-    )),
-
-  addTrack: (kind) => set((state) => commit(state, addTrack(state.doc, kind))),
-
-  setTrackFlags: (trackId, patch) =>
-    set((state) => commit(state, setTrackFlags(state.doc, trackId, patch))),
-
-  setTrackMixer: (trackId, patch) =>
-    set((state) => commit(state, setTrackMixer(state.doc, trackId, patch))),
-
-  setMasterAudio: (patch) =>
-    set((state) => commit(state, setMasterAudio(state.doc, patch))),
-
-  renameTrack: (trackId, name) =>
-    set((state) => commit(state, renameTrack(state.doc, trackId, name))),
-
-  removeTrack: (trackId) =>
-    set((state) => commit(state, removeTrack(state.doc, trackId))),
-
-  addTimelineMarker: (marker) =>
-    set((state) => commit(state, addMarker(state.doc, marker))),
-
-  updateTimelineMarker: (markerId, patch) =>
-    set((state) => commit(state, updateMarker(state.doc, markerId, patch))),
-
-  duplicateTimelineMarker: (markerId, duplicateId) =>
-    set((state) => commit(
-      state,
-      duplicateMarker(state.doc, markerId, duplicateId),
-    )),
-
-  deleteTimelineMarker: (markerId) =>
-    set((state) => commit(state, deleteMarker(state.doc, markerId))),
-
-  addCaptionTrack: (track) =>
-    set((state) => commit(state, addCaptionLane(state.doc, track))),
-
-  updateCaptionTrack: (trackId, patch) =>
-    set((state) => commit(state, updateCaptionLane(state.doc, trackId, patch))),
-
-  deleteCaptionTrack: (trackId) =>
-    set((state) => commit(state, deleteCaptionLane(state.doc, trackId))),
-
-  addCaptionItem: (trackId, item) =>
-    set((state) => commit(state, addCaptionCue(state.doc, trackId, item))),
-
-  updateCaptionItem: (trackId, itemId, patch) =>
-    set((state) => commit(state, updateCaptionCue(state.doc, trackId, itemId, patch))),
-
-  deleteCaptionItem: (trackId, itemId) =>
-    set((state) => commit(state, deleteCaptionCue(state.doc, trackId, itemId))),
-
-  replaceCaptionItems: (trackId, items) =>
-    set((state) => commit(state, replaceCaptionItems(state.doc, trackId, items))),
-
-  splitCaptionItem: (trackId, itemId, frame, rightItemId) =>
-    set((state) => {
-      if (sequenceProjectReservedIds(state.project).has(rightItemId)) throw new RangeError('The split caption identity is already reserved in the project')
-      return commit(state, splitCaptionItem(state.doc, trackId, itemId, frame, rightItemId))
-    }),
-
-  mergeCaptionWithNext: (trackId, itemId) =>
-    set((state) => commit(
-      state,
-      mergeCaptionWithNext(state.doc, trackId, itemId),
-    )),
-
-  addEffect: (clipId, effect) =>
-    set((state) => commit(state, addEffect(state.doc, clipId, effect))),
-
-  setEffectEnabled: (clipId, effectId, enabled) =>
-    set((state) => commit(
-      state,
-      setEffectEnabled(state.doc, clipId, effectId, enabled),
-    )),
-
-  updateEffectParams: (clipId, effectId, patch) =>
-    set((state) => commit(
-      state,
-      updateEffectParams(state.doc, clipId, effectId, patch),
-    )),
-
-  updateEffectParamsAtFrame: (clipId, effectId, timelineFrame, patch) =>
-    set((state) => commit(
-      state,
-      updateEffectParamsAtFrame(state.doc, clipId, effectId, timelineFrame, patch),
-    )),
-
-  reorderEffect: (clipId, effectId, targetIndex) =>
-    set((state) => commit(
-      state,
-      reorderEffect(state.doc, clipId, effectId, targetIndex),
-    )),
-
-  resetEffect: (clipId, effectId) =>
-    set((state) => commit(state, resetEffect(state.doc, clipId, effectId))),
-
-  removeEffect: (clipId, effectId) =>
-    set((state) => commit(state, removeEffect(state.doc, clipId, effectId))),
-
-  addAudioEffect: (target, effect) =>
-    set((state) => commit(state, addAudioEffect(state.doc, target, effect))),
-
-  setAudioEffectEnabled: (target, effectId, enabled) =>
-    set((state) => commit(
-      state,
-      setAudioEffectEnabled(state.doc, target, effectId, enabled),
-    )),
-
-  updateAudioEffectParams: (target, effectId, patch) =>
-    set((state) => commit(
-      state,
-      updateAudioEffectParams(state.doc, target, effectId, patch),
-    )),
-
-  reorderAudioEffect: (target, effectId, targetIndex) =>
-    set((state) => commit(
-      state,
-      reorderAudioEffect(state.doc, target, effectId, targetIndex),
-    )),
-
-  resetAudioEffect: (target, effectId) =>
-    set((state) => commit(state, resetAudioEffect(state.doc, target, effectId))),
-
-  removeAudioEffect: (target, effectId) =>
-    set((state) => commit(state, removeAudioEffect(state.doc, target, effectId))),
-
-  applyAudioEffectPreset: (target, presetId) =>
-    set((state) => commit(
-      state,
-      applyAudioEffectPreset(state.doc, target, presetId),
-    )),
-
-  normalizeMasterLoudness: (measuredLufs, targetLufs) =>
-    set((state) => commit(
-      state,
-      normalizeMasterLoudness(state.doc, measuredLufs, targetLufs),
-    )),
-
-  undo: () =>
-    set((state) => {
-      const previous = state.past[state.past.length - 1]
-      if (!previous || captionRetentionError(state, undefined, [], heldCaptionUsage)
-        || previous.sequences.some((sequence) => captionDocumentValidationError(sequence))) return state
-      return {
-        project: previous,
-        ...activeSequenceFor(previous, state.activeSequenceId),
-        past: state.past.slice(0, -1),
-        future: [state.project, ...state.future].slice(0, HISTORY_LIMIT),
-      }
-    }),
-
-  redo: () =>
-    set((state) => {
-      const next = state.future[0]
-      if (!next || captionRetentionError(state, undefined, [], heldCaptionUsage)
-        || next.sequences.some((sequence) => captionDocumentValidationError(sequence))) return state
-      return {
-        project: next,
-        ...activeSequenceFor(next, state.activeSequenceId),
-        past: [...state.past, state.project].slice(-HISTORY_LIMIT),
-        future: state.future.slice(1),
-      }
-    }),
-}))
+    redo: () =>
+      set((state) => {
+        const next = state.future[0]
+        if (!next || captionRetentionError(state, undefined, [], heldCaptionUsage)
+          || next.sequences.some((sequence) => captionDocumentValidationError(sequence))) return state
+        return {
+          project: next,
+          ...activeSequenceFor(next, state.activeSequenceId),
+          past: [...state.past, state.project].slice(-HISTORY_LIMIT),
+          future: state.future.slice(1),
+        }
+      }),
+  }
+})
