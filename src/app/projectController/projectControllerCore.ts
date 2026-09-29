@@ -18,7 +18,7 @@ import { useTransportStore } from '../../state/transportStore';
 import { clearSelectedPoolAssetId } from '../sourceMonitorController';
 import { compatibilityItemForAsset, checkingCompatibilityItem } from '../mediaCompatibilityController';
 import { createActiveMediaRelinkCoordinator, type ActiveMediaRelinkTransactionResult } from '../activeMediaRelinkCoordinator';
-import { inspectionCandidateForDescriptor, matchingDescriptorCandidates, narrowedFolderCandidateIds, relinkedAsset, selectDescriptor, selectDescriptorByCompatibilityReport, selectDescriptorByFileIdentity } from '../projectMediaMatching';
+import { inspectionCandidateForDescriptor, matchingDescriptorCandidates, narrowedFolderCandidateIds, relinkedAsset, selectDescriptor, selectDescriptorByCompatibilityReport, selectDescriptorByFileIdentity, type DescriptorInspectionCandidate } from '../projectMediaMatching';
 import { isMediaProbeCancellation, type MediaProbeResult } from '../../pipeline/mediaCompatibilityProbe';
 import { suspendProjectPersistenceSession, type ProjectPersistenceSession } from '../projectPersistenceController';
 import { isLocalMediaPickerCancellation, localMediaFolderSelectionsFromFiles, supportsLocalMediaFolders, supportsLocalMediaHandles, type LocalMediaFileHandle, type LocalMediaFolderSelection, type LocalMediaPermission } from '../localMediaHandles';
@@ -210,9 +210,7 @@ function discardAssets(
   }
 }
 
-function invalidateActiveMediaRelink(
-  _deps: Pick<ProjectControllerDeps, 'revokeObjectURL'> = realDeps,
-): void {
+function invalidateActiveMediaRelink(): void {
   activeMediaRelinkGeneration++
   const work = activeMediaRelinkWork
   activeMediaRelinkWork = null
@@ -234,7 +232,7 @@ function invalidatePending(
   deps: Pick<ProjectControllerDeps, 'revokeObjectURL'> = realDeps,
 ): void {
   operationGeneration++
-  invalidateActiveMediaRelink(deps)
+  invalidateActiveMediaRelink()
   if (pendingResume) {
     pendingResume.abortController.abort()
     discardAssets(pendingResume.assets, deps)
@@ -309,6 +307,40 @@ export function returnToProjectHome(): void {
 }
 
 /**
+ * Release every editor-owned Blob consumer in a fixed order. Returns false as
+ * soon as a newer project operation supersedes this one.
+ */
+async function teardownEditor(
+  deps: ProjectControllerDeps,
+  generation: number,
+): Promise<boolean> {
+  // Pause synchronously before the first await: no queued live save may
+  // cross the slower export/audio teardown below.
+  await deps.pauseProjectPersistence()
+  if (generation !== operationGeneration) return false
+  await deps.disposeVoiceoverCapture?.()
+  if (generation !== operationGeneration) return false
+  // Export and audio are the asynchronous consumers. They must release the
+  // old Blobs before mediaStore revokes their URLs.
+  await deps.disposeExport()
+  await deps.disposeTransport()
+  if (generation !== operationGeneration) return false
+
+  await disposePreviewAndPlugins(deps)
+  if (generation !== operationGeneration) return false
+  deps.disposeMediaVisuals()
+  deps.resetMediaImport()
+  return true
+}
+
+/** Session-scoped editor stores that no project may inherit. */
+function resetEditorSessionStores(): void {
+  useTransportStore.getState().resetTransport()
+  useSourceMonitorStore.getState().resetSourceMonitor()
+  clearSelectedPoolAssetId()
+}
+
+/**
  * Leave an active editor only after every Blob consumer has released it.
  * Launch-screen Back buttons use returnToProjectHome because no editor-owned
  * transport, workers, or media exist on those screens.
@@ -320,21 +352,10 @@ export async function leaveActiveProject(
   const generation = operationGeneration
   useProjectSessionStore.setState({ phase: 'closing', error: null })
   try {
-    // Pause synchronously before the first await: no queued live save may
-    // cross the slower export/audio teardown below.
-    await deps.pauseProjectPersistence()
-    if (generation !== operationGeneration) return { status: 'cancelled' }
-    await deps.disposeVoiceoverCapture?.()
-    if (generation !== operationGeneration) return { status: 'cancelled' }
-    await deps.disposeExport()
-    await deps.disposeTransport()
-    if (generation !== operationGeneration) return { status: 'cancelled' }
-
-    await disposePreviewAndPlugins(deps)
-    if (generation !== operationGeneration) return { status: 'cancelled' }
-    deps.disposeMediaVisuals()
-    deps.resetMediaImport()
-    if (generation !== operationGeneration) return { status: 'cancelled' }
+    if (
+      !await teardownEditor(deps, generation)
+      || generation !== operationGeneration
+    ) return { status: 'cancelled' }
     // Keep the prior journal until teardown reaches terminal success. A
     // failed exit or crash during cleanup must still have a durable copy.
     await deps.discardProjectRecovery()
@@ -343,9 +364,7 @@ export async function leaveActiveProject(
     if (generation !== operationGeneration) return { status: 'cancelled' }
 
     useMediaStore.getState().clearAssets()
-    useTransportStore.getState().resetTransport()
-    useSourceMonitorStore.getState().resetSourceMonitor()
-    clearSelectedPoolAssetId()
+    resetEditorSessionStores()
     clearActiveLocalProjectBindingId()
     useProjectSessionStore.setState({ ...INITIAL_PROJECT_SESSION_STATE })
     return { status: 'ready' }
@@ -374,20 +393,7 @@ async function activateProject(
     if (!persistence.projectBindingId) {
       throw new Error('The local project binding is unavailable')
     }
-    await deps.pauseProjectPersistence()
-    if (generation !== operationGeneration) return { status: 'cancelled' }
-    await deps.disposeVoiceoverCapture?.()
-    if (generation !== operationGeneration) return { status: 'cancelled' }
-    // Export and audio are the asynchronous consumers. They must release the
-    // old Blobs before mediaStore revokes their URLs.
-    await deps.disposeExport()
-    await deps.disposeTransport()
-    if (generation !== operationGeneration) return { status: 'cancelled' }
-
-    await disposePreviewAndPlugins(deps)
-    if (generation !== operationGeneration) return { status: 'cancelled' }
-    deps.disposeMediaVisuals()
-    deps.resetMediaImport()
+    if (!await teardownEditor(deps, generation)) return { status: 'cancelled' }
     deps.suspendProjectPersistence()
     if (generation !== operationGeneration) return { status: 'cancelled' }
 
@@ -403,9 +409,7 @@ async function activateProject(
     // Ownership of candidate URLs moved into mediaStore with replaceAssets.
     pendingResume = null
     useDocumentStore.getState().setProject(project)
-    useTransportStore.getState().resetTransport()
-    useSourceMonitorStore.getState().resetSourceMonitor()
-    clearSelectedPoolAssetId()
+    resetEditorSessionStores()
     useProjectSessionStore.setState({
       screen: 'editor',
       phase: 'idle',
@@ -531,6 +535,17 @@ async function resolveCandidateBinding(
   }
 }
 
+/** Show a failed project read on the Resume screen without a candidate. */
+function failProjectRead(message: string): ProjectActionResult {
+  useProjectSessionStore.setState({
+    screen: 'resume',
+    phase: 'error',
+    candidate: null,
+    error: message,
+  })
+  return { status: 'failed', message }
+}
+
 function beginProjectRead(deps: ProjectControllerDeps): number {
   invalidatePending(deps)
   const generation = operationGeneration
@@ -647,14 +662,7 @@ async function readProjectCandidateFile(
     return await prepareProjectCandidate(serialized, source, generation, deps)
   } catch (cause) {
     if (generation !== operationGeneration) return { status: 'cancelled' }
-    const message = `Could not read "${file.name}": ${messageFrom(cause)}`
-    useProjectSessionStore.setState({
-      screen: 'resume',
-      phase: 'error',
-      candidate: null,
-      error: message,
-    })
-    return { status: 'failed', message }
+    return failProjectRead(`Could not read "${file.name}": ${messageFrom(cause)}`)
   }
 }
 
@@ -687,14 +695,7 @@ export async function openCollectedProject(
       useProjectSessionStore.setState({ phase: 'idle', error: null })
       return { status: 'cancelled' }
     }
-    const message = `Could not open the collected project: ${messageFrom(cause)}`
-    useProjectSessionStore.setState({
-      screen: 'resume',
-      phase: 'error',
-      candidate: null,
-      error: message,
-    })
-    return { status: 'failed', message }
+    return failProjectRead(`Could not open the collected project: ${messageFrom(cause)}`)
   }
 }
 
@@ -773,14 +774,7 @@ async function finishRecentProjectOpen(
     }, generation, deps)
   } catch (cause) {
     if (generation !== operationGeneration) return { status: 'cancelled' }
-    const message = `Could not open "${record.fileName}": ${messageFrom(cause)}`
-    useProjectSessionStore.setState({
-      screen: 'resume',
-      phase: 'error',
-      candidate: null,
-      error: message,
-    })
-    return { status: 'failed', message }
+    return failProjectRead(`Could not open "${record.fileName}": ${messageFrom(cause)}`)
   }
 }
 
@@ -840,14 +834,7 @@ export async function openRecoveryProject(
     }
   }
   if (generation !== operationGeneration) return { status: 'cancelled' }
-  const message = `Could not open the recovery copy: ${messageFrom(lastError)}`
-  useProjectSessionStore.setState({
-    screen: 'resume',
-    phase: 'error',
-    candidate: null,
-    error: message,
-  })
-  return { status: 'failed', message }
+  return failProjectRead(`Could not open the recovery copy: ${messageFrom(lastError)}`)
 }
 
 function activeRelinkIsCurrent(work: ActiveMediaRelinkWork): boolean {
@@ -858,12 +845,11 @@ function activeRelinkIsCurrent(work: ActiveMediaRelinkWork): boolean {
     && useDocumentStore.getState().project.id === work.documentId
 }
 
-function publishActiveMediaRelink(
+function publishRelinkSummary(
   work: ActiveMediaRelinkWork,
   phase: 'scanning' | 'awaiting-choice' | 'complete',
   ambiguity: MediaRelinkAmbiguitySummary | null = null,
 ): void {
-  if (!activeRelinkIsCurrent(work)) return
   useProjectSessionStore.setState({
     activeMediaRelink: {
       phase,
@@ -877,13 +863,32 @@ function publishActiveMediaRelink(
   })
 }
 
+/** Publish a finished relink summary that carries only errors. */
+function publishRelinkErrors(errors: string[]): void {
+  useProjectSessionStore.setState({
+    activeMediaRelink: {
+      ...INITIAL_ACTIVE_MEDIA_RELINK,
+      phase: 'complete',
+      errors,
+    },
+  })
+}
+
+function publishActiveMediaRelink(
+  work: ActiveMediaRelinkWork,
+  phase: 'scanning' | 'awaiting-choice' | 'complete',
+  ambiguity: MediaRelinkAmbiguitySummary | null = null,
+): void {
+  if (!activeRelinkIsCurrent(work)) return
+  publishRelinkSummary(work, phase, ambiguity)
+}
+
 function createActiveMediaRelinkWork(
   scannedFileCount: number,
-  deps: Pick<ProjectControllerDeps, 'revokeObjectURL'>,
 ): ActiveMediaRelinkWork | null {
   const session = useProjectSessionStore.getState()
   if (session.screen !== 'editor') return null
-  invalidateActiveMediaRelink(deps)
+  invalidateActiveMediaRelink()
   const store = useDocumentStore.getState()
   const document = store.doc
   const projectBindingId = getActiveLocalProjectBindingId()
@@ -1117,17 +1122,7 @@ function finishActiveMediaRelink(work: ActiveMediaRelinkWork): void {
   if (!activeRelinkIsCurrent(work)) return
   work.outcome = 'complete'
   activeMediaRelinkWork = null
-  useProjectSessionStore.setState({
-    activeMediaRelink: {
-      phase: 'complete',
-      processedFileCount: work.processedFileCount,
-      scannedFileCount: work.scannedFileCount,
-      connectedCount: work.connectedCount,
-      skippedCount: work.skippedCount,
-      errors: [...work.errors],
-      ambiguity: null,
-    },
-  })
+  publishRelinkSummary(work, 'complete')
 }
 
 function publishNextFolderAmbiguity(work: ActiveMediaRelinkWork): void {
@@ -1207,6 +1202,30 @@ function pendingPersistenceSession(
   return session
 }
 
+/** Move an exact relink match into the candidate; it now owns the URL. */
+function adoptPendingCandidate(
+  pending: PendingResume,
+  descriptor: PortableAssetDescriptor,
+  candidate: DescriptorInspectionCandidate,
+  requestId: string,
+): void {
+  const connected = relinkedAsset(
+    descriptor,
+    candidate.asset,
+    rootSequence(pending.project).frameRate,
+  )
+  pending.assets.set(descriptor.id, connected)
+  pending.compatibility.set(
+    descriptor.id,
+    compatibilityItemForAsset(
+      connected,
+      requestId,
+      'ready',
+      candidate.compatibility,
+    ),
+  )
+}
+
 function forgetStaleHandle(
   pending: PendingResume,
   descriptor: PortableAssetDescriptor,
@@ -1281,21 +1300,7 @@ async function restoreRememberedDescriptor(
           ?? `"${descriptor.fileName}" is not compatible in this browser. Open offline to relink it later.`,
       }
     }
-    const connected = relinkedAsset(
-      descriptor,
-      candidate.asset,
-      rootSequence(pending.project).frameRate,
-    )
-    pending.assets.set(descriptor.id, connected)
-    pending.compatibility.set(
-      descriptor.id,
-      compatibilityItemForAsset(
-        connected,
-        requestId,
-        'ready',
-        candidate.compatibility,
-      ),
-    )
+    adoptPendingCandidate(pending, descriptor, candidate, requestId)
     pending.rememberedHandles.delete(descriptor.id)
     analyzed = null // ownership moved to the pending candidate
     useProjectSessionStore.setState({ candidate: resumeSummary(pending) })
@@ -1397,21 +1402,7 @@ async function restoreCollectedMedia(
             ?? `"${descriptor.fileName}" is not compatible in this browser.`,
         )
       }
-      const connected = relinkedAsset(
-        descriptor,
-        candidate.asset,
-        rootSequence(pending.project).frameRate,
-      )
-      pending.assets.set(descriptor.id, connected)
-      pending.compatibility.set(
-        descriptor.id,
-        compatibilityItemForAsset(
-          connected,
-          requestId,
-          'ready',
-          candidate.compatibility,
-        ),
-      )
+      adoptPendingCandidate(pending, descriptor, candidate, requestId)
       analyzed = null
       void deps.rememberMediaHandle(
         pending.projectBindingId,
@@ -1549,7 +1540,7 @@ async function connectProjectMediaSelections(
         pending.abortController.signal,
       )
       if (inspection.asset) analyzed = inspection.asset
-      if (generation !== operationGeneration || pending !== pendingResume) {
+      if (!pendingIsCurrent(pending, generation)) {
         if (analyzed) deps.revokeObjectURL(analyzed.objectUrl)
         return { status: 'cancelled' }
       }
@@ -1615,21 +1606,7 @@ async function connectProjectMediaSelections(
         file,
         inspection,
       )
-      const connected = relinkedAsset(
-        descriptor,
-        candidate.asset,
-        rootSequence(pending.project).frameRate,
-      )
-      pending.assets.set(descriptor.id, connected)
-      pending.compatibility.set(
-        descriptor.id,
-        compatibilityItemForAsset(
-          connected,
-          requestId,
-          'ready',
-          candidate.compatibility,
-        ),
-      )
+      adoptPendingCandidate(pending, descriptor, candidate, requestId)
       pending.rememberedHandles.delete(descriptor.id)
       analyzed = null // ownership moved to the pending candidate
       useProjectSessionStore.setState({ candidate: resumeSummary(pending) })
@@ -1649,7 +1626,7 @@ async function connectProjectMediaSelections(
       }
     } catch (cause) {
       if (analyzed) deps.revokeObjectURL(analyzed.objectUrl)
-      if (generation !== operationGeneration || pending !== pendingResume) {
+      if (!pendingIsCurrent(pending, generation)) {
         return { status: 'cancelled' }
       }
       if (!isMediaProbeCancellation(cause)) {
@@ -1674,7 +1651,7 @@ async function connectProjectMediaSelections(
     }
   }
 
-  if (generation !== operationGeneration || pending !== pendingResume) {
+  if (!pendingIsCurrent(pending, generation)) {
     return { status: 'cancelled' }
   }
   if (errors.length > 0) {
@@ -1740,12 +1717,10 @@ interface ActiveMediaPickerContext {
   generation: number
 }
 
-function beginActiveMediaPicker(
-  deps: Pick<ProjectControllerDeps, 'revokeObjectURL'>,
-): ActiveMediaPickerContext | null {
+function beginActiveMediaPicker(): ActiveMediaPickerContext | null {
   if (useProjectSessionStore.getState().screen !== 'editor') return null
   const documentId = useDocumentStore.getState().project.id
-  invalidateActiveMediaRelink(deps)
+  invalidateActiveMediaRelink()
   return { documentId, generation: activeMediaRelinkGeneration }
 }
 
@@ -1773,7 +1748,7 @@ async function connectActiveAssetSelection(
     return { status: 'failed', message }
   }
 
-  const work = createActiveMediaRelinkWork(1, deps)
+  const work = createActiveMediaRelinkWork(1)
   if (!work) {
     return { status: 'failed', message: 'Open a project before reconnecting media.' }
   }
@@ -1822,7 +1797,7 @@ export async function chooseActiveAssetMedia(
   assetId: string,
   deps: ProjectControllerDeps = realDeps,
 ): Promise<ProjectActionResult> {
-  const context = beginActiveMediaPicker(deps)
+  const context = beginActiveMediaPicker()
   if (!context) {
     return { status: 'failed', message: 'Open a project before reconnecting media.' }
   }
@@ -1838,13 +1813,7 @@ export async function chooseActiveAssetMedia(
     if (!activeMediaPickerIsCurrent(context)) return { status: 'cancelled' }
     if (isLocalMediaPickerCancellation(cause)) return { status: 'ready' }
     const message = `Could not choose source media: ${messageFrom(cause)}`
-    useProjectSessionStore.setState({
-      activeMediaRelink: {
-        ...INITIAL_ACTIVE_MEDIA_RELINK,
-        phase: 'complete',
-        errors: [message],
-      },
-    })
+    publishRelinkErrors([message])
     return { status: 'failed', message }
   }
 }
@@ -1854,7 +1823,7 @@ export async function connectActiveMediaFolder(
   selections: readonly LocalMediaFolderSelection[],
   deps: ProjectControllerDeps = realDeps,
 ): Promise<ProjectActionResult> {
-  const work = createActiveMediaRelinkWork(selections.length, deps)
+  const work = createActiveMediaRelinkWork(selections.length)
   if (!work) {
     return { status: 'failed', message: 'Open a project before reconnecting media.' }
   }
@@ -1947,13 +1916,7 @@ export function connectActiveMediaFolderFiles(
     )
   } catch (cause) {
     const message = `Could not scan the media folder: ${messageFrom(cause)}`
-    useProjectSessionStore.setState({
-      activeMediaRelink: {
-        ...INITIAL_ACTIVE_MEDIA_RELINK,
-        phase: 'complete',
-        errors: [message],
-      },
-    })
+    publishRelinkErrors([message])
     return Promise.resolve({ status: 'failed', message })
   }
 }
@@ -1966,7 +1929,7 @@ export function canChooseActiveMediaFolder(): boolean {
 export async function chooseActiveMediaFolder(
   deps: ProjectControllerDeps = realDeps,
 ): Promise<ProjectActionResult> {
-  const context = beginActiveMediaPicker(deps)
+  const context = beginActiveMediaPicker()
   if (!context) {
     return { status: 'failed', message: 'Open a project before reconnecting media.' }
   }
@@ -1990,13 +1953,7 @@ export async function chooseActiveMediaFolder(
       return { status: 'ready' }
     }
     const message = `Could not scan the media folder: ${messageFrom(cause)}`
-    useProjectSessionStore.setState({
-      activeMediaRelink: {
-        ...INITIAL_ACTIVE_MEDIA_RELINK,
-        phase: 'complete',
-        errors: [message],
-      },
-    })
+    publishRelinkErrors([message])
     return { status: 'failed', message }
   }
 }
@@ -2055,9 +2012,7 @@ export async function skipActiveMediaAmbiguity(
 }
 
 /** Cancel only unresolved folder choices; already connected sources stay online. */
-export function cancelActiveMediaRelink(
-  _deps: Pick<ProjectControllerDeps, 'revokeObjectURL'> = realDeps,
-): void {
+export function cancelActiveMediaRelink(): void {
   const work = activeMediaRelinkWork
   if (!work || !activeRelinkIsCurrent(work)) return
   work.abortController.abort()
@@ -2070,17 +2025,7 @@ export function cancelActiveMediaRelink(
   activeMediaRelinkWork = null
   activeMediaRelinkGeneration++
   work.outcome = 'cancelled'
-  useProjectSessionStore.setState({
-    activeMediaRelink: {
-      phase: 'complete',
-      processedFileCount: work.processedFileCount,
-      scannedFileCount: work.scannedFileCount,
-      connectedCount: work.connectedCount,
-      skippedCount: work.skippedCount,
-      errors: [...work.errors],
-      ambiguity: null,
-    },
-  })
+  publishRelinkSummary(work, 'complete')
 }
 
 interface PermissionRequest {
@@ -2138,13 +2083,7 @@ async function restoreRequestedMediaAndActivate(
     deps,
   )
   if (result.status === 'activated' && errors.length > 0) {
-    useProjectSessionStore.setState({
-      activeMediaRelink: {
-        ...INITIAL_ACTIVE_MEDIA_RELINK,
-        phase: 'complete',
-        errors,
-      },
-    })
+    publishRelinkErrors(errors)
   }
   return result
 }

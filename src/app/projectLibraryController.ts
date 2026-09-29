@@ -5,7 +5,6 @@
  */
 
 import {
-  INITIAL_PROJECT_LIBRARY_STATE,
   useProjectLibraryStore,
   type LocalProjectPermission as LibraryPermission,
 } from '../state/projectLibraryStore'
@@ -175,14 +174,6 @@ export class ProjectLibraryController {
     }
   }
 
-  reset(): void {
-    this.generation++
-    this.activeRefresh = null
-    this.recentRecords.clear()
-    this.recoveryRecords.clear()
-    useProjectLibraryStore.setState({ ...INITIAL_PROJECT_LIBRARY_STATE })
-  }
-
   private async runRefresh(generation: number): Promise<void> {
     const recentSupported = this.deps.supportsRecentProjects()
     useProjectLibraryStore.setState({
@@ -331,8 +322,4 @@ export function discardRecoveryJournals(
 
 export function clearDisposableLocalData(): Promise<boolean> {
   return controller.clearDisposableStorage()
-}
-
-export function resetProjectLibraryController(): void {
-  controller.reset()
 }

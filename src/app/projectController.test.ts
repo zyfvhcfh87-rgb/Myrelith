@@ -2577,7 +2577,7 @@ describe('active-project media relink', () => {
         report: previousReport,
       })
 
-    cancelActiveMediaRelink(deps)
+    cancelActiveMediaRelink()
     expect(useMediaStore.getState().compatibility.get(descriptor.id))
       .toMatchObject({
         requestId: 'compat-test-1',
@@ -2772,7 +2772,7 @@ describe('active-project media relink', () => {
     expect(serializedSummary).not.toContain('blob:ambiguous-summary')
     expect(serializedSummary).not.toContain('getFile')
 
-    cancelActiveMediaRelink(deps)
+    cancelActiveMediaRelink()
   })
 
   test('confirming an ambiguity transfers the staged URL and handle to the chosen asset', async () => {
@@ -2887,8 +2887,8 @@ describe('active-project media relink', () => {
     expect(useProjectSessionStore.getState().activeMediaRelink.phase)
       .toBe('awaiting-choice')
 
-    cancelActiveMediaRelink(deps)
-    cancelActiveMediaRelink(deps)
+    cancelActiveMediaRelink()
+    cancelActiveMediaRelink()
 
     const revocations = vi.mocked(deps.revokeObjectURL).mock.calls
       .map(([url]) => url)
@@ -3028,7 +3028,7 @@ describe('active-project media relink', () => {
     await flush()
     expect(useMediaStore.getState().assets.has(descriptor.id)).toBe(true)
 
-    cancelActiveMediaRelink(deps)
+    cancelActiveMediaRelink()
     remember.resolve(undefined)
 
     await expect(connecting).resolves.toEqual({ status: 'cancelled' })
