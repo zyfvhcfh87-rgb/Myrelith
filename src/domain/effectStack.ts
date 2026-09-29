@@ -5,6 +5,7 @@ import type { EffectDescriptor, EffectParamValue } from './schema'
 import { spatialEffectRegistrations, type SpatialPixelEffect } from './spatialEffectDefinitions'
 import type { ColorCorrectionParameters } from './colorCorrection'
 import { maskBezierPathValidationError } from './maskPath'
+import { numericLimitsError } from './effectBounds'
 
 export const COLOR_ADJUST_EFFECT_TYPE = 'builtin.color-adjust' as const
 export const COLOR_ADJUST_EFFECT_VERSION = 1 as const
@@ -285,18 +286,6 @@ export function effectAnimationParameterSpec(
   return registration.animatableParams[parameter] ?? null
 }
 
-function finiteInRange(value: EffectParamValue | undefined, min: number, max: number): boolean {
-  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
-}
-
-function optionalFiniteInRange(
-  value: EffectParamValue | undefined,
-  min: number,
-  max: number,
-): boolean {
-  return value === undefined || finiteInRange(value, min, max)
-}
-
 function requiredString(value: EffectParamValue | undefined): value is string {
   return typeof value === 'string'
 }
@@ -365,46 +354,14 @@ function colorAdjustCapabilities(effect: EffectDescriptor): readonly EffectCapab
     : [CANVAS_PIXEL_EFFECT_CAPABILITY]
 }
 
+// Descriptors from before temperature/tint existed omit both controls.
+const OPTIONAL_COLOR_ADJUST_PARAMS: ReadonlySet<string> = new Set(['temperature', 'tint'])
+
 /** Validate registered semantics without rejecting opaque unknown descriptors. */
 function validateColorAdjustParams(
   params: Readonly<Record<string, EffectParamValue>>,
 ): string | null {
-  if (!finiteInRange(
-    params.exposure,
-    COLOR_ADJUST_LIMITS.exposure.min,
-    COLOR_ADJUST_LIMITS.exposure.max,
-  )) {
-    return `exposure must be between ${COLOR_ADJUST_LIMITS.exposure.min} and ${COLOR_ADJUST_LIMITS.exposure.max}`
-  }
-  if (!finiteInRange(
-    params.contrast,
-    COLOR_ADJUST_LIMITS.contrast.min,
-    COLOR_ADJUST_LIMITS.contrast.max,
-  )) {
-    return `contrast must be between ${COLOR_ADJUST_LIMITS.contrast.min} and ${COLOR_ADJUST_LIMITS.contrast.max}`
-  }
-  if (!finiteInRange(
-    params.saturation,
-    COLOR_ADJUST_LIMITS.saturation.min,
-    COLOR_ADJUST_LIMITS.saturation.max,
-  )) {
-    return `saturation must be between ${COLOR_ADJUST_LIMITS.saturation.min} and ${COLOR_ADJUST_LIMITS.saturation.max}`
-  }
-  if (!optionalFiniteInRange(
-    params.temperature,
-    COLOR_ADJUST_LIMITS.temperature.min,
-    COLOR_ADJUST_LIMITS.temperature.max,
-  )) {
-    return `temperature must be between ${COLOR_ADJUST_LIMITS.temperature.min} and ${COLOR_ADJUST_LIMITS.temperature.max}`
-  }
-  if (!optionalFiniteInRange(
-    params.tint,
-    COLOR_ADJUST_LIMITS.tint.min,
-    COLOR_ADJUST_LIMITS.tint.max,
-  )) {
-    return `tint must be between ${COLOR_ADJUST_LIMITS.tint.min} and ${COLOR_ADJUST_LIMITS.tint.max}`
-  }
-  return null
+  return numericLimitsError(params, COLOR_ADJUST_LIMITS, OPTIONAL_COLOR_ADJUST_PARAMS)
 }
 
 /** Validate mask controls only; a prepared path owner validates Bezier geometry separately. */
@@ -414,12 +371,8 @@ export function maskNonPathParamsValidationError(
   if (params.shape !== 'rectangle' && params.shape !== 'ellipse' && params.shape !== 'bezier') {
     return 'shape must be rectangle, ellipse, or bezier'
   }
-  for (const parameter of ['x', 'y', 'width', 'height', 'feather'] as const) {
-    const limit = MASK_LIMITS[parameter]
-    if (!finiteInRange(params[parameter], limit.min, limit.max)) {
-      return `${parameter} must be between ${limit.min} and ${limit.max}`
-    }
-  }
+  const limitError = numericLimitsError(params, MASK_LIMITS)
+  if (limitError) return limitError
   if (!requiredBoolean(params.invert)) return 'invert must be a boolean'
   if (!requiredString(params.path)) return 'path must be a string'
   return null
@@ -436,13 +389,7 @@ function validateChromaKeyParams(
   if (!requiredString(params.color) || !/^#[0-9a-f]{6}$/i.test(params.color)) {
     return 'color must be a six-digit hex color'
   }
-  for (const parameter of ['tolerance', 'softness', 'spill'] as const) {
-    const limit = CHROMA_KEY_LIMITS[parameter]
-    if (!finiteInRange(params[parameter], limit.min, limit.max)) {
-      return `${parameter} must be between ${limit.min} and ${limit.max}`
-    }
-  }
-  return null
+  return numericLimitsError(params, CHROMA_KEY_LIMITS)
 }
 
 export function effectParamsValidationError(effect: EffectDescriptor): string | null {
@@ -571,8 +518,6 @@ export interface CanvasEffectStackResolution {
   readonly filter: string | null
   /** Complete executable stack whenever any ready effect needs pixel access. */
   readonly pixelEffects: readonly CanvasPixelEffect[]
-  /** Backward-compatible color-only projection for existing callers/tests. */
-  readonly pixelCorrections: readonly ColorCorrectionParameters[]
   readonly effects: readonly EffectResolution[]
 }
 
@@ -614,9 +559,6 @@ export function resolvePostCompositeEffectStack(
   return {
     filter: null,
     pixelEffects,
-    pixelCorrections: pixelEffects.flatMap((effect) => (
-      effect.kind === 'color-adjust' ? [effect.params] : []
-    )),
     effects: effectsResolution,
   }
 }
@@ -645,9 +587,6 @@ export function resolveCanvasEffectStack(
           : []
       ))
     : []
-  const pixelCorrections = pixelEffects.flatMap((effect) =>
-    effect.kind === 'color-adjust' ? [effect.params] : [],
-  )
   const filters = resolutions.flatMap((resolution) =>
     usePixelPath
     || resolution.canvasFilter === null
@@ -661,7 +600,6 @@ export function resolveCanvasEffectStack(
   return {
     filter: filters.length === 0 ? null : filters.join(' '),
     pixelEffects,
-    pixelCorrections,
     effects: resolutions,
   }
 }

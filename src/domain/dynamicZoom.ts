@@ -13,6 +13,7 @@ import {
   animationEasingValidationError,
   clipAnimation,
   clipAnimationValidationError,
+  cloneAnimationEasing,
   documentAnimationKeyframeGrowthAllowed,
   isClipPropertyAnimated,
   LINEAR_ANIMATION_EASING,
@@ -139,10 +140,6 @@ export const DYNAMIC_ZOOM_PRESETS: readonly DynamicZoomPreset[] = [
   },
 ]
 
-function cloneEasing(easing: ClipAnimationEasing): ClipAnimationEasing {
-  return easing.type === 'cubic-bezier' ? { ...easing } : { type: easing.type }
-}
-
 export function dynamicZoomPreset(id: DynamicZoomPresetId): DynamicZoomPreset {
   const preset = DYNAMIC_ZOOM_PRESETS.find((item) => item.id === id)
   if (!preset) throw new RangeError(`Unknown dynamic zoom preset: ${id}`)
@@ -150,7 +147,7 @@ export function dynamicZoomPreset(id: DynamicZoomPresetId): DynamicZoomPreset {
     ...preset,
     start: { ...preset.start },
     end: { ...preset.end },
-    easing: cloneEasing(preset.easing),
+    easing: cloneAnimationEasing(preset.easing),
   }
 }
 
@@ -170,7 +167,7 @@ export function dynamicZoomRequestFromPreset(
 export function reverseDynamicZoomEasing(
   easing: ClipAnimationEasing,
 ): ClipAnimationEasing {
-  if (easing.type !== 'cubic-bezier') return cloneEasing(easing)
+  if (easing.type !== 'cubic-bezier') return cloneAnimationEasing(easing)
   return {
     type: 'cubic-bezier',
     x1: 1 - easing.x2,
@@ -373,7 +370,7 @@ function framingTrack(
   return {
     property,
     keyframes: [
-      { frame: 0, value: startValue, easing: cloneEasing(easing) },
+      { frame: 0, value: startValue, easing: cloneAnimationEasing(easing) },
       { frame: endFrame, value: endValue, easing: LINEAR_ANIMATION_EASING },
     ],
   }

@@ -9,26 +9,27 @@ import type {
 } from './schema'
 import {
   EFFECT_STACK_LIMITS,
-  effectDescriptorBoundsError,
-  effectDescriptorBudget,
+  effectAppendBudgetError,
+  effectCollectionAppendBudgetError,
+  effectReplacementBudgetError,
+  effectStacksBudgetUsage,
+  type EffectBudgetScope,
   type EffectBudgetUsage,
 } from './effectBounds'
 
-export const AUDIO_EFFECT_STACK_LIMITS = Object.freeze({
-  maxEffectsPerStack: EFFECT_STACK_LIMITS.maxEffectsPerClip,
-  maxEffectParams: EFFECT_STACK_LIMITS.maxEffectParams,
-  maxTotalEffects: EFFECT_STACK_LIMITS.maxTotalEffects,
-  maxTotalEffectParams: EFFECT_STACK_LIMITS.maxTotalEffectParams,
-  maxTotalEffectStringCharacters: EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters,
-  maxEffectStringCharacters: EFFECT_STACK_LIMITS.maxEffectStringCharacters,
-  maxIdCharacters: EFFECT_STACK_LIMITS.maxIdCharacters,
-  maxTypeAndParamKeyCharacters: EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters,
-  maxFiniteMagnitude: EFFECT_STACK_LIMITS.maxFiniteMagnitude,
-})
+// Audio descriptors share the video descriptor contract and budget exactly.
+export {
+  effectDescriptorBoundsError as audioEffectDescriptorBoundsError,
+  effectDescriptorBudget as audioEffectDescriptorBudget,
+} from './effectBounds'
 
-export function audioEffectDescriptorBoundsError(value: unknown): string | null {
-  return effectDescriptorBoundsError(value)
-}
+const { maxEffectsPerClip, ...SHARED_EFFECT_LIMITS } = EFFECT_STACK_LIMITS
+
+/** Every video effect bound applies; only the per-owner stack name differs. */
+export const AUDIO_EFFECT_STACK_LIMITS = Object.freeze({
+  maxEffectsPerStack: maxEffectsPerClip,
+  ...SHARED_EFFECT_LIMITS,
+})
 
 export function clipAudioEffects(clip: Clip): readonly AudioEffectDescriptor[] {
   return clip.audioEffects ?? []
@@ -44,66 +45,30 @@ export function masterAudioEffects(
   return master?.audioEffects ?? []
 }
 
-export function audioEffectDescriptorBudget(
-  effect: AudioEffectDescriptor,
-): EffectBudgetUsage {
-  return effectDescriptorBudget(effect)
-}
-
-function stackBudgetUsage(
-  effects: readonly AudioEffectDescriptor[],
-): EffectBudgetUsage {
-  let params = 0
-  let stringCharacters = 0
-  for (const effect of effects) {
-    const descriptor = audioEffectDescriptorBudget(effect)
-    params += descriptor.params
-    stringCharacters += descriptor.stringCharacters
-  }
-  return { effects: effects.length, params, stringCharacters }
-}
-
-function addUsage(left: EffectBudgetUsage, right: EffectBudgetUsage): EffectBudgetUsage {
-  return {
-    effects: left.effects + right.effects,
-    params: left.params + right.params,
-    stringCharacters: left.stringCharacters + right.stringCharacters,
+function* documentAudioEffectStacks(doc: TimelineDoc): Generator<readonly AudioEffectDescriptor[]> {
+  yield masterAudioEffects(doc.masterAudio)
+  for (const track of doc.tracks) {
+    yield trackAudioEffects(track)
+    for (const clip of track.clips) yield clipAudioEffects(clip)
   }
 }
 
 export function documentAudioEffectBudgetUsage(doc: TimelineDoc): EffectBudgetUsage {
-  let usage: EffectBudgetUsage = { effects: 0, params: 0, stringCharacters: 0 }
-  usage = addUsage(usage, stackBudgetUsage(masterAudioEffects(doc.masterAudio)))
-  for (const track of doc.tracks) {
-    usage = addUsage(usage, stackBudgetUsage(trackAudioEffects(track)))
-    for (const clip of track.clips) {
-      usage = addUsage(usage, stackBudgetUsage(clipAudioEffects(clip)))
-    }
-  }
-  return usage
+  return effectStacksBudgetUsage(documentAudioEffectStacks(doc))
 }
 
-function aggregateBudgetError(usage: EffectBudgetUsage): string | null {
-  if (usage.effects > AUDIO_EFFECT_STACK_LIMITS.maxTotalEffects) {
-    return `project exceeds ${AUDIO_EFFECT_STACK_LIMITS.maxTotalEffects} audio effects in total`
-  }
-  if (usage.params > AUDIO_EFFECT_STACK_LIMITS.maxTotalEffectParams) {
-    return `project exceeds ${AUDIO_EFFECT_STACK_LIMITS.maxTotalEffectParams} audio-effect parameters in total`
-  }
-  if (usage.stringCharacters > AUDIO_EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters) {
-    return `project exceeds ${AUDIO_EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters} audio-effect-string characters in total`
-  }
-  return null
-}
+const AUDIO_EFFECT_BUDGET: EffectBudgetScope = Object.freeze({
+  usage: documentAudioEffectBudgetUsage,
+  effects: 'audio effects',
+  params: 'audio-effect parameters',
+  strings: 'audio-effect-string characters',
+})
 
 export function audioEffectCollectionAppendBudgetError(
   doc: TimelineDoc,
   effects: readonly AudioEffectDescriptor[],
 ): string | null {
-  if (effects.length === 0) return null
-  const current = documentAudioEffectBudgetUsage(doc)
-  const added = stackBudgetUsage(effects)
-  return aggregateBudgetError(addUsage(current, added))
+  return effectCollectionAppendBudgetError(doc, effects, AUDIO_EFFECT_BUDGET)
 }
 
 export function audioEffectAppendBudgetError(
@@ -111,10 +76,7 @@ export function audioEffectAppendBudgetError(
   stack: readonly AudioEffectDescriptor[],
   effect: AudioEffectDescriptor,
 ): string | null {
-  if (stack.length + 1 > AUDIO_EFFECT_STACK_LIMITS.maxEffectsPerStack) {
-    return `audio-effect stack has reached the ${AUDIO_EFFECT_STACK_LIMITS.maxEffectsPerStack}-effect limit`
-  }
-  return audioEffectCollectionAppendBudgetError(doc, [effect])
+  return effectAppendBudgetError(doc, { effects: stack }, effect, 'audio-effect stack', AUDIO_EFFECT_BUDGET)
 }
 
 export function audioEffectReplacementBudgetError(
@@ -122,26 +84,12 @@ export function audioEffectReplacementBudgetError(
   previous: AudioEffectDescriptor,
   next: AudioEffectDescriptor,
 ): string | null {
-  const current = documentAudioEffectBudgetUsage(doc)
-  const removed = audioEffectDescriptorBudget(previous)
-  const added = audioEffectDescriptorBudget(next)
-  return aggregateBudgetError({
-    effects: current.effects,
-    params: current.params - removed.params + added.params,
-    stringCharacters:
-      current.stringCharacters - removed.stringCharacters + added.stringCharacters,
-  })
+  return effectReplacementBudgetError(doc, previous, next, AUDIO_EFFECT_BUDGET)
 }
 
 export function audioEffectIdExists(doc: TimelineDoc, effectId: string): boolean {
-  if (masterAudioEffects(doc.masterAudio).some((effect) => effect.id === effectId)) {
-    return true
-  }
-  for (const track of doc.tracks) {
-    if (trackAudioEffects(track).some((effect) => effect.id === effectId)) return true
-    for (const clip of track.clips) {
-      if (clipAudioEffects(clip).some((effect) => effect.id === effectId)) return true
-    }
+  for (const stack of documentAudioEffectStacks(doc)) {
+    if (stack.some((effect) => effect.id === effectId)) return true
   }
   return false
 }

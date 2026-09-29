@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'vitest'
 import type { AudioEffectDescriptor } from './schema'
 import {
-  applyAudioEffectStack,
   audioEffectHostCapabilities,
   audioEffectParamsValidationError,
+  cloneAudioEffectDescriptor,
   COMPRESSOR_EFFECT_TYPE,
+  createAudioEffectChain,
   createCompressorEffect,
   createLimiterEffect,
   createNoiseGateEffect,
@@ -13,10 +14,8 @@ import {
   jsStereoBlockCapabilities,
   LIMITER_EFFECT_TYPE,
   NOISE_GATE_EFFECT_TYPE,
-  migrateAudioEffectDescriptor,
   PARAMETRIC_EQ_EFFECT_TYPE,
   resolveAudioEffectStack,
-  supportsJsStereoBlock,
 } from './audioEffectStack'
 
 describe('audio-effect registry and identity evaluation', () => {
@@ -71,8 +70,6 @@ describe('audio-effect registry and identity evaluation', () => {
     const [resolution] = resolveAudioEffectStack([eq], new Set())
     expect(resolution.status).toBe('unsupported')
     expect(resolution.detail).toContain(JS_STEREO_BLOCK_CAPABILITY)
-    expect(supportsJsStereoBlock({ processStereoBlock: () => undefined })).toBe(true)
-    expect(supportsJsStereoBlock({})).toBe(false)
     expect(audioEffectHostCapabilities({ jsStereoBlock: false }).size).toBe(0)
   })
 
@@ -89,19 +86,16 @@ describe('audio-effect registry and identity evaluation', () => {
       params: { width: 2 },
     }
 
-    const resolutions = applyAudioEffectStack(
-      left,
-      right,
-      [createParametricEqEffect('afx-eq'), createCompressorEffect('afx-comp'), unknown],
-      jsStereoBlockCapabilities(),
-    )
+    const effects = [createParametricEqEffect('afx-eq'), createCompressorEffect('afx-comp'), unknown]
+    const resolutions = resolveAudioEffectStack(effects, jsStereoBlockCapabilities())
+    createAudioEffectChain(effects, 48_000, jsStereoBlockCapabilities()).process(left, right)
 
     expect(Array.from(left)).toEqual(beforeLeft)
     expect(Array.from(right)).toEqual(beforeRight)
     expect(resolutions.map((item) => item.status)).toEqual(['ready', 'ready', 'unsupported'])
   })
 
-  test('clones unknown descriptors losslessly during migration', () => {
+  test('clones unknown descriptors losslessly', () => {
     const unknown: AudioEffectDescriptor = {
       id: 'afx-unknown',
       type: 'future.effect',
@@ -109,9 +103,20 @@ describe('audio-effect registry and identity evaluation', () => {
       enabled: false,
       params: { opaque: 'yes' },
     }
-    const migrated = migrateAudioEffectDescriptor(unknown)
-    expect(migrated).toEqual(unknown)
-    expect(migrated).not.toBe(unknown)
-    expect(migrated.params).not.toBe(unknown.params)
+    const clone = cloneAudioEffectDescriptor(unknown)
+    expect(clone).toEqual(unknown)
+    expect(clone).not.toBe(unknown)
+    expect(clone.params).not.toBe(unknown.params)
+  })
+
+  test('reports the first out-of-range dynamics parameter in limit order', () => {
+    const error = (effect: AudioEffectDescriptor, params: AudioEffectDescriptor['params']) =>
+      audioEffectParamsValidationError({ ...effect, params: { ...effect.params, ...params } })
+    const compressor = createCompressorEffect('afx-comp')
+    expect(error(compressor, {})).toBeNull()
+    expect(error(compressor, { ratio: 0 })).toBe('ratio must be between 1 and 20')
+    expect(error(compressor, { makeupDb: 30, thresholdDb: 1 })).toBe('thresholdDb must be between -60 and 0')
+    expect(error(createLimiterEffect('afx-lim'), { releaseMs: '5' })).toBe('releaseMs must be between 1 and 1000')
+    expect(error(createNoiseGateEffect('afx-gate'), { rangeDb: Number.NaN })).toBe('rangeDb must be between 0 and 96')
   })
 })

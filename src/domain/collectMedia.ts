@@ -11,6 +11,7 @@ import {
   hasSupportedProjectFileExtension,
   PROJECT_FILE_EXTENSION,
 } from './projectFile'
+import { isRecord } from './projectFile/validationPrimitives'
 import type { SequenceProject } from './projectSequences'
 import { isSupportedTextFontFamily } from './textOverlay'
 
@@ -156,14 +157,6 @@ function isIgnorableCollectDestinationEntry(name: string): boolean {
 
 function fail(path: string, problem: string): never {
   throw new CollectMediaError(`${path}: ${problem}`)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return false
-  }
-  const prototype = Object.getPrototypeOf(value)
-  return prototype === Object.prototype || prototype === null
 }
 
 function exactKeys(

@@ -135,4 +135,34 @@ describe('caption file round trips', () => {
     expect((error as CaptionFileError).code).toBe(code)
     expect((error as CaptionFileError).message.length).toBeGreaterThan(8)
   })
+
+  it('keeps each format timestamp grammar and the per-file cue limit', () => {
+    const rate = { num: 1_000, den: 1 }
+    const start = (source: string, format: 'srt' | 'vtt') =>
+      parseCaptionFile(source, format, rate, idFactory)[0]?.range.startFrame
+    expect(start('1\n100:00:00,000 --> 100:00:00,001\nHi\n', 'srt')).toBe(360_000_000)
+    expect(start('WEBVTT\n\n01:00.000 --> 01:00:00.000\nHi\n', 'vtt')).toBe(60_000)
+    expect(() => start('1\n00:01,000 --> 00:02,000\nHi\n', 'srt')).toThrow('Line 2: Invalid timestamp: 00:01,000')
+    expect(() => start('1\n00:00:01.000 --> 00:00:02.000\nHi\n', 'srt')).toThrow('Invalid timestamp: 00:00:01.000')
+    expect(() => start('WEBVTT\n\n00:01,000 --> 00:02.000\nHi\n', 'vtt')).toThrow('Line 3: Invalid timestamp: 00:01,000')
+    expect(() => start('WEBVTT\n\n00:60.000 --> 01:02.000\nHi\n', 'vtt')).toThrow('out of range')
+    const cue = (index: number) => `${index + 1}\n00:00:00,000 --> 00:00:00,001\nx\n`
+    const over = Array.from({ length: 20_001 }, (_, index) => cue(index)).join('\n')
+    expect(() => start(over, 'srt')).toThrow('Line 80001: Caption file exceeds 20000 cues')
+  })
+
+  it.each([
+    ['vtt', 'WEBVTT\n\nhello\n00:00.000 --> 00:01.000\n\n', 'malformed-cue'],
+    ['srt', '1\n00:00:00,000 --> 00:00:01,000\n\n', 'malformed-cue'],
+  ] as const)('rejects an empty %s cue body', (format, source, code) => {
+    let error: unknown
+    try {
+      parseCaptionFile(source, format, { num: 30, den: 1 }, idFactory)
+    } catch (caught) {
+      error = caught
+    }
+    expect(error).toBeInstanceOf(CaptionFileError)
+    expect((error as CaptionFileError).code).toBe(code)
+    expect((error as CaptionFileError).message.length).toBeGreaterThan(8)
+  })
 })

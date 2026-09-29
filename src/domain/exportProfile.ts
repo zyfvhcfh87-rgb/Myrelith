@@ -103,11 +103,12 @@ const ALLOWED_CODEC_PAIRS = Object.freeze([
   Object.freeze({ container: 'mp4', videoCodec: 'hevc', audioCodec: 'aac' }),
 ] as const)
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+// Exact-shape helpers shared with the delivery-product parsers.
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function hasExactlyKeys(
+export function hasExactlyKeys(
   value: Record<string, unknown>,
   expected: readonly string[],
 ): boolean {
@@ -115,11 +116,11 @@ function hasExactlyKeys(
   return keys.length === expected.length && expected.every((key) => Object.hasOwn(value, key))
 }
 
-function isOneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
+export function isOneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
   return typeof value === 'string' && values.some((candidate) => candidate === value)
 }
 
-function assertBoundedSafeInteger(
+export function assertBoundedSafeInteger(
   value: unknown,
   label: string,
   minimum: number,

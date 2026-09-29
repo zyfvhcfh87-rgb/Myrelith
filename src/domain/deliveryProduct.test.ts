@@ -7,12 +7,11 @@ import {
   DEFAULT_IMAGE_SEQUENCE_PROFILE,
   assertChapterDelivery,
   assertDeliveryWorkBudget,
-  containerChapterSupport,
+  CONTAINER_CHAPTER_SUPPORT,
   deliveryFileExtension,
   deliveryProductLabel,
   deliveryWorkBudgetReason,
   imageSequenceFileName,
-  imageSequenceFileNames,
   imageSequencePadWidth,
   isDeliveryProfile,
   parseChapterPolicy,
@@ -41,8 +40,7 @@ describe('delivery products', () => {
     expect(isDeliveryProfile(DEFAULT_EXPORT_PROFILE)).toBe(false)
     expect(parseExportSettings(DEFAULT_EXPORT_PROFILE)).toEqual(DEFAULT_EXPORT_PROFILE)
     expect(isDeliveryProfile(DEFAULT_IMAGE_SEQUENCE_PROFILE)).toBe(true)
-    expect(containerChapterSupport('mp4')).toBe('unsupported')
-    expect(containerChapterSupport('webm')).toBe('unsupported')
+    expect(CONTAINER_CHAPTER_SUPPORT).toBe('unsupported')
   })
 
   test('names PNG frames from absolute range frames with deterministic padding', () => {
@@ -50,7 +48,8 @@ describe('delivery products', () => {
     expect(imageSequencePadWidth(100_000)).toBe(5)
     expect(imageSequencePadWidth(1_000_000)).toBe(6)
     expect(imageSequenceFileName('frame', 7, 5)).toBe('frame_00007.png')
-    expect(imageSequenceFileNames({ startFrame: 10, endFrame: 13 }, 'plate')).toEqual([
+    const padWidth = imageSequencePadWidth(13)
+    expect([10, 11, 12].map((frame) => imageSequenceFileName('plate', frame, padWidth))).toEqual([
       'plate_00010.png',
       'plate_00011.png',
       'plate_00012.png',

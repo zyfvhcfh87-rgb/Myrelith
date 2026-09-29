@@ -1,6 +1,7 @@
 /** Pure audio-effect descriptor registry, validation, resolution, and shared stereo-block DSP. */
 
 import type { AudioEffectDescriptor, EffectParamValue } from './schema'
+import { finiteInRange, numericLimitsError, type NumericParamLimits } from './effectBounds'
 import {
   createAudioEffectChainFromReady,
   type AudioEffectChain,
@@ -26,13 +27,6 @@ export const EQ_BAND_TYPES = Object.freeze([
 ] as const)
 
 export type EqBandType = (typeof EQ_BAND_TYPES)[number]
-
-export interface AudioEffectParamSpec {
-  readonly label: string
-  readonly min: number
-  readonly max: number
-  readonly step: number
-}
 
 export interface EqParams extends Record<string, EffectParamValue> {
   band1Type: EqBandType
@@ -180,10 +174,6 @@ export interface AudioEffectRegistration {
   readonly validateParams: (params: Readonly<Record<string, EffectParamValue>>) => string | null
 }
 
-function finiteInRange(value: EffectParamValue | undefined, min: number, max: number): boolean {
-  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
-}
-
 function isEqBandType(value: EffectParamValue | undefined): value is EqBandType {
   return typeof value === 'string' && (EQ_BAND_TYPES as readonly string[]).includes(value)
 }
@@ -220,40 +210,10 @@ function validateEqParams(
     ?? validateEqBand(params, 4)
 }
 
-function validateCompressorParams(
-  params: Readonly<Record<string, EffectParamValue>>,
-): string | null {
-  for (const key of Object.keys(COMPRESSOR_LIMITS) as (keyof typeof COMPRESSOR_LIMITS)[]) {
-    const limit = COMPRESSOR_LIMITS[key]
-    if (!finiteInRange(params[key], limit.min, limit.max)) {
-      return `${key} must be between ${limit.min} and ${limit.max}`
-    }
-  }
-  return null
-}
-
-function validateLimiterParams(
-  params: Readonly<Record<string, EffectParamValue>>,
-): string | null {
-  for (const key of Object.keys(LIMITER_LIMITS) as (keyof typeof LIMITER_LIMITS)[]) {
-    const limit = LIMITER_LIMITS[key]
-    if (!finiteInRange(params[key], limit.min, limit.max)) {
-      return `${key} must be between ${limit.min} and ${limit.max}`
-    }
-  }
-  return null
-}
-
-function validateNoiseGateParams(
-  params: Readonly<Record<string, EffectParamValue>>,
-): string | null {
-  for (const key of Object.keys(NOISE_GATE_LIMITS) as (keyof typeof NOISE_GATE_LIMITS)[]) {
-    const limit = NOISE_GATE_LIMITS[key]
-    if (!finiteInRange(params[key], limit.min, limit.max)) {
-      return `${key} must be between ${limit.min} and ${limit.max}`
-    }
-  }
-  return null
+function limitsValidator(
+  limits: NumericParamLimits,
+): AudioEffectRegistration['validateParams'] {
+  return (params) => numericLimitsError(params, limits)
 }
 
 const EQ_REGISTRATION: AudioEffectRegistration = Object.freeze({
@@ -271,7 +231,7 @@ const COMPRESSOR_REGISTRATION: AudioEffectRegistration = Object.freeze({
   label: 'Compressor',
   capabilities: Object.freeze([JS_STEREO_BLOCK_CAPABILITY]),
   defaultParams: DEFAULT_COMPRESSOR_PARAMS,
-  validateParams: validateCompressorParams,
+  validateParams: limitsValidator(COMPRESSOR_LIMITS),
 })
 
 const LIMITER_REGISTRATION: AudioEffectRegistration = Object.freeze({
@@ -280,7 +240,7 @@ const LIMITER_REGISTRATION: AudioEffectRegistration = Object.freeze({
   label: 'Limiter',
   capabilities: Object.freeze([JS_STEREO_BLOCK_CAPABILITY]),
   defaultParams: DEFAULT_LIMITER_PARAMS,
-  validateParams: validateLimiterParams,
+  validateParams: limitsValidator(LIMITER_LIMITS),
 })
 
 const NOISE_GATE_REGISTRATION: AudioEffectRegistration = Object.freeze({
@@ -289,7 +249,7 @@ const NOISE_GATE_REGISTRATION: AudioEffectRegistration = Object.freeze({
   label: 'Noise gate',
   capabilities: Object.freeze([JS_STEREO_BLOCK_CAPABILITY]),
   defaultParams: DEFAULT_NOISE_GATE_PARAMS,
-  validateParams: validateNoiseGateParams,
+  validateParams: limitsValidator(NOISE_GATE_LIMITS),
 })
 
 const AUDIO_EFFECT_REGISTRY = new Map<string, AudioEffectRegistration>([
@@ -298,10 +258,6 @@ const AUDIO_EFFECT_REGISTRY = new Map<string, AudioEffectRegistration>([
   [LIMITER_EFFECT_TYPE, LIMITER_REGISTRATION],
   [NOISE_GATE_EFFECT_TYPE, NOISE_GATE_REGISTRATION],
 ])
-
-export function registeredAudioEffects(): readonly AudioEffectRegistration[] {
-  return [...AUDIO_EFFECT_REGISTRY.values()]
-}
 
 export function audioEffectRegistration(type: string): AudioEffectRegistration | null {
   return AUDIO_EFFECT_REGISTRY.get(type) ?? null
@@ -370,25 +326,8 @@ export function audioEffectParamsValidationError(
   return registration.validateParams(effect.params)
 }
 
-/**
- * Upgrade descriptors owned by this registry. Unknown types and future
- * versions are cloned byte-for-byte at the JSON value level and remain opaque.
- */
-export function migrateAudioEffectDescriptor(
-  effect: AudioEffectDescriptor,
-): AudioEffectDescriptor {
-  return cloneAudioEffectDescriptor(effect)
-}
-
 export function jsStereoBlockCapabilities(): ReadonlySet<AudioEffectCapability> {
   return new Set<AudioEffectCapability>([JS_STEREO_BLOCK_CAPABILITY])
-}
-
-/** Structural probe shared by live playback and export hosts. */
-export function supportsJsStereoBlock(
-  host: { readonly processStereoBlock?: unknown },
-): boolean {
-  return typeof host.processStereoBlock === 'function'
 }
 
 export function audioEffectHostCapabilities(options: {
@@ -480,24 +419,4 @@ export function createAudioEffectChain(
     .filter((resolution) => resolution.status === 'ready')
     .map((resolution) => resolution.effect)
   return createAudioEffectChainFromReady(ready, sampleRate)
-}
-
-/**
- * Run the ordered stereo block processor. Disabled, invalid, and unsupported
- * entries are skipped. Both playback and export must call this helper, or
- * the stateful `createAudioEffectChain` equivalent, so order stays identical.
- */
-export function applyAudioEffectStack(
-  left: Float32Array,
-  right: Float32Array,
-  effects: readonly AudioEffectDescriptor[],
-  capabilities: ReadonlySet<AudioEffectCapability>,
-  sampleRate = 48_000,
-): readonly AudioEffectResolution[] {
-  if (left.length !== right.length) {
-    throw new RangeError('audio-effect blocks must have matching stereo lengths')
-  }
-  const resolutions = resolveAudioEffectStack(effects, capabilities)
-  createAudioEffectChain(effects, sampleRate, capabilities).process(left, right)
-  return resolutions
 }

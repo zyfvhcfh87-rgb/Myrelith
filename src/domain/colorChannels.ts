@@ -27,7 +27,3 @@ export function applyChannelTables(rgba: Uint8ClampedArray, tables: ChannelTable
     rgba[i + 2] = tables[2][rgba[i + 2]]
   }
 }
-
-export function finiteColorNumber(value: unknown, minimum: number, maximum: number): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum
-}

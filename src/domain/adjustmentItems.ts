@@ -23,6 +23,8 @@ import {
   cloneAnimationEasing,
   documentAnimationKeyframeGrowthAllowed,
   MAX_KEYFRAME_FRAME,
+  MAX_KEYFRAMES_PER_TRACK,
+  remapEffectAnimationIds,
 } from './clipAnimation'
 import { evaluateValidatedAnimationTrack } from './scalarAnimation'
 import {
@@ -176,13 +178,6 @@ export function findAdjustment(
   adjustmentId: AdjustmentItemId,
 ): AdjustmentItem | null {
   return locateAdjustment(doc, adjustmentId)?.adjustment ?? null
-}
-
-export function trackOfAdjustment(
-  doc: TimelineDoc,
-  adjustmentId: AdjustmentItemId,
-): Track | null {
-  return locateAdjustment(doc, adjustmentId)?.track ?? null
 }
 
 export function locateAdjustment(
@@ -380,21 +375,6 @@ export function trimAdjustment(
   })
 }
 
-function remapAnimationEffectIds(
-  animation: AdjustmentAnimation,
-  replacements: ReadonlyMap<EffectId, EffectId>,
-): AdjustmentAnimation {
-  const clone = cloneAdjustmentAnimation(animation)
-  clone.effectTracks = clone.effectTracks.map((track) => ({
-    ...track,
-    effectId: replacements.get(track.effectId) ?? track.effectId,
-  }))
-  if (clone.effectPathTracks) clone.effectPathTracks = clone.effectPathTracks.map((track) => ({
-    ...track, effectId: replacements.get(track.effectId) ?? track.effectId,
-  }))
-  return clone
-}
-
 function duplicatePayload(item: AdjustmentItem): Omit<AdjustmentItem, 'timelineRange'> {
   const replacements = new Map<EffectId, EffectId>()
   const effects = item.effects.map((effect) => {
@@ -405,7 +385,7 @@ function duplicatePayload(item: AdjustmentItem): Omit<AdjustmentItem, 'timelineR
   return {
     ...item,
     id: newId('adjustment'),
-    animation: remapAnimationEffectIds(item.animation, replacements),
+    animation: remapEffectAnimationIds(item.animation, replacements) as AdjustmentAnimation,
     effects,
   }
 }
@@ -549,7 +529,7 @@ function upsertKeyframe(
   const next = keyframes.filter((candidate) => candidate.frame !== keyframe.frame)
   next.push(cloneAdjustmentKeyframe(keyframe))
   next.sort((left, right) => left.frame - right.frame)
-  if (next.length > 1_024) return null
+  if (next.length > MAX_KEYFRAMES_PER_TRACK) return null
   return next
 }
 
