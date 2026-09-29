@@ -4,19 +4,6 @@ import { audioSampleBoundary, type AudioSampleDocument } from './time'
 /** Physical timing is uncalibrated by default. Limit manual adjustment to ±0.5 s. */
 export const MAX_VOICEOVER_COMPENSATION_SECONDS = 0.5
 
-/** Convert a signed UI frame adjustment to samples; sample adjustment is authoritative. */
-export function voiceoverCompensationFromFrames(
-  frames: number,
-  doc: AudioSampleDocument,
-): number {
-  if (!Number.isSafeInteger(frames)) throw new RangeError('Compensation frames must be a safe integer')
-  const samples = audioSampleBoundary(Math.abs(frames), doc)
-  if (samples > Math.floor(doc.audioSampleRate * MAX_VOICEOVER_COMPENSATION_SECONDS)) {
-    throw new RangeError('Voiceover compensation exceeds the half-second sample bound')
-  }
-  return frames < 0 ? -samples : samples
-}
-
 function nonNegative(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer`)
@@ -88,10 +75,7 @@ export function voiceoverTimelineFrameAtSample(
   let frame = safe(projected * BigInt(doc.frameRate.num) / divisor, 'Timeline frame')
   // Frame boundaries round to the nearest sample, so the rational floor can
   // be adjacent to (but never far from) the containing frame.
-  const boundary = (f: number) => (
-    BigInt(f) * BigInt(doc.frameRate.den) * BigInt(doc.audioSampleRate) +
-    BigInt(doc.frameRate.num) / 2n
-  ) / BigInt(doc.frameRate.num)
+  const boundary = (f: number) => BigInt(audioSampleBoundary(f, doc))
   if (boundary(frame) > projected) frame--
   else if (frame < Number.MAX_SAFE_INTEGER - 1 &&
     boundary(frame + 1) <= projected) frame++

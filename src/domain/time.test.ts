@@ -7,11 +7,9 @@
 import { describe, test, expect } from 'vitest'
 import type { FrameRate, TimeRange } from './schema'
 import {
-  addFrames,
   framesToMicroseconds,
   formatTimecode,
   framesToSeconds,
-  growRange,
   microsecondsDurationToFrames,
   microsecondsTimestampToFrameCeil,
   microsecondsToFrames,
@@ -21,7 +19,6 @@ import {
   rateEquals,
   rescaleFrames,
   audioSampleBoundary,
-  clipLocalFrameAtSample,
   clipLocalFrameAtSeconds,
   secondsToFrames,
   secondsToMicroseconds,
@@ -49,7 +46,6 @@ describe('audio sample grid', () => {
     const doc = { frameRate: F30, audioSampleRate: 48_000 }
     expect(audioSampleBoundary(0, doc)).toBe(0)
     expect(audioSampleBoundary(1, doc)).toBe(1_600)
-    expect(clipLocalFrameAtSample(0, 800, 0, doc)).toBe(0.5)
     expect(clipLocalFrameAtSeconds(10, framesToSeconds(15, F30), F30)).toBe(5)
   })
 })
@@ -153,44 +149,10 @@ describe('frames <-> canonical microseconds', () => {
 })
 
 /* ------------------------------------------------------------------ */
-/* Plan test 2: addFrames / durations never go negative                 */
+/* Rate helpers and timecode                                            */
 /* ------------------------------------------------------------------ */
 
-describe('addFrames and duration safety', () => {
-  test('same-rate add sums integer frames', () => {
-    const sum = addFrames(
-      { frames: 100, rate: NTSC_2997 },
-      { frames: 50, rate: NTSC_2997 },
-    )
-    expect(sum).toEqual({ frames: 150, rate: NTSC_2997 })
-  })
-
-  test('mixed-rate add rescales to the first operand rate', () => {
-    // 1 second of 60fps (60 frames) added to 1 second of 30fps (30 frames)
-    // = 2 seconds at 30fps = 60 frames.
-    const sum = addFrames({ frames: 30, rate: F30 }, { frames: 60, rate: F60 })
-    expect(sum).toEqual({ frames: 60, rate: F30 })
-  })
-
-  test('negative deltas are allowed on time points (moving a clip left)', () => {
-    const sum = addFrames(
-      { frames: 10, rate: F30 },
-      { frames: -25, rate: F30 },
-    )
-    expect(sum.frames).toBe(-15) // pure point math; ranges clamp, points do not
-  })
-
-  test('growRange never produces negative duration', () => {
-    // The plan's "addFrames never produces negative duration" guarantee lives
-    // here: duration math goes through growRange, which clamps at 0.
-    expect(growRange(r(10, 5), -3)).toEqual(r(10, 2))
-    expect(growRange(r(10, 5), -5)).toEqual(r(10, 0))
-    expect(growRange(r(10, 5), -9999)).toEqual(r(10, 0))
-    for (let delta = -20; delta <= 20; delta++) {
-      expect(growRange(r(0, 7), delta).durationFrames).toBeGreaterThanOrEqual(0)
-    }
-  })
-
+describe('rate helpers and timecode', () => {
   test('rateEquals compares reduced value, not representation', () => {
     expect(rateEquals(F30, { num: 60, den: 2 })).toBe(true)
     expect(rateEquals(F30, F60)).toBe(false)

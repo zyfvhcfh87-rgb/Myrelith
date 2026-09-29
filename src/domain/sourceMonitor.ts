@@ -17,7 +17,6 @@ import type {
   AssetKind,
   FrameRate,
   MediaAsset,
-  TimeRange,
 } from './schema'
 import {
   microsecondsDurationToFrames,
@@ -278,30 +277,8 @@ export function openSourceMonitor(
   return { status: 'ok', session: createSession(source) }
 }
 
-export function closeSourceMonitor(
-  _session: SourceMonitorSession | null,
-): null {
-  return null
-}
-
 export function sourceMonitorLastFrame(session: SourceMonitorSession): number {
   return lastFrameOf(session.source.durationFrames)
-}
-
-export function sourceMonitorSelectionRange(
-  session: SourceMonitorSession,
-): TimeRange | null {
-  const { inFrame, outFrameExclusive } = session
-  if (inFrame === null || outFrameExclusive === null) return null
-  if (inFrame >= outFrameExclusive) return null
-  return {
-    startFrame: inFrame,
-    durationFrames: outFrameExclusive - inFrame,
-  }
-}
-
-export function sourceMonitorDecodeFrame(session: SourceMonitorSession): number {
-  return session.source.kind === 'image' ? 0 : session.playheadFrame
 }
 
 export function sourceMonitorAudioAudition(session: SourceMonitorSession): boolean {
@@ -463,16 +440,4 @@ export function requestMonitorPlayback(
     return { owner: requested, pausedOwner: null }
   }
   return { owner: requested, pausedOwner: current }
-}
-
-/** Marks currently inside the source, used by later three-point commands. */
-export function sourceMonitorPreparedRange(
-  session: SourceMonitorSession,
-): TimeRange {
-  const marked = sourceMonitorSelectionRange(session)
-  if (marked) return marked
-  return {
-    startFrame: 0,
-    durationFrames: session.source.durationFrames,
-  }
 }

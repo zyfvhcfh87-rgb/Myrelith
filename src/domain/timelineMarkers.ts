@@ -132,14 +132,6 @@ export function updateTimelineMarker(
   return withSortedMarkers(doc, updated)
 }
 
-export function moveTimelineMarker(
-  doc: TimelineDoc,
-  markerId: TimelineMarkerId,
-  frame: number,
-): TimelineDoc {
-  return updateTimelineMarker(doc, markerId, { frame })
-}
-
 export function duplicateTimelineMarker(
   doc: TimelineDoc,
   markerId: TimelineMarkerId,

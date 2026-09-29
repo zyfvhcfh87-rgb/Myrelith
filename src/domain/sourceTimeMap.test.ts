@@ -22,7 +22,6 @@ import {
   stretchQualityBand,
   timelineFramesWithinSourceMap,
   timelineOffsetAtSourceTicks,
-  timelineFramesWithinSourceTicks,
   SOURCE_TIME_TICKS_PER_FRAME,
 } from './sourceTimeMap'
 
@@ -100,11 +99,6 @@ describe('SourceTimeMap', () => {
     expect(() => sourceTimeRateFromPercent(10)).toThrow(/25% step/)
     expect(() => sourceTimeRateFromPercent(425)).toThrow(/1\/4x through 4x/)
     expect(() => canonicalSourceTimeRate(1, 3)).toThrow(/fixed source-time tick precision/)
-  })
-
-  test('converts exact source handle capacity back to whole timeline frames', () => {
-    expect(timelineFramesWithinSourceTicks(9_000_000, { numerator: 3, denominator: 2 })).toBe(6)
-    expect(timelineFramesWithinSourceTicks(1_000_000, { numerator: 1, denominator: 2 })).toBe(2)
   })
 
   test('keeps legacy 1x clips byte-behavior compatible and classifies constant stretch', () => {
@@ -326,6 +320,34 @@ describe('SourceTimeMap', () => {
     expect(timelineOffsetAtSourceTicks(freeze, 0, 0, 7)).toBe(3)
   })
 
+  test('integrates across many mixed segments from a shifted origin', () => {
+    // Fixed values recorded from the pre-cursor integrator: every query
+    // crosses several segments, a freeze and both curve ends.
+    const rate = sourceTimeSpeedRateFromPercent
+    const map = {
+      ...defaultSourceTimeMap(30, 1_000),
+      speedCurve: {
+        originFrame: -3,
+        points: [
+          { frame: 0, rate: rate(50), easing: 'linear' as const },
+          { frame: 4, rate: rate(200), easing: 'hold' as const },
+          { frame: 7, rate: rate(0), easing: 'hold' as const },
+          { frame: 9, rate: rate(75), easing: 'smooth' as const },
+          { frame: 15, rate: rate(300), easing: 'linear' as const },
+          { frame: 18, rate: rate(25), easing: 'smooth' as const },
+          { frame: 23, rate: rate(100), easing: 'hold' as const },
+        ],
+      },
+    }
+    expect([-5, 0, 2, 3, 5, 8, 10, 11, 13, 16, 19, 22, 25, 30].map((offset) => (
+      sourceTicksAtTimelineOffset(map, offset)
+    ))).toEqual([
+      27_500_000, 30_000_000, 31_000_000, 31_500_000, 33_250_000, 38_500_000,
+      42_500_000, 42_500_000, 43_307_291, 48_166_666, 56_291_666, 58_902_000,
+      60_777_000, 65_750_000,
+    ])
+  })
+
   test('keeps ramp phase exact across split and trim origins', () => {
     const map = {
       ...defaultSourceTimeMap(5, 30),
@@ -420,18 +442,12 @@ describe('SourceTimeMap', () => {
       ...original,
       rate: sourceTimeRateFromPercent(75),
     }
-    expect(timelineFramesWithinSourceTicks(
-      slow.sourceDurationTicks,
-      slow.rate,
-    )).toBe(133)
+    expect(timelineFramesWithinSourceMap(slow)).toBe(133)
     expect(sourceRangeForMap(slow, 133)).toEqual({
       startFrame: 0,
       durationFrames: 100,
     })
-    expect(timelineFramesWithinSourceTicks(
-      slow.sourceDurationTicks,
-      sourceTimeRateFromPercent(100),
-    )).toBe(100)
+    expect(timelineFramesWithinSourceMap(original)).toBe(100)
   })
 
   test('keeps durable keyframe source intent across repeated rate round trips', () => {

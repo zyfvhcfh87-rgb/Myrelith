@@ -10,7 +10,7 @@
  * No browser APIs, no imports outside domain/ (ARCHITECTURE.md).
  */
 
-import type { FrameRate, RationalTime, TimeRange } from './schema'
+import type { FrameRate, TimeRange } from './schema'
 
 /** Integer timebase used by WebCodecs and canonical media durations. */
 export const MICROSECONDS_PER_SECOND = 1_000_000
@@ -19,14 +19,18 @@ export const MICROSECONDS_PER_SECOND = 1_000_000
 /* Validation                                                           */
 /* ------------------------------------------------------------------ */
 
-/** Throws unless the rate is made of positive integers (e.g. 30000/1001). */
+/** True when the rate is made of positive safe integers (e.g. 30000/1001). */
+export function isValidFrameRate(rate: Readonly<FrameRate>): boolean {
+  return (
+    Number.isSafeInteger(rate.num) &&
+    Number.isSafeInteger(rate.den) &&
+    rate.num > 0 &&
+    rate.den > 0
+  )
+}
+
 function assertValidRate(rate: FrameRate): void {
-  if (
-    !Number.isSafeInteger(rate.num) ||
-    !Number.isSafeInteger(rate.den) ||
-    rate.num <= 0 ||
-    rate.den <= 0
-  ) {
+  if (!isValidFrameRate(rate)) {
     throw new TypeError(
       `Invalid FrameRate ${rate.num}/${rate.den}: num and den must be positive integers`,
     )
@@ -94,7 +98,8 @@ const STANDARD_RATES: readonly FrameRate[] = [
   { num: 120, den: 1 },
 ]
 
-function gcd(a: number, b: number): number {
+/** Greatest common divisor of two non-negative integers. */
+export function gcd(a: number, b: number): number {
   while (b !== 0) {
     const t = b
     b = a % b
@@ -238,7 +243,7 @@ export function framesToMicroseconds(frames: number, rate: FrameRate): number {
   )
 }
 
-/** Convert a finite, non-negative seconds boundary value to integer Âµs. */
+/** Convert a finite, non-negative seconds boundary value to integer µs. */
 export function secondsToMicroseconds(seconds: number): number {
   if (!Number.isFinite(seconds) || seconds < 0) {
     throw new TypeError(
@@ -322,40 +327,11 @@ export function audioSampleBoundary(
   assertValidRate(doc.frameRate)
   assertPositiveSafeInteger(doc.audioSampleRate, 'Audio sample rate')
 
-  const divisor = BigInt(doc.frameRate.num)
-  const numerator =
-    BigInt(frame) *
-    BigInt(doc.frameRate.den) *
-    BigInt(doc.audioSampleRate)
-  const rounded = (numerator + divisor / 2n) / divisor
-  if (rounded > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new RangeError('Audio sample boundary exceeds the safe integer range')
-  }
-  return Number(rounded)
-}
-
-/**
- * Clip-local frame at one mix-grid sample inside a known document frame.
- * The containing frame comes from the mixer so this stays exact on NTSC
- * frames whose sample length is not constant.
- */
-export function clipLocalFrameAtSample(
-  clipStartFrame: number,
-  sample: number,
-  documentFrame: number,
-  doc: AudioSampleDocument,
-): number {
-  if (!Number.isSafeInteger(clipStartFrame)) {
-    throw new RangeError('Clip start frame must be a safe integer')
-  }
-  if (!Number.isSafeInteger(sample) || sample < 0) {
-    throw new RangeError('Sample index must be a non-negative safe integer')
-  }
-  const start = audioSampleBoundary(documentFrame, doc)
-  const end = audioSampleBoundary(documentFrame + 1, doc)
-  const span = end - start
-  const fraction = span <= 0 ? 0 : (sample - start) / span
-  return documentFrame - clipStartFrame + fraction
+  return divideRoundNearest(
+    BigInt(frame) * BigInt(doc.frameRate.den) * BigInt(doc.audioSampleRate),
+    BigInt(doc.frameRate.num),
+    'Audio sample boundary',
+  )
 }
 
 /** Clip-local frame at a timeline time in seconds. Integer frame times round-trip. */
@@ -372,23 +348,6 @@ export function clipLocalFrameAtSeconds(
     throw new TypeError(`timeline seconds must be finite, got ${timelineSeconds}`)
   }
   return (timelineSeconds * rate.num) / rate.den - clipStartFrame
-}
-
-/* ------------------------------------------------------------------ */
-/* RationalTime arithmetic                                              */
-/* ------------------------------------------------------------------ */
-
-/**
- * Add two RationalTimes; the result is expressed at `a`'s rate. When rates
- * differ, `b` is rescaled to `a`'s rate first (nearest frame). Deltas may be
- * negative — this is a pure point/delta add and never clamps; use growRange
- * for duration math that must not go negative.
- */
-export function addFrames(a: RationalTime, b: RationalTime): RationalTime {
-  const bFrames = rateEquals(a.rate, b.rate)
-    ? b.frames
-    : rescaleFrames(b.frames, b.rate, a.rate)
-  return { frames: a.frames + bFrames, rate: a.rate }
 }
 
 /* ------------------------------------------------------------------ */
@@ -414,19 +373,6 @@ export function rangeOverlap(a: TimeRange, b: TimeRange): boolean {
 /** True when `frame` lies inside the range: start inclusive, end exclusive. */
 export function rangeContains(range: TimeRange, frame: number): boolean {
   return frame >= range.startFrame && frame < rangeEnd(range)
-}
-
-/**
- * Lengthen (positive delta) or shorten (negative delta) a range, keeping the
- * start fixed. Duration is clamped at 0 — a range can never have negative
- * duration. (Clip operations additionally enforce a 1-frame minimum; that
- * rule lives in domain/operations.ts, not here.)
- */
-export function growRange(range: TimeRange, deltaFrames: number): TimeRange {
-  return {
-    startFrame: range.startFrame,
-    durationFrames: Math.max(0, range.durationFrames + deltaFrames),
-  }
 }
 
 /**

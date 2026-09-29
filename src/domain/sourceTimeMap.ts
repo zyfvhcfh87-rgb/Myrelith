@@ -23,6 +23,7 @@ import type {
 import { MAX_KEYFRAME_FRAME } from './scalarAnimation'
 import { mapAnimationTrackKeyframes } from './animationTiming'
 import { mapAnimationCollections, type AnyAnimationTrack } from './animationCollections'
+import { gcd, isValidFrameRate } from './time'
 
 export const SOURCE_TIME_TICKS_PER_FRAME = 1_000_000 as const
 export const MIN_SOURCE_TIME_RATE: Readonly<SourceTimeRate> = Object.freeze({
@@ -46,13 +47,6 @@ const SPEED_EASING_SET = new Set<SourceTimeSpeedEasing>(SOURCE_TIME_SPEED_EASING
 
 const TICKS = BigInt(SOURCE_TIME_TICKS_PER_FRAME)
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER)
-
-function greatestCommonDivisor(left: number, right: number): number {
-  let a = Math.abs(left)
-  let b = Math.abs(right)
-  while (b !== 0) [a, b] = [b, a % b]
-  return a
-}
 
 function floorDiv(numerator: bigint, denominator: bigint): bigint {
   const quotient = numerator / denominator
@@ -87,7 +81,7 @@ export function canonicalSourceTimeRate(
       `Source-time rate terms must be positive safe integers at most ${MAX_SOURCE_TIME_RATE_TERM}`,
     )
   }
-  const divisor = greatestCommonDivisor(numerator, denominator)
+  const divisor = gcd(numerator, denominator)
   const rate = {
     numerator: numerator / divisor,
     denominator: denominator / divisor,
@@ -151,7 +145,7 @@ export function defaultSourceTimeSpeedCurve(): SourceTimeSpeedCurve {
   return { originFrame: 0, points: [] }
 }
 
-function speedCurveValidationError(
+export function sourceTimeSpeedCurveValidationError(
   curve: SourceTimeSpeedCurve | undefined,
 ): string | null {
   if (curve === undefined) return null
@@ -197,12 +191,6 @@ function speedCurveValidationError(
   return null
 }
 
-export function sourceTimeSpeedCurveValidationError(
-  curve: SourceTimeSpeedCurve | undefined,
-): string | null {
-  return speedCurveValidationError(curve)
-}
-
 function sourceTimeMapBaseValidationError(value: SourceTimeMap): string | null {
   if (
     !Number.isSafeInteger(value.sourceStartTicks)
@@ -218,7 +206,7 @@ function sourceTimeMapBaseValidationError(value: SourceTimeMap): string | null {
 
 export function sourceTimeMapValidationError(value: SourceTimeMap): string | null {
   return sourceTimeMapBaseValidationError(value)
-    ?? speedCurveValidationError(value.speedCurve)
+    ?? sourceTimeSpeedCurveValidationError(value.speedCurve)
 }
 
 export function sourceTimeRateFromPercent(percent: number): SourceTimeRate {
@@ -379,6 +367,9 @@ function integrateCurveForward(
   const points = curve.points
   let cursor = startFrame
   let ticks = 0n
+  // Validated point frames strictly increase and the cursor never moves
+  // back, so the containing segment index only ever advances.
+  let pointIndex = 0
   while (cursor < endFrame) {
     const first = points[0]!
     if (cursor < first.frame) {
@@ -388,13 +379,10 @@ function integrateCurveForward(
       continue
     }
 
-    let pointIndex = points.length - 1
-    for (let index = 0; index < points.length - 1; index++) {
-      if (cursor < points[index + 1]!.frame) {
-        pointIndex = index
-        break
-      }
-    }
+    while (
+      pointIndex < points.length - 1
+      && cursor >= points[pointIndex + 1]!.frame
+    ) pointIndex++
     const left = points[pointIndex]!
     const right = points[pointIndex + 1]
     if (!right) {
@@ -437,7 +425,7 @@ function validSpeedCurve(map: SourceTimeMap): SourceTimeSpeedCurve | null {
   const curve = map.speedCurve
   return curve
     && curve.points.length > 0
-    && speedCurveValidationError(curve) === null
+    && sourceTimeSpeedCurveValidationError(curve) === null
     ? curve
     : null
 }
@@ -448,7 +436,7 @@ export function sourceTimeMapUsesSpeedCurve(map: SourceTimeMap): boolean {
 
 export function sourceTimeMapHasInvalidSpeedCurve(map: SourceTimeMap): boolean {
   return map.speedCurve !== undefined
-    && speedCurveValidationError(map.speedCurve) !== null
+    && sourceTimeSpeedCurveValidationError(map.speedCurve) !== null
 }
 
 /** Exact fixed-point source position at one signed clip-local frame offset. */
@@ -557,33 +545,6 @@ export function sourceRangeForMap(
   const startFrame = safeNumber(floorDiv(startTicks, TICKS), 'Source-range start')
   const endFrame = safeNumber(ceilDiv(endTicks, TICKS), 'Source-range end')
   return { startFrame, durationFrames: endFrame - startFrame }
-}
-
-export function sourceSpanTicks(
-  map: SourceTimeMap,
-): number {
-  const error = sourceTimeMapValidationError(map)
-  if (error) throw new RangeError(error)
-  return map.sourceDurationTicks
-}
-
-/** Maximum whole timeline frames that fit in an exact source-tick capacity. */
-export function timelineFramesWithinSourceTicks(
-  availableSourceTicks: number,
-  rate: SourceTimeRate,
-): number {
-  if (!Number.isSafeInteger(availableSourceTicks) || availableSourceTicks < 0) {
-    throw new RangeError('Available source ticks must be a non-negative safe integer')
-  }
-  const error = sourceTimeRateValidationError(rate)
-  if (error) throw new RangeError(error)
-  return safeNumber(
-    floorDiv(
-      BigInt(availableSourceTicks) * BigInt(rate.denominator),
-      BigInt(rate.numerator) * TICKS,
-    ),
-    'Timeline capacity',
-  )
 }
 
 function mappedDeltaTicks(
@@ -758,7 +719,7 @@ export function sourceTimeSpeedPointsAtClip(
   map: SourceTimeMap,
 ): SourceTimeSpeedPoint[] {
   const curve = map.speedCurve
-  if (!curve || speedCurveValidationError(curve)) return []
+  if (!curve || sourceTimeSpeedCurveValidationError(curve)) return []
   return curve.points.map((point) => ({
     frame: point.frame - curve.originFrame,
     rate: { ...point.rate },
@@ -877,7 +838,7 @@ export function sourceTimeMapWithSpeedPoint(
   if (existingIndex >= 0) curve.points[existingIndex] = replacement
   else curve.points.push(replacement)
   curve.points.sort((left, right) => left.frame - right.frame)
-  const curveError = speedCurveValidationError(curve)
+  const curveError = sourceTimeSpeedCurveValidationError(curve)
   if (curveError) throw new RangeError(curveError)
   return next
 }
@@ -895,7 +856,7 @@ export function sourceTimeMapWithoutSpeedPoint(
   if (index < 0) return next
   curve.points.splice(index, 1)
   if (curve.points.length === 0) curve.originFrame = 0
-  const curveError = speedCurveValidationError(curve)
+  const curveError = sourceTimeSpeedCurveValidationError(curve)
   if (curveError) throw new RangeError(curveError)
   return next
 }
@@ -1083,12 +1044,6 @@ function constantStretchRate(
   return createConstantAudioStretchRate(rate)
 }
 
-export function sourceTimeMapIsConstantStretchCompatible(
-  map: SourceTimeMap,
-): boolean {
-  return constantStretchRate(map) !== null
-}
-
 export function sourceTimeAudioPolicy(clip: Clip): SourceTimeAudioPolicy {
   const map = clipSourceTimeMap(clip)
   if (sourceTimeMapValidationError(map)) {
@@ -1165,12 +1120,7 @@ export function clipAudioPresentation(clip: Clip): ClipAudioPresentation {
 }
 
 function assertPositiveRateTerms(rate: FrameRate, label: string): void {
-  if (
-    !Number.isSafeInteger(rate.num)
-    || !Number.isSafeInteger(rate.den)
-    || rate.num <= 0
-    || rate.den <= 0
-  ) {
+  if (!isValidFrameRate(rate)) {
     throw new RangeError(`${label} must use positive safe-integer terms`)
   }
 }

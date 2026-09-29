@@ -5,7 +5,6 @@ import {
   voiceoverLimitStop,
   MAX_VOICEOVER_COMPENSATION_SECONDS,
   planVoiceoverSampleWindow,
-  voiceoverCompensationFromFrames,
   voiceoverCountInWindow,
   voiceoverCountInCues,
   voiceoverStopBoundary,
@@ -121,12 +120,6 @@ describe('fixed-window voiceover trim and pad', () => {
 
   test('permits signed half-second offsets and rejects the next sample and bad ranges', () => {
     expect(MAX_VOICEOVER_COMPENSATION_SECONDS).toBe(0.5)
-    expect(voiceoverCompensationFromFrames(1, ntsc)).toBe(1_602)
-    expect(voiceoverCompensationFromFrames(-1, ntsc)).toBe(-1_602)
-    expect(voiceoverCompensationFromFrames(15, { frameRate: { num: 30, den: 1 },
-      audioSampleRate: 48_000 })).toBe(24_000)
-    expect(() => voiceoverCompensationFromFrames(15, ntsc)).toThrow(RangeError)
-    expect(() => voiceoverCompensationFromFrames(1.5, ntsc)).toThrow(RangeError)
     for (const value of [-24_000, 24_000]) {
       const result = planVoiceoverSampleWindow({ ...window, compensationSamples: value })
       expect(result.leadingSilenceSamples + result.sourceSamples + result.trailingSilenceSamples)

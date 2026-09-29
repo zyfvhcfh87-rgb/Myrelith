@@ -1,7 +1,7 @@
 /** Pinned capture intent and live destination checks; no media or project mutation. */
 import { planMediaAssetPlacement, type MediaPlacementRejection } from './mediaPlacement'
 import type { FrameRate, TimelineDoc } from './schema'
-import { rateEquals } from './time'
+import { isValidFrameRate, rateEquals } from './time'
 
 export interface VoiceoverDestinationContext {
   readonly projectId: string
@@ -34,11 +34,6 @@ function nonNegativeInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0
 }
 
-function validRate(rate: Readonly<FrameRate>): boolean {
-  return Number.isSafeInteger(rate.num) && rate.num > 0 &&
-    Number.isSafeInteger(rate.den) && rate.den > 0
-}
-
 /** Unknown duration checks the insertion frame; recheck the full take after import. */
 export function checkVoiceoverDestination(
   pinned: VoiceoverDestination,
@@ -54,7 +49,7 @@ export function checkVoiceoverDestination(
     return reject('stale-project')
   }
   if (pinned.sequenceId !== live.doc.id) return reject('stale-sequence')
-  if (!validRate(pinned.frameRate) || !validRate(live.doc.frameRate) ||
+  if (!isValidFrameRate(pinned.frameRate) || !isValidFrameRate(live.doc.frameRate) ||
     !Number.isSafeInteger(pinned.audioSampleRate) || pinned.audioSampleRate <= 0 ||
     !Number.isSafeInteger(live.doc.audioSampleRate) || live.doc.audioSampleRate <= 0) return reject('invalid-destination')
   if (!rateEquals(pinned.frameRate, live.doc.frameRate) || pinned.audioSampleRate !== live.doc.audioSampleRate) {

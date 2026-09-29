@@ -7,9 +7,7 @@ import type { Clip, TimelineDoc } from './schema'
 import {
   createVideoStabilizationSamplePlan,
   createVideoStabilizationPlan,
-  requiredVideoStabilizationSafeZoom,
-  sourceTicksToTimestamp,
-  timestampToSourceTicks,
+  reviewVideoStabilizationCoverage,
   VIDEO_STABILIZATION_ALGORITHM_VERSION,
   VIDEO_STABILIZATION_PROPERTIES,
   type VideoStabilizationAnalysis,
@@ -106,26 +104,6 @@ function analysis(
 }
 
 describe('video stabilization product planning', () => {
-  test('maps source timestamps with integer source-time arithmetic', () => {
-    expect(timestampToSourceTicks(0, doc().frameRate)).toBe(0)
-    expect(timestampToSourceTicks(33_333, doc().frameRate)).toBe(1_000_000)
-    expect(timestampToSourceTicks(33_334, doc().frameRate)).toBe(1_000_000)
-    expect(timestampToSourceTicks(1_000_000, doc().frameRate)).toBe(30_000_000)
-  })
-
-  test('converts conformed source ticks at the project rate instead of the native rate', () => {
-    const project30 = { num: 30, den: 1 }
-
-    expect(sourceTicksToTimestamp(30_000_000, project30, 'floor'))
-      .toBe(1_000_000)
-    expect(timestampToSourceTicks(1_000_000, project30))
-      .toBe(30_000_000)
-    expect(sourceTicksToTimestamp(1, project30, 'floor')).toBe(0)
-    expect(sourceTicksToTimestamp(1, project30, 'ceil')).toBe(1)
-    expect(() => timestampToSourceTicks(-1, project30))
-      .toThrow('outside the connected source')
-  })
-
   test.each([7_000, -7_000])(
     'normalizes first presentation timestamp %i to the rendered zero-relative timeline',
     (firstTimestampUs) => {
@@ -490,13 +468,13 @@ describe('video stabilization product planning', () => {
       item.transform,
       { ...item.transform, x: 18, y: -13, rotation: 24.5, scaleX: 1.82, scaleY: 1.82 },
     ]
-    const zoom = requiredVideoStabilizationSafeZoom(
+    const zoom = reviewVideoStabilizationCoverage(
       doc(item, 1_280, 720),
       item,
       source,
       transforms,
-    )
-    expect(zoom).not.toBeNull()
+    )?.safeZoom
+    expect(zoom).toBeDefined()
     expect(zoom!).toBeGreaterThanOrEqual(1)
   })
 
@@ -515,7 +493,7 @@ describe('video stabilization product planning', () => {
       },
     }
 
-    expect(requiredVideoStabilizationSafeZoom(doc(item), item, source, singlePass))
+    expect(reviewVideoStabilizationCoverage(doc(item), item, source, singlePass)?.safeZoom)
       .toBeGreaterThanOrEqual(1)
     expect(iteratorCount).toBe(1)
   })

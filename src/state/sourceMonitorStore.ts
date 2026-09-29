@@ -14,7 +14,6 @@ import {
   clearSourceIn,
   clearSourceMarks,
   clearSourceOut,
-  closeSourceMonitor,
   jumpSourceToEnd,
   jumpSourceToIn,
   jumpSourceToOut,
@@ -132,7 +131,7 @@ export const useSourceMonitorStore = create<SourceMonitorStore>()((set, get) => 
 
     closeSource: () => {
       set((state) => {
-        const session = closeSourceMonitor(state.session)
+        const session = null
         const playbackOwner = state.playbackOwner === 'source'
           ? 'none'
           : state.playbackOwner
