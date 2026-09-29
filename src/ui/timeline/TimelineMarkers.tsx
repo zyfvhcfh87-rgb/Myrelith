@@ -38,6 +38,12 @@ interface TimelineMarkersProps {
   readonly viewWidthPx: number
 }
 
+interface EdgeViewportPosition {
+  readonly beforeLeft: number
+  readonly afterLeft: number
+  readonly top: number
+}
+
 interface MarkerEditorProps {
   readonly marker: TimelineMarker
   readonly leftPx: number
@@ -189,11 +195,8 @@ export default function TimelineMarkers({
   const contextMenu = useEditorContextMenu()
   const rootRef = useRef<HTMLDivElement | null>(null)
   const previousSelectedRef = useRef<TimelineMarkerId | null>(null)
-  const [edgeViewportPosition, setEdgeViewportPosition] = useState<{
-    beforeLeft: number
-    afterLeft: number
-    top: number
-  } | null>(null)
+  const [edgeViewportPosition, setEdgeViewportPosition] =
+    useState<EdgeViewportPosition | null>(null)
   const selectedMarkerId = useTransportStore((state) => state.selectedMarkerId)
   const editingMarkerId = useTransportStore((state) => state.editingMarkerId)
   const selected = selectedMarkerId
@@ -221,11 +224,21 @@ export default function TimelineMarkers({
     const scrollerRect = scroller.getBoundingClientRect()
     const rulerRect = ruler.getBoundingClientRect()
     const headerRight = header?.getBoundingClientRect().right ?? scrollerRect.left
-    setEdgeViewportPosition({
+    const next = {
       beforeLeft: headerRight + 4,
       afterLeft: scrollerRect.right - 24,
       top: rulerRect.top + 3,
-    })
+    }
+    // Horizontal scrolling rarely moves these fixed edges; skip the extra
+    // render a fresh object would force on every ruler scroll frame.
+    setEdgeViewportPosition((current) => (
+      current
+      && current.beforeLeft === next.beforeLeft
+      && current.afterLeft === next.afterLeft
+      && current.top === next.top
+        ? current
+        : next
+    ))
   }, [viewLeftPx, viewWidthPx])
 
   const reveal = (marker: TimelineMarker): void => {
@@ -284,10 +297,9 @@ export default function TimelineMarkers({
   return (
     <div ref={rootRef} className="timeline-marker-layer" aria-label="Timeline markers">
       {clusters.map((cluster) => {
-        const selectedInCluster = cluster.markers.some(({ id }) => id === selectedMarkerId)
-        const marker = selectedInCluster && selected
-          ? selected
-          : cluster.representative
+        // The planner already promotes a selected member to representative.
+        const marker = cluster.representative
+        const selectedInCluster = marker.id === selectedMarkerId
         return (
           <button
             key={cluster.key}

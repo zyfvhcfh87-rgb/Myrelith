@@ -120,13 +120,6 @@ export function sourceTimeMapSpeedSegments(
   return segments
 }
 
-export function clipSpeedSegments(clip: Clip): ClipSpeedSegment[] {
-  return sourceTimeMapSpeedSegments(
-    clipSourceTimeMap(clip),
-    clip.timelineRange.durationFrames,
-  )
-}
-
 export function clipHasSpeedLane(clip: Clip): boolean {
   return sourceTimeMapUsesSpeedCurve(clipSourceTimeMap(clip))
 }

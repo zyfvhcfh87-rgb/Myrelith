@@ -35,7 +35,7 @@ import {
   calculateTimelineZoomGeometry,
   clampTimelineZoom,
   sliderPositionForZoom,
-  timelineRunwayFrames,
+  timelineDocumentRunwayFrames,
   zoomAtSliderPosition,
 } from './timelineZoom'
 import type { TimelineZoomGeometry } from './timelineZoom'
@@ -44,9 +44,25 @@ import {
   measureTimelineLaneWidth,
   planTimelineAnchor,
   planTimelineStart,
+  type TimelineViewportPlan,
 } from './timelineViewport'
 
 type ScrollAnchor = 'start' | 'playhead'
+
+/** Viewport for a zoom change, read from the live document and playhead. */
+function anchorPlan(
+  anchor: ScrollAnchor,
+  zoom: number,
+  laneWidth: number,
+): TimelineViewportPlan {
+  if (anchor === 'start') return planTimelineStart()
+  return planTimelineAnchor(
+    timelineDocumentRunwayFrames(useDocumentStore.getState().doc),
+    zoom,
+    laneWidth,
+    useTransportStore.getState().playheadFrame,
+  )
+}
 
 function sameGeometry(
   left: TimelineZoomGeometry,
@@ -92,23 +108,12 @@ export default function TimelineZoomControls() {
       const scroller = findTimelineScroller(rootRef.current)
       if (!scroller) return
 
-      const laneWidth = measureTimelineLaneWidth(scroller)
-      const doc = useDocumentStore.getState().doc
-      const totalFrames = timelineRunwayFrames(
-        timelineDisplayDurationFrames(doc),
-        doc.frameRate,
+      const initialPlan = anchorPlan(
+        anchor,
+        newZoom,
+        measureTimelineLaneWidth(scroller),
       )
-      const transport = useTransportStore.getState()
-      const initialPlan =
-        anchor === 'start'
-          ? planTimelineStart()
-          : planTimelineAnchor(
-              totalFrames,
-              newZoom,
-              laneWidth,
-              transport.playheadFrame,
-            )
-      transport.setTimelineOriginFrame(initialPlan.originFrame)
+      useTransportStore.getState().setTimelineOriginFrame(initialPlan.originFrame)
       const resetRevision = getTransportResetRevision()
 
       // The origin + zoom render commits before this frame. Only then read the
@@ -118,20 +123,12 @@ export default function TimelineZoomControls() {
         if (resetRevision !== getTransportResetRevision()) return
         const liveScroller = findTimelineScroller(rootRef.current)
         if (!liveScroller) return
-        const liveDoc = useDocumentStore.getState().doc
+        const livePlan = anchorPlan(
+          anchor,
+          newZoom,
+          measureTimelineLaneWidth(liveScroller),
+        )
         const liveTransport = useTransportStore.getState()
-        const livePlan =
-          anchor === 'start'
-            ? planTimelineStart()
-            : planTimelineAnchor(
-                timelineRunwayFrames(
-                  timelineDisplayDurationFrames(liveDoc),
-                  liveDoc.frameRate,
-                ),
-                newZoom,
-                measureTimelineLaneWidth(liveScroller),
-                liveTransport.playheadFrame,
-              )
         if (liveTransport.timelineOriginFrame !== livePlan.originFrame) {
           flushSync(() =>
             liveTransport.setTimelineOriginFrame(livePlan.originFrame),

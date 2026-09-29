@@ -7,6 +7,7 @@ import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../../domain/projectFile'
  * to the exact stored transition snapshot.
  */
 
+import { Profiler } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type {
@@ -25,6 +26,7 @@ import {
 } from '../../test/storeFixtures'
 import { EditorContextMenuHost } from '../EditorContextMenu'
 import Timeline from './Timeline'
+import TransitionSeam from './TransitionSeam'
 
 function makeClip(id: string, startFrame: number, durationFrames: number): Clip {
   return {
@@ -497,6 +499,29 @@ describe('timeline crossfade controls', () => {
     expect(documentState().doc).toBe(removed)
     expect(track('V1').transitions).toEqual([])
     expect(screen.getByTestId('transition-add-A-B')).toBeInTheDocument()
+  })
+
+  test('a closed seam stays idle on unrelated commits; an open editor follows them', () => {
+    const [from, to] = track('V1').clips
+    const renders = vi.fn()
+    render(
+      <Profiler id="seam" onRender={renders}>
+        <TransitionSeam trackId="V1" locked={false} from={from} to={to} />
+      </Profiler>,
+    )
+
+    renders.mockClear()
+    act(() => documentState().setTrackFlags('A1', { muted: true }))
+    expect(documentState().past).toHaveLength(1)
+    expect(renders).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('transition-add-A-B'))
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Visual crossfade available up to',
+    )
+    renders.mockClear()
+    act(() => documentState().setTrackFlags('A1', { muted: false }))
+    expect(renders).toHaveBeenCalled()
   })
 
   test('neighbor overlap reports an accessible error, then a touching D4 adds once', () => {
