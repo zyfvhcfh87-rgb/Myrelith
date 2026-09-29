@@ -13,6 +13,7 @@ import {
   clipVisualSettingsValidationError,
   transformScaleValidationError,
 } from './clipInspector'
+import { errorMessage } from './errors'
 import {
   trackingSamplesToAnimationTracks,
   type TrackingAnimationSample,
@@ -400,7 +401,7 @@ export function createMotionTrackingPlan(
       })),
     }))
   } catch (cause) {
-    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+    return { ok: false, reason: errorMessage(cause) }
   }
   const owned = new Set(tracks.map((track) => track.property))
   const replacementRequired = clipAnimation(targetClip).tracks.some((track) => owned.has(track.property))

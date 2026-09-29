@@ -18,6 +18,7 @@ import {
   type AudioFeatureCacheEntry,
   type DerivedAnalysisCacheEntry,
 } from '../domain/analysisCache'
+import { errorMessage } from '../domain/errors'
 import { audioFeatureKeyPreimage, type AudioFeatureIdentity } from '../domain/multicamAlignmentProvenance'
 import { writeFileHandle } from './fileSystemAccess'
 
@@ -99,10 +100,6 @@ function unavailable(cause: unknown): boolean {
     || cause.name === 'InvalidStateError'
     || cause.name === 'NotSupportedError'
   )
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 function exactResultFileName(value: string): boolean {

@@ -7,6 +7,7 @@
  * tests without pretending that file handles are JSON-serializable.
  */
 
+import { hasErrorName } from '../domain/errors'
 import {
   LEGACY_PROJECT_FILE_EXTENSION,
   parseProjectFile,
@@ -21,7 +22,6 @@ import {
   legacyLocalProjectBindingId,
 } from './localProjectProvenance'
 import { isLocalProjectBindingId } from '../domain/localProjectBinding'
-import { hasErrorName } from './fileSystemAccess'
 import {
   createCachedDatabase,
   requestInTransaction,

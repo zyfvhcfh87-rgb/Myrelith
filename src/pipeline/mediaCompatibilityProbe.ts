@@ -20,6 +20,7 @@ import {
   refineVideoDecoderBudget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
+import { errorMessage, throwIfAborted, truncateText } from '../domain/errors'
 import type {
   MediaCompatibilityReport,
   MediaDecoderConfigSummary,
@@ -118,15 +119,7 @@ type ProbeFallbackBudget = Pick<
   'fileBytes' | 'durationMicroseconds'
 >
 
-function makeAbortError(): Error {
-  const error = new Error('Media compatibility check was cancelled')
-  error.name = 'AbortError'
-  return error
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw makeAbortError()
-}
+const PROBE_CANCELLED = 'Media compatibility check was cancelled'
 
 function descriptionByteLength(
   description: AllowSharedBufferSource | undefined,
@@ -136,15 +129,10 @@ function descriptionByteLength(
   return (description as ArrayBuffer).byteLength
 }
 
-function boundedDiagnosticText(value: string, maxCharacters: number): string {
-  if (value.length <= maxCharacters) return value
-  return `${value.slice(0, maxCharacters - 1)}…`
-}
-
 function boundedDiagnosticToken(value: string | null): string | null {
   return value === null
     ? null
-    : boundedDiagnosticText(value, MAX_DIAGNOSTIC_TOKEN_CHARACTERS)
+    : truncateText(value, MAX_DIAGNOSTIC_TOKEN_CHARACTERS)
 }
 
 function decoderCodecProblem(
@@ -172,10 +160,7 @@ function videoConfigSummary(
 ): MediaDecoderConfigSummary | null {
   if (!config) return null
   return {
-    codec: boundedDiagnosticText(
-      config.codec,
-      MAX_DIAGNOSTIC_TOKEN_CHARACTERS,
-    ),
+    codec: truncateText(config.codec, MAX_DIAGNOSTIC_TOKEN_CHARACTERS),
     descriptionBytes: descriptionByteLength(config.description),
     codedWidth: config.codedWidth ?? null,
     codedHeight: config.codedHeight ?? null,
@@ -189,10 +174,7 @@ function audioConfigSummary(
 ): MediaDecoderConfigSummary | null {
   if (!config) return null
   return {
-    codec: boundedDiagnosticText(
-      config.codec,
-      MAX_DIAGNOSTIC_TOKEN_CHARACTERS,
-    ),
+    codec: truncateText(config.codec, MAX_DIAGNOSTIC_TOKEN_CHARACTERS),
     descriptionBytes: descriptionByteLength(config.description),
     codedWidth: null,
     codedHeight: null,
@@ -206,10 +188,7 @@ function serializeInternalCodecId(
 ): string | null {
   if (value === null) return null
   if (typeof value === 'string' || typeof value === 'number') {
-    return boundedDiagnosticText(
-      String(value),
-      MAX_DIAGNOSTIC_TOKEN_CHARACTERS,
-    )
+    return truncateText(String(value), MAX_DIAGNOSTIC_TOKEN_CHARACTERS)
   }
   const shown = value.subarray(0, 64)
   const hex = Array.from(shown, (byte) => byte.toString(16).padStart(2, '0'))
@@ -395,7 +374,7 @@ async function probeVideoTrack(
       track.getDisplayHeight(),
       track.computePacketStats(FPS_SAMPLE_PACKETS),
     ])
-    throwIfAborted(signal)
+    throwIfAborted(signal, PROBE_CANCELLED)
 
     const decoderConfigSummary = videoConfigSummary(decoderConfig)
     const problem = (
@@ -455,17 +434,14 @@ async function probeVideoTrack(
         }, signal)
         decodable = support.decodable
         decoderPath = support.path
-        throwIfAborted(signal)
+        throwIfAborted(signal, PROBE_CANCELLED)
         if (support.decodable === false) {
           reason = support.failure.reason
           detail = support.failure.detail
         }
       } catch (cause) {
-        if (signal?.aborted) throw makeAbortError()
-        const failure = boundedDiagnosticText(
-          cause instanceof Error ? cause.message : String(cause),
-          MAX_DIAGNOSTIC_DETAIL_CHARACTERS,
-        )
+        throwIfAborted(signal, PROBE_CANCELLED)
+        const failure = truncateText(errorMessage(cause), MAX_DIAGNOSTIC_DETAIL_CHARACTERS)
         reason = 'decode-failed'
         detail = `The video decoder compatibility check failed: ${failure}`
       }
@@ -495,11 +471,8 @@ async function probeVideoTrack(
       decoderConfig,
     }
   } catch (cause) {
-    if (signal?.aborted) throw makeAbortError()
-    const detail = boundedDiagnosticText(
-      cause instanceof Error ? cause.message : String(cause),
-      MAX_DIAGNOSTIC_DETAIL_CHARACTERS,
-    )
+    throwIfAborted(signal, PROBE_CANCELLED)
+    const detail = truncateText(errorMessage(cause), MAX_DIAGNOSTIC_DETAIL_CHARACTERS)
     return {
       report: emptyTrack(
         'video',
@@ -536,7 +509,7 @@ async function probeAudioTrack(
       track.getSampleRate(),
       track.getNumberOfChannels(),
     ])
-    throwIfAborted(signal)
+    throwIfAborted(signal, PROBE_CANCELLED)
 
     const decoderConfigSummary = audioConfigSummary(decoderConfig)
     const problem = (
@@ -585,17 +558,14 @@ async function probeAudioTrack(
         }, signal)
         decodable = support.decodable
         decoderPath = support.path
-        throwIfAborted(signal)
+        throwIfAborted(signal, PROBE_CANCELLED)
         if (support.decodable === false) {
           reason = support.failure.reason
           detail = support.failure.detail
         }
       } catch (cause) {
-        if (signal?.aborted) throw makeAbortError()
-        const failure = boundedDiagnosticText(
-          cause instanceof Error ? cause.message : String(cause),
-          MAX_DIAGNOSTIC_DETAIL_CHARACTERS,
-        )
+        throwIfAborted(signal, PROBE_CANCELLED)
+        const failure = truncateText(errorMessage(cause), MAX_DIAGNOSTIC_DETAIL_CHARACTERS)
         reason = 'decode-failed'
         detail = `The audio decoder compatibility check failed: ${failure}`
       }
@@ -624,11 +594,8 @@ async function probeAudioTrack(
       },
     }
   } catch (cause) {
-    if (signal?.aborted) throw makeAbortError()
-    const detail = boundedDiagnosticText(
-      cause instanceof Error ? cause.message : String(cause),
-      MAX_DIAGNOSTIC_DETAIL_CHARACTERS,
-    )
+    throwIfAborted(signal, PROBE_CANCELLED)
+    const detail = truncateText(errorMessage(cause), MAX_DIAGNOSTIC_DETAIL_CHARACTERS)
     return {
       report: emptyTrack(
         'audio',
@@ -720,7 +687,7 @@ async function probeOpenedInput(
   sourceId: string,
   signal?: AbortSignal,
 ): Promise<ProbeCoreResult> {
-  throwIfAborted(signal)
+  throwIfAborted(signal, PROBE_CANCELLED)
   if (!(await input.canRead())) {
     return fileFailure(
       'unsupported',
@@ -728,13 +695,13 @@ async function probeOpenedInput(
       `"${fileName}" is not a supported media container.`,
     )
   }
-  throwIfAborted(signal)
+  throwIfAborted(signal, PROBE_CANCELLED)
 
   const [format, allTracks] = await Promise.all([
     input.getFormat(),
     input.getTracks(),
   ])
-  throwIfAborted(signal)
+  throwIfAborted(signal, PROBE_CANCELLED)
   let container = {
     name: format.name,
     mimeType: format.mimeType,
@@ -810,7 +777,7 @@ async function probeOpenedInput(
       primaryVideo ? input.getFirstTimestamp([primaryVideo]) : Promise.resolve(null),
       primaryAudio ? input.getFirstTimestamp([primaryAudio]) : Promise.resolve(null),
     ])
-  throwIfAborted(signal)
+  throwIfAborted(signal, PROBE_CANCELLED)
   const fallbackBudget: ProbeFallbackBudget = {
     fileBytes,
     durationMicroseconds: Number.isFinite(durationSec) && durationSec > 0
@@ -836,7 +803,7 @@ async function probeOpenedInput(
             signal,
           )
     ))
-  throwIfAborted(signal)
+  throwIfAborted(signal, PROBE_CANCELLED)
 
   const primaryMetadata = {
     video: primaryVideoDurationSec === null || primaryVideoFirstSec === null
@@ -943,7 +910,7 @@ export async function probeMediaFile(
   assetId: string,
   signal?: AbortSignal,
 ): Promise<MediaProbeResult> {
-  throwIfAborted(signal)
+  throwIfAborted(signal, PROBE_CANCELLED)
   beginMediaDecoderSource(assetId)
   if (!Number.isSafeInteger(file.size) || file.size <= 0) {
     const compatibility = fileFailure(
@@ -988,7 +955,7 @@ export async function probeMediaFile(
       signal,
     )
   } catch (cause) {
-    if (signal?.aborted) throw makeAbortError()
+    throwIfAborted(signal, PROBE_CANCELLED)
     if (cause instanceof UnsupportedInputFormatError) {
       core = fileFailure(
         'unsupported',
@@ -996,10 +963,7 @@ export async function probeMediaFile(
         `"${file.name}" is not a supported media container.`,
       )
     } else {
-      const detail = boundedDiagnosticText(
-        cause instanceof Error ? cause.message : String(cause),
-        MAX_DIAGNOSTIC_DETAIL_CHARACTERS,
-      )
+      const detail = truncateText(errorMessage(cause), MAX_DIAGNOSTIC_DETAIL_CHARACTERS)
       core = fileFailure(
         'error',
         'malformed-media',

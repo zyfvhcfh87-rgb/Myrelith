@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { errorMessage } from '../domain/errors'
 import { docDurationFrames } from '../domain/selectors'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
@@ -209,7 +210,7 @@ export default function ProxyEditingBenchmarkPanel() {
     try {
       setResult(await measureCurrentRepresentation())
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      setError(errorMessage(cause))
     } finally {
       setRunning(false)
     }

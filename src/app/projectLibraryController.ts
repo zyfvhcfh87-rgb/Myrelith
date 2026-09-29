@@ -22,6 +22,7 @@ import {
   localDerivedStorage,
   type DisposableStorageEstimate,
 } from './localDerivedStorage'
+import { errorMessage } from '../domain/errors'
 
 interface BrowserStorageEstimate {
   usage: number | null
@@ -69,10 +70,6 @@ const realDeps: ProjectLibraryControllerDeps = {
   estimateBrowserStorage,
   estimateDisposableStorage: () => localDerivedStorage.estimate(),
   clearDisposableStorage: () => localDerivedStorage.clear(),
-}
-
-function messageFrom(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 export class ProjectLibraryController {
@@ -123,7 +120,7 @@ export class ProjectLibraryController {
       await this.refresh(true)
       return true
     } catch (cause) {
-      this.publishError(`Could not remove the recent project: ${messageFrom(cause)}`)
+      this.publishError(`Could not remove the recent project: ${errorMessage(cause)}`)
       return false
     }
   }
@@ -135,7 +132,7 @@ export class ProjectLibraryController {
       await this.refresh(true)
       return true
     } catch (cause) {
-      this.publishError(`Could not discard the recovery copy: ${messageFrom(cause)}`)
+      this.publishError(`Could not discard the recovery copy: ${errorMessage(cause)}`)
       return false
     }
   }
@@ -169,7 +166,7 @@ export class ProjectLibraryController {
       await this.refresh(true)
       return true
     } catch (cause) {
-      this.publishError(`Could not clear disposable local data: ${messageFrom(cause)}`)
+      this.publishError(`Could not clear disposable local data: ${errorMessage(cause)}`)
       return false
     }
   }
@@ -221,10 +218,10 @@ export class ProjectLibraryController {
     ]))
     const errors: string[] = []
     if (recentResult.status === 'rejected') {
-      errors.push(`Recent projects: ${messageFrom(recentResult.reason)}`)
+      errors.push(`Recent projects: ${errorMessage(recentResult.reason)}`)
     }
     if (recoveryResult.status === 'rejected') {
-      errors.push(`Recovery copies: ${messageFrom(recoveryResult.reason)}`)
+      errors.push(`Recovery copies: ${errorMessage(recoveryResult.reason)}`)
     }
     const storageErrors: string[] = []
     if (browserStorageResult.status === 'rejected') {

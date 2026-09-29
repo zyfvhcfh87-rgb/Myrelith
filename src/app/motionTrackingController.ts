@@ -6,6 +6,7 @@ import {
   type AnalysisSourceProvenance,
 } from '../domain/analysisCache'
 import { clipVisualSettings } from '../domain/clipInspector'
+import { errorMessage } from '../domain/errors'
 import {
   DEFAULT_MOTION_ANALYSIS_BUDGET,
   MOTION_ANALYSIS_ALGORITHM_VERSION,
@@ -533,7 +534,7 @@ export async function analyzeMotionTracking(
       request.direction,
     )
   } catch (cause) {
-    throw new MotionAnalysisError('unsupported-runtime', cause instanceof Error ? cause.message : String(cause), cause)
+    throw new MotionAnalysisError('unsupported-runtime', errorMessage(cause), cause)
   }
   const snapshot = sourceSnapshot(doc, clip, source, request)
   const sourceMappingDigest = await jsonDigest(clipSourceTimeMap(clip))

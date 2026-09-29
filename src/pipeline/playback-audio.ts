@@ -16,6 +16,7 @@ import {
 } from 'mediabunny'
 import {
   MediaAssetRuntimeError,
+  mediaAssetRuntimeError,
   type MediaRuntimeFailure,
 } from '../domain/mediaCompatibility'
 import {
@@ -71,6 +72,7 @@ import {
   measureAudioMeterSample,
 } from '../domain/audioMeter'
 import { foldPlanarBlockToStereo } from '../domain/audioChannelMix'
+import { throwIfAborted } from '../domain/errors'
 import { sourceTicksToSeconds } from '../domain/sourceTimeMap'
 import {
   AUDIO_STRETCH_MAX_SESSIONS,
@@ -91,31 +93,6 @@ export const PLAYBACK_EQUAL_POWER_CURVE_POINTS = 129
 
 const TIME_EPSILON = 1e-7
 const EMPTY_SOURCE_BOUNDS: SourceBoundsCatalog = new Map()
-
-function runtimeFailureDetail(cause: unknown): string {
-  const detail = cause instanceof Error ? cause.message : String(cause)
-  return detail.slice(0, 2_048)
-}
-
-function playbackAssetError(
-  assetId: AssetId,
-  reason: MediaRuntimeFailure['reason'],
-  cause: unknown,
-  trackKind: MediaRuntimeFailure['trackKind'] = null,
-): MediaAssetRuntimeError {
-  if (
-    cause instanceof MediaAssetRuntimeError
-    && cause.assetId === assetId
-    && cause.failure.surface === 'audio-playback'
-    && cause.failure.trackKind === trackKind
-  ) return cause
-  return new MediaAssetRuntimeError(assetId, {
-    surface: 'audio-playback',
-    trackKind,
-    reason,
-    detail: runtimeFailureDetail(cause),
-  }, cause)
-}
 
 export interface ResolvedPlaybackAsset {
   blob: Blob
@@ -789,7 +766,7 @@ export function createMediabunnyPlaybackAudioSource(
       try {
         resolved = await resolveAsset(assetId)
       } catch (cause) {
-        throw playbackAssetError(assetId, 'resource-unavailable', cause)
+        throw mediaAssetRuntimeError(assetId, 'audio-playback', null, 'resource-unavailable', cause)
       }
       const { blob } = resolved
       if (closed) throw new Error('Playback audio source is closed')
@@ -801,7 +778,7 @@ export function createMediabunnyPlaybackAudioSource(
           formats: ALL_FORMATS,
         })
       } catch (cause) {
-        throw playbackAssetError(assetId, 'resource-unavailable', cause)
+        throw mediaAssetRuntimeError(assetId, 'audio-playback', null, 'resource-unavailable', cause)
       }
       openInputs.add(input)
       try {
@@ -826,11 +803,12 @@ export function createMediabunnyPlaybackAudioSource(
           ),
         })
         if (!support.decodable) {
-          throw playbackAssetError(
+          throw mediaAssetRuntimeError(
             assetId,
+            'audio-playback',
+            'audio',
             support.failure.reason,
             new Error(support.failure.detail),
-            'audio',
           )
         }
         if (closed) throw new Error('Playback audio source is closed')
@@ -1681,12 +1659,6 @@ const realDeps: PlaybackAudioDeps = {
   pumpIntervalMs: PLAYBACK_AUDIO_PUMP_INTERVAL_MS,
 }
 
-function abortedError(): Error {
-  const error = new Error('Playback audio startup was cancelled')
-  error.name = 'AbortError'
-  return error
-}
-
 function validateDeps(deps: PlaybackAudioDeps): void {
   if (!Number.isFinite(deps.lookaheadSeconds) || deps.lookaheadSeconds <= 0) {
     throw new RangeError('Audio lookahead must be positive')
@@ -2297,13 +2269,13 @@ export async function startTimelineAudioPlayback(
   options.signal?.addEventListener('abort', abortHandler, { once: true })
 
   try {
-    if (options.signal?.aborted) throw abortedError()
+    throwIfAborted(options.signal, 'Playback audio startup was cancelled')
     const initialEnd = Math.min(
       durationTime,
       fromTime + deps.lookaheadSeconds,
     )
     const initialEvents = await prepareInterval(fromTime, initialEnd)
-    if (options.signal?.aborted) throw abortedError()
+    throwIfAborted(options.signal, 'Playback audio startup was cancelled')
 
     const minimumLead = options.minimumStartLeadSeconds ?? 0
     if (!Number.isFinite(minimumLead) || minimumLead < 0) {

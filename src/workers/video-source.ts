@@ -18,6 +18,7 @@ import {
   Input,
   VideoSampleSink,
 } from 'mediabunny'
+import { runtimeFailureDetail } from '../domain/errors'
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { InputVideoTrack } from 'mediabunny'
 import {
@@ -135,8 +136,7 @@ export class WorkerVideoSourceOpenError extends Error {
   readonly failure: WorkerVideoSourceOpenFailure
 
   constructor(failure: WorkerVideoSourceOpenFailure, cause: unknown) {
-    const detail = cause instanceof Error ? cause.message : String(cause)
-    super(detail.slice(0, 2_048), { cause })
+    super(runtimeFailureDetail(cause), { cause })
     this.name = 'WorkerVideoSourceOpenError'
     this.failure = failure
   }

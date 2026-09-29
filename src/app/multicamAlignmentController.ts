@@ -1,3 +1,4 @@
+import { errorMessage } from '../domain/errors'
 import { alignmentRateIsSupported, type AudioAlignmentResult } from '../domain/multicamAlignment'
 import { applyMulticamDefinitionEdit, type MulticamDefinitionEditCommand } from '../domain/multicamOperations'
 import { alignTimecodes } from '../domain/multicamTimecode'
@@ -172,7 +173,7 @@ export class MulticamAlignmentController {
               facts: null, fromCache: false })
           } catch (cause) {
             if (!this.current(session)) return
-            const detail = cause instanceof Error ? cause.message : String(cause)
+            const detail = errorMessage(cause)
             if (i === 0) throw new Error(`Reference timecode unavailable: ${detail}`)
             rows.push({ angleId: angle.id, name: angle.name, currentFrame: angle.coverage.startFrame,
               proposedFrame: null, state: 'unavailable', detail, facts: null, fromCache: false })
@@ -189,7 +190,7 @@ export class MulticamAlignmentController {
       if (useMulticamAlignmentStore.getState().phase === 'cancelled' || useMulticamAlignmentStore.getState().phase === 'stale') return
       this.session = null
       useMulticamAlignmentStore.setState({ definitionId: settings.definitionId, phase: 'error', rows: [],
-        detail: cause instanceof Error ? cause.message : String(cause) })
+        detail: errorMessage(cause) })
     }
   }
   apply(offsets: readonly { angleId: string; coverageStartFrame: number }[]): boolean {

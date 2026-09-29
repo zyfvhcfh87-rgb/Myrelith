@@ -10,6 +10,7 @@ import { createTimelineDoc, type ProjectSettings } from '../../domain/projectSet
 import type { MediaCompatibilityItem, MediaCompatibilityReport, MediaCompatibilityStatus } from '../../domain/mediaCompatibility';
 import type { FrameRate, MediaAsset, TimelineDoc } from '../../domain/schema';
 import type { MediaCollection } from '../../domain/mediaCollections';
+import { errorMessage as messageFrom } from '../../domain/errors';
 import { useDocumentStore } from '../../state/documentStore';
 import { useMediaStore } from '../../state/mediaStore';
 import { INITIAL_ACTIVE_MEDIA_RELINK, INITIAL_PROJECT_SESSION_STATE, type MediaRelinkAmbiguitySummary, type ResumeProjectSummary, useProjectSessionStore } from '../../state/projectSessionStore';
@@ -116,10 +117,6 @@ interface ActiveMediaRelinkWork {
 let activeMediaRelinkWork: ActiveMediaRelinkWork | null = null
 let activeMediaRelinkGeneration = 0
 let activeMediaRelinkToken = 0
-
-function messageFrom(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
-}
 
 function compatibilityFailureReport(
   fileName: string,

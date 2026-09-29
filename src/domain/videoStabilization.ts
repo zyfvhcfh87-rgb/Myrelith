@@ -24,6 +24,7 @@ import {
 } from './motionAnalysis'
 import { isProceduralTitleClip } from './textOverlay'
 import { MAX_ANALYSIS_SAMPLES } from './analysisCache'
+import { errorMessage } from './errors'
 import { VIDEO_STABILIZATION_PROPERTIES } from './framingProperties'
 import type {
   Clip,
@@ -847,7 +848,7 @@ export function createVideoStabilizationPlan(
       settings.smoothingRadiusFrames,
     )
   } catch (cause) {
-    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+    return { ok: false, reason: errorMessage(cause) }
   }
   const map = clipSourceTimeMap(clip)
   const frames: VideoStabilizationFrame[] = []
@@ -880,7 +881,7 @@ export function createVideoStabilizationPlan(
       })
     }
   } catch (cause) {
-    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+    return { ok: false, reason: errorMessage(cause) }
   }
   if (frames.length < 2) {
     return { ok: false, reason: 'The analyzed source does not map to at least two unique clip frames.' }
@@ -895,7 +896,7 @@ export function createVideoStabilizationPlan(
       frames,
     )
   } catch (cause) {
-    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+    return { ok: false, reason: errorMessage(cause) }
   }
   const simplified = repeatSafeFrames
     ? simplifyVideoStabilizationFrames(doc, clip, source, repeatSafeFrames)
@@ -915,7 +916,7 @@ export function createVideoStabilizationPlan(
       transformsAtEveryClipFrame(clip.timelineRange.durationFrames, simplified),
     )
   } catch (cause) {
-    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+    return { ok: false, reason: errorMessage(cause) }
   }
   if (coverage === null || coverage.safeZoom > MAX_STABILIZATION_SAFE_ZOOM) {
     return {

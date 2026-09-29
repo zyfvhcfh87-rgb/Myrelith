@@ -7,7 +7,6 @@
  * entering Zustand or the serialized `.myrelith` contract.
  */
 
-import { hasErrorName } from './fileSystemAccess'
 import {
   createCachedDatabase,
   requestInTransaction,
@@ -17,6 +16,7 @@ import {
   legacyDocumentIdForBinding,
   legacyLocalProjectBindingId,
 } from './localProjectProvenance'
+import { hasErrorName } from '../domain/errors'
 
 export type LocalMediaPermission = 'granted' | 'denied' | 'prompt'
 

@@ -1,3 +1,4 @@
+import { errorMessage } from '../domain/errors'
 import {
   MAX_PROXY_CACHE_ENTRIES,
   PROXY_CACHE_SCHEMA_VERSION,
@@ -66,10 +67,6 @@ function emptyManifest(): ProxyCacheManifest {
 
 function notFound(cause: unknown): boolean {
   return cause instanceof DOMException && cause.name === 'NotFoundError'
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 export class ProxyStorage {

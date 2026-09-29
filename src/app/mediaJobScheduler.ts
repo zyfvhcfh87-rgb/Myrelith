@@ -8,6 +8,7 @@
  */
 
 import { mediaResourceAdmission } from './mediaResourceAdmission'
+import { errorMessage, truncateText } from '../domain/errors'
 
 export type MediaJobPriority = 'background' | 'visible' | 'selected'
 
@@ -155,12 +156,6 @@ function finitePositive(value: number, label: string): number {
   return value
 }
 
-function errorDetail(cause: unknown): string {
-  const detail = cause instanceof Error ? cause.message : String(cause)
-  if (detail.length <= MAX_DIAGNOSTIC_DETAIL_CHARACTERS) return detail
-  return `${detail.slice(0, MAX_DIAGNOSTIC_DETAIL_CHARACTERS - 1)}…`
-}
-
 function failureRecord(
   request: MediaJobRequest,
   cause: unknown,
@@ -169,7 +164,7 @@ function failureRecord(
     id: request.id,
     generation: request.generation,
     code: cause instanceof MediaJobExecutionError ? cause.code : 'unexpected',
-    detail: errorDetail(cause),
+    detail: truncateText(errorMessage(cause), MAX_DIAGNOSTIC_DETAIL_CHARACTERS),
   }
 }
 

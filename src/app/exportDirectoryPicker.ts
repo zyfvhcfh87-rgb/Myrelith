@@ -3,7 +3,8 @@
  * The handle is a one-shot app-owned capability and never enters Zustand.
  */
 
-import { hasErrorName, writeFileHandle } from './fileSystemAccess'
+import { writeFileHandle } from './fileSystemAccess'
+import { hasErrorName } from '../domain/errors'
 
 export interface ExportDirectoryPickerHost {
   readonly isSecureContext?: boolean

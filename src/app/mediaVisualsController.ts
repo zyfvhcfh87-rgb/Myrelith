@@ -5,6 +5,7 @@
  * successful transfer.
  */
 
+import { abortError, errorMessage, throwIfAborted } from '../domain/errors'
 import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import {
@@ -23,6 +24,7 @@ import {
   type StaticImageThumbnailOptions,
 } from '../pipeline/static-image-thumbnail'
 import {
+  MEDIA_VISUAL_CANCELLED,
   MediaVisualDecodeError,
   MediaVisualSourceError,
   generateFilmstrip,
@@ -114,16 +116,6 @@ const state: ControllerState = {
   viewport: null,
   poolVisibleAssetIds: EMPTY_VISIBLE_ASSETS,
   nextGeneration: 0,
-}
-
-function abortError(): Error {
-  const error = new Error('Media visual generation was cancelled')
-  error.name = 'AbortError'
-  return error
-}
-
-function throwIfAborted(signal: AbortSignal): void {
-  if (signal.aborted) throw abortError()
 }
 
 function isCancellation(cause: unknown, signal: AbortSignal): boolean {
@@ -240,7 +232,7 @@ function jobFailure(
   reason: MediaRuntimeFailure['reason'],
   cause: unknown,
 ): MediaJobExecutionError {
-  const detail = cause instanceof Error ? cause.message : String(cause)
+  const detail = errorMessage(cause)
   return new MediaJobExecutionError(reason, detail, cause)
 }
 
@@ -272,7 +264,7 @@ async function process(
   try {
     blob = await deps.fetchBlob(asset.objectUrl, signal)
   } catch (cause) {
-    if (isCancellation(cause, signal)) throw abortError()
+    if (isCancellation(cause, signal)) throw abortError(MEDIA_VISUAL_CANCELLED)
     if (!connectedAssetStillMatches(asset)) return
     reportFailureAndThrow(
       record,
@@ -287,7 +279,7 @@ async function process(
       cause,
     )
   }
-  throwIfAborted(signal)
+  throwIfAborted(signal, MEDIA_VISUAL_CANCELLED)
   if (!connectedAssetStillMatches(asset)) return
   context.reportProgress(0.15)
 
@@ -336,7 +328,7 @@ async function process(
     : null
   if (signal.aborted) {
     revokeGenerated(filmstrip, waveform)
-    throw abortError()
+    throw abortError(MEDIA_VISUAL_CANCELLED)
   }
 
   const failure = filmstripResult.status === 'rejected'
@@ -356,7 +348,7 @@ async function process(
     // Compatibility owns the complete connected source. A confirmed runtime
     // failure disconnects it, so a successful sibling URL must be released.
     revokeGenerated(filmstrip, waveform)
-    if (isCancellation(failure.cause, signal)) throw abortError()
+    if (isCancellation(failure.cause, signal)) throw abortError(MEDIA_VISUAL_CANCELLED)
     if (!connectedAssetStillMatches(asset)) return
     reportFailureAndThrow(
       record,

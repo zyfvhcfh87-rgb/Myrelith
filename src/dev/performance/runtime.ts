@@ -32,6 +32,7 @@ import {
   defaultClipAudioSettings,
   defaultClipVisualSettings,
 } from '../../domain/clipInspector'
+import { errorMessage } from '../../domain/errors'
 import { exportPresetById } from '../../domain/exportProfile'
 import type { PortableAssetDescriptor } from '../../domain/projectFile'
 import type {
@@ -728,10 +729,6 @@ export async function collectChromiumProcessMemoryEvidence(
     reason: null,
     samples,
   }
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 function sleep(milliseconds: number): Promise<void> {

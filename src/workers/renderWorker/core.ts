@@ -14,6 +14,7 @@ import {
   videoCompositionRequestKey,
 } from '../../domain/videoCompositionPlan';
 import { supportsCanvasEffectFilter, supportsCanvasEffectPixels } from '../../domain/effectStack';
+import { errorMessage } from '../../domain/errors'
 import { analyzeVideoScopes, VIDEO_SCOPE_SAMPLE_HEIGHT, VIDEO_SCOPE_SAMPLE_WIDTH } from '../../domain/videoScopes';
 import { renderWorkSurfaceBudget } from '../../domain/renderSurfaceBudget';
 import type { Composite2D, FrameSource, RenderFrameSource, TransitionSurfaceProvider, TransitionSurfaces, VideoEffectStageExecutor } from '../../pipeline/render';
@@ -444,7 +445,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         } catch (cause) {
           lensOwnerTerminal = true
           lensRemapAvailability = lensUnavailable(
-            cause instanceof Error ? cause.message : String(cause),
+            errorMessage(cause),
           )
         }
       }
@@ -462,7 +463,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     } catch (cause) {
       lensRemapProvider = null
       lensRemapAvailability = lensUnavailable(
-        cause instanceof Error ? cause.message : String(cause),
+        errorMessage(cause),
       )
     }
 
@@ -508,7 +509,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           canvasSyncPending = false
           syncCanvases()
         }).catch((error) => {
-          env.post({ type: 'error', message: `Render surface configuration failed: ${error instanceof Error ? error.message : String(error)}` })
+          env.post({ type: 'error', message: `Render surface configuration failed: ${errorMessage(error)}` })
         })
       }
       return
@@ -1405,7 +1406,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         type: 'error',
         requestId,
         assetId: entry.assetId,
-        message: `streaming playback failed: ${error instanceof Error ? error.message : String(error)}`,
+        message: `streaming playback failed: ${errorMessage(error)}`,
       })
       return null
     }
@@ -1453,7 +1454,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           type: 'error',
           requestId,
           assetId: entry.assetId,
-          message: `streaming seek failed: ${error instanceof Error ? error.message : String(error)}`,
+          message: `streaming seek failed: ${errorMessage(error)}`,
         })
       }
       return null

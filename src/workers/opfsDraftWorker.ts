@@ -4,6 +4,8 @@
  * request handling. Browser-worker only; imports nothing from pipeline/.
  */
 
+import { errorMessage } from '../domain/errors'
+
 type SyncAccessFileHandle<T> = FileSystemFileHandle & {
   createSyncAccessHandle(): Promise<T>
 }
@@ -129,7 +131,7 @@ export function serveSerializedRequests<
       } catch (cause) {
         reply = { requestId: data.requestId, error: {
           name: cause instanceof Error ? cause.name : 'Error',
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: errorMessage(cause),
         } }
       }
       try {
@@ -137,7 +139,7 @@ export function serveSerializedRequests<
       } catch (cause) {
         post({ requestId: data.requestId, error: {
           name: 'DataCloneError',
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: errorMessage(cause),
         } })
       }
     }).catch(() => {

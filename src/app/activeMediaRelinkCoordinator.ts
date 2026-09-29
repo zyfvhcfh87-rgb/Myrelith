@@ -1,3 +1,4 @@
+import { errorMessage } from '../domain/errors'
 import type {
   MediaCompatibilityItem,
   MediaCompatibilityReport,
@@ -87,10 +88,6 @@ export interface ActiveMediaRelinkCoordinatorDeps {
   releaseSelection(): void
   store: ActiveMediaRelinkStorePort
   progress: ActiveMediaRelinkProgressPort
-}
-
-function messageFrom(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 function candidateFailureMessage(
@@ -331,7 +328,7 @@ export function createActiveMediaRelinkCoordinator(
           } catch (cause) {
             if (deps.isCurrent()) {
               deps.progress.warning(
-                `Reconnected "${currentDescriptor.fileName}", but could not remember it: ${messageFrom(cause)}`,
+                `Reconnected "${currentDescriptor.fileName}", but could not remember it: ${errorMessage(cause)}`,
               )
             }
           }
@@ -354,8 +351,8 @@ export function createActiveMediaRelinkCoordinator(
           )
         }
         const message = selection.kind === 'folder'
-          ? `Could not reconnect "${selection.displayPath}": ${messageFrom(cause)}`
-          : `Could not reconnect "${initialDescriptor.fileName}": ${messageFrom(cause)}`
+          ? `Could not reconnect "${selection.displayPath}": ${errorMessage(cause)}`
+          : `Could not reconnect "${initialDescriptor.fileName}": ${errorMessage(cause)}`
         const visibleMessage = selection.kind === 'folder'
           && deps.isProbeCancellation(cause)
             ? undefined

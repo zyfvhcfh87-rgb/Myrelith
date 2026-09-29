@@ -1,5 +1,6 @@
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import { audioFeatureIdentity, type AudioFeatureCacheEntry } from '../domain/analysisCache'
+import { errorMessage } from '../domain/errors'
 import { correlateAudioFingerprints, decodeAudioFingerprint, encodeAudioFingerprint,
   MULTICAM_ALIGNMENT_LIMITS as LIMITS, type AudioAlignmentResult, type AudioFingerprint } from '../domain/multicamAlignment'
 import { audioFeatureKeyPreimage, audioPairKeyPreimage, type AudioFeatureIdentity } from '../domain/multicamAlignmentProvenance'
@@ -182,7 +183,7 @@ export class AudioAlignmentService {
         } catch (cause) {
           current()
           cached = null
-          warnings.push(`Cache unavailable for ${source.asset.fileName}: ${cause instanceof Error ? cause.message : String(cause)}`)
+          warnings.push(`Cache unavailable for ${source.asset.fileName}: ${errorMessage(cause)}`)
         }
         current()
         if (cached) {
@@ -215,7 +216,7 @@ export class AudioAlignmentService {
             if (transaction) await transaction.rollback()
             if (staged) await staged.discard()
             current()
-            warnings.push(`Could not cache ${source.asset.fileName}: ${cause instanceof Error ? cause.message : String(cause)}`)
+            warnings.push(`Could not cache ${source.asset.fileName}: ${errorMessage(cause)}`)
           }
         }
       } finally { worker.close() }

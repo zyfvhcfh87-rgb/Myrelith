@@ -8,6 +8,7 @@ import {
   type AnalysisClipAttachment,
   type AnalysisSourceProvenance,
 } from '../domain/analysisCache'
+import { errorMessage } from '../domain/errors'
 import type { MediaAsset } from '../domain/schema'
 import type {
   MotionAnalysisWorkerRunMessage,
@@ -324,7 +325,7 @@ function publicError(cause: unknown): MotionAnalysisError {
   }
   return new MotionAnalysisError(
     'unexpected',
-    cause instanceof Error ? cause.message : String(cause),
+    errorMessage(cause),
     cause,
   )
 }

@@ -27,6 +27,7 @@ import {
 } from './export-mediabunny-profile'
 import {
   exportAudioChannelCount,
+  throwIfCapabilityCheckAborted,
   type ExportCapabilityProbe,
 } from './export-capabilities'
 
@@ -38,14 +39,6 @@ const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
 }
 
 const REPRESENTATIVE_AUDIO_PROBE_SAMPLES = EXPORT_AUDIO_BLOCK_SAMPLES * 2
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (!signal?.aborted) return
-  if (signal.reason instanceof Error) throw signal.reason
-  const error = new Error('Export capability check was canceled')
-  error.name = 'AbortError'
-  throw error
-}
 
 function audioProbeFrameCount(doc: TimelineDoc, totalFrames: number): number {
   if (
@@ -86,7 +79,7 @@ export async function runFreshMediabunnyExportProbe(
   includeAudio: boolean,
   signal?: AbortSignal,
 ): Promise<void> {
-  throwIfAborted(signal)
+  throwIfCapabilityCheckAborted(signal)
   if (includeAudio && profile.audioChannelLayout === 'off') {
     throw new TypeError(
       'An audio-off profile cannot run an audio capability probe',
@@ -169,10 +162,10 @@ export async function runFreshMediabunnyExportProbe(
 
   try {
     await output.start()
-    throwIfAborted(signal)
+    throwIfCapabilityCheckAborted(signal)
 
     for (let frame = 0; frame < probeFrameCount; frame++) {
-      throwIfAborted(signal)
+      throwIfCapabilityCheckAborted(signal)
       const audioWrite = async (): Promise<void> => {
         if (!audioSource || !audioProfile) return
         const channels = audioChannelCount
@@ -182,7 +175,7 @@ export async function runFreshMediabunnyExportProbe(
           startSample < frameEndSample;
           startSample += EXPORT_AUDIO_BLOCK_SAMPLES
         ) {
-          throwIfAborted(signal)
+          throwIfCapabilityCheckAborted(signal)
           const sampleCount = Math.min(
             EXPORT_AUDIO_BLOCK_SAMPLES,
             frameEndSample - startSample,
@@ -211,11 +204,11 @@ export async function runFreshMediabunnyExportProbe(
     }
 
     if (aacAssembler) {
-      throwIfAborted(signal)
+      throwIfCapabilityCheckAborted(signal)
       await aacAssembler.flush(writeAudioProbeChunk)
     }
 
-    throwIfAborted(signal)
+    throwIfCapabilityCheckAborted(signal)
     videoSource.close()
     audioSource?.close()
     await output.finalize()

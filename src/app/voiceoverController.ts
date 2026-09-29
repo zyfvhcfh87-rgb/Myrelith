@@ -2,6 +2,7 @@
  * UI facade for microphone voiceover. Components call these functions; the
  * capture owner, recovery worker, streams, and file handles stay app-owned.
  */
+import { errorMessage } from '../domain/errors'
 import { MAX_VOICEOVER_COMPENSATION_SECONDS } from '../domain/voiceoverClock'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
@@ -94,7 +95,7 @@ export async function refreshVoiceoverDrafts(): Promise<void> {
   } catch (cause) {
     if (token !== surveyToken) return
     useVoiceoverDraftStore.setState({ busy: false,
-      error: cause instanceof Error ? cause.message : String(cause) })
+      error: errorMessage(cause) })
   }
 }
 
@@ -102,7 +103,7 @@ async function draftAction(run: () => Promise<VoiceoverDraftAction>): Promise<Vo
   useVoiceoverDraftStore.setState({ busy: true, error: null })
   let result: VoiceoverDraftAction
   try { result = await run() }
-  catch (cause) { result = { status: 'failed', message: cause instanceof Error ? cause.message : String(cause) } }
+  catch (cause) { result = { status: 'failed', message: errorMessage(cause) } }
   useVoiceoverDraftStore.setState({ lastAction: result })
   await refreshVoiceoverDrafts()
   return result

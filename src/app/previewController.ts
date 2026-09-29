@@ -55,6 +55,7 @@ import {
   createSourceBoundsCatalog,
   type SourceBoundsCatalog,
 } from '../domain/crossfadePlan'
+import { errorMessage } from '../domain/errors'
 import {
   createVideoCompositionPlanner,
   videoCompositionRequests,
@@ -802,7 +803,7 @@ function scheduleRender(deps: PreviewDeps): void {
       }, (cause) => {
         if (state.renderGeneration !== generation || state.bridge !== bridge
           || state.presentationGeneration !== presentationGeneration) return
-        usePreviewStatusStore.getState().setRenderError(previewRenderFailureMessage(cause instanceof Error ? cause.message : String(cause)))
+        usePreviewStatusStore.getState().setRenderError(previewRenderFailureMessage(errorMessage(cause)))
         console.warn('[previewController] render failed:', cause instanceof Error ? cause.message : cause)
       })
   })

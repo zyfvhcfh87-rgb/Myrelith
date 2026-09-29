@@ -11,6 +11,7 @@ import {
 import { getMotionAnalysisController } from '../app/motionAnalysisRuntime'
 import { clipAnimation, evaluateAnimationTrack } from '../domain/clipAnimation'
 import { clipVisualSettings } from '../domain/clipInspector'
+import { errorMessage } from '../domain/errors'
 import type { Clip, Transform } from '../domain/schema'
 import {
   VIDEO_STABILIZATION_PROPERTIES,
@@ -41,10 +42,6 @@ function previewTransform(plan: VideoStabilizationPlan, localFrame: number): Tra
     scaleX: value('scale-x', first.scaleX),
     scaleY: value('scale-y', first.scaleY),
   }
-}
-
-function failureMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 export default function StabilizationEditor({
@@ -146,7 +143,7 @@ export default function StabilizationEditor({
     } catch (cause) {
       if (generation !== analysisGeneration.current) return
       setPhase('error')
-      setMessage(failureMessage(cause))
+      setMessage(errorMessage(cause))
     }
   }
 

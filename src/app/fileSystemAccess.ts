@@ -1,7 +1,7 @@
 /**
  * Small shared seams over the File System Access API. Handles stay with their
- * app-layer owners; these helpers only normalize error names, read-permission
- * checks, and the write → close / abort-on-failure contract.
+ * app-layer owners; these helpers only normalize read-permission checks and
+ * the write → close / abort-on-failure contract.
  */
 
 export type FileSystemReadPermission = 'granted' | 'denied' | 'prompt'
@@ -19,14 +19,6 @@ export interface WritableFileStreamLike {
 
 export interface WritableFileHandleLike<S extends WritableFileStreamLike> {
   createWritable(options?: { keepExistingData?: boolean }): Promise<S>
-}
-
-/** True for a DOMException (or any error-shaped value) with this exact name. */
-export function hasErrorName(cause: unknown, name: string): boolean {
-  return typeof cause === 'object'
-    && cause !== null
-    && 'name' in cause
-    && cause.name === name
 }
 
 /** Browsers without the permission methods grant read access implicitly. */

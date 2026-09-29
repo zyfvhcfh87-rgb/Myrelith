@@ -29,6 +29,7 @@ import { useMediaStore } from '../state/mediaStore'
 import { useVoiceoverCaptureStore } from '../state/voiceoverCaptureStore'
 import { useAvCaptureStore } from '../state/avCaptureStore'
 import { avCaptureSessionIsTerminal } from '../domain/avCaptureSession'
+import { errorMessage } from '../domain/errors'
 import { VoiceoverWavBridge } from './voiceoverWavBridge'
 import type {
   LocalMediaFileHandle,
@@ -96,10 +97,6 @@ export interface VoiceoverDraftSurvey {
 }
 
 export type { VoiceoverDraftAction }
-
-function failureMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
-}
 
 export class VoiceoverDraftRecovery {
   private readonly deps: VoiceoverDraftRecoveryDeps
@@ -202,7 +199,7 @@ export class VoiceoverDraftRecovery {
     try {
       references = await this.deps.allRememberedHandles()
     } catch (cause) {
-      throw new Error(`Could not read remembered media handles: ${failureMessage(cause)}`)
+      throw new Error(`Could not read remembered media handles: ${errorMessage(cause)}`)
     }
     return references.map(({ projectBindingId, assetId, handle }) => ({
       fileName: handle.name,
@@ -281,7 +278,7 @@ export class VoiceoverDraftRecovery {
         let note: string | undefined
         try { await this.deps.rememberHandle?.(binding, imported.assetId, finalized.handle) }
         catch (cause) {
-          note = `The recording is in the Media Pool, but its browser grant could not be saved: ${failureMessage(cause)}`
+          note = `The recording is in the Media Pool, but its browser grant could not be saved: ${errorMessage(cause)}`
         }
         return { status: 'recovered', assetId: imported.assetId, sizeBytes: classification.sizeBytes,
           ...(note ? { note } : {}) }
@@ -289,7 +286,7 @@ export class VoiceoverDraftRecovery {
         this.forget(bridge)
       }
     } catch (cause) {
-      return { status: 'failed', message: failureMessage(cause) }
+      return { status: 'failed', message: errorMessage(cause) }
     }
   }
 
@@ -320,7 +317,7 @@ export class VoiceoverDraftRecovery {
       await this.storeFor(classification.fileName).discardId(draftId)
       return { status: 'discarded', sizeBytes: classification.sizeBytes }
     } catch (cause) {
-      return { status: 'failed', message: failureMessage(cause) }
+      return { status: 'failed', message: errorMessage(cause) }
     }
   }
 
@@ -353,7 +350,7 @@ export class VoiceoverDraftRecovery {
     try {
       handle = await this.deps.loadHandle(binding, assetId)
     } catch (cause) {
-      return { status: 'failed', message: `Could not read the remembered original: ${failureMessage(cause)}` }
+      return { status: 'failed', message: `Could not read the remembered original: ${errorMessage(cause)}` }
     }
     if (!handle) {
       return { status: 'rejected', reason: 'No remembered original for this asset' }
@@ -362,7 +359,7 @@ export class VoiceoverDraftRecovery {
     try {
       survey = await this.surveyNow()
     } catch (cause) {
-      return { status: 'failed', message: failureMessage(cause) }
+      return { status: 'failed', message: errorMessage(cause) }
     }
     if (
       lifecycle !== this.lifecycle
@@ -392,7 +389,7 @@ export class VoiceoverDraftRecovery {
     try {
       isOriginal = await this.deps.isRecordingOriginal(classification.fileName, handle)
     } catch (cause) {
-      return { status: 'failed', message: `Could not verify the recording original: ${failureMessage(cause)}` }
+      return { status: 'failed', message: `Could not verify the recording original: ${errorMessage(cause)}` }
     }
     if (!isOriginal) {
       return { status: 'rejected', reason: 'The remembered file is not this recording original' }
@@ -410,7 +407,7 @@ export class VoiceoverDraftRecovery {
     try {
       await this.storeFor(classification.fileName).discardId(classification.id)
     } catch (cause) {
-      return { status: 'failed', message: `The original file could not be deleted: ${failureMessage(cause)}` }
+      return { status: 'failed', message: `The original file could not be deleted: ${errorMessage(cause)}` }
     }
     let note: string | undefined
     try {
@@ -420,7 +417,7 @@ export class VoiceoverDraftRecovery {
     } catch (cause) {
       // The file is already deleted; the stale grant self-heals on the next
       // resume, so report the removal with the cleanup caveat.
-      note = `The original was deleted, but its browser grant could not be forgotten: ${failureMessage(cause)}`
+      note = `The original was deleted, but its browser grant could not be forgotten: ${errorMessage(cause)}`
     }
     if (this.projectIsCurrent(binding, projectGeneration, documentSnapshot)) {
       for (const referencedAssetId of classification.assetIds) {

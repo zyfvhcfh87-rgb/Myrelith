@@ -6,6 +6,7 @@
  * stale preview/audio/export work is therefore harmless after a relink.
  */
 
+import { runtimeFailureDetail } from '../domain/errors'
 import {
   withMediaRuntimeFailure,
   type MediaRuntimeFailure,
@@ -22,11 +23,6 @@ export interface MediaRuntimeGuard {
 }
 
 let runtimeRequestId = 0
-
-function detailFrom(cause: unknown): string {
-  const detail = cause instanceof Error ? cause.message : String(cause)
-  return detail.slice(0, 2_048)
-}
 
 export function captureMediaRuntimeGuard(
   assetId: string,
@@ -48,7 +44,7 @@ export function mediaRuntimeFailure(
   cause: unknown,
   reason: MediaRuntimeFailure['reason'] = 'decode-failed',
 ): MediaRuntimeFailure {
-  return { surface, trackKind, reason, detail: detailFrom(cause) }
+  return { surface, trackKind, reason, detail: runtimeFailureDetail(cause) }
 }
 
 /** Atomically expose a confirmed asset failure and leave its descriptor offline. */

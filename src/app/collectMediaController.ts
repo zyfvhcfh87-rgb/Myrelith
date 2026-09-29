@@ -21,6 +21,7 @@ import {
   type CollectMediaPreflightItem,
   type CollectMediaSourceFact,
 } from '../domain/collectMedia'
+import { errorMessage } from '../domain/errors'
 import {
   createProjectFileSnapshot,
   serializeProjectFile,
@@ -179,7 +180,7 @@ function messageFrom(cause: unknown): string {
   if (isCollectMediaPermissionFailure(cause)) {
     return 'Write permission to the destination was lost.'
   }
-  return cause instanceof Error ? cause.message : String(cause)
+  return errorMessage(cause)
 }
 
 function stopRemaining(

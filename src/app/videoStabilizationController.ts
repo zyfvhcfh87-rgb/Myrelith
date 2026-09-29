@@ -6,6 +6,7 @@ import {
   type AnalysisSourceProvenance,
 } from '../domain/analysisCache'
 import { clipVisualSettings } from '../domain/clipInspector'
+import { errorMessage } from '../domain/errors'
 import {
   DEFAULT_MOTION_ANALYSIS_BUDGET,
   estimateGlobalMotion,
@@ -470,7 +471,7 @@ export async function analyzeVideoStabilization(clipId: ClipId): Promise<VideoSt
   } catch (cause) {
     throw new MotionAnalysisError(
       'unsupported-runtime',
-      cause instanceof Error ? cause.message : String(cause),
+      errorMessage(cause),
       cause,
     )
   }

@@ -22,6 +22,7 @@ import {
   validateDeliveryProfile,
   type DeliveryProfile,
 } from '../domain/deliveryProduct'
+import { hasErrorName } from '../domain/errors'
 import type { TimelineDoc } from '../domain/schema'
 import { fullResolutionPresentationProfile } from '../domain/presentationProfile'
 import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
@@ -410,10 +411,7 @@ async function cleanupExport(
 }
 
 export function isQuotaExceededCause(cause: unknown): boolean {
-  return typeof cause === 'object'
-    && cause !== null
-    && 'name' in cause
-    && (cause.name === 'QuotaExceededError' || cause.name === 'NS_ERROR_DOM_QUOTA_REACHED')
+  return hasErrorName(cause, 'QuotaExceededError', 'NS_ERROR_DOM_QUOTA_REACHED')
 }
 
 export async function* exportTimeline(

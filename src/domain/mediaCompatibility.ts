@@ -4,6 +4,7 @@
  * resources, so compatibility never leaks into TimelineDoc or persistence.
  */
 
+import { runtimeFailureDetail } from './errors'
 import type {
   FrameRate,
   MediaAsset,
@@ -351,6 +352,31 @@ export class MediaAssetRuntimeError extends Error {
     this.assetId = assetId
     this.failure = failure
   }
+}
+
+/**
+ * Attribute `cause` to one asset, surface and track. A cause already
+ * attributed to exactly that asset, surface and track passes through unchanged.
+ */
+export function mediaAssetRuntimeError(
+  assetId: string,
+  surface: MediaRuntimeSurface,
+  trackKind: MediaRuntimeFailure['trackKind'],
+  reason: MediaRuntimeFailure['reason'],
+  cause: unknown,
+): MediaAssetRuntimeError {
+  if (
+    cause instanceof MediaAssetRuntimeError
+    && cause.assetId === assetId
+    && cause.failure.surface === surface
+    && cause.failure.trackKind === trackKind
+  ) return cause
+  return new MediaAssetRuntimeError(assetId, {
+    surface,
+    trackKind,
+    reason,
+    detail: runtimeFailureDetail(cause),
+  }, cause)
 }
 
 /** Preserve probe facts while marking only the implicated primary track. */

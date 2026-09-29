@@ -21,6 +21,7 @@ import CaptionStyleTools from './CaptionStyleTools'
 import CaptionImportPanel from './CaptionImportPanel'
 import CaptionExportPanel from './CaptionExportPanel'
 import { CAPTION_STYLE_PRESETS, CAPTION_TRACK_ROLES, createCaptionTrack } from '../domain/captions'
+import { errorMessage } from '../domain/errors'
 import type { CaptionItem, CaptionItemId, CaptionTrack, CaptionTrackId } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
@@ -35,10 +36,6 @@ export interface CaptionEditorProps {
 
 function id(prefix: 'caption_track' | 'caption_item'): string {
   return `${prefix}_${crypto.randomUUID()}`
-}
-
-function errorMessage(value: unknown): string {
-  return value instanceof Error ? value.message : String(value)
 }
 
 function formatCue(item: CaptionItem): string {

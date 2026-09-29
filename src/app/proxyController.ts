@@ -1,4 +1,5 @@
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
+import { errorMessage } from '../domain/errors'
 import {
   DEFAULT_PROXY_PARAMETERS,
   PROXY_GENERATOR_VERSION,
@@ -144,10 +145,6 @@ function endAssetMutation(assetId: string): void {
   }
   pendingAssetMutationCounts.delete(assetId)
   state.quiescingAssets.delete(assetId)
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 export async function fingerprintProxyOriginal(

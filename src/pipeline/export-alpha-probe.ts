@@ -14,6 +14,7 @@ import {
   ALL_FORMATS,
 } from 'mediabunny'
 import type { AlphaVideoCodec } from '../domain/deliveryProduct'
+import { errorMessage } from '../domain/errors'
 
 export interface AlphaCapabilityResult {
   readonly codec: AlphaVideoCodec
@@ -166,7 +167,7 @@ export async function provePngSequenceSupport(): Promise<{
   } catch (cause) {
     return {
       supported: false,
-      reason: cause instanceof Error ? cause.message : String(cause),
+      reason: errorMessage(cause),
     }
   } finally {
     canvas.width = 1

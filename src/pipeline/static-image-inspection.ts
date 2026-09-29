@@ -7,6 +7,8 @@
  * dimensions because encoded metadata is not proof that decoding will agree.
  */
 
+import { abortError, throwIfAborted } from '../domain/errors'
+
 export const STATIC_IMAGE_RESOURCE_LIMITS = Object.freeze({
   maxFileBytes: 256 * 1024 * 1024,
   maxHeaderBytes: 4 * 1024 * 1024,
@@ -207,15 +209,7 @@ function resolvedLimits(
   return Object.freeze(limits)
 }
 
-function makeAbortError(): Error {
-  const error = new Error('Static image inspection was cancelled')
-  error.name = 'AbortError'
-  return error
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw makeAbortError()
-}
+const INSPECTION_CANCELLED = 'Static image inspection was cancelled'
 
 function hasBytes(bytes: Uint8Array, expected: readonly number[]): boolean {
   if (bytes.length < expected.length) return false
@@ -1513,7 +1507,7 @@ export async function inspectStaticImageBlob(
   options: InspectStaticImageBlobOptions = {},
 ): Promise<StaticImageInspection> {
   const limits = resolvedLimits(options.limits)
-  throwIfAborted(options.signal)
+  throwIfAborted(options.signal, INSPECTION_CANCELLED)
   if (!Number.isSafeInteger(blob.size) || blob.size < 0) {
     inspectionError(
       'malformed-image',
@@ -1526,7 +1520,7 @@ export async function inspectStaticImageBlob(
   let removeAbortListener = (): void => {}
   const aborted = options.signal
     ? new Promise<never>((_resolve, reject) => {
-        const onAbort = (): void => reject(makeAbortError())
+        const onAbort = (): void => reject(abortError(INSPECTION_CANCELLED))
         options.signal?.addEventListener('abort', onAbort, { once: true })
         removeAbortListener = () => {
           options.signal?.removeEventListener('abort', onAbort)
@@ -1535,7 +1529,7 @@ export async function inspectStaticImageBlob(
     : null
   try {
     const buffer = await (aborted ? Promise.race([read, aborted]) : read)
-    throwIfAborted(options.signal)
+    throwIfAborted(options.signal, INSPECTION_CANCELLED)
     return inspectStaticImageBytesWithLimits(
       new Uint8Array(buffer),
       blob.size,

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import type { MediaAsset } from './schema'
 import {
   MediaAssetRuntimeError,
+  mediaAssetRuntimeError,
   partialTrackImportOption,
   reapplyPartialTrackImport,
   withMediaRuntimeFailure,
@@ -168,6 +169,31 @@ describe('runtime media compatibility', () => {
     expect(error.failure).toBe(failure)
     expect(error.message).toBe(failure.detail)
     expect(error.cause).toBe(cause)
+  })
+
+  test('runtime error attribution passes through only an exact asset, surface and track match', () => {
+    const cause = new Error('x'.repeat(3_000))
+    const wrapped = mediaAssetRuntimeError('asset-audio', 'export', 'audio', 'decode-failed', cause)
+    expect(wrapped.failure).toEqual({
+      surface: 'export',
+      trackKind: 'audio',
+      reason: 'decode-failed',
+      detail: 'x'.repeat(2_048),
+    })
+    expect(wrapped.cause).toBe(cause)
+
+    expect(mediaAssetRuntimeError('asset-audio', 'export', 'audio', 'resource-limit', wrapped))
+      .toBe(wrapped)
+    const otherSurface = mediaAssetRuntimeError(
+      'asset-audio', 'audio-playback', 'audio', 'resource-limit', wrapped,
+    )
+    expect(otherSurface).not.toBe(wrapped)
+    expect(otherSurface.failure.surface).toBe('audio-playback')
+    expect(otherSurface.failure.reason).toBe('resource-limit')
+    expect(mediaAssetRuntimeError('asset-audio', 'export', null, 'decode-failed', wrapped))
+      .not.toBe(wrapped)
+    expect(mediaAssetRuntimeError('other-asset', 'export', 'audio', 'decode-failed', wrapped))
+      .not.toBe(wrapped)
   })
 })
 

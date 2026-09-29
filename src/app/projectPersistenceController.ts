@@ -7,6 +7,7 @@
  * document/media changes are written back after a short debounce.
  */
 
+import { errorMessage, hasErrorName } from '../domain/errors'
 import {
   createProjectFileSnapshot,
   PROJECT_FILE_EXTENSION,
@@ -171,17 +172,6 @@ const realDeps: ProjectPersistenceDeps = {
       projectBindingId: bookmark.projectBindingId,
     })
   },
-}
-
-function messageFrom(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
-}
-
-function isPickerCancellation(cause: unknown): boolean {
-  return typeof cause === 'object'
-    && cause !== null
-    && 'name' in cause
-    && cause.name === 'AbortError'
 }
 
 /** Windows-safe, extension-stable default for both picker and fallback. */
@@ -402,7 +392,7 @@ export class ProjectPersistenceController {
       // must still be present when the browser checks this call.
       target = await this.deps.pickSaveFile(this.suggestedFileName())
     } catch (cause) {
-      if (isPickerCancellation(cause)) {
+      if (hasErrorName(cause, 'AbortError')) {
         this.finishCancelledOperation(operation)
         return { status: 'cancelled' }
       }
@@ -617,7 +607,7 @@ export class ProjectPersistenceController {
         recoveryError: null,
       })
     } catch (cause) {
-      const message = `Could not clear the recovery copy: ${messageFrom(cause)}`
+      const message = `Could not clear the recovery copy: ${errorMessage(cause)}`
       if (this.operationIsCurrent(operation)) {
         useProjectSessionStore.setState({
           recoveryPhase: 'error',
@@ -651,7 +641,7 @@ export class ProjectPersistenceController {
     operation: SaveOperation,
     cause: unknown,
   ): { status: 'failed'; message: string } {
-    const message = `Could not save the project: ${messageFrom(cause)}`
+    const message = `Could not save the project: ${errorMessage(cause)}`
     if (this.operationIsCurrent(operation)) {
       const hasUnsavedChanges = this.revision !== this.persistedRevision
       this.operation = null
@@ -728,7 +718,7 @@ export class ProjectPersistenceController {
       ) {
         useProjectSessionStore.setState({
           recoveryPhase: 'error',
-          recoveryError: `Could not update the recovery copy: ${messageFrom(cause)}`,
+          recoveryError: `Could not update the recovery copy: ${errorMessage(cause)}`,
         })
       }
       return
@@ -776,7 +766,7 @@ export class ProjectPersistenceController {
       ) {
         useProjectSessionStore.setState({
           recoveryPhase: 'error',
-          recoveryError: `Could not update the recovery copy: ${messageFrom(cause)}`,
+          recoveryError: `Could not update the recovery copy: ${errorMessage(cause)}`,
         })
       }
     } finally {

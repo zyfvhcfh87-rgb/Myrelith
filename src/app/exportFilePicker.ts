@@ -11,7 +11,7 @@ import {
   parseExportSettings,
   type ExportSettingsUnion,
 } from '../domain/deliveryProduct'
-import { hasErrorName } from './fileSystemAccess'
+import { hasErrorName } from '../domain/errors'
 
 export interface ExportSaveFilePickerOptions {
   readonly suggestedName: string

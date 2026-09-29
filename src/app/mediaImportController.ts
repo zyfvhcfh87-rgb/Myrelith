@@ -7,6 +7,7 @@
  * successful commit; every other terminal path revokes it here.
  */
 
+import { errorMessage } from '../domain/errors'
 import type {
   MediaCompatibilityItem,
   MediaCompatibilityReport,
@@ -174,8 +175,8 @@ let activeImport: ActiveImport | null = null
 let activeBatch: ActiveImportBatch | null = null
 const retainedImports = new Map<string, RetainedImport>()
 
-function errorMessage(fileName: string, cause: unknown): string {
-  const detail = cause instanceof Error ? cause.message : String(cause)
+function importFailureMessage(fileName: string, cause: unknown): string {
+  const detail = errorMessage(cause)
   return `Could not import "${fileName}": ${detail}`
 }
 
@@ -183,7 +184,7 @@ function unexpectedCompatibility(
   fileName: string,
   cause: unknown,
 ): MediaCompatibilityReport {
-  const detail = cause instanceof Error ? cause.message : String(cause)
+  const detail = errorMessage(cause)
   return {
     status: 'error',
     container: null,
@@ -502,7 +503,7 @@ async function importSelectedMedia(
     if (activeImport !== operation || operation.cancelled) {
       return { status: 'cancelled' }
     }
-    const message = errorMessage(file.name, cause)
+    const message = importFailureMessage(file.name, cause)
     if (!probeReturned && deps.hasCompatibility(itemId, requestId)) {
       const report = unexpectedCompatibility(file.name, cause)
       deps.setCompatibility(itemId, requestId, 'error', report)
@@ -729,7 +730,7 @@ export async function chooseMediaForImport(
     return importMediaSelections(selections, deps)
   } catch (cause) {
     if (isLocalMediaPickerCancellation(cause)) return { status: 'cancelled' }
-    const detail = cause instanceof Error ? cause.message : String(cause)
+    const detail = errorMessage(cause)
     const message = `Could not choose media: ${detail}`
     useMediaImportStore.setState({
       phase: 'error',

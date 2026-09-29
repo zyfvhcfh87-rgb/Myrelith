@@ -1,5 +1,6 @@
 import { openAudioAlignmentSource } from '../pipeline/audioAlignmentDecode'
 import type { AudioAlignmentWorkerRequest, AudioAlignmentWorkerReply } from '../pipeline/audioAlignmentProtocol'
+import { runtimeFailureDetail } from '../domain/errors'
 
 let source: Awaited<ReturnType<typeof openAudioAlignmentSource>> | null = null
 let phase: 'idle' | 'opening' | 'ready' | 'decoding' | 'done' = 'idle'
@@ -26,6 +27,6 @@ self.onmessage = (event: MessageEvent<AudioAlignmentWorkerRequest>) => {
     source?.close()
     source = null
     phase = 'done'
-    send({ type: 'failure', detail: (cause instanceof Error ? cause.message : String(cause)).slice(0, 2048) })
+    send({ type: 'failure', detail: runtimeFailureDetail(cause) })
   })
 }

@@ -3,15 +3,14 @@
  * controllers. Each caller keeps its own messages, limits and ordering.
  */
 
+import { truncateText } from '../domain/errors'
 import type { PluginParameter } from '../domain/pluginManifest'
 
 /** Longest detail string a plugin controller projects into public state. */
 const MAX_PUBLIC_DETAIL_CHARACTERS = 512
 
 export function boundedDetail(value: string): string {
-  return value.length <= MAX_PUBLIC_DETAIL_CHARACTERS
-    ? value
-    : `${value.slice(0, MAX_PUBLIC_DETAIL_CHARACTERS - 1)}…`
+  return truncateText(value, MAX_PUBLIC_DETAIL_CHARACTERS)
 }
 
 /** Rethrow one cleanup failure unchanged, or all of them together. */

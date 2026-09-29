@@ -16,6 +16,7 @@ import {
   motionAnalysisSourceOpenFailureCode,
   validateMotionAnalysisWorkerRunMessage,
 } from '../pipeline/motionAnalysisProtocol'
+import { runtimeFailureDetail } from '../domain/errors'
 
 interface PendingWindow {
   readonly windowIndex: number
@@ -63,11 +64,6 @@ function failureCode(cause: unknown): MotionAnalysisWorkerFailureCode {
   if (cause instanceof RangeError) return 'resource-limit'
   if (cause instanceof DOMException || cause instanceof Error) return 'decode-readback'
   return 'unexpected'
-}
-
-function detail(cause: unknown): string {
-  const value = cause instanceof Error ? cause.message : String(cause)
-  return value.slice(0, 2_048)
 }
 
 async function run(message: MotionAnalysisWorkerRunMessage): Promise<void> {
@@ -147,7 +143,7 @@ self.addEventListener('message', (event: MessageEvent<unknown>) => {
       type: 'failure',
       requestId: message.requestId,
       code: failureCode(cause),
-      detail: detail(cause),
+      detail: runtimeFailureDetail(cause),
     }
     self.postMessage(failure)
   }).finally(() => {

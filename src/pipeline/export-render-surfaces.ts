@@ -4,6 +4,7 @@
  * leg/group scratch canvases. The sink releases them exactly once.
  */
 
+import { errorMessage } from '../domain/errors'
 import { hasVideoBusEffects, videoBusRenderBudgetError } from '../domain/videoBusStage'
 import type { TimelineDoc } from '../domain/schema'
 import type { SequenceProject } from '../domain/projectSequences'
@@ -87,7 +88,7 @@ export function createExportRenderSurfaces(
     }
   } catch (cause) {
     throw new LensRemapUnavailableError(
-      `Export lens correction is unavailable: ${cause instanceof Error ? cause.message : String(cause)}`,
+      `Export lens correction is unavailable: ${errorMessage(cause)}`,
       true,
       cause,
     )

@@ -21,7 +21,8 @@ import {
   type CollectMediaFolder,
   type CollectMediaManifest,
 } from '../domain/collectMedia'
-import { hasErrorName, withWritableFile, writeFileHandle } from './fileSystemAccess'
+import { hasErrorName } from '../domain/errors'
+import { withWritableFile, writeFileHandle } from './fileSystemAccess'
 
 export const COLLECT_STREAM_CHUNK_BYTES = 1024 * 1024
 
@@ -110,7 +111,7 @@ export function isCollectMediaQuotaFailure(cause: unknown): boolean {
 }
 
 export function isCollectMediaPermissionFailure(cause: unknown): boolean {
-  return hasErrorName(cause, 'NotAllowedError') || hasErrorName(cause, 'SecurityError')
+  return hasErrorName(cause, 'NotAllowedError', 'SecurityError')
 }
 
 export function collectMediaAbortError(): DOMException {
