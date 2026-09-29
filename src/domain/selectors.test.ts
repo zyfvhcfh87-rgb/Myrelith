@@ -10,7 +10,6 @@ import {
   audibleTracks,
   clipContributesAudioOutput,
   clipContributesVisualOutput,
-  clipSourceFrame,
   docDurationFrames,
   documentHasOutputPluginEffects,
   findClip,
@@ -19,6 +18,7 @@ import {
   tracksInDisplayOrder,
 } from './selectors'
 import { videoCompositionPlanAtFrame } from './videoCompositionPlan'
+import { sourceFrameAtTimelineFrame } from './sourceTimeMap'
 import { defaultTextProps } from './textOverlay'
 
 function makeClip(id: string, tlStart: number, duration: number, sourceStart = 0): Clip {
@@ -505,19 +505,19 @@ describe('documentHasOutputPluginEffects', () => {
   })
 })
 
-describe('clipSourceFrame', () => {
+describe('sourceFrameAtTimelineFrame', () => {
   test('untrimmed clip maps its start to source frame 0', () => {
     const clip = makeClip('a', 100, 50)
-    expect(clipSourceFrame(clip, 100)).toBe(0)
-    expect(clipSourceFrame(clip, 149)).toBe(49)
+    expect(sourceFrameAtTimelineFrame(clip, 100)).toBe(0)
+    expect(sourceFrameAtTimelineFrame(clip, 149)).toBe(49)
   })
 
   test('trimmed clip offsets into the source', () => {
     // Clip shows source frames [30, 80) at timeline [100, 150).
     const clip = makeClip('a', 100, 50, 30)
-    expect(clipSourceFrame(clip, 100)).toBe(30)
-    expect(clipSourceFrame(clip, 110)).toBe(40)
-    expect(clipSourceFrame(clip, 149)).toBe(79)
+    expect(sourceFrameAtTimelineFrame(clip, 100)).toBe(30)
+    expect(sourceFrameAtTimelineFrame(clip, 110)).toBe(40)
+    expect(sourceFrameAtTimelineFrame(clip, 149)).toBe(79)
   })
 
   test('constant-speed clips use the shared rational map', () => {
@@ -529,9 +529,9 @@ describe('clipSourceFrame', () => {
       rate: { numerator: 2, denominator: 1 },
     }
 
-    expect(clipSourceFrame(clip, 100)).toBe(30)
-    expect(clipSourceFrame(clip, 110)).toBe(50)
-    expect(clipSourceFrame(clip, 124)).toBe(78)
+    expect(sourceFrameAtTimelineFrame(clip, 100)).toBe(30)
+    expect(sourceFrameAtTimelineFrame(clip, 110)).toBe(50)
+    expect(sourceFrameAtTimelineFrame(clip, 124)).toBe(78)
   })
 
   test('every timeline frame of a still resolves to its sole source frame', () => {
@@ -540,9 +540,9 @@ describe('clipSourceFrame', () => {
       sourceMode: 'still' as const,
       sourceRange: { startFrame: 0, durationFrames: 1 },
     }
-    expect(clipSourceFrame(clip, 100)).toBe(0)
-    expect(clipSourceFrame(clip, 350)).toBe(0)
-    expect(clipSourceFrame(clip, 599)).toBe(0)
+    expect(sourceFrameAtTimelineFrame(clip, 100)).toBe(0)
+    expect(sourceFrameAtTimelineFrame(clip, 350)).toBe(0)
+    expect(sourceFrameAtTimelineFrame(clip, 599)).toBe(0)
   })
 })
 

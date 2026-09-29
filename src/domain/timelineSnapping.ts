@@ -13,7 +13,7 @@ import type {
   TrackId,
   TrackKind,
 } from './schema'
-import { resolveCrossfade } from './selectors'
+import { resolveCrossfadeGeometry } from './crossfadePlan'
 import { rangeEnd } from './time'
 import { timelineMarkers } from './timelineMarkers'
 
@@ -163,7 +163,7 @@ export function timelineSnapCandidates(
         excluded.has(transition.fromClipId)
         || excluded.has(transition.toClipId)
       ) continue
-      const resolved = resolveCrossfade(track, transition)
+      const resolved = resolveCrossfadeGeometry(track, transition)
       if (!resolved) continue
       candidates.push(
         {
