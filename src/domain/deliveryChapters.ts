@@ -7,7 +7,7 @@ import type { ExportRange } from './exportRange'
 import type { TimelineDoc, TimelineMarker } from './schema'
 import { timelineMarkers, compareTimelineMarkers } from './timelineMarkers'
 import { framesToMicroseconds } from './time'
-import { containerChapterSupport } from './deliveryProduct'
+import { CONTAINER_CHAPTER_SUPPORT } from './deliveryProduct'
 
 export interface ChapterCue {
   readonly id: string
@@ -62,7 +62,7 @@ export function buildChapterSidecar(
   return Object.freeze({
     format: 'myrelith-chapters',
     version: 1,
-    containerChapterSupport: containerChapterSupport('webm'),
+    containerChapterSupport: CONTAINER_CHAPTER_SUPPORT,
     reason: SIDECAR_REASON,
     frameRate: Object.freeze({ ...doc.frameRate }),
     range: Object.freeze({ startFrame: range.startFrame, endFrame: range.endFrame }),

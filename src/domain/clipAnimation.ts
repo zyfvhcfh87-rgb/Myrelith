@@ -39,7 +39,7 @@ import { resolveEffectPathAnimation } from './effectPathAnimationResolution'
 import {
   animationEasingValidationError,
   cloneAnimationEasing,
-  evaluateAnimationTrack,
+  evaluateValidatedAnimationTrack,
   keyframesValidationError,
   MAX_ANIMATED_FINITE_MAGNITUDE,
   MAX_KEYFRAME_FRAME,
@@ -384,6 +384,7 @@ function applyAnimatedValues(
   }
 }
 
+/** Tracks must belong to an animation accepted by clipAnimationValidationError. */
 function applyAnimatedEffectValues(
   clip: Clip,
   tracks: readonly EffectAnimationTrack[],
@@ -407,7 +408,7 @@ function applyAnimatedEffectValues(
       if (track.keyframes.some((keyframe) => (
         keyframe.value < spec.min || keyframe.value > spec.max
       ))) continue
-      const value = evaluateAnimationTrack(track, localFrame, fallback)
+      const value = evaluateValidatedAnimationTrack(track, localFrame, fallback)
       if (value < spec.min || value > spec.max || value === fallback) continue
       params[track.parameter] = value
       changed = true
@@ -438,7 +439,7 @@ export function resolveClipAnimationAtFrame(clip: Clip, timelineFrame: number): 
     const fallback = readClipAnimationProperty(clip, track.property)
     values.set(
       track.property,
-      evaluateAnimationTrack(track, localFrame, fallback),
+      evaluateValidatedAnimationTrack(track, localFrame, fallback),
     )
   }
   const resolved = applyAnimatedEffectValues(
@@ -448,6 +449,10 @@ export function resolveClipAnimationAtFrame(clip: Clip, timelineFrame: number): 
   )
   // Title-path geometry remains unavailable until the title/path owners agree it.
   return isProceduralTitleClip(clip) ? resolved : resolveEffectPathAnimation(resolved, effectPathAnimationTracks(animation), localFrame)
+}
+
+function cloneKeyframe<T extends ClipAnimationKeyframe>(keyframe: T): T {
+  return { ...keyframe, easing: cloneAnimationEasing(keyframe.easing) }
 }
 
 function replaceTrack(
@@ -482,8 +487,8 @@ export function upsertAnimationKeyframe(
   if (existing && (existing.propertyVersion ?? 1) !== 1) return null
   const keyframes = (existing?.keyframes ?? [])
     .filter((item) => item.frame !== keyframe.frame)
-    .map((item) => ({ ...item, easing: cloneAnimationEasing(item.easing) }))
-  keyframes.push({ ...keyframe, easing: cloneAnimationEasing(keyframe.easing) })
+    .map(cloneKeyframe)
+  keyframes.push(cloneKeyframe(keyframe))
   keyframes.sort((left, right) => left.frame - right.frame)
   if (keyframes.length > MAX_KEYFRAMES_PER_TRACK) return null
   return replaceTrack(animation, property, { ...existing, property, keyframes })
@@ -502,7 +507,7 @@ export function moveAnimationKeyframe(
   if (fromFrame === toFrame) return animation
   const remainingKeyframes = track.keyframes
     .filter((keyframe) => keyframe.frame !== fromFrame)
-    .map((keyframe) => ({ ...keyframe, easing: cloneAnimationEasing(keyframe.easing) }))
+    .map(cloneKeyframe)
   const withoutSource = replaceTrack(
     animation,
     property,
@@ -525,7 +530,7 @@ export function removeAnimationKeyframe(
   if (!track || !track.keyframes.some((keyframe) => keyframe.frame === frame)) return null
   const keyframes = track.keyframes
     .filter((keyframe) => keyframe.frame !== frame)
-    .map((keyframe) => ({ ...keyframe, easing: cloneAnimationEasing(keyframe.easing) }))
+    .map(cloneKeyframe)
   return replaceTrack(
     animation,
     property,
@@ -569,10 +574,7 @@ function replaceEffectTrack(
     ...animation,
     tracks: animation.tracks.map((track) => ({
       ...track,
-      keyframes: track.keyframes.map((keyframe) => ({
-        ...keyframe,
-        easing: cloneAnimationEasing(keyframe.easing),
-      })),
+      keyframes: track.keyframes.map(cloneKeyframe),
     })),
     effectTracks,
   }
@@ -598,8 +600,8 @@ export function upsertEffectAnimationKeyframe(
     || effectPathAnimationTracks(animation).some((track) => track.effectId === effect.id && track.parameter === parameter)) return null
   const keyframes = (existing?.keyframes ?? [])
     .filter((item) => item.frame !== keyframe.frame)
-    .map((item) => ({ ...item, easing: cloneAnimationEasing(item.easing) }))
-  keyframes.push({ ...keyframe, easing: cloneAnimationEasing(keyframe.easing) })
+    .map(cloneKeyframe)
+  keyframes.push(cloneKeyframe(keyframe))
   keyframes.sort((left, right) => left.frame - right.frame)
   if (keyframes.length > MAX_KEYFRAMES_PER_TRACK) return null
   if (!existing && effectAnimationTracks(animation).length >= MAX_EFFECT_ANIMATION_TRACKS_PER_CLIP) {
@@ -626,7 +628,7 @@ export function moveEffectAnimationKeyframe(
   if (fromFrame === toFrame) return animation
   const remaining = track.keyframes
     .filter((keyframe) => keyframe.frame !== fromFrame)
-    .map((keyframe) => ({ ...keyframe, easing: cloneAnimationEasing(keyframe.easing) }))
+    .map(cloneKeyframe)
   const withoutSource = replaceEffectTrack(
     animation,
     effect.id,
@@ -649,7 +651,7 @@ export function removeEffectAnimationKeyframe(
   if (!track || !track.keyframes.some((keyframe) => keyframe.frame === frame)) return null
   const keyframes = track.keyframes
     .filter((keyframe) => keyframe.frame !== frame)
-    .map((keyframe) => ({ ...keyframe, easing: cloneAnimationEasing(keyframe.easing) }))
+    .map(cloneKeyframe)
   return replaceEffectTrack(
     animation,
     effectId,
@@ -667,10 +669,7 @@ export function removeEffectAnimationTracks(
     ...animation,
     tracks: animation.tracks.map((track) => ({
       ...track,
-      keyframes: track.keyframes.map((keyframe) => ({
-        ...keyframe,
-        easing: cloneAnimationEasing(keyframe.easing),
-      })),
+      keyframes: track.keyframes.map(cloneKeyframe),
     })),
     effectTracks: effectAnimationTracks(animation)
       .filter((track) => track.effectId !== effectId || (
@@ -678,10 +677,7 @@ export function removeEffectAnimationTracks(
       ))
       .map((track) => ({
         ...track,
-        keyframes: track.keyframes.map((keyframe) => ({
-          ...keyframe,
-          easing: cloneAnimationEasing(keyframe.easing),
-        })),
+        keyframes: track.keyframes.map(cloneKeyframe),
       })),
     ...(animation.effectPathTracks === undefined ? {} : {
       effectPathTracks: animation.effectPathTracks.filter((track) => track.effectId !== effectId

@@ -92,6 +92,7 @@ import {
 import { preflightExportProfile } from './exportCapabilitiesController'
 import type { ExportFileDestinationCapability } from './exportFilePicker'
 import { registerLoadedExportDisposer } from './exportLifecycle'
+import { createMediaBlobFetcher } from './objectUrlBlob'
 import { drainPreviewPlayback } from './previewController'
 import { drainSourcePreviewPlayback } from './sourceMonitorPreviewController'
 import { pauseAndDrainPlayback } from './transportController'
@@ -174,15 +175,7 @@ const realDeps: ExportControllerDeps = {
     ])
   },
   preflightProfile: preflightExportProfile,
-  fetchBlob: async (url) => {
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(
-        `Could not read export media (${response.status} ${response.statusText})`,
-      )
-    }
-    return response.blob()
-  },
+  fetchBlob: createMediaBlobFetcher('export media'),
   createMediaSource: createMediabunnyExportMediaSource,
   createPipelineDeps: (
     resolveAsset,
@@ -319,15 +312,18 @@ function retainReferencedBlobs(
   }
 }
 
-/** Fail closed if stale/corrupt clips target a track the import omitted. */
+/**
+ * Fail closed if stale/corrupt clips target a track the import omitted.
+ * `crossfadeWindows` is the sequence's bounds-aware index; it may be null only
+ * when no audible clip has a whole-window silent ramp, the one case that reads it.
+ */
 function partialTrackConflict(
   doc: TimelineDoc,
   assets: ReadonlyMap<AssetId, MediaAsset>,
   includeAudio: boolean,
-  providedCrossfadeWindows?: CrossfadeAudioWindowIndex,
+  crossfadeWindows: CrossfadeAudioWindowIndex | null,
 ): string | null {
   const audibleTrackIds = new Set(audibleTracks(doc).map((track) => track.id))
-  let crossfadeWindows = providedCrossfadeWindows
   for (const track of doc.tracks) {
     const contributes = track.kind === 'video'
       ? !track.hidden
@@ -338,7 +334,7 @@ function partialTrackConflict(
         if (!clipContributesVisualOutput(clip)) continue
       } else {
         const crossfadeWindow = clipHasWholeWindowSilentRampedAudio(clip)
-          ? (crossfadeWindows ??= createCrossfadeAudioWindowIndex(doc)).get(clip.id) ?? null
+          ? crossfadeWindows?.get(clip.id) ?? null
           : null
         if (!clipContributesDecodedAudioOutput(
           clip,
@@ -443,7 +439,7 @@ function wrapDownloadWithSidecar(
   return createAlternativeBufferedExportResult({
     destination: 'download',
     kind: 'kind' in result ? result.kind : 'av-media',
-    buffer: (zip.buffer as ArrayBuffer).slice(zip.byteOffset, zip.byteOffset + zip.byteLength),
+    buffer: zip.buffer,
     mimeType: 'application/zip',
     fileExtension: 'zip',
     label,
@@ -501,17 +497,21 @@ function captureExportInputs(
   const multicams = new Map((projectTarget.project.multicams ?? []).map(
     (definition) => [definition.id, createMulticamPlanner(definition)],
   ))
+  // Built once per sequence, and only when an audible whole-window silent
+  // ramp needs it: the only case either consumer below reads the index.
+  const crossfadeIndexes = new Map<TimelineDoc, CrossfadeAudioWindowIndex | null>()
   for (const sequence of reachable) {
     const hasSilentRamp = includeAudio && audibleTracks(sequence).some((track) => (
       track.clips.some(clipHasWholeWindowSilentRampedAudio)
     ))
     const crossfadeWindows = hasSilentRamp
       ? createCrossfadeAudioWindowIndex(sequence, sourceBounds)
-      : undefined
+      : null
+    crossfadeIndexes.set(sequence, crossfadeWindows)
     for (const assetId of outputMediaAssetIds(
       sequence,
       includeAudio,
-      crossfadeWindows,
+      crossfadeWindows ?? undefined,
       includeVisual,
     )) retainedAssetIds.add(assetId)
     if (!includeVisual) continue
@@ -546,14 +546,11 @@ function captureExportInputs(
     )
   }
   for (const sequence of reachable) {
-    const crossfadeWindows = includeAudio
-      ? createCrossfadeAudioWindowIndex(sequence, sourceBounds)
-      : undefined
     const trackConflict = partialTrackConflict(
       sequence,
       assets,
       includeAudio,
-      crossfadeWindows,
+      crossfadeIndexes.get(sequence) ?? null,
     )
     if (trackConflict) throw new Error(trackConflict)
   }
@@ -720,10 +717,7 @@ async function preflightAndRunExport(
   doc: TimelineDoc,
   projectTarget: ProjectExportTarget,
   settings: ExportSettings,
-  assets: ReadonlyMap<AssetId, MediaAsset>,
-  retainedAssetIds: readonly AssetId[],
-  sourceBounds: SourceBoundsCatalog,
-  audioMixPlan: TimelineAudioMixPlan,
+  captured: CapturedExportInputs,
   callbacks: ExportCallbacks,
   deps: ExportControllerDeps,
   pluginExecution?: Pick<
@@ -731,6 +725,7 @@ async function preflightAndRunExport(
     'pluginSnapshot' | 'videoEffectStageExecutor'
   >,
 ): Promise<ExportResult | undefined> {
+  const { assets, retainedAssetIds, sourceBounds, audioMixPlan } = captured
   if (lifecycle.cancelRequested) return undefined
   const chapters = resolvedChapterPolicy(settings, callbacks)
   assertChapterDelivery(settings.destination, chapters)
@@ -1013,10 +1008,7 @@ export function startExport(
       doc,
       projectTarget,
       runSettings,
-      captured.assets,
-      captured.retainedAssetIds,
-      captured.sourceBounds,
-      captured.audioMixPlan,
+      captured,
       runOptions,
       deps,
     ),
@@ -1088,10 +1080,7 @@ export function startPreparedExport(
           execution.document,
           projectTarget,
           execution.settings,
-          captured.assets,
-          captured.retainedAssetIds,
-          captured.sourceBounds,
-          captured.audioMixPlan,
+          captured,
           runOptions,
           deps,
           execution,

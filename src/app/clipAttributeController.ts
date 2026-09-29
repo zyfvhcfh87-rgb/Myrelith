@@ -30,12 +30,12 @@ export function initClipAttributeClipboard(): () => void {
   return () => { unsubscribe(); clear() }
 }
 
-export function copyClipAttributes(clipId: string, effectIds?: readonly string[]): void {
+function copyFromClip(clipId: string, effectsOnly: boolean, effectIds: readonly string[] | undefined, copied: string): void {
   const state = useDocumentStore.getState()
   const track = state.doc.tracks.find((track) => track.clips.some((clip) => clip.id === clipId))
   const clip = track?.clips.find((clip) => clip.id === clipId)
   if (!track || !clip) { report('The source clip no longer exists.'); return }
-  const groups = effectIds === undefined ? supportedClipAttributeGroups(track.kind) : ['effects'] as const
+  const groups = effectsOnly ? ['effects'] as const : supportedClipAttributeGroups(track.kind)
   const result = captureClipAttributes(clip, track.kind, groups, effectIds, state.project.colorLuts)
   if (!result.ok) { report(result.reason); return }
   const pathTracks = result.template.animation.effectPathTracks ?? []
@@ -43,23 +43,16 @@ export function copyClipAttributes(clipId: string, effectIds?: readonly string[]
   if (budgetError) { report(budgetError); return }
   useDocumentStore.setState({ retainedClipboardColorLuts: result.template.colorLuts ?? [], retainedAttributePathTracks: pathTracks })
   clipboard = { generation: state.projectGeneration, template: result.template }
-  useClipAttributeStore.setState({ sourceName: clip.name, groups, message: `Copied ${effectIds === undefined ? 'attributes' : 'effects'} from ${clip.name}.` })
+  useClipAttributeStore.setState({ sourceName: clip.name, groups, message: `Copied ${copied} from ${clip.name}.` })
+}
+
+export function copyClipAttributes(clipId: string, effectIds?: readonly string[]): void {
+  copyFromClip(clipId, effectIds !== undefined, effectIds, effectIds === undefined ? 'attributes' : 'effects')
 }
 
 /** Complete-stack copy preserves orphan tracks; checked-effects copy excludes them. */
 export function copyClipEffectStack(clipId: string): void {
-  const state = useDocumentStore.getState()
-  const track = state.doc.tracks.find((track) => track.clips.some((clip) => clip.id === clipId))
-  const clip = track?.clips.find((clip) => clip.id === clipId)
-  if (!track || !clip) { report('The source clip no longer exists.'); return }
-  const result = captureClipAttributes(clip, track.kind, ['effects'], undefined, state.project.colorLuts)
-  if (!result.ok) { report(result.reason); return }
-  const pathTracks = result.template.animation.effectPathTracks ?? []
-  const budgetError = animationRetentionError(state, { tracks: pathTracks })
-  if (budgetError) { report(budgetError); return }
-  useDocumentStore.setState({ retainedClipboardColorLuts: result.template.colorLuts ?? [], retainedAttributePathTracks: pathTracks })
-  clipboard = { generation: state.projectGeneration, template: result.template }
-  useClipAttributeStore.setState({ sourceName: clip.name, groups: ['effects'], message: `Copied the effect stack from ${clip.name}.` })
+  copyFromClip(clipId, true, undefined, 'the effect stack')
 }
 
 export interface AttributeEditSession {
@@ -102,18 +95,17 @@ export function applyAttributeEdit(
     || selected.some((id, index) => id !== session.targetIds[index])) {
     return 'The project or selection changed. Reopen the attribute dialog.'
   }
-  if (mode === 'paste' && !session.template) return 'Copy attributes or effects first.'
-  if (mode === 'paste' && session.template) {
+  const clips = `${session.targetIds.length} clip${session.targetIds.length === 1 ? '' : 's'}`
+  if (mode === 'paste') {
+    if (!session.template) return 'Copy attributes or effects first.'
     const result = pasteClipAttributes(state.project, session.sequenceId, session.targetIds, session.template, options, () => crypto.randomUUID())
     if (!result.ok) return result.reason
     const error = commitPortableProjectEdit(state.project, session.generation, result.project)
-    if (!error) report(`Pasted attributes on ${session.targetIds.length} clip${session.targetIds.length === 1 ? '' : 's'}.`)
+    if (!error) report(`Pasted attributes on ${clips}.`)
     return error
   }
   const error = state.applyClipAttributes(session.project, session.sequenceId,
-    mode === 'paste' && session.template
-      ? { kind: 'paste', targetIds: session.targetIds, template: session.template, options }
-      : { kind: 'reset', targetIds: session.targetIds, groups: options.groups })
-  if (!error) report(`${mode === 'paste' ? 'Pasted' : 'Reset'} attributes on ${session.targetIds.length} clip${session.targetIds.length === 1 ? '' : 's'}.`)
+    { kind: 'reset', targetIds: session.targetIds, groups: options.groups })
+  if (!error) report(`Reset attributes on ${clips}.`)
   return error
 }

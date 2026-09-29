@@ -58,7 +58,7 @@ describe('text overlay stores', () => {
       ...clipVisualSettings(clip),
       crop: { ...clipVisualSettings(clip).crop, left: 0.2 },
     }
-    useTransportStore.getState().setClipVisualPreview({
+    useTransportStore.getState().setOwnedClipVisualPreview('visual-gesture', {
       clipId: clip.id,
       transform,
       visual,

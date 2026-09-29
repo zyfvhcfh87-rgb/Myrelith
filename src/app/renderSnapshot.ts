@@ -1,11 +1,10 @@
 import type { SequenceProject } from '../domain/projectSequences'
 import { createProjectFileSnapshot, serializeProjectFile } from '../domain/projectFile'
-import type { MediaCollection } from '../domain/mediaCollections'
-import type { PortableAssetDescriptor } from '../domain/projectFile'
 import { MAX_RENDER_SNAPSHOT_BYTES } from '../domain/renderJobs'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
+import { sha256Hex } from './sourceFingerprint'
 
 /** Conservative logical retention/scratch admission before stringify allocates. */
 function measure(value: unknown, depth=0): number {
@@ -34,18 +33,6 @@ export interface RenderSnapshot {
   readonly descriptorJson: string
   readonly bytes: number
 }
-async function sha256Hex(serialized: string): Promise<string> {
-  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(serialized))
-  return [...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('')
-}
-export async function renderRevisionDigest(
-  project: SequenceProject,
-  descriptors: readonly PortableAssetDescriptor[],
-  collections: readonly MediaCollection[] = [],
-): Promise<string> {
-  const portable=serializeProjectFile(createProjectFileSnapshot(project,descriptors,collections))
-  return sha256Hex(portable)
-}
 export async function captureRenderSnapshot(): Promise<RenderSnapshot> {
   const state=useDocumentStore.getState()
   const project=state.project, sequenceId=state.activeSequenceId
@@ -61,7 +48,7 @@ export async function captureRenderSnapshot(): Promise<RenderSnapshot> {
   const portable=serializeProjectFile(createProjectFileSnapshot(project,descriptors,media.collections))
   const bytes=measure({project:portable,descriptors,collections:media.collections})
   const descriptorJson=JSON.stringify(canonical(descriptors))
-  const revision=await sha256Hex(portable)
+  const revision=await sha256Hex(new TextEncoder().encode(portable))
   if(useDocumentStore.getState().project!==project || useDocumentStore.getState().projectGeneration!==generation || getActiveLocalProjectBindingId()!==binding)throw new Error('The project changed while capturing the job. Try again.')
   return {project,sequenceId,binding,revision,descriptorJson,bytes}
 }

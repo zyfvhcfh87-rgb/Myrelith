@@ -209,7 +209,8 @@ function compressorStage(effect: AudioEffectDescriptor, sampleRate: number): Sta
         } else if (overshoot > 0) {
           reduction = overshoot * (1 - 1 / ratio)
         }
-        const gain = dbToGain(-reduction) * makeup
+        // Below the knee dbToGain(-0) is exactly 1; skip the per-sample power.
+        const gain = reduction === 0 ? makeup : dbToGain(-reduction) * makeup
         left[i] *= gain
         right[i] *= gain
       }

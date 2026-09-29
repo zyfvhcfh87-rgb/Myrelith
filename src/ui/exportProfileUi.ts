@@ -14,6 +14,7 @@ import {
   isDeliveryProfile,
   type ExportSettingsUnion,
 } from '../domain/deliveryProduct'
+import { windowsSafeFileStem } from '../domain/fileNames'
 import type { TimelineDoc } from '../domain/schema'
 import { docDurationFrames } from '../domain/selectors'
 import type { ExportPreferenceSelectionId } from '../state/preferencesStore'
@@ -63,21 +64,13 @@ export function exportFileName(
   projectName: string,
   extension: string,
 ): string {
-  let base = projectName
-    .trim()
-    .replace(/[. ]+$/g, '')
-    .replace(/\.(?:mp4|webm|wav|m4a|zip)$/i, '')
-  base = base.replace(/[<>:"/\\|?*]/g, '-')
-  base = Array.from(base, (character) =>
-    character.charCodeAt(0) < 32 ? '-' : character,
-  ).join('')
-  base = Array.from(base).slice(0, 80).join('').replace(/[. ]+$/g, '')
-  if (
-    /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i
-      .test(base)
-  ) {
-    base = `myrelith-${base}`
-  }
+  const base = windowsSafeFileStem(
+    projectName
+      .trim()
+      .replace(/[. ]+$/g, '')
+      .replace(/\.(?:mp4|webm|wav|m4a|zip)$/i, ''),
+    80,
+  )
   return `${base || 'myrelith-export'}.${extension}`
 }
 

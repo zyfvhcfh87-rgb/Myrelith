@@ -10,13 +10,13 @@
  * A/B/T/Y/U·S·Del shortcuts already ignore keystrokes in editable
  * targets (isEditableTarget), so typing a name never razors a clip.
  *
- * Receives its Track as a prop from Timeline (which owns the doc
- * subscription) and reads stores only inside event handlers via
- * getState(), so a moving playhead can never re-render a header
- * (invariant 6). All mutations go through documentStore — one undo entry
- * per real change; idempotent toggles/renames push none. The lone local
- * state is the rename-editor flag. Delete is disabled while locked (the
- * lock IS the "don't touch this content" guard); solo's actual mix rule
+ * Receives its Track and resolved sequence-edit target flag as props from
+ * Timeline (which owns the doc and target subscriptions) and reads stores
+ * only inside event handlers via getState(), so a moving playhead can never
+ * re-render a header (invariant 6). All mutations go through documentStore —
+ * one undo entry per real change; idempotent toggles/renames push none. The
+ * lone local state is the rename-editor flag. Delete is disabled while locked
+ * (the lock IS the "don't touch this content" guard); solo's actual mix rule
  * lives in domain selectors.audibleTracks.
  */
 
@@ -24,11 +24,7 @@ import { memo, useEffect, useRef, useState } from 'react'
 import { Eye, LockSimple, PencilSimple, X } from '@phosphor-icons/react'
 import type { Track as TrackData } from '../../domain/schema'
 import { useDocumentStore } from '../../state/documentStore'
-import { useTransportStore } from '../../state/transportStore'
-import {
-  resolvedTrackTargets,
-  toggleTrackTarget,
-} from '../../app/sequenceEditController'
+import { toggleTrackTarget } from '../../app/sequenceEditController'
 import type { TrackFlagsPatch } from '../../domain/operations'
 import { editorContextMenuIdentity } from '../../app/editorContextMenuCommands'
 import {
@@ -38,15 +34,14 @@ import {
 
 interface TrackHeaderProps {
   track: TrackData
+  /**
+   * Resolved insert/overwrite destination. Locking or deleting ANOTHER track
+   * can move the default here, so the container resolves it for every row.
+   */
+  targeted: boolean
 }
 
-function TrackHeader({ track }: TrackHeaderProps) {
-  useTransportStore((state) => state.videoTargetTrackId)
-  useTransportStore((state) => state.audioTargetTrackId)
-  useTransportStore((state) => state.trackTargetsTouched)
-  const targeted = track.kind === 'video'
-    ? resolvedTrackTargets().videoTrackId === track.id
-    : resolvedTrackTargets().audioTrackId === track.id
+function TrackHeader({ track, targeted }: TrackHeaderProps) {
   const contextMenu = useEditorContextMenu()
   const [renaming, setRenaming] = useState(false)
   const renameTriggerRef = useRef<HTMLButtonElement | null>(null)

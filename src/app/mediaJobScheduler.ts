@@ -8,6 +8,8 @@
  */
 
 import { mediaResourceAdmission } from './mediaResourceAdmission'
+import { errorMessage, truncateText } from '../domain/errors'
+import { requirePositiveSafeInteger } from '../domain/numeric'
 
 export type MediaJobPriority = 'background' | 'visible' | 'selected'
 
@@ -141,24 +143,11 @@ const MAX_WAIT_SAMPLES = 1_024
 const MAX_FAILURE_RECORDS = 32
 const MAX_DIAGNOSTIC_DETAIL_CHARACTERS = 2_048
 
-function positiveInteger(value: number, label: string): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${label} must be a positive safe integer`)
-  }
-  return value
-}
-
 function finitePositive(value: number, label: string): number {
   if (!Number.isFinite(value) || value <= 0) {
     throw new RangeError(`${label} must be finite and positive`)
   }
   return value
-}
-
-function errorDetail(cause: unknown): string {
-  const detail = cause instanceof Error ? cause.message : String(cause)
-  if (detail.length <= MAX_DIAGNOSTIC_DETAIL_CHARACTERS) return detail
-  return `${detail.slice(0, MAX_DIAGNOSTIC_DETAIL_CHARACTERS - 1)}…`
 }
 
 function failureRecord(
@@ -169,7 +158,7 @@ function failureRecord(
     id: request.id,
     generation: request.generation,
     code: cause instanceof MediaJobExecutionError ? cause.code : 'unexpected',
-    detail: errorDetail(cause),
+    detail: truncateText(errorMessage(cause), MAX_DIAGNOSTIC_DETAIL_CHARACTERS),
   }
 }
 
@@ -223,12 +212,12 @@ export class MediaJobScheduler {
 
   constructor(options: MediaJobSchedulerOptions = {}) {
     this.budget = Object.freeze({
-      maxConcurrentJobs: positiveInteger(
+      maxConcurrentJobs: requirePositiveSafeInteger(
         options.budget?.maxConcurrentJobs
           ?? DEFAULT_MEDIA_JOB_SCHEDULER_BUDGET.maxConcurrentJobs,
         'maxConcurrentJobs',
       ),
-      maxDecoderSlots: positiveInteger(
+      maxDecoderSlots: requirePositiveSafeInteger(
         options.budget?.maxDecoderSlots
           ?? DEFAULT_MEDIA_JOB_SCHEDULER_BUDGET.maxDecoderSlots,
         'maxDecoderSlots',
@@ -256,7 +245,7 @@ export class MediaJobScheduler {
     if (!Number.isSafeInteger(request.generation) || request.generation < 0) {
       throw new RangeError('Media job generation must be a non-negative safe integer')
     }
-    const decoderSlots = positiveInteger(
+    const decoderSlots = requirePositiveSafeInteger(
       request.resources.decoderSlots,
       'decoderSlots',
     )

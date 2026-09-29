@@ -7,6 +7,7 @@
  * every path.
  */
 
+import { abortError, throwIfAborted } from '../domain/errors'
 import {
   decodeStaticImage,
   type StaticImageRenderSource,
@@ -54,15 +55,7 @@ export interface StaticImageThumbnailOptions {
   revokeObjectUrl?: (url: string) => void
 }
 
-function makeAbortError(): Error {
-  const error = new Error('Still image thumbnail generation was cancelled')
-  error.name = 'AbortError'
-  return error
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw makeAbortError()
-}
+const THUMBNAIL_CANCELLED = 'Still image thumbnail generation was cancelled'
 
 function awaitWithAbort<T>(
   pending: Promise<T>,
@@ -71,7 +64,7 @@ function awaitWithAbort<T>(
   if (!signal) return pending
   if (signal.aborted) {
     void pending.catch(() => {})
-    return Promise.reject(makeAbortError())
+    return Promise.reject(abortError(THUMBNAIL_CANCELLED))
   }
   return new Promise<T>((resolve, reject) => {
     let settled = false
@@ -79,7 +72,7 @@ function awaitWithAbort<T>(
       if (settled) return
       settled = true
       signal.removeEventListener('abort', abort)
-      reject(makeAbortError())
+      reject(abortError(THUMBNAIL_CANCELLED))
     }
     signal.addEventListener('abort', abort, { once: true })
     void pending.then(
@@ -173,12 +166,12 @@ export async function generateStaticImageThumbnail(
     ?? ((source: Blob) => URL.createObjectURL(source))
   const revokeObjectUrl = options.revokeObjectUrl
     ?? ((url: string) => URL.revokeObjectURL(url))
-  throwIfAborted(options.signal)
+  throwIfAborted(options.signal, THUMBNAIL_CANCELLED)
   const decoded = await decode(file, { signal: options.signal })
   const dimensions = outputDimensions(decoded.width, decoded.height)
   let url: string | null = null
   try {
-    throwIfAborted(options.signal)
+    throwIfAborted(options.signal, THUMBNAIL_CANCELLED)
     let canvas: StaticImageThumbnailCanvas
     try {
       canvas = createCanvas(dimensions.width, dimensions.height)
@@ -213,7 +206,7 @@ export async function generateStaticImageThumbnail(
         `The still-image thumbnail exceeds Myrelith's ${STATIC_IMAGE_THUMBNAIL_LIMITS.maxEncodedBytes}-byte limit.`,
       )
     }
-    throwIfAborted(options.signal)
+    throwIfAborted(options.signal, THUMBNAIL_CANCELLED)
     try {
       url = createObjectUrl(png)
     } catch (cause) {
@@ -226,7 +219,7 @@ export async function generateStaticImageThumbnail(
     if (options.signal?.aborted) {
       revokeObjectUrl(url)
       url = null
-      throw makeAbortError()
+      throw abortError(THUMBNAIL_CANCELLED)
     }
     return {
       url,

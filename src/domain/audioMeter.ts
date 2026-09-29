@@ -2,10 +2,8 @@
 
 export const AUDIO_METER_FLOOR_DB = -60
 export const AUDIO_METER_CEILING_DB = 6
-export const AUDIO_METER_OVERLOAD_DB = 0
 export const AUDIO_METER_FFT_SIZE = 256
 export const AUDIO_METER_UPDATE_INTERVAL_MS = 100
-export const AUDIO_METER_UPDATE_HZ = 1_000 / AUDIO_METER_UPDATE_INTERVAL_MS
 export const AUDIO_METER_RELEASE_DB_PER_SECOND = 18
 export const AUDIO_METER_OVERLOAD_HOLD_MS = 2_000
 
@@ -202,6 +200,24 @@ export function audioMeterReadout(
     },
     overloadLatched: state.overloadLatched,
   }
+}
+
+/** Displayed fraction of a meter lane: 0 at the floor, 1 at the ceiling. */
+export function audioMeterScale(db: number): number {
+  return Math.max(
+    0,
+    Math.min(
+      1,
+      (db - AUDIO_METER_FLOOR_DB)
+        / (AUDIO_METER_CEILING_DB - AUDIO_METER_FLOOR_DB),
+    ),
+  )
+}
+
+/** Screen-reader value text for one meter reading. */
+export function audioMeterValueText(db: number): string {
+  if (db <= AUDIO_METER_FLOOR_DB) return 'silent, below minus 60 dBFS'
+  return `${db >= 0 ? 'plus ' : 'minus '}${Math.abs(db).toFixed(1)} dBFS`
 }
 
 /** Stop/seek clears moving levels and hold, but keeps a warning until reset. */

@@ -31,6 +31,7 @@ import type {
   PluginRuntimeFailure,
   PluginRuntimeFailureCode,
 } from '../workers/plugin-runtime-protocol'
+import { linkedAbortSignal } from './pluginControllerShared'
 
 const MAX_PLUGIN_EXPORT_EFFECTS = EFFECT_STACK_LIMITS.maxTotalEffects
 const MAX_REASON_CHARACTERS = 512
@@ -234,27 +235,6 @@ function rethrowAsyncFailure(
     cause,
   })
   throw cause
-}
-
-function linkedAbortSignal(
-  signals: readonly (AbortSignal | undefined)[],
-): { readonly signal: AbortSignal; dispose(): void } {
-  const controller = new AbortController()
-  const active = signals.filter((value): value is AbortSignal => value !== undefined)
-  const onAbort = (): void => controller.abort()
-  for (const signal of active) {
-    if (signal.aborted) {
-      controller.abort()
-      break
-    }
-    signal.addEventListener('abort', onAbort, { once: true })
-  }
-  return {
-    signal: controller.signal,
-    dispose() {
-      for (const signal of active) signal.removeEventListener('abort', onAbort)
-    },
-  }
 }
 
 function declarationSnapshot(

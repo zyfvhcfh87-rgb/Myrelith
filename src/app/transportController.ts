@@ -19,7 +19,6 @@ import { beginSpeechRetirement } from './speechRetirement'
  * pauses with the playhead on the last frame.
  */
 
-import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { AssetId, MediaAsset, TimelineDoc, TrackId } from '../domain/schema'
 import {
   createSourceBoundsCatalog,
@@ -48,12 +47,10 @@ import {
   audioPlaybackAssetIds,
   audioPlaybackPlanKey,
   hasAudioPlaybackContent,
-  startTimelineAudioPlayback,
 } from '../pipeline/playback-audio'
 import type {
   PlaybackAssetResolver,
   StartTimelineAudioOptions,
-  TimelineAudioPlaybackWarning,
   TimelineAudioPlaybackDiagnostics,
   TimelineAudioPlaybackSession,
 } from '../pipeline/playback-audio'
@@ -71,7 +68,17 @@ import {
   reportMediaRuntimeFailure,
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
+import { createMediaBlobFetcher } from './objectUrlBlob'
 import { drainSourcePreviewPlayback } from './sourceMonitorPreviewController'
+import {
+  PlaybackTasks,
+  createPlaybackAssetResolver,
+  descriptorSourceBoundsCatalog,
+  playbackAudioWarningMessage,
+  startPlaybackAudio,
+  stopPlaybackAudioSession,
+} from './playbackAudioShared'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 /** The slice of AudioContext we use (fake-able in tests). */
 export interface ClockContext extends PlaybackClock {
@@ -111,23 +118,8 @@ const realDeps: TransportDeps = {
     mediaDevices.addEventListener('devicechange', cb)
     return () => mediaDevices.removeEventListener('devicechange', cb)
   },
-  fetchBlob: async (url) => {
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(
-        `Could not read playback media (${response.status} ${response.statusText})`,
-      )
-    }
-    return response.blob()
-  },
-  startAudio: (context, doc, fromFrame, resolveAsset, options) =>
-    startTimelineAudioPlayback(
-      context as AudioContext,
-      doc,
-      fromFrame,
-      resolveAsset,
-      options,
-    ),
+  fetchBlob: createMediaBlobFetcher('playback media'),
+  startAudio: startPlaybackAudio,
 }
 
 interface ControllerState {
@@ -147,8 +139,7 @@ interface ControllerState {
   meterSampleWindowSize: number
   unsubscribes: Array<() => void>
   /** Async playback startups and stop work that project switching must drain. */
-  playbackTasks: Set<Promise<void>>
-  cleanupTasks: Set<Promise<void>>
+  tasks: PlaybackTasks
   voiceover: VoiceoverPlayback | null
 }
 
@@ -184,8 +175,7 @@ const state: ControllerState = {
   meterSequence: 0,
   meterSampleWindowSize: AUDIO_METER_FFT_SIZE,
   unsubscribes: [],
-  playbackTasks: new Set(),
-  cleanupTasks: new Set(),
+  tasks: new PlaybackTasks(),
   voiceover: null,
 }
 
@@ -346,23 +336,6 @@ function startAudioMeter(
   pollAudioMeter(generation, session)
 }
 
-function audioWarningMessage(warning: TimelineAudioPlaybackWarning): string {
-  if (warning.scope === 'media') {
-    if (warning.stage === 'source-open') {
-      return `audio clip "${warning.clipId}" source open failed`
-    }
-    if (warning.stage === 'decoded-timing') {
-      return `audio clip "${warning.clipId}" produced invalid decoded timing`
-    }
-    return `audio clip "${warning.clipId}" decode failed`
-  }
-  if (warning.stage === 'output-schedule') {
-    return 'audio output scheduling failed'
-  }
-  if (warning.stage === 'pump') return 'audio refill failed'
-  return 'audio cleanup failed'
-}
-
 function captureAudioRuntimeGuards(
   doc: TimelineDoc,
   fromFrame: number,
@@ -393,12 +366,6 @@ function audioAssetsKey(
     .join('|')
 }
 
-function currentSourceBoundsCatalog(): SourceBoundsCatalog {
-  return createSourceBoundsCatalog(
-    useMediaStore.getState().descriptors.values(),
-  )
-}
-
 function currentProjectAudioMixPlan(
   catalog: SourceBoundsCatalog,
 ): TimelineAudioMixPlan {
@@ -410,47 +377,6 @@ function currentProjectAudioMixPlan(
   )
 }
 
-/** Resolve from the immutable media snapshot; the live source owns caching. */
-function createAssetResolver(
-  assets: ReadonlyMap<AssetId, MediaAsset>,
-  fetchBlob: TransportDeps['fetchBlob'],
-): PlaybackAssetResolver {
-  return (assetId) => {
-    const asset = assets.get(assetId)
-    if (!asset) {
-      throw new Error(
-        `Playback media asset "${assetId}" is missing from the media pool`,
-      )
-    }
-    if (!asset.hasAudio) {
-      throw new Error(
-        `Playback media asset "${asset.fileName}" has no imported audio track`,
-      )
-    }
-    try {
-      return Promise.resolve(fetchBlob(asset.objectUrl)).then((blob) => ({
-        blob,
-        budget: mediaAssetDecoderBudget(asset, blob.size),
-      }))
-    } catch (cause) {
-      return Promise.reject(cause)
-    }
-  }
-}
-
-function trackCleanup(
-  operation: Promise<unknown>,
-  failureMessage: string,
-): Promise<void> {
-  const cleanup = operation.then(
-    () => undefined,
-    (cause) => warnAudio(failureMessage, cause),
-  )
-  state.cleanupTasks.add(cleanup)
-  void cleanup.then(() => state.cleanupTasks.delete(cleanup))
-  return cleanup
-}
-
 function stopAudioSession(): void {
   state.startupAbort?.abort()
   state.startupAbort = null
@@ -458,18 +384,11 @@ function stopAudioSession(): void {
   const lease = state.audioLease
   state.audioLease = null
   state.audioSession = null
-  if (session) {
-    let pending: Promise<unknown>
-    try {
-      pending = Promise.resolve(session.stop())
-    } catch (cause) {
-      pending = Promise.reject(cause)
-    }
-    // A replacement may start while this session is still closing. Count both
-    // reservations until cleanup settles; optional previews must yield if that
-    // overlap exceeds their allowance, rather than undercounting audio owners.
-    void trackCleanup(pending.finally(() => lease?.release()), 'audio cleanup failed')
-  }
+  if (!session) return
+  void state.tasks.trackCleanup(
+    stopPlaybackAudioSession(session, lease),
+    (cause) => warnAudio('audio cleanup failed', cause),
+  )
 }
 
 function cancelPlaybackWork(): void {
@@ -526,7 +445,7 @@ function ensureEngine(): PlaybackEngine {
         s.project !== prev.project
         && useTransportStore.getState().isPlaying
       ) {
-        const catalog = currentSourceBoundsCatalog()
+        const catalog = descriptorSourceBoundsCatalog()
         const mixPlan = createProjectTimelineAudioMixPlan(
           s.project,
           s.activeSequenceId,
@@ -657,7 +576,7 @@ function startAdmittedPlayback(
     return
   }
 
-  const resolveAsset = createAssetResolver(assets, state.deps.fetchBlob)
+  const resolveAsset = createPlaybackAssetResolver(assets, state.deps.fetchBlob, 'Playback')
   const lease = mediaResourceAdmission.reserve({ kind: 'audio', decoderSlots: mixPlan.clips.length, surfaceBytes: 0, monitorCompatible: true })
   let adoptedLease = false
   const playbackTask = (async () => {
@@ -671,7 +590,7 @@ function startAdmittedPlayback(
         sourceBoundsCatalog: catalog,
         mixPlan,
         onWarning: (warning) => {
-          warnAudio(audioWarningMessage(warning), warning.cause)
+          warnAudio(playbackAudioWarningMessage(warning), warning.cause)
           if (warning.scope !== 'media') return
           const guard = runtimeGuards.get(warning.assetId)
           if (!guard) return
@@ -717,8 +636,7 @@ function startAdmittedPlayback(
     stopAudioMeter('unavailable', 'Playback levels unavailable')
     engine.start(from, durationFrames, doc.frameRate, context.currentTime)
   }).finally(() => { if (!adoptedLease) lease.release() })
-  state.playbackTasks.add(playbackTask)
-  void playbackTask.then(() => state.playbackTasks.delete(playbackTask))
+  state.tasks.track(playbackTask)
 }
 
 /** Every start and restart passes this barrier; edits cannot bypass a pending drain. */
@@ -740,8 +658,7 @@ function startPlayback(from: number, unlockedContext?: Promise<unknown>): void {
     warnAudio('Speech playback handoff failed', cause)
     useTransportStore.getState().setIsPlaying(false)
   })
-  state.playbackTasks.add(admissionTask)
-  void admissionTask.then(() => state.playbackTasks.delete(admissionTask))
+  state.tasks.track(admissionTask)
 }
 
 function restartPlayback(): void {
@@ -809,8 +726,7 @@ export function play(): void {
     warnAudio('Playback resource handoff failed', cause)
     useTransportStore.getState().setIsPlaying(false)
   })
-  state.playbackTasks.add(admissionTask)
-  void admissionTask.then(() => state.playbackTasks.delete(admissionTask))
+  state.tasks.track(admissionTask)
 }
 
 /** Stop advancing; the playhead stays exactly where it is. */
@@ -821,24 +737,13 @@ export function pause(): void {
 }
 
 /** Wait until Program's startup and audio-cleanup work has retired. */
-export async function drainProgramPlayback(): Promise<void> {
-  // Snapshot playback once. A later Program admission may wait on Source
-  // drain, which can wait on a Source admission that waits on this drain.
-  // Re-checking playbackTasks would pull that cycle in and hang.
-  await Promise.all([
-    ...state.playbackTasks,
-    ...state.cleanupTasks,
-  ])
-  while (state.cleanupTasks.size > 0) {
-    await Promise.all([...state.cleanupTasks])
-  }
+export function drainProgramPlayback(): Promise<void> {
+  return state.tasks.drain()
 }
 
 /** Avoid an async handoff when Program has no outstanding resource owner. */
 export function beginProgramPlaybackDrain(): Promise<void> | null {
-  return state.playbackTasks.size > 0 || state.cleanupTasks.size > 0
-    ? drainProgramPlayback()
-    : null
+  return state.tasks.hasWork() ? drainProgramPlayback() : null
 }
 
 /** Pause immediately, then wait until every playback decoder owner is gone. */
@@ -923,7 +828,7 @@ export function armVoiceoverTransport(options: {
     return Promise.reject(new Error('Pause playback and scrubbing before recording'))
   }
 
-  const pendingPlayback = [...state.playbackTasks, ...state.cleanupTasks]
+  const pendingPlayback = state.tasks.pending()
   const abort = new AbortController()
   let stopCues = () => {}
   let unsubscribe = () => {}
@@ -988,7 +893,7 @@ export function armVoiceoverTransport(options: {
       const countInSamples = audioSampleBoundary(countInFrames, doc)
       const leadSeconds = (Math.max(countInSamples, preRollSamples) + 12_000) / doc.audioSampleRate
       const assets = new Map(useMediaStore.getState().assets)
-      const catalog = currentSourceBoundsCatalog()
+      const catalog = descriptorSourceBoundsCatalog()
       const mixPlan = createProjectTimelineAudioMixPlan(documentState.project,
         documentState.activeSequenceId, catalog)
       const duration = docDurationFrames(doc)
@@ -998,7 +903,7 @@ export function armVoiceoverTransport(options: {
         localLease = mediaResourceAdmission.reserve({ kind: 'audio', decoderSlots: mixPlan.clips.length,
           surfaceBytes: 0, monitorCompatible: true })
         const session = await state.deps.startAudio(context, doc, startFrame,
-          createAssetResolver(assets, state.deps.fetchBlob), {
+          createPlaybackAssetResolver(assets, state.deps.fetchBlob, 'Playback'), {
             signal: abort.signal, sourceBoundsCatalog: catalog, mixPlan,
             minimumStartLeadSeconds: leadSeconds,
           })
@@ -1039,9 +944,7 @@ export function armVoiceoverTransport(options: {
       if (!adopted) localLease?.release()
     }
   })()
-  const tracked = task.then(() => undefined, () => undefined)
-  state.playbackTasks.add(tracked)
-  void tracked.then(() => state.playbackTasks.delete(tracked))
+  state.tasks.track(task.then(() => undefined, () => undefined))
   return task
 }
 
@@ -1089,8 +992,7 @@ export async function disposeTransport(): Promise<void> {
 
   await Promise.all([
     sourceDrain,
-    ...state.playbackTasks,
-    ...state.cleanupTasks,
+    ...state.tasks.pending(),
   ])
   if (context?.close) {
     try {
@@ -1100,6 +1002,7 @@ export async function disposeTransport(): Promise<void> {
     }
   }
 }
+registerLoadedEditorRuntime('transport', disposeTransport)
 
 /** Dev/browser verification hook; null while silent or still priming. */
 export function getAudioPlaybackDiagnostics():

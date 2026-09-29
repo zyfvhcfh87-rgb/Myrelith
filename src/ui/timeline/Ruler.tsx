@@ -249,31 +249,6 @@ export default function Ruler() {
     )
   }
 
-  const snapFromPointer = (
-    e: ReactPointerEvent<HTMLDivElement>,
-  ): RulerSnapUpdate => {
-    const frame = frameFromPointer(e)
-    if (e.altKey || !usePreferencesStore.getState().snappingEnabled) {
-      return { frame, guide: null }
-    }
-    const resolution = resolveTimelineSnap({
-      candidates: snapCandidatesRef.current,
-      movingPoints: [{
-        id: 'playhead',
-        kind: 'cursor',
-        frame,
-        deltaDirection: 1,
-        trackKind: null,
-        trackIndex: -1,
-      }],
-      rawDeltaFrames: frame,
-      minDeltaFrames: 0,
-      maxDeltaFrames: viewport.totalFrames,
-      zoom,
-    })
-    return { frame: resolution.deltaFrames, guide: resolution.guide }
-  }
-
   const endScrub = (): void => {
     scrubbingRef.current = false
     scrubbingPointerIdRef.current = null
@@ -327,6 +302,11 @@ export default function Ruler() {
     })
     return { frame: resolution.deltaFrames, guide: resolution.guide }
   }
+
+  // Pointer frames are already inside [0, lastSeekFrame]; snapping is shared.
+  const snapFromPointer = (
+    e: ReactPointerEvent<HTMLDivElement>,
+  ): RulerSnapUpdate => snapSeekFrame(frameFromPointer(e), e.altKey)
 
   const seekTo = (frame: number, bypassSnapping: boolean): void => {
     snapCandidatesRef.current = timelineSnapCandidates(
@@ -421,13 +401,11 @@ export default function Ruler() {
           scrubbingPointerIdRef.current !== e.pointerId
           || !isPrimaryEditingPointer(e)
         ) return
-        scrubbingRef.current = false
-        scrubbingPointerIdRef.current = null
+        // Resolve the final frame before endScrub drops the candidates.
+        const update = snapFromPointer(e)
+        endScrub()
         releasePointer(e)
-        schedule(snapFromPointer(e))
-        snapCandidatesRef.current = []
-        setIsScrubbing(false)
-        setSnapGuide(null)
+        schedule(update)
       }}
       onPointerCancel={(e) => {
         if (scrubbingPointerIdRef.current === e.pointerId) endScrub()

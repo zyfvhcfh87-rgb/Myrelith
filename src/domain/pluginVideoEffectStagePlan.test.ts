@@ -6,12 +6,21 @@ import {
 import {
   canonicalPluginVideoEffectParameterJson,
   createPluginVideoEffectContributionSnapshot,
-  resolveVideoEffectStagePlan,
+  createVideoEffectStagePlanner,
   type PluginVideoEffectContributionAvailability,
   type PluginVideoEffectContributionDeclarationInput,
+  type PluginVideoEffectContributionSnapshot,
 } from './pluginVideoEffectStagePlan'
 import type { Clip, EffectDescriptor } from './schema'
 import { expandedTitleProject, legacyTitleProject } from '../test/titleOwnerFixtures'
+
+function resolveVideoEffectStagePlan(
+  clip: Clip,
+  timelineFrame: number,
+  snapshot?: PluginVideoEffectContributionSnapshot,
+) {
+  return createVideoEffectStagePlanner(snapshot).planClip(clip, timelineFrame)
+}
 
 const SIGNER = `sha256:${'1'.repeat(64)}`
 const PACKAGE = `sha256:${'2'.repeat(64)}`

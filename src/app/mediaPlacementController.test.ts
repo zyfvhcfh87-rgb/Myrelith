@@ -17,7 +17,7 @@ import {
   invalidateMediaPlacementHover,
   mediaPlacementPreviewEpoch,
   placeImportedAsset,
-  resetMediaPlacementControllerForTest,
+  teardownMediaPlacementUi,
   TIMELINE_MULTI_FILE_DROP_MESSAGE,
 } from './mediaPlacementController'
 
@@ -134,7 +134,7 @@ function fillHistoryToCapacity(): TimelineDoc {
 }
 
 beforeEach(() => {
-  resetMediaPlacementControllerForTest()
+  teardownMediaPlacementUi()
   resetTransportStoreForTest()
   resetMediaStoreForTest()
   resetDocumentStoreForTest(makeDoc())

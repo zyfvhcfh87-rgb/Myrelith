@@ -1,9 +1,12 @@
 /** Browser-free provenance and stale-result policy for derived analysis data. */
 
+import { hasExactKeys, isBoundedString, isRecord, isSha256Hex } from './guards'
 import { isLocalProjectBindingId } from './localProjectBinding'
 import { MAX_DOCUMENT_ID_CHARACTERS } from './projectLimits'
 import type { FrameRate } from './schema'
 import { audioFeatureKeyPreimage, type AudioFeatureIdentity } from './multicamAlignmentProvenance'
+import { isNonNegativeSafeInteger, isPositiveSafeInteger } from './numeric'
+import { gcd } from './time'
 
 export const ANALYSIS_CACHE_SCHEMA_VERSION = 2 as const
 // Keep the physical root: schema 1 motion files migrate without moving bytes.
@@ -122,72 +125,36 @@ const ANALYSIS_KIND_SET = new Set<AnalysisKind>([
   'box-tracking',
 ])
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
-  const keys = Object.keys(value)
-  return keys.length === expected.length && keys.every((key) => expected.includes(key))
-}
-
-function boundedString(value: unknown, maximum = MAX_STRING_CHARACTERS): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= maximum
-}
-
-function digest(value: unknown): value is string {
-  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
-}
-
-function nonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-}
-
-function positiveSafeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
-}
-
 function boundedTimestamp(value: unknown): value is number {
   return typeof value === 'number'
     && Number.isSafeInteger(value)
     && Math.abs(value) <= MAX_TIMESTAMP
 }
 
-function greatestCommonDivisor(left: number, right: number): number {
-  let a = left
-  let b = right
-  while (b !== 0) {
-    const remainder = a % b
-    a = b
-    b = remainder
-  }
-  return a
-}
-
 function validRate(value: unknown): value is FrameRate {
-  if (!record(value) || !exactKeys(value, ['num', 'den'])) return false
-  return positiveSafeInteger(value.num)
+  if (!isRecord(value) || !hasExactKeys(value, ['num', 'den'])) return false
+  return isPositiveSafeInteger(value.num)
     && value.num <= MAX_RATE_PART
-    && positiveSafeInteger(value.den)
+    && isPositiveSafeInteger(value.den)
     && value.den <= MAX_RATE_PART
-    && greatestCommonDivisor(value.num, value.den) === 1
+    && gcd(value.num, value.den) === 1
     && value.num / value.den <= MAX_FRAME_RATE
 }
 
 function validFingerprint(value: unknown): value is AnalysisSourceFingerprint {
-  return record(value)
-    && exactKeys(value, ['algorithm', 'digest', 'fileName', 'size', 'lastModified'])
+  return isRecord(value)
+    && hasExactKeys(value, ['algorithm', 'digest', 'fileName', 'size', 'lastModified'])
     && value.algorithm === 'sha256-sampled-v1'
-    && digest(value.digest)
-    && boundedString(value.fileName)
-    && nonNegativeSafeInteger(value.size)
-    && nonNegativeSafeInteger(value.lastModified)
+    && isSha256Hex(value.digest)
+    && isBoundedString(value.fileName, MAX_STRING_CHARACTERS)
+    && isNonNegativeSafeInteger(value.size)
+    && isNonNegativeSafeInteger(value.lastModified)
     && value.lastModified <= MAX_TIMESTAMP
 }
 
 function validSource(value: unknown): value is AnalysisSourceProvenance {
-  return record(value)
-    && exactKeys(value, [
+  return isRecord(value)
+    && hasExactKeys(value, [
       'fingerprint',
       'videoStreamIndex',
       'width',
@@ -198,40 +165,40 @@ function validSource(value: unknown): value is AnalysisSourceProvenance {
       'samplingIntervalFrames',
     ])
     && validFingerprint(value.fingerprint)
-    && nonNegativeSafeInteger(value.videoStreamIndex)
+    && isNonNegativeSafeInteger(value.videoStreamIndex)
     && value.videoStreamIndex <= 255
-    && positiveSafeInteger(value.width)
+    && isPositiveSafeInteger(value.width)
     && value.width <= MAX_DIMENSION
-    && positiveSafeInteger(value.height)
+    && isPositiveSafeInteger(value.height)
     && value.height <= MAX_DIMENSION
     && validRate(value.frameRate)
     && boundedTimestamp(value.sourceStartMicroseconds)
     && boundedTimestamp(value.sourceEndMicroseconds)
     && value.sourceEndMicroseconds > value.sourceStartMicroseconds
-    && positiveSafeInteger(value.samplingIntervalFrames)
+    && isPositiveSafeInteger(value.samplingIntervalFrames)
     && value.samplingIntervalFrames <= MAX_ANALYSIS_SAMPLES
 }
 
 function validAttachment(value: unknown): value is AnalysisClipAttachment {
-  return record(value)
-    && exactKeys(value, ['clipId', 'sourceMappingDigest', 'projectionDigest'])
-    && boundedString(value.clipId, MAX_DOCUMENT_ID_CHARACTERS)
-    && digest(value.sourceMappingDigest)
-    && digest(value.projectionDigest)
+  return isRecord(value)
+    && hasExactKeys(value, ['clipId', 'sourceMappingDigest', 'projectionDigest'])
+    && isBoundedString(value.clipId, MAX_DOCUMENT_ID_CHARACTERS)
+    && isSha256Hex(value.sourceMappingDigest)
+    && isSha256Hex(value.projectionDigest)
 }
 
 function validAlgorithm(value: unknown): value is AnalysisAlgorithmProvenance {
-  return record(value)
-    && exactKeys(value, ['kind', 'algorithmId', 'algorithmVersion', 'parametersDigest'])
+  return isRecord(value)
+    && hasExactKeys(value, ['kind', 'algorithmId', 'algorithmVersion', 'parametersDigest'])
     && typeof value.kind === 'string'
     && ANALYSIS_KIND_SET.has(value.kind as AnalysisKind)
-    && boundedString(value.algorithmId, 256)
-    && boundedString(value.algorithmVersion, 256)
-    && digest(value.parametersDigest)
+    && isBoundedString(value.algorithmId, 256)
+    && isBoundedString(value.algorithmVersion, 256)
+    && isSha256Hex(value.parametersDigest)
 }
 
 function validEntry(value: unknown): value is AnalysisCacheEntry {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'cacheKind',
     'cacheKey',
     'projectBindingId',
@@ -245,22 +212,22 @@ function validEntry(value: unknown): value is AnalysisCacheEntry {
     'createdAt',
     'lastUsedAt',
   ])) return false
-  return value.cacheKind === 'motion' && digest(value.cacheKey)
+  return value.cacheKind === 'motion' && isSha256Hex(value.cacheKey)
     && isLocalProjectBindingId(value.projectBindingId)
-    && boundedString(value.assetId, MAX_DOCUMENT_ID_CHARACTERS)
+    && isBoundedString(value.assetId, MAX_DOCUMENT_ID_CHARACTERS)
     && validSource(value.source)
     && validAttachment(value.attachment)
     && validAlgorithm(value.algorithm)
     && typeof value.resultFileName === 'string'
     && RESULT_FILE_PATTERN.test(value.resultFileName)
     && value.resultFileName.startsWith(`${value.cacheKey}.`)
-    && positiveSafeInteger(value.resultBytes)
+    && isPositiveSafeInteger(value.resultBytes)
     && value.resultBytes <= MAX_ANALYSIS_RESULT_BYTES
-    && positiveSafeInteger(value.sampleCount)
+    && isPositiveSafeInteger(value.sampleCount)
     && value.sampleCount <= MAX_ANALYSIS_SAMPLES
-    && nonNegativeSafeInteger(value.createdAt)
+    && isNonNegativeSafeInteger(value.createdAt)
     && value.createdAt <= MAX_TIMESTAMP
-    && nonNegativeSafeInteger(value.lastUsedAt)
+    && isNonNegativeSafeInteger(value.lastUsedAt)
     && value.lastUsedAt <= MAX_TIMESTAMP
     && value.lastUsedAt >= value.createdAt
 }
@@ -272,23 +239,23 @@ export function audioFeatureIdentity(entry: AudioFeatureCacheEntry): AudioFeatur
 }
 
 function validAudioEntry(value: unknown): value is AudioFeatureCacheEntry {
-  if (!record(value) || value.cacheKind !== 'audio-feature') return false
+  if (!isRecord(value) || value.cacheKind !== 'audio-feature') return false
   const { cacheKind: _kind, cacheKey, resultFileName, resultBytes, createdAt, lastUsedAt,
     ...identity } = value
   try { audioFeatureKeyPreimage(identity) } catch { return false }
-  return digest(cacheKey)
+  return isSha256Hex(cacheKey)
     && typeof resultFileName === 'string' && RESULT_FILE_PATTERN.test(resultFileName)
     && resultFileName.startsWith(`${cacheKey}.`)
-    && positiveSafeInteger(resultBytes) && resultBytes <= MAX_AUDIO_FEATURE_BYTES
+    && isPositiveSafeInteger(resultBytes) && resultBytes <= MAX_AUDIO_FEATURE_BYTES
     && resultBytes === (identity.binCount as number) * 4
-    && nonNegativeSafeInteger(createdAt) && createdAt <= MAX_TIMESTAMP
-    && nonNegativeSafeInteger(lastUsedAt) && lastUsedAt <= MAX_TIMESTAMP
+    && isNonNegativeSafeInteger(createdAt) && createdAt <= MAX_TIMESTAMP
+    && isNonNegativeSafeInteger(lastUsedAt) && lastUsedAt <= MAX_TIMESTAMP
     && lastUsedAt >= createdAt
 }
 
 /** Invalid/future disposable manifests fail closed instead of being repaired. */
 export function parseAnalysisCacheManifest(value: unknown): AnalysisCacheManifest {
-  if (!record(value) || !exactKeys(value, ['schemaVersion', 'entries'])) {
+  if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion', 'entries'])) {
     throw new TypeError('Analysis cache manifest must be an exact object')
   }
   if (value.schemaVersion !== 1 && value.schemaVersion !== ANALYSIS_CACHE_SCHEMA_VERSION) {
@@ -303,9 +270,9 @@ export function parseAnalysisCacheManifest(value: unknown): AnalysisCacheManifes
   let aggregateBytes = 0
   for (const input of value.entries) {
     // Only schema 1 may omit the discriminator; never reinterpret an audio record.
-    const rawEntry = value.schemaVersion === 1 && record(input) && !('cacheKind' in input)
+    const rawEntry = value.schemaVersion === 1 && isRecord(input) && !('cacheKind' in input)
       ? { ...input, cacheKind: 'motion' } : input
-    if (value.schemaVersion === 1 && record(input) && 'cacheKind' in input) {
+    if (value.schemaVersion === 1 && isRecord(input) && 'cacheKind' in input) {
       throw new TypeError('Schema 1 only contains legacy motion entries')
     }
     if (!validEntry(rawEntry) && !validAudioEntry(rawEntry)) {

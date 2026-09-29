@@ -7,7 +7,6 @@ import type { PortableColorLut } from '../../domain/colorLutCatalog'
  * this module. Every decoded VideoFrame and borrowed render frame must still be
  * closed exactly once; contracts and browser-only adapters live in siblings.
  */
-import { FrameRingBuffer } from '../../engine/frame-cache';
 import type { AssetId, ClipId, TimelineDoc } from '../../domain/schema';
 import { fullResolutionPresentationProfile, presentationProfileMatchesDocument, type PresentationProfile } from '../../domain/presentationProfile';
 import {
@@ -15,6 +14,7 @@ import {
   videoCompositionRequestKey,
 } from '../../domain/videoCompositionPlan';
 import { supportsCanvasEffectFilter, supportsCanvasEffectPixels } from '../../domain/effectStack';
+import { errorMessage } from '../../domain/errors'
 import { analyzeVideoScopes, VIDEO_SCOPE_SAMPLE_HEIGHT, VIDEO_SCOPE_SAMPLE_WIDTH } from '../../domain/videoScopes';
 import { renderWorkSurfaceBudget } from '../../domain/renderSurfaceBudget';
 import type { Composite2D, FrameSource, RenderFrameSource, TransitionSurfaceProvider, TransitionSurfaces, VideoEffectStageExecutor } from '../../pipeline/render';
@@ -23,13 +23,25 @@ import { LensRemapUnavailableError, LENS_REMAP_BACKEND_VERSION, type LensRemapAv
 import { createDocumentLensRemapProvider, documentHasLensCorrection, documentHasSupportedLensCorrection, WebGl2LensRemapBackend } from '../../pipeline/lensRemapWebgl';
 import { staticImageDecodedByteLength, STATIC_IMAGE_RESIDENT_BUDGET_BYTES, StaticImageDecodeError, type DecodedStaticImage, type StaticImageDecodedByteReservation, type StaticImageDecodedByteReserver, type StaticImageRenderSource } from '../../pipeline/static-image';
 import type { BitmapLike } from '../decode-types';
-import { createLegacyRenderWorkerCompatibility, type LegacyRenderWorkerCompatibility } from '../render-legacy';
 import type { RenderWorkerRuntimeTelemetrySnapshot, RenderFrameMessage, StreamingCompositeSourceEntry, StreamingVideoSourceEntry, ToRenderWorker } from '../render-protocol';
 import { WorkerVideoSourceOpenError } from '../video-source';
 import type { DecodedVideoFrame, VideoFrameCursor, WorkerVideoSource } from '../video-source';
 import { PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION, isPluginEffectBridgeHostMessage, zeroAttachedPluginEffectBuffer } from '../plugin-effect-bridge-protocol';
+import { throwIfRejected } from '../settledResults';
 import { PLAYBACK_RESTART_GAP_US, SRGB_2D_CONTEXT, type RenderCanvasLike, type RenderWorkerEnv } from './contracts';
 import { StaticImageResidentBudgetError, type ClipDecodeIdentity, type OwnedStreamingFrame, type PendingPluginEffect, type PendingStaticImageOpen, type PlaybackLaneState, type StaticImageAssetState, type StaticImageLoan, type StreamingAssetState, type StreamingLoan } from './state';
+
+/** `Name: message` for Errors, so posted diagnostics keep the error class. */
+function describeError(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+}
+
+/** Video-clip decode identities before and after one setDoc. */
+interface DocClipChange {
+  readonly previous: ReadonlyMap<ClipId, ClipDecodeIdentity>
+  readonly next: ReadonlyMap<ClipId, ClipDecodeIdentity>
+  readonly frameRateChanged: boolean
+}
 
 export function createRenderWorkerCore(env: RenderWorkerEnv): {
   handleMessage(msg: ToRenderWorker): Promise<void>
@@ -58,9 +70,15 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   let lastVideoScopeAnalysisAt = Number.NEGATIVE_INFINITY
   let scratchFrame: number | null = null
   let doc: TimelineDoc | null = null
+  /**
+   * Decode identities of `doc`'s video clips, derived once when it is
+   * installed. The worker owns its structured-cloned doc and never mutates
+   * it, so this stays exact until the next setDoc replaces both together.
+   */
+  let docClipIdentities: ReadonlyMap<ClipId, ClipDecodeIdentity> = new Map()
   let presentationProfile: PresentationProfile | null = null
-  /** Bumped by every composite/setDoc/configureAsset/releaseAsset/close;
-   * stale composites and parked feed loops check it and unwind. */
+  /** Bumped by every render/setDoc/open/releaseAsset/close; stale
+   * composites and parked seek cursors check it and unwind. */
   let generation = 0
   let colorLuts: readonly PortableColorLut[] = []
   let gradingRuntime: ColorGradingRuntime | null = null
@@ -86,8 +104,6 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   let workerLifecycle = 0
   /** Worker-global tokens prevent ABA when per-key revision entries retire. */
   let revisionToken = 0
-  /** Deprecated chunk-backed state lives behind one compatibility delegate. */
-  let legacyCompatibility: LegacyRenderWorkerCompatibility | null = null
   /** Blob-backed streaming asset states. */
   const streamingAssets = new Map<AssetId, StreamingAssetState>()
   /** Blob-backed static image states (one retained frame per asset). */
@@ -279,7 +295,6 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   /** Invalidate presentation work without cancelling persistent playback lanes. */
   function supersede(): number {
     generation++
-    legacyCompatibility?.wakeAll()
     cancelActiveSeeks()
     cancelPendingPluginEffects()
     return generation
@@ -430,7 +445,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         } catch (cause) {
           lensOwnerTerminal = true
           lensRemapAvailability = lensUnavailable(
-            cause instanceof Error ? cause.message : String(cause),
+            errorMessage(cause),
           )
         }
       }
@@ -448,7 +463,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     } catch (cause) {
       lensRemapProvider = null
       lensRemapAvailability = lensUnavailable(
-        cause instanceof Error ? cause.message : String(cause),
+        errorMessage(cause),
       )
     }
 
@@ -494,7 +509,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           canvasSyncPending = false
           syncCanvases()
         }).catch((error) => {
-          env.post({ type: 'error', message: `Render surface configuration failed: ${error instanceof Error ? error.message : String(error)}` })
+          env.post({ type: 'error', message: `Render surface configuration failed: ${errorMessage(error)}` })
         })
       }
       return
@@ -691,40 +706,6 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     },
   }
 
-  legacyCompatibility = createLegacyRenderWorkerCompatibility(env, {
-    supersede,
-    generationIsCurrent: (candidate) => generation === candidate,
-    isReady: () => Boolean(visibleCtx && scratch && scratchCtx && doc),
-    createCache: (capacity) => new FrameRingBuffer<BitmapLike>(capacity),
-    enqueueComposite: (run) => {
-      compositeChain = compositeChain.then(run)
-      return compositeChain
-    },
-    composite: (plan, source) => {
-      syncCanvases()
-      if (!doc || !scratchCtx) {
-        throw new Error('legacy composite invoked before init/setDoc')
-      }
-      return compositeWithOwnedSurfaces(
-        doc,
-        plan,
-        scratchCtx,
-        source as FrameSource,
-        transitionSurfaceProvider,
-        currentPresentationProfile() ?? undefined,
-        lensRemapProvider,
-        undefined,
-        gradingFrame(generation),
-      )
-    },
-    present: () => {
-      if (!visibleCtx || !scratch) {
-        throw new Error('legacy presentation invoked before init/setDoc')
-      }
-      visibleCtx.drawImage(scratch as unknown as ImageBitmap, 0, 0)
-    },
-  })
-
   function closeOwnedStreamingFrame(frame: OwnedStreamingFrame | null): void {
     closeStreamingBitmap(frame?.bitmap ?? null)
   }
@@ -761,12 +742,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     while (state.pendingCopies.size > 0) {
       await Promise.allSettled([...state.pendingCopies])
     }
-    const errors = closeResults
-      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      .map((result) => result.reason)
-    if (errors.length > 0) {
-      throw new AggregateError(errors, 'Failed to close streaming render asset')
-    }
+    throwIfRejected(closeResults, 'Failed to close streaming render asset')
   }
 
   async function removeStreamingAsset(assetId: AssetId): Promise<void> {
@@ -1031,10 +1007,9 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
   }
 
   function collectClipDecodeIdentities(
-    value: TimelineDoc | null,
+    value: TimelineDoc,
   ): Map<ClipId, ClipDecodeIdentity> {
     const identities = new Map<ClipId, ClipDecodeIdentity>()
-    if (!value) return identities
     for (const track of value.tracks) {
       if (track.kind !== 'video') continue
       for (const clip of track.clips) {
@@ -1065,22 +1040,15 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     )
   }
 
-  function invalidatePlaybackPolicyForDoc(
-    previousDoc: TimelineDoc | null,
-    nextDoc: TimelineDoc,
-  ): void {
-    if (!previousDoc) return
-    const previous = collectClipDecodeIdentities(previousDoc)
-    const next = collectClipDecodeIdentities(nextDoc)
-    const frameRateChanged = (
-      previousDoc.frameRate.num !== nextDoc.frameRate.num
-      || previousDoc.frameRate.den !== nextDoc.frameRate.den
-    )
-    for (const [clipId, identity] of previous) {
+  function invalidatePlaybackPolicyForDoc(change: DocClipChange): void {
+    for (const [clipId, identity] of change.previous) {
       const key = playbackLaneKey(identity.assetId, clipId)
       if (
         desiredPlaybackLaneKeys.has(key)
-        && (frameRateChanged || !sameClipDecodeIdentity(identity, next.get(clipId)))
+        && (
+          change.frameRateChanged
+          || !sameClipDecodeIdentity(identity, change.next.get(clipId))
+        )
       ) {
         const revision = bumpPlaybackLaneRevision(key)
         desiredPlaybackLaneKeys.delete(key)
@@ -1089,24 +1057,15 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
   }
 
-  async function prunePlaybackLanes(
-    previousDoc: TimelineDoc | null,
-    nextDoc: TimelineDoc,
-  ): Promise<void> {
-    const previous = collectClipDecodeIdentities(previousDoc)
-    const next = collectClipDecodeIdentities(nextDoc)
-    const frameRateChanged = previousDoc !== null && (
-      previousDoc.frameRate.num !== nextDoc.frameRate.num
-      || previousDoc.frameRate.den !== nextDoc.frameRate.den
-    )
-
+  async function prunePlaybackLanes(change: DocClipChange): Promise<void> {
     const closes: Promise<void>[] = []
     for (const [assetId, state] of streamingAssets) {
       for (const clipId of state.lanes.keys()) {
+        const next = change.next.get(clipId)
         const compatible = (
-          !frameRateChanged
-          && sameClipDecodeIdentity(previous.get(clipId), next.get(clipId))
-          && next.get(clipId)?.assetId === assetId
+          !change.frameRateChanged
+          && sameClipDecodeIdentity(change.previous.get(clipId), next)
+          && next?.assetId === assetId
         )
         if (!compatible) {
           desiredPlaybackLaneKeys.delete(playbackLaneKey(assetId, clipId))
@@ -1114,13 +1073,10 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         }
       }
     }
-    const results = await Promise.allSettled(closes)
-    const errors = results
-      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      .map((result) => result.reason)
-    if (errors.length > 0) {
-      throw new AggregateError(errors, 'Failed to prune streaming playback lanes')
-    }
+    throwIfRejected(
+      await Promise.allSettled(closes),
+      'Failed to prune streaming playback lanes',
+    )
   }
 
   async function copyDecodedFrame(
@@ -1188,7 +1144,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
 
   function applyPlaybackPolicy(
     msg: RenderFrameMessage,
-  ): Promise<unknown[]> {
+  ): Promise<PromiseSettledResult<void>[]> {
     const videoSources = msg.sources.filter(
       (entry): entry is StreamingVideoSourceEntry =>
         entry.kind === 'video' && streamingAssets.has(entry.assetId),
@@ -1221,11 +1177,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         }
       }
     }
-    return Promise.allSettled(closes).then((results) =>
-      results
-        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-        .map((result) => result.reason),
-    )
+    return Promise.allSettled(closes)
   }
 
   function streamingStateIsCurrent(
@@ -1454,7 +1406,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         type: 'error',
         requestId,
         assetId: entry.assetId,
-        message: `streaming playback failed: ${error instanceof Error ? error.message : String(error)}`,
+        message: `streaming playback failed: ${errorMessage(error)}`,
       })
       return null
     }
@@ -1502,7 +1454,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
           type: 'error',
           requestId,
           assetId: entry.assetId,
-          message: `streaming seek failed: ${error instanceof Error ? error.message : String(error)}`,
+          message: `streaming seek failed: ${errorMessage(error)}`,
         })
       }
       return null
@@ -1518,42 +1470,45 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     }
   }
 
-  /** Install one deprecated chunk decoder after current sources retire. */
-  async function configureAssetAtRevision(
-    msg: Extract<ToRenderWorker, { type: 'configureAsset' }>,
+  /**
+   * Retire every current source for `assetId` on behalf of `revision`.
+   * Resolves false when a newer operation took the asset over; a cleanup
+   * failure then belongs to that stale revision and goes to `onStaleFailure`
+   * instead of rejecting the newer owner's waiter.
+   */
+  async function retireAssetSources(
+    assetId: AssetId,
     revision: number,
     lifecycle: number,
-  ): Promise<void> {
-    env.invalidateDecoderSource(msg.assetId)
-    supersede() // in-flight composites may reference the machinery we replace
-    legacyCompatibility?.releaseAsset(msg.assetId)
+    onStaleFailure: (error: unknown) => void = () => undefined,
+  ): Promise<boolean> {
+    env.invalidateDecoderSource(assetId)
+    supersede()
     try {
-      await removeStreamingAsset(msg.assetId)
-      await removeStaticImageAsset(msg.assetId)
+      await removeStreamingAsset(assetId)
+      await removeStaticImageAsset(assetId)
     } catch (error) {
-      if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
+      if (!assetRevisionIsCurrent(assetId, revision, lifecycle)) {
+        onStaleFailure(error)
+        return false
+      }
       throw error
     }
-    if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
-    if (!legacyCompatibility) {
-      throw new Error('legacy render compatibility is unavailable')
-    }
-    await legacyCompatibility.configureAsset(
-      msg,
-      () => assetRevisionIsCurrent(msg.assetId, revision, lifecycle),
-    )
+    return assetRevisionIsCurrent(assetId, revision, lifecycle)
   }
 
-  async function handleConfigureAsset(
-    msg: Extract<ToRenderWorker, { type: 'configureAsset' }>,
+  /** Run one asset operation under a fresh revision that newer ones supersede. */
+  async function withAssetRevision(
+    assetId: AssetId,
+    run: (revision: number, lifecycle: number) => Promise<void>,
   ): Promise<void> {
-    const revision = nextAssetRevision(msg.assetId)
-    abortPendingStaticImageOpen(msg.assetId)
+    const revision = nextAssetRevision(assetId)
+    abortPendingStaticImageOpen(assetId)
     const lifecycle = workerLifecycle
     try {
-      await configureAssetAtRevision(msg, revision, lifecycle)
+      await run(revision, lifecycle)
     } finally {
-      clearAssetRevision(msg.assetId, revision)
+      clearAssetRevision(assetId, revision)
     }
   }
 
@@ -1562,18 +1517,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     revision: number,
     lifecycle: number,
   ): Promise<void> {
-    env.invalidateDecoderSource(msg.assetId)
-    supersede()
-
-    legacyCompatibility?.releaseAsset(msg.assetId)
-    try {
-      await removeStreamingAsset(msg.assetId)
-      await removeStaticImageAsset(msg.assetId)
-    } catch (error) {
-      if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
-      throw error
-    }
-    if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
+    if (!await retireAssetSources(msg.assetId, revision, lifecycle)) return
 
     let source: WorkerVideoSource
     try {
@@ -1605,17 +1549,12 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     })
   }
 
-  async function handleOpenAsset(
+  function handleOpenAsset(
     msg: Extract<ToRenderWorker, { type: 'openAsset' }>,
   ): Promise<void> {
-    const revision = nextAssetRevision(msg.assetId)
-    abortPendingStaticImageOpen(msg.assetId)
-    const lifecycle = workerLifecycle
-    try {
-      await openAssetAtRevision(msg, revision, lifecycle)
-    } finally {
-      clearAssetRevision(msg.assetId, revision)
-    }
+    return withAssetRevision(msg.assetId, (revision, lifecycle) =>
+      openAssetAtRevision(msg, revision, lifecycle),
+    )
   }
 
   function staticImageFailure(error: unknown): {
@@ -1646,11 +1585,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       if (workerLifecycle === lifecycle) {
         env.post({
           type: 'error',
-          message:
-            `stale image cleanup failed for asset ${assetId}: `
-            + (error instanceof Error
-              ? `${error.name}: ${error.message}`
-              : String(error)),
+          message: `stale image cleanup failed for asset ${assetId}: ${describeError(error)}`,
         })
       }
     }
@@ -1662,18 +1597,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     lifecycle: number,
     signal: AbortSignal,
   ): Promise<void> {
-    env.invalidateDecoderSource(msg.assetId)
-    supersede()
-
-    legacyCompatibility?.releaseAsset(msg.assetId)
-    try {
-      await removeStreamingAsset(msg.assetId)
-      await removeStaticImageAsset(msg.assetId)
-    } catch (error) {
-      if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
-      throw error
-    }
-    if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
+    if (!await retireAssetSources(msg.assetId, revision, lifecycle)) return
 
     let decoded: DecodedStaticImage
     let reservationRequested = false
@@ -1749,84 +1673,54 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     })
   }
 
-  async function handleOpenImage(
+  function handleOpenImage(
     msg: Extract<ToRenderWorker, { type: 'openImage' }>,
   ): Promise<void> {
-    const revision = nextAssetRevision(msg.assetId)
-    const previousOpen = pendingStaticImageOpens.get(msg.assetId)
-    previousOpen?.controller.abort()
-    const lifecycle = workerLifecycle
-    const controller = new AbortController()
-    const operation: PendingStaticImageOpen = {
-      revision,
-      controller,
-      done: Promise.resolve(),
-    }
-    pendingStaticImageOpens.set(msg.assetId, operation)
-    operation.done = (async () => {
-      if (previousOpen) await previousOpen.done.catch(() => undefined)
-      if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
-      await openImageAtRevision(
-        msg,
+    return withAssetRevision(msg.assetId, async (revision, lifecycle) => {
+      // withAssetRevision already aborted this previous open; the new one
+      // still waits for it to settle before decoding.
+      const previousOpen = pendingStaticImageOpens.get(msg.assetId)
+      const controller = new AbortController()
+      const operation: PendingStaticImageOpen = {
         revision,
-        lifecycle,
-        controller.signal,
-      )
-    })()
-    try {
-      await operation.done
-    } finally {
-      if (pendingStaticImageOpens.get(msg.assetId) === operation) {
-        pendingStaticImageOpens.delete(msg.assetId)
+        controller,
+        done: Promise.resolve(),
       }
-      clearAssetRevision(msg.assetId, revision)
-    }
-  }
-
-  async function handleReleaseAsset(assetId: AssetId): Promise<void> {
-    const revision = nextAssetRevision(assetId)
-    abortPendingStaticImageOpen(assetId)
-    const lifecycle = workerLifecycle
-    try {
-      env.invalidateDecoderSource(assetId)
-      supersede()
-      legacyCompatibility?.releaseAsset(assetId)
+      pendingStaticImageOpens.set(msg.assetId, operation)
+      operation.done = (async () => {
+        if (previousOpen) await previousOpen.done.catch(() => undefined)
+        if (!assetRevisionIsCurrent(msg.assetId, revision, lifecycle)) return
+        await openImageAtRevision(
+          msg,
+          revision,
+          lifecycle,
+          controller.signal,
+        )
+      })()
       try {
-        await removeStreamingAsset(assetId)
-        await removeStaticImageAsset(assetId)
-      } catch (error) {
-        if (!assetRevisionIsCurrent(assetId, revision, lifecycle)) {
-          // This cleanup belonged to a source that a newer open already
-          // replaced. Keep the diagnostic global so it cannot reject or
-          // disconnect that newer asset generation.
-          if (workerLifecycle === lifecycle) {
-            env.post({
-              type: 'error',
-              message:
-                `stale release cleanup failed for asset ${assetId}: `
-                + (error instanceof Error
-                  ? `${error.name}: ${error.message}`
-                  : String(error)),
-            })
-          }
-          return
+        await operation.done
+      } finally {
+        if (pendingStaticImageOpens.get(msg.assetId) === operation) {
+          pendingStaticImageOpens.delete(msg.assetId)
         }
-        throw error
       }
-    } finally {
-      clearAssetRevision(assetId, revision)
-    }
+    })
   }
 
-  function handleComposite(
-    msg: Extract<ToRenderWorker, { type: 'composite' }>,
-  ): Promise<void> {
-    if (!legacyCompatibility) {
-      return Promise.reject(
-        new Error('legacy render compatibility is unavailable'),
-      )
-    }
-    return legacyCompatibility.handleComposite(msg)
+  function handleReleaseAsset(assetId: AssetId): Promise<void> {
+    return withAssetRevision(assetId, async (revision, lifecycle) => {
+      await retireAssetSources(assetId, revision, lifecycle, (error) => {
+        // This cleanup belonged to a source that a newer open already
+        // replaced. Keep the diagnostic global so it cannot reject or
+        // disconnect that newer asset generation.
+        if (workerLifecycle === lifecycle) {
+          env.post({
+            type: 'error',
+            message: `stale release cleanup failed for asset ${assetId}: ${describeError(error)}`,
+          })
+        }
+      })
+    })
   }
 
   function handleRenderFrame(msg: RenderFrameMessage): Promise<void> {
@@ -1838,17 +1732,12 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
     const retirement = applyPlaybackPolicy(msg)
 
     const run = async (): Promise<void> => {
-      const retirementErrors = await retirement
+      const retirementResults = await retirement
       if (generation !== myGen) {
         postSuperseded(msg.requestId)
         return
       }
-      if (retirementErrors.length > 0) {
-        throw new AggregateError(
-          retirementErrors,
-          'Failed to retire obsolete playback lanes',
-        )
-      }
+      throwIfRejected(retirementResults, 'Failed to retire obsolete playback lanes')
       syncCanvases()
       if (!visibleCtx || !scratch || !scratchCtx || !doc) {
         env.post({
@@ -1979,7 +1868,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         env.post({
           type: 'error',
           requestId: msg.requestId,
-          message: `renderFrame failed: ${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}`,
+          message: `renderFrame failed: ${describeError(error)}`,
         })
       }).finally(leaveRenderQueue),
     )
@@ -2012,12 +1901,21 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       case 'setDoc': {
         clearTextLayoutCaches([visibleCtx, scratchCtx, transitionLegCtx, transitionGroupCtx])
         const previousDoc = doc
-        invalidatePlaybackPolicyForDoc(previousDoc, msg.doc)
+        const change: DocClipChange = {
+          previous: docClipIdentities,
+          next: collectClipDecodeIdentities(msg.doc),
+          frameRateChanged: previousDoc !== null && (
+            previousDoc.frameRate.num !== msg.doc.frameRate.num
+            || previousDoc.frameRate.den !== msg.doc.frameRate.den
+          ),
+        }
+        invalidatePlaybackPolicyForDoc(change)
         supersede() // an in-flight composite is rendering a stale doc
         doc = msg.doc
+        docClipIdentities = change.next
         prepareLensRemap(msg.doc)
         syncCanvases()
-        await prunePlaybackLanes(previousDoc, msg.doc)
+        await prunePlaybackLanes(change)
         break
       }
       case 'setPresentationProfile': {
@@ -2033,9 +1931,6 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       case 'openImage':
         await handleOpenImage(msg)
         break
-      case 'configureAsset':
-        await handleConfigureAsset(msg)
-        break
       case 'releaseAsset':
         await handleReleaseAsset(msg.assetId)
         break
@@ -2045,9 +1940,6 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       case 'pluginEffectApplied':
       case 'pluginEffectBypassed':
         handlePluginEffectHostMessage(msg)
-        break
-      case 'composite':
-        await handleComposite(msg)
         break
       case 'setRuntimeTelemetry':
         setRuntimeTelemetry(msg.enabled)
@@ -2078,7 +1970,6 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         for (const pending of pendingImageOpens) pending.controller.abort()
         desiredPlaybackLaneKeys.clear()
         playbackLaneRevisions.clear()
-        legacyCompatibility?.close()
         const streaming = [...streamingAssets.values()]
         streamingAssets.clear()
         const staticImages = [...staticImageAssets.entries()]
@@ -2100,12 +1991,8 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         )
         clearTextLayoutCaches([visibleCtx, scratchCtx, transitionLegCtx, transitionGroupCtx])
         gradingRuntime?.dispose(); gradingRuntime = null; colorLuts = []
-        const errors = results
-          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-          .map((result) => result.reason)
-        if (errors.length > 0) {
-          throw new AggregateError(errors, 'Failed to close render worker')
-        }
+        env.releaseStreamingBitmapSurface?.()
+        throwIfRejected(results, 'Failed to close render worker')
         break
       }
     }
@@ -2117,24 +2004,18 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
       await dispatch(msg)
     } catch (e) {
       // Uncaught async exceptions in a worker are silent to the page —
-      // never let one vanish (same rule as the decode worker).
-      const message = `worker ${msg.type} failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`
+      // never let one vanish.
+      const message = `worker ${msg.type} failed: ${describeError(e)}`
       env.post({
         type: 'error',
-        requestId:
-          msg.type === 'composite' || msg.type === 'renderFrame'
-            ? msg.requestId
-            : undefined,
+        requestId: msg.type === 'renderFrame' ? msg.requestId : undefined,
         assetId:
-          msg.type === 'configureAsset'
-          || msg.type === 'openAsset'
+          msg.type === 'openAsset'
           || msg.type === 'openImage'
           || msg.type === 'releaseAsset'
             ? msg.assetId
             : undefined,
-        ...(msg.type === 'configureAsset'
-          || msg.type === 'openAsset'
-          || msg.type === 'openImage'
+        ...(msg.type === 'openAsset' || msg.type === 'openImage'
           ? { setupId: msg.setupId }
           : {}),
         ...(msg.type === 'openAsset' && e instanceof WorkerVideoSourceOpenError

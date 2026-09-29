@@ -7,7 +7,17 @@ import { timelineRunwayFrames } from '../timeline/timelineZoom'
 import { useAnimationPointer } from './useAnimationPointer'
 import AnimationCurve from './AnimationCurve'
 
-const GUTTER = 248, ROW = ANIMATION_VIEW_LIMITS.rowHeight
+/** Lane-label gutter; the workspace subtracts it when sizing zoom presets. */
+export const ANIMATION_GRID_GUTTER_PX = 248
+const GUTTER = ANIMATION_GRID_GUTTER_PX, ROW = ANIMATION_VIEW_LIMITS.rowHeight
+
+/** Sorted key frames per lane for one key selection. */
+function framesByLane(keys: readonly AnimationKeyAddress[]): Map<string, number[]> {
+  const result = new Map<string, number[]>()
+  for (const key of keys) { const id = animationLaneKey(key.lane), frames = result.get(id) ?? []; frames.push(key.frame); result.set(id, frames) }
+  for (const frames of result.values()) frames.sort((a, b) => a - b)
+  return result
+}
 export default memo(function AnimationGrid({ index, rows, focused, frame, mode, selection, onSelect, onLane, reveal, requestedFrame }: {
   index: AnimationLaneIndex; rows: readonly AnimationLaneRow[]; focused?: AnimationLaneRow; frame: number | null; mode: 'sheet' | 'curve'
   selection: readonly AnimationKeyAddress[]; onSelect: (row: AnimationLaneRow, offset: number, extend: boolean, toggle: boolean) => void
@@ -31,18 +41,8 @@ export default memo(function AnimationGrid({ index, rows, focused, frame, mode, 
   const focusedPosition = focused ? rows.indexOf(focused) : -1
   if (focused && focusedPosition >= 0 && !mounted.some(({ row }) => row.id === focused.id)) mounted.push({ row: focused, position: focusedPosition })
   const budget = Math.max(1, Math.floor(ANIMATION_VIEW_LIMITS.glyphs / Math.max(1, mounted.length) / (preview ? 2 : 1)))
-  const selected = useMemo(() => {
-    const result = new Map<string, number[]>()
-    for (const key of selection) { const id = animationLaneKey(key.lane), frames = result.get(id) ?? []; frames.push(key.frame); result.set(id, frames) }
-    for (const frames of result.values()) frames.sort((a, b) => a - b)
-    return result
-  }, [selection])
-  const ghosts = useMemo(() => {
-    const result = new Map<string, number[]>()
-    for (const key of preview?.selection ?? []) { const id = animationLaneKey(key.lane), frames = result.get(id) ?? []; frames.push(key.frame); result.set(id, frames) }
-    for (const frames of result.values()) frames.sort((a, b) => a - b)
-    return result
-  }, [preview])
+  const selected = useMemo(() => framesByLane(selection), [selection])
+  const ghosts = useMemo(() => framesByLane(preview?.selection ?? []), [preview])
   useLayoutEffect(() => {
     const element = root.current
     if (!element) return

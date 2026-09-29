@@ -8,7 +8,7 @@
  */
 
 import { linkedPartners } from '../../domain/linking'
-import type { Clip, ClipId, TimelineDoc } from '../../domain/schema'
+import type { Clip, ClipId, FrameRate, TimelineDoc } from '../../domain/schema'
 import { findClip } from '../../domain/selectors'
 import {
   clipSourceTimeMap,
@@ -16,6 +16,8 @@ import {
   timelineFramesWithinMappedSourceTicks,
   SOURCE_TIME_TICKS_PER_FRAME,
 } from '../../domain/sourceTimeMap'
+import { microsecondsDurationToFrames } from '../../domain/time'
+import type { MediaState } from '../../state/mediaStore'
 import type { EditPreviewKind } from '../../state/transportStore'
 
 export type GestureMode = 'move' | EditPreviewKind
@@ -108,21 +110,41 @@ export function gestureBoundsForClip(
 }
 
 /**
- * Intersect the owner and every linked partner using a fresh document/media
- * snapshot captured by the caller at pointer-down.
+ * Exact owner/link closure of every gesture root, deduplicated in root order.
+ * Bounds, snapping, and the live preview all share this one member list.
  */
-export function linkedGestureBounds(
+export function gestureMembers(
   doc: TimelineDoc,
-  ownerClipId: ClipId,
+  rootClipIds: readonly ClipId[],
+): readonly Clip[] {
+  const members: Clip[] = []
+  const seen = new Set<ClipId>()
+  for (const rootClipId of rootClipIds) {
+    const owner = findClip(doc, rootClipId)
+    if (!owner) continue
+    for (const member of [owner, ...linkedPartners(doc, rootClipId)]) {
+      if (seen.has(member.id)) continue
+      seen.add(member.id)
+      members.push(member)
+    }
+  }
+  return members
+}
+
+/**
+ * Intersect every gesture member's own interval, using a fresh document/media
+ * snapshot captured by the caller at gesture start.
+ */
+export function gestureMembersBounds(
+  members: readonly Clip[],
   mode: GestureMode,
   assetDurationFramesForClip: AssetDurationFramesForClip,
 ): GestureBounds {
-  const owner = findClip(doc, ownerClipId)
-  if (!owner) return { minDelta: 0, maxDelta: 0 }
+  if (members.length === 0) return { minDelta: 0, maxDelta: 0 }
 
   let minDelta = Number.NEGATIVE_INFINITY
   let maxDelta = Number.POSITIVE_INFINITY
-  for (const member of [owner, ...linkedPartners(doc, ownerClipId)]) {
+  for (const member of members) {
     const bounds = gestureBoundsForClip(
       member,
       mode,
@@ -137,4 +159,21 @@ export function linkedGestureBounds(
   return minDelta <= maxDelta
     ? { minDelta, maxDelta }
     : { minDelta: 0, maxDelta: 0 }
+}
+
+/**
+ * Timeline-frame length of an asset: the connected media when present, else
+ * its offline descriptor. Unknown assets report 0 so timed edits fail closed.
+ */
+export function timelineAssetDurationFrames(
+  media: Pick<MediaState, 'assets' | 'descriptors'>,
+  assetId: string,
+  frameRate: FrameRate,
+): number {
+  const connected = media.assets.get(assetId)
+  if (connected) return connected.durationFrames
+  const descriptor = media.descriptors.get(assetId)
+  return descriptor
+    ? microsecondsDurationToFrames(descriptor.durationMicroseconds, frameRate)
+    : 0
 }

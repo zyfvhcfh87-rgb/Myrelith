@@ -7,6 +7,8 @@
  * tests without pretending that file handles are JSON-serializable.
  */
 
+import { hasErrorName } from '../domain/errors'
+import { isBoundedString, isPlainRecord } from '../domain/guards'
 import {
   LEGACY_PROJECT_FILE_EXTENSION,
   parseProjectFile,
@@ -21,6 +23,11 @@ import {
   legacyLocalProjectBindingId,
 } from './localProjectProvenance'
 import { isLocalProjectBindingId } from '../domain/localProjectBinding'
+import {
+  createCachedDatabase,
+  requestInTransaction,
+} from './indexedDbAccess'
+import { createKeyedSerialQueue } from './keyedSerialQueue'
 
 export const LOCAL_PROJECT_RECORD_VERSION = 1 as const
 
@@ -157,26 +164,6 @@ const MAX_FILE_NAME_CHARACTERS = PROJECT_FILE_LIMITS.maxFileNameCharacters
 const MAX_JOURNAL_ID_CHARACTERS = MAX_DOCUMENT_ID_CHARACTERS
 const MAX_DATE_TIMESTAMP = 8_640_000_000_000_000
 
-type JsonRecord = Record<string, unknown>
-
-function isRecord(value: unknown): value is JsonRecord {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return false
-  }
-  const prototype = Object.getPrototypeOf(value)
-  return prototype === Object.prototype || prototype === null
-}
-
-function isBoundedString(
-  value: unknown,
-  maximumCharacters: number,
-  allowEmpty = false,
-): value is string {
-  return typeof value === 'string'
-    && (allowEmpty || value.length > 0)
-    && value.length <= maximumCharacters
-}
-
 function isTimestamp(value: unknown): value is number {
   return typeof value === 'number'
     && Number.isSafeInteger(value)
@@ -213,7 +200,7 @@ function isProjectFileHandle(value: unknown): value is LocalProjectFileHandle {
 }
 
 function normalizeRecentProject(value: unknown): RecentProjectRecord | null {
-  if (!isRecord(value) || value.version !== LOCAL_PROJECT_RECORD_VERSION) {
+  if (!isPlainRecord(value) || value.version !== LOCAL_PROJECT_RECORD_VERSION) {
     return null
   }
   if (!isBoundedString(value.documentId, MAX_DOCUMENT_ID_CHARACTERS)) return null
@@ -247,13 +234,19 @@ function cloneRecoveryJournal(
   }
 }
 
+/** A valid generation plus the project name its snapshot already parsed to. */
+interface NormalizedRecoveryGeneration {
+  readonly generation: RecoveryGeneration
+  readonly projectName: string
+}
+
 function normalizeRecoveryGeneration(
   value: unknown,
   documentId: string,
   fallbackBindingId: string,
-): RecoveryGeneration | null {
+): NormalizedRecoveryGeneration | null {
   if (
-    !isRecord(value)
+    !isPlainRecord(value)
     || !isBoundedString(value.snapshotId, MAX_JOURNAL_ID_CHARACTERS)
     || !isTimestamp(value.capturedAt)
   ) {
@@ -267,9 +260,11 @@ function normalizeRecoveryGeneration(
   ) {
     return null
   }
+  let projectName: string
   try {
     const project = parseProjectFile(value.serializedProject)
     if (project.id !== documentId) return null
+    projectName = project.name
   } catch {
     return null
   }
@@ -280,10 +275,13 @@ function normalizeRecoveryGeneration(
       : null
   if (!projectBindingId) return null
   return {
-    snapshotId: value.snapshotId,
-    capturedAt: value.capturedAt,
-    serializedProject: value.serializedProject,
-    projectBindingId,
+    generation: {
+      snapshotId: value.snapshotId,
+      capturedAt: value.capturedAt,
+      serializedProject: value.serializedProject,
+      projectBindingId,
+    },
+    projectName,
   }
 }
 
@@ -291,7 +289,7 @@ function normalizeRecoveryJournal(
   value: unknown,
   maximumGenerations: number,
 ): RecoveryJournalRecord | null {
-  if (!isRecord(value) || value.version !== LOCAL_PROJECT_RECORD_VERSION) {
+  if (!isPlainRecord(value) || value.version !== LOCAL_PROJECT_RECORD_VERSION) {
     return null
   }
   if (!isBoundedString(value.journalId, MAX_JOURNAL_ID_CHARACTERS)) return null
@@ -316,8 +314,9 @@ function normalizeRecoveryJournal(
   if (!projectBindingId) return null
 
   const generations: RecoveryGeneration[] = []
+  let latestProjectName: string | null = null
   for (const candidate of value.generations) {
-    const generation = normalizeRecoveryGeneration(
+    const normalized = normalizeRecoveryGeneration(
       candidate,
       value.documentId,
       projectBindingId,
@@ -325,20 +324,15 @@ function normalizeRecoveryJournal(
     // A partially corrupted newest entry must not hide an older complete
     // recovery point. IndexedDB writes are atomic, but this also makes manual
     // storage damage and future record migrations fail safely.
-    if (!generation) continue
+    if (!normalized) continue
+    const { generation } = normalized
     const previous = generations.at(-1)
     if (previous && generation.capturedAt < previous.capturedAt) continue
     generations.push(generation)
+    latestProjectName = normalized.projectName
   }
   const latest = generations.at(-1)
-  if (!latest) return null
-  let latestProjectName: string
-  try {
-    const latestProject = parseProjectFile(latest.serializedProject)
-    latestProjectName = latestProject.name
-  } catch {
-    return null
-  }
+  if (!latest || latestProjectName === null) return null
 
   return {
     version: LOCAL_PROJECT_RECORD_VERSION,
@@ -491,21 +485,7 @@ export function createLocalProjectStorage(
 ): LocalProjectStorage {
   const now = options.now ?? (() => Date.now())
   const limits = resolvedLimits(options)
-  const tails = new Map<string, Promise<void>>()
-
-  function enqueue<T>(key: string, operation: () => Promise<T>): Promise<T> {
-    const previous = tails.get(key) ?? Promise.resolve()
-    const result = previous.then(operation)
-    const tail = result.then(
-      () => undefined,
-      () => undefined,
-    )
-    tails.set(key, tail)
-    void tail.then(() => {
-      if (tails.get(key) === tail) tails.delete(key)
-    })
-    return result
-  }
+  const enqueue = createKeyedSerialQueue()
 
   function withRecentKey<T>(
     documentId: string,
@@ -690,9 +670,16 @@ export function createLocalProjectStorage(
   }
 }
 
-class IndexedDbLocalProjectStorageBackend implements LocalProjectStorageBackend {
-  private database: Promise<IDBDatabase> | null = null
+const openLocalProjectDatabase = createCachedDatabase({
+  name: DATABASE_NAME,
+  version: DATABASE_VERSION,
+  stores: [RECENT_STORE, RECOVERY_STORE],
+  unavailableMessage: 'IndexedDB is unavailable in this browser',
+  openFailedMessage: 'Could not open local project storage',
+  blockedMessage: 'Local project storage is blocked by another Myrelith tab',
+})
 
+class IndexedDbLocalProjectStorageBackend implements LocalProjectStorageBackend {
   get(storeName: LocalProjectStoreName, key: string): Promise<unknown> {
     return this.withStore(storeName, 'readonly', (store) => store.get(key))
   }
@@ -713,58 +700,14 @@ class IndexedDbLocalProjectStorageBackend implements LocalProjectStorageBackend 
     await this.withStore(storeName, 'readwrite', (store) => store.delete(key))
   }
 
-  private open(): Promise<IDBDatabase> {
-    if (this.database) return this.database
-    this.database = new Promise<IDBDatabase>((resolve, reject) => {
-      if (typeof indexedDB === 'undefined') {
-        reject(new Error('IndexedDB is unavailable in this browser'))
-        return
-      }
-      const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
-      request.onupgradeneeded = () => {
-        for (const storeName of [RECENT_STORE, RECOVERY_STORE]) {
-          if (!request.result.objectStoreNames.contains(storeName)) {
-            request.result.createObjectStore(storeName)
-          }
-        }
-      }
-      request.onsuccess = () => {
-        request.result.onversionchange = () => request.result.close()
-        resolve(request.result)
-      }
-      request.onerror = () => reject(
-        request.error ?? new Error('Could not open local project storage'),
-      )
-      request.onblocked = () => reject(
-        new Error('Local project storage is blocked by another Myrelith tab'),
-      )
-    })
-    void this.database.catch(() => {
-      this.database = null
-    })
-    return this.database
-  }
-
   private async withStore<T>(
     storeName: LocalProjectStoreName,
     mode: IDBTransactionMode,
     requestFor: (store: IDBObjectStore) => IDBRequest<T>,
   ): Promise<T> {
-    const database = await this.open()
-    return new Promise<T>((resolve, reject) => {
-      const transaction = database.transaction(storeName, mode)
-      const request = requestFor(transaction.objectStore(storeName))
-      let result: T
-      request.onsuccess = () => {
-        result = request.result
-      }
-      request.onerror = () => reject(
-        request.error ?? new Error('Could not access local project storage'),
-      )
-      transaction.oncomplete = () => resolve(result)
-      transaction.onabort = () => reject(
-        transaction.error ?? new Error('Local project storage was aborted'),
-      )
+    return requestInTransaction(await openLocalProjectDatabase(), storeName, mode, requestFor, {
+      requestFailed: 'Could not access local project storage',
+      aborted: 'Local project storage was aborted',
     })
   }
 }
@@ -832,23 +775,11 @@ export async function pickLocalProjectFile(): Promise<LocalProjectSelection> {
   }
 }
 
-export function queryLocalProjectPermission(
-  handle: LocalProjectFileHandle,
-): Promise<LocalProjectPermission> {
-  return handle.queryPermission?.({ mode: 'read' })
-    ?? Promise.resolve('granted')
-}
-
-export function requestLocalProjectPermission(
-  handle: LocalProjectFileHandle,
-): Promise<LocalProjectPermission> {
-  return handle.requestPermission?.({ mode: 'read' })
-    ?? Promise.resolve('granted')
-}
+export {
+  queryReadPermission as queryLocalProjectPermission,
+  requestReadPermission as requestLocalProjectPermission,
+} from './fileSystemAccess'
 
 export function isLocalProjectPickerCancellation(cause: unknown): boolean {
-  return typeof cause === 'object'
-    && cause !== null
-    && 'name' in cause
-    && cause.name === 'AbortError'
+  return hasErrorName(cause, 'AbortError')
 }

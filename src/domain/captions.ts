@@ -49,7 +49,8 @@ export const CAPTION_STYLE_PRESETS = Object.freeze([
 
 const PORTABLE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/u
 const LANGUAGE_TAG = /^(?:und|[A-Za-z]{2,8})(?:-[A-Za-z0-9]{1,8})*$/u
-const MARKUP = /<[^>\n]+>/u
+/** Tag-like markup; caption text is plain and imports reject it. */
+export const CAPTION_MARKUP = /<[^>\n]+>/u
 
 function isSafeFrame(value: number): boolean {
   return Number.isSafeInteger(value)
@@ -95,7 +96,7 @@ export function captionItemValidationError(item: CaptionItem): string | null {
   if (item.text.length > CAPTION_LIMITS.maxItemCharacters) {
     return `Caption ${item.id} text must not exceed ${CAPTION_LIMITS.maxItemCharacters} characters`
   }
-  if (MARKUP.test(item.text)) {
+  if (CAPTION_MARKUP.test(item.text)) {
     return `Caption ${item.id} contains unsupported markup; captions accept plain text only`
   }
   return null
@@ -427,14 +428,6 @@ export function findCaptionTrack(
   trackId: CaptionTrackId,
 ): CaptionTrack | null {
   return (doc.captionTracks ?? []).find((track) => track.id === trackId) ?? null
-}
-
-export function findCaptionItem(
-  doc: TimelineDoc,
-  trackId: CaptionTrackId,
-  itemId: CaptionItemId,
-): CaptionItem | null {
-  return findCaptionTrack(doc, trackId)?.items.find((item) => item.id === itemId) ?? null
 }
 
 /** Visible active items in deterministic track/item order for one exact frame. */

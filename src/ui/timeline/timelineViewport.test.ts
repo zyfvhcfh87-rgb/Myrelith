@@ -4,6 +4,7 @@ import {
   calculateTimelineViewport,
   frameAtTimelineClientX,
   frameAtTimelineLocalPx,
+  frameAtTimelineRangeClientX,
   frameToTimelineLocalPx,
   planTimelineAnchor,
   planTimelineEdgeRebase,
@@ -18,6 +19,16 @@ describe('virtual timeline viewport math', () => {
     expect(frameAtTimelineClientX(-500, 100, 1_000, 2.5)).toBe(760)
     expect(frameAtTimelineClientX(50_000, 100, 1_000, 2.5, 0, 1_200))
       .toBe(1_200)
+  })
+
+  test('maps a pointer inside one clip from its origin-clamped left edge', () => {
+    const clip = { startFrame: 900, durationFrames: 200 }
+
+    // The clip element starts at the origin, not at its offscreen head.
+    expect(frameAtTimelineRangeClientX(125, 100, clip, 1_000, 2.5)).toBe(1_010)
+    expect(frameAtTimelineRangeClientX(125, 100, clip, 0, 2.5)).toBe(910)
+    expect(frameAtTimelineRangeClientX(50_000, 100, clip, 0, 2.5)).toBe(1_100)
+    expect(frameAtTimelineRangeClientX(-500, 100, clip, 0, 2.5)).toBe(900)
   })
 
   test('bounds a 12-hour max-zoom runway below browser layout limits', () => {

@@ -8,12 +8,10 @@
  */
 
 import { describe, expect, test, vi } from 'vitest'
-import {
-  applyStereoBalanceToSample,
-  foldDecodedFrameToStereo,
-} from '../domain/audioChannelMix'
+import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import { stereoBalanceGains } from '../domain/clipInspector'
 import {
+  applyStereoBalanceToSample,
   discreteSplitterPlanes,
   expectedParityStereo,
   isolatedParityPlanes,
@@ -271,6 +269,36 @@ describe('multichannel preview/export fold-down parity', () => {
       )
       expect(audible[0]).toBeCloseTo(expected[0])
       expect(audible[1]).toBeCloseTo(expected[1])
+    }
+  })
+
+  test('preview folds a split multichannel buffer once per output', () => {
+    const harness = makePreviewHarness()
+    const output = createWebAudioPlaybackOutput(harness.context)
+    const planes = isolatedParityPlanes(6, 2)
+    const buffer = makePlanarAudioBuffer(planes, PARITY_SAMPLE_RATE)
+    const half = PARITY_FRAME_COUNT / 2 / PARITY_SAMPLE_RATE
+    for (const offset of [0, half]) {
+      output.schedule({
+        clipId: 'split',
+        buffer,
+        timelineStartTime: offset,
+        when: offset,
+        offset,
+        duration: half,
+        volume: 1,
+        envelope: null,
+      })
+    }
+    output.stop()
+    expect(harness.context.createBuffer).toHaveBeenCalledOnce()
+    expect(harness.sources).toHaveLength(2)
+    expect(harness.sources[1]?.buffer).toBe(harness.sources[0]?.buffer)
+    const folded = harness.sources[0]!.buffer!
+    for (let frame = 0; frame < PARITY_FRAME_COUNT; frame++) {
+      const expected = foldDecodedFrameToStereo(planes, frame)
+      expect(folded.getChannelData(0)[frame]).toBe(Math.fround(expected[0]))
+      expect(folded.getChannelData(1)[frame]).toBe(Math.fround(expected[1]))
     }
   })
 })

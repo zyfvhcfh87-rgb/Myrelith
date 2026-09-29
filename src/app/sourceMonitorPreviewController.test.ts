@@ -424,6 +424,71 @@ describe('sourceMonitorPreviewController', () => {
     expect(bridge.opened).toHaveLength(openCount + 1)
   })
 
+  test('rescales the auto presentation when shuttle playback starts and stops', async () => {
+    const { deps, bridge } = makeDeps()
+    seed(makeAsset())
+    initSourcePreview(canvasEl(), deps)
+    setSourcePreviewViewport({ widthCssPx: 320, heightCssPx: 180, devicePixelRatio: 1 })
+    expect(openSourceAsset('asset-source').status).toBe('ok')
+    await nextFrame()
+    await flush()
+    expect(bridge.profiles.at(-1)).toMatchObject({ reason: 'paused', scale: 1 })
+
+    useSourceMonitorStore.getState().stepShuttle('l')
+    await nextFrame()
+    await flush()
+    expect(bridge.profiles.at(-1)).toMatchObject({
+      reason: 'playing',
+      scale: 0.25,
+      outputWidth: 320,
+      outputHeight: 180,
+    })
+    expect(bridge.rendered.at(-1)?.mode).toBe('playback')
+
+    // A monitor resized while playing must not keep its reduced scale paused.
+    setSourcePreviewViewport({ widthCssPx: 640, heightCssPx: 360, devicePixelRatio: 1 })
+    expect(bridge.profiles.at(-1)).toMatchObject({ reason: 'playing', scale: 0.5 })
+    const profileCount = bridge.profiles.length
+    useSourceMonitorStore.getState().stepShuttle('l')
+    expect(bridge.profiles).toHaveLength(profileCount)
+    useSourceMonitorStore.getState().stepShuttle('k')
+    await nextFrame()
+    await flush()
+    expect(bridge.profiles.at(-1)).toMatchObject({
+      reason: 'paused',
+      scale: 1,
+      outputWidth: 1280,
+      outputHeight: 720,
+    })
+    expect(bridge.rendered.at(-1)?.mode).toBe('seek')
+  })
+
+  test('rebuilds the review only when the open asset entry changes', async () => {
+    const { deps, bridge } = makeDeps()
+    const asset = makeAsset()
+    seed(asset)
+    initSourcePreview(canvasEl(), deps)
+    expect(openSourceAsset(asset.id).status).toBe('ok')
+    await nextFrame()
+    await flush()
+    const docCount = bridge.docs.length
+
+    useMediaStore.setState({ visuals: new Map(), compatibility: new Map() })
+    useMediaStore.setState({
+      assets: new Map([
+        [asset.id, asset],
+        ['other', makeAsset({ id: 'other', objectUrl: 'blob:other' })],
+      ]),
+    })
+    expect(bridge.docs).toHaveLength(docCount)
+
+    useMediaStore.setState({
+      assets: new Map([[asset.id, { ...asset, width: 640, height: 360 }]]),
+    })
+    expect(bridge.docs).toHaveLength(docCount + 1)
+    expect(bridge.docs.at(-1)).toMatchObject({ width: 640, height: 360 })
+  })
+
   test('ignores an old fetch when suspension reopens the same source', async () => {
     const { deps, bridge, blob } = makeDeps()
     let releaseFetch!: (value: Blob) => void

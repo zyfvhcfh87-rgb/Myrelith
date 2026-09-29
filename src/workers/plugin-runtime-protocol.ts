@@ -32,13 +32,6 @@ export interface PluginRuntimeFailure {
   readonly pluginCode?: number
 }
 
-export interface PluginWorkerConnectRequest {
-  readonly protocolVersion: typeof PLUGIN_RUNTIME_PROTOCOL_VERSION
-  readonly kind: 'connect'
-  readonly generation: number
-  readonly port: MessagePort
-}
-
 export interface PluginWorkerActivateRequest {
   readonly protocolVersion: typeof PLUGIN_RUNTIME_PROTOCOL_VERSION
   readonly kind: 'activate'
@@ -74,20 +67,6 @@ export interface PluginWorkerMigrateRequest {
   readonly toVersion: number
   readonly canonicalInputBytes: ArrayBuffer
 }
-
-export interface PluginWorkerCloseRequest {
-  readonly protocolVersion: typeof PLUGIN_RUNTIME_PROTOCOL_VERSION
-  readonly kind: 'close'
-  readonly generation: number
-  readonly requestId: number
-  readonly reason: string
-}
-
-export type PluginWorkerRequest =
-  | PluginWorkerActivateRequest
-  | PluginWorkerRenderRequest
-  | PluginWorkerMigrateRequest
-  | PluginWorkerCloseRequest
 
 export interface PluginWorkerReadyResponse {
   readonly protocolVersion: typeof PLUGIN_RUNTIME_PROTOCOL_VERSION

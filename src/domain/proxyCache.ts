@@ -1,8 +1,11 @@
+import { hasExactKeys, isBoundedString, isRecord, isSha256Hex } from './guards'
 import type { FrameRate } from './schema'
 import { MAX_DOCUMENT_ID_CHARACTERS } from './projectLimits'
 import {
   isLocalProjectBindingId,
 } from './localProjectBinding'
+import { isNonNegativeSafeInteger, isPositiveSafeInteger } from './numeric'
+import { gcd } from './time'
 
 export const PROXY_CACHE_SCHEMA_VERSION = 2 as const
 const LEGACY_PROXY_CACHE_SCHEMA_VERSION = 1 as const
@@ -147,55 +150,19 @@ export function proxyDescriptorCouldMatch(
     && entry.original.lastModified === descriptor.lastModified
 }
 
-function positiveSafeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
-}
-
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function exactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const keys = Object.keys(value)
-  return keys.length === expected.length
-    && keys.every((key) => expected.includes(key))
-}
-
-function boundedString(value: unknown, maximum: number): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= maximum
-}
-
-function greatestCommonDivisor(left: number, right: number): number {
-  let a = left
-  let b = right
-  while (b !== 0) {
-    const remainder = a % b
-    a = b
-    b = remainder
-  }
-  return a
-}
-
-function nonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-}
-
 function validRate(value: unknown): value is FrameRate {
-  if (!record(value) || !exactKeys(value, ['num', 'den'])) return false
+  if (!isRecord(value) || !hasExactKeys(value, ['num', 'den'])) return false
   const rate = value as Partial<FrameRate>
-  return positiveSafeInteger(rate.num)
+  return isPositiveSafeInteger(rate.num)
     && rate.num <= MAX_PROXY_RATE_PART
-    && positiveSafeInteger(rate.den)
+    && isPositiveSafeInteger(rate.den)
     && rate.den <= MAX_PROXY_RATE_PART
-    && greatestCommonDivisor(rate.num, rate.den) === 1
+    && gcd(rate.num, rate.den) === 1
     && rate.num / rate.den <= MAX_PROXY_FRAMES_PER_SECOND
 }
 
 function validParameters(value: unknown): value is ProxyGenerationParameters {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'container',
     'videoCodec',
     'bitrate',
@@ -206,11 +173,11 @@ function validParameters(value: unknown): value is ProxyGenerationParameters {
   const parameters = value as Partial<ProxyGenerationParameters>
   return parameters.container === 'mp4'
     && parameters.videoCodec === 'avc'
-    && positiveSafeInteger(parameters.bitrate)
+    && isPositiveSafeInteger(parameters.bitrate)
     && parameters.bitrate <= MAX_PROXY_BITRATE
-    && positiveSafeInteger(parameters.maxWidth)
+    && isPositiveSafeInteger(parameters.maxWidth)
     && parameters.maxWidth <= MAX_PROXY_DIMENSION
-    && positiveSafeInteger(parameters.maxHeight)
+    && isPositiveSafeInteger(parameters.maxHeight)
     && parameters.maxHeight <= MAX_PROXY_DIMENSION
     && typeof parameters.keyFrameIntervalSeconds === 'number'
     && Number.isFinite(parameters.keyFrameIntervalSeconds)
@@ -219,7 +186,7 @@ function validParameters(value: unknown): value is ProxyGenerationParameters {
 }
 
 function validFingerprint(value: unknown): value is ProxyOriginalFingerprint {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'algorithm',
     'digest',
     'fileName',
@@ -228,16 +195,15 @@ function validFingerprint(value: unknown): value is ProxyOriginalFingerprint {
   ])) return false
   const fingerprint = value as Partial<ProxyOriginalFingerprint>
   return fingerprint.algorithm === 'sha256-sampled-v1'
-    && typeof fingerprint.digest === 'string'
-    && /^[a-f0-9]{64}$/.test(fingerprint.digest)
-    && boundedString(fingerprint.fileName, MAX_PROXY_FILE_NAME_CHARACTERS)
-    && nonNegativeSafeInteger(fingerprint.size)
-    && nonNegativeSafeInteger(fingerprint.lastModified)
+    && isSha256Hex(fingerprint.digest)
+    && isBoundedString(fingerprint.fileName, MAX_PROXY_FILE_NAME_CHARACTERS)
+    && isNonNegativeSafeInteger(fingerprint.size)
+    && isNonNegativeSafeInteger(fingerprint.lastModified)
     && fingerprint.lastModified <= MAX_PROXY_TIMESTAMP
 }
 
 function validEntry(value: unknown, legacy = false): value is ProxyCacheEntry {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'cacheKey',
     ...(legacy ? [] : ['projectBindingId']),
     'assetId',
@@ -255,14 +221,13 @@ function validEntry(value: unknown, legacy = false): value is ProxyCacheEntry {
     'lastUsedAt',
   ])) return false
   const entry = value as Partial<ProxyCacheEntry>
-  return typeof entry.cacheKey === 'string'
-    && /^[a-f0-9]{64}$/.test(entry.cacheKey)
+  return isSha256Hex(entry.cacheKey)
     && (
       legacy
       || entry.projectBindingId === null
       || isLocalProjectBindingId(entry.projectBindingId)
     )
-    && boundedString(entry.assetId, MAX_DOCUMENT_ID_CHARACTERS)
+    && isBoundedString(entry.assetId, MAX_DOCUMENT_ID_CHARACTERS)
     && validFingerprint(entry.original)
     && validParameters(entry.parameters)
     && entry.generatorVersion === PROXY_GENERATOR_VERSION
@@ -270,27 +235,27 @@ function validEntry(value: unknown, legacy = false): value is ProxyCacheEntry {
     && isProxyCacheFileName(entry.fileName)
     && entry.fileName.startsWith(`${entry.cacheKey}.`)
     && entry.mimeType === 'video/mp4'
-    && positiveSafeInteger(entry.byteSize)
-    && positiveSafeInteger(entry.width)
+    && isPositiveSafeInteger(entry.byteSize)
+    && isPositiveSafeInteger(entry.width)
     && entry.width <= MAX_PROXY_DIMENSION
     && entry.width <= entry.parameters.maxWidth
     && entry.width % 2 === 0
-    && positiveSafeInteger(entry.height)
+    && isPositiveSafeInteger(entry.height)
     && entry.height <= MAX_PROXY_DIMENSION
     && entry.height <= entry.parameters.maxHeight
     && entry.height % 2 === 0
     && validRate(entry.frameRate)
-    && positiveSafeInteger(entry.durationMicroseconds)
-    && nonNegativeSafeInteger(entry.createdAt)
+    && isPositiveSafeInteger(entry.durationMicroseconds)
+    && isNonNegativeSafeInteger(entry.createdAt)
     && entry.createdAt <= MAX_PROXY_TIMESTAMP
-    && nonNegativeSafeInteger(entry.lastUsedAt)
+    && isNonNegativeSafeInteger(entry.lastUsedAt)
     && entry.lastUsedAt <= MAX_PROXY_TIMESTAMP
     && entry.lastUsedAt >= entry.createdAt
 }
 
 /** Invalid or future manifests fail closed to an empty disposable cache. */
 export function parseProxyCacheManifest(value: unknown): ProxyCacheManifest {
-  if (!record(value) || !exactKeys(value, ['schemaVersion', 'entries'])) {
+  if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion', 'entries'])) {
     throw new TypeError('Proxy cache manifest must be an object')
   }
   const schemaVersion = value.schemaVersion
@@ -357,7 +322,7 @@ export function proxyOutputDimensions(
   sourceHeight: number,
   parameters: ProxyGenerationParameters = DEFAULT_PROXY_PARAMETERS,
 ): Readonly<{ width: number; height: number }> {
-  if (!positiveSafeInteger(sourceWidth) || !positiveSafeInteger(sourceHeight)) {
+  if (!isPositiveSafeInteger(sourceWidth) || !isPositiveSafeInteger(sourceHeight)) {
     throw new RangeError('Proxy source dimensions must be positive safe integers')
   }
   const scale = Math.min(
@@ -376,7 +341,7 @@ export function estimateProxyBytes(
   durationMicroseconds: number,
   bitrate: number = DEFAULT_PROXY_PARAMETERS.bitrate,
 ): number {
-  if (!positiveSafeInteger(durationMicroseconds) || !positiveSafeInteger(bitrate)) {
+  if (!isPositiveSafeInteger(durationMicroseconds) || !isPositiveSafeInteger(bitrate)) {
     throw new RangeError('Proxy estimate requires a positive duration and bitrate')
   }
   const payload = Math.ceil(durationMicroseconds / 1_000_000 * bitrate / 8)

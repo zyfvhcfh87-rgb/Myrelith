@@ -1,7 +1,7 @@
 /** Browser-only G2 proof harness. Never imported by a production entry. */
 import { compositeFrame, clearTextLayoutCaches, type TransitionSurfaceProvider } from '../pipeline/render'
 import { createProjectVideoCompositionPlanner } from '../domain/projectVideoCompositionPlan'
-import { createVideoCompositionPlanner, type VideoCompositionPlan } from '../domain/videoCompositionPlan'
+import type { VideoCompositionPlan } from '../domain/videoCompositionPlan'
 import { legacyTitleProject } from './titleOwnerFixtures'
 import { upgradeLegacyTextTitle } from '../domain/titleUpgrade'
 import { defaultSourceTimeMap } from '../domain/sourceTimeMap'
@@ -235,8 +235,4 @@ export function compareTitleProof(left: TitleProofPixels, right: TitleProofPixel
     maximumDelta = Math.max(maximumDelta, delta)
   }
   return { differingBytes, maximumDelta, sameLines: JSON.stringify(left.lines) === JSON.stringify(right.lines) }
-}
-
-export function localLegacyPlan(doc: TimelineDoc, frame: number): VideoCompositionPlan {
-  return createVideoCompositionPlanner(doc, new Map()).planFrame(frame)
 }

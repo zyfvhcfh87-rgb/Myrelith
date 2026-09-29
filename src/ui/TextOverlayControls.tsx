@@ -7,6 +7,7 @@ import {
   type PointerEvent,
   type RefObject,
 } from 'react'
+import { clamp } from '../domain/numeric'
 import type { Clip, TextProps, TimelineDoc, Transform } from '../domain/schema'
 import { rangeEnd } from '../domain/time'
 import { TEXT_OVERLAY_LIMITS } from '../domain/textOverlay'
@@ -33,10 +34,6 @@ interface Gesture {
   transform: Transform
   text: TextProps
   latest: TextOverlayPreview
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value))
 }
 
 function measureViewport(

@@ -1,4 +1,5 @@
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
+import { errorMessage } from '../domain/errors'
 import {
   DEFAULT_PROXY_PARAMETERS,
   PROXY_GENERATOR_VERSION,
@@ -31,6 +32,7 @@ import {
   proxyStorage,
 } from './proxyStorage'
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 import { fingerprintLocalMediaSource, sha256Hex } from './sourceFingerprint'
 
 const PROXY_JOB_PREFIX = 'proxy:'
@@ -53,16 +55,26 @@ export interface ProxyControllerDeps {
 
 const realDeps: ProxyControllerDeps = {
   storage: proxyStorage,
-  fetchBlob: async (url, signal) => {
-    const response = await fetch(url, { signal })
-    if (!response.ok) throw new Error(`Media source returned HTTP ${response.status}`)
-    return response.blob()
-  },
+  fetchBlob: fetchObjectUrlBlob,
   now: () => Date.now(),
   probeEncoderSupport: probeProxyEncoderSupport,
   probeInputSupport: probeProxyInputSupport,
   generateProxy: generateEditingProxy,
 }
+
+interface ProbedInputs {
+  readonly asset: MediaAsset
+  readonly projectBindingId: string | null
+  readonly entry: ProxyCacheEntry | null
+}
+
+/** Phases a completed probe publishes; others are in flight or need a retry. */
+const PROBE_RESULT_PHASES: ReadonlySet<ProxyAssetState['phase']> = new Set([
+  'unavailable',
+  'available',
+  'ready',
+  'stale',
+])
 
 interface ControllerState {
   deps: ProxyControllerDeps
@@ -72,6 +84,12 @@ interface ControllerState {
   previewTokens: Map<string, { cacheKey: string; token: object }>
   activeSources: Map<string, { objectUrl: string; generation: number }>
   probeGenerations: Map<string, number>
+  /**
+   * Inputs of each asset's last completed, non-error probe. The asset object,
+   * binding and cache entry are replaced (never mutated) when they change, so
+   * identity equality means a re-probe would publish the same result.
+   */
+  probedInputs: Map<string, ProbedInputs>
   unsubscribeMedia: (() => void) | null
   nextGeneration: number
   lifecycleGeneration: number
@@ -88,6 +106,7 @@ const state: ControllerState = {
   previewTokens: new Map(),
   activeSources: new Map(),
   probeGenerations: new Map(),
+  probedInputs: new Map(),
   unsubscribeMedia: null,
   nextGeneration: 0,
   lifecycleGeneration: 0,
@@ -123,10 +142,6 @@ function endAssetMutation(assetId: string): void {
   }
   pendingAssetMutationCounts.delete(assetId)
   state.quiescingAssets.delete(assetId)
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 export async function fingerprintProxyOriginal(
@@ -198,6 +213,28 @@ function publish(item: ProxyAssetState): void {
   useProxyStore.getState().setAsset(item)
 }
 
+/** Publish a completed probe result and remember the inputs that produced it. */
+function publishProbeResult(asset: MediaAsset, item: ProxyAssetState): void {
+  state.probedInputs.set(asset.id, {
+    asset,
+    projectBindingId: getActiveLocalProjectBindingId(),
+    entry: item.entry,
+  })
+  publish(item)
+}
+
+/** True when the visible result still came from this exact source and entry. */
+function probeResultIsCurrent(asset: MediaAsset): boolean {
+  const probed = state.probedInputs.get(asset.id)
+  const item = useProxyStore.getState().assets.get(asset.id)
+  return probed !== undefined
+    && item !== undefined
+    && PROBE_RESULT_PHASES.has(item.phase)
+    && probed.asset === asset
+    && probed.projectBindingId === getActiveLocalProjectBindingId()
+    && probed.entry === currentEntry(asset.id)
+}
+
 function entryFreshForDescriptor(
   entry: ProxyCacheEntry | null,
   descriptor: { fileName: string; size: number; lastModified: number },
@@ -248,6 +285,7 @@ function offlineItem(assetId: string): ProxyAssetState {
 }
 
 async function probeConnectedAsset(asset: MediaAsset, generation: number): Promise<void> {
+  state.probedInputs.delete(asset.id)
   let entry = currentEntry(asset.id)
   if (
     asset.kind !== 'video'
@@ -256,7 +294,7 @@ async function probeConnectedAsset(asset: MediaAsset, generation: number): Promi
     || !asset.height
     || !exactVideoBounds(asset)
   ) {
-    publish({
+    publishProbeResult(asset, {
       assetId: asset.id,
       phase: 'unavailable',
       progress: 0,
@@ -286,7 +324,7 @@ async function probeConnectedAsset(asset: MediaAsset, generation: number): Promi
       || useMediaStore.getState().assets.get(asset.id)?.objectUrl !== asset.objectUrl
     ) return
     if (!encoder.supported) {
-      publish({
+      publishProbeResult(asset, {
         assetId: asset.id,
         phase: entry ? 'stale' : 'unavailable',
         progress: 0,
@@ -307,7 +345,7 @@ async function probeConnectedAsset(asset: MediaAsset, generation: number): Promi
       || useMediaStore.getState().assets.get(asset.id)?.objectUrl !== asset.objectUrl
     ) return
     if (!input.supported) {
-      publish({
+      publishProbeResult(asset, {
         assetId: asset.id,
         phase: entry ? 'stale' : 'unavailable',
         progress: 0,
@@ -346,7 +384,7 @@ async function probeConnectedAsset(asset: MediaAsset, generation: number): Promi
       await refreshStorageState()
     }
     const fresh = entry ? proxyFingerprintMatches(entry, fingerprint) : false
-    publish({
+    publishProbeResult(asset, {
       assetId: asset.id,
       phase: entry ? (fresh ? 'ready' : 'stale') : 'available',
       progress: 0,
@@ -386,6 +424,7 @@ function scan(): void {
     }
     const asset = media.assets.get(assetId)
     if (!asset) {
+      state.probedInputs.delete(assetId)
       state.probeGenerations.set(assetId, ++state.nextGeneration)
       publish(offlineItem(assetId))
       continue
@@ -395,6 +434,8 @@ function scan(): void {
       (existing?.phase === 'queued' || existing?.phase === 'generating')
       && state.activeSources.has(assetId)
     ) continue
+    // Unrelated media changes must not re-demux and re-hash every video.
+    if (probeResultIsCurrent(asset)) continue
     const generation = ++state.nextGeneration
     state.probeGenerations.set(assetId, generation)
     void probeConnectedAsset(asset, generation)
@@ -461,10 +502,13 @@ async function runGeneration(
         if (state.lifecycleGeneration !== lifecycleGeneration) return
         const current = useProxyStore.getState().assets.get(asset.id)
         if (current?.phase !== 'generating') return
+        const detail = `Generating proxy… ${Math.round(progress * 100)}%`
+        // Encoders report every frame; publish only when the percent changes.
+        if (detail === current.detail) return
         publish({
           ...current,
           progress: Math.max(current.progress, Math.min(1, progress)),
-          detail: `Generating proxy… ${Math.round(progress * 100)}%`,
+          detail,
         })
       },
       onDecoderCount: context.setActiveDecoderCount,
@@ -761,6 +805,7 @@ export async function removeProxy(assetId: string): Promise<void> {
   if (!projectBindingId) return
   beginAssetMutation(assetId)
   state.probeGenerations.set(assetId, ++state.nextGeneration)
+  state.probedInputs.delete(assetId)
   state.activeSources.delete(assetId)
   const scheduler = state.scheduler
   scheduler?.cancel(jobId(assetId), 'removed')
@@ -778,7 +823,10 @@ export async function removeProxy(assetId: string): Promise<void> {
       const generation = ++state.nextGeneration
       state.probeGenerations.set(assetId, generation)
       await probeConnectedAsset(asset, generation)
-    } else publish(offlineItem(assetId))
+    } else {
+      state.probedInputs.delete(assetId)
+      publish(offlineItem(assetId))
+    }
     await refreshStorageState()
   })
 }
@@ -803,6 +851,8 @@ export async function clearAllProxies(): Promise<void> {
       pendingClearCount--
       state.clearing = pendingClearCount > 0
     }
+    // Every result may have depended on a cleared or legacy entry.
+    state.probedInputs.clear()
     scan()
     await refreshStorageState()
   })
@@ -897,6 +947,7 @@ async function disposeControllerRuntime(): Promise<void> {
     state.unownedEntries.clear()
     state.previewTokens.clear()
     state.probeGenerations.clear()
+    state.probedInputs.clear()
     state.activeSources.clear()
     state.quiescingAssets.clear()
     pendingAssetMutationCounts.clear()

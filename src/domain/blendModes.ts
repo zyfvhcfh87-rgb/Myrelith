@@ -1,3 +1,4 @@
+import { colorByte } from './colorChannels'
 import type { Clip } from './schema'
 
 /** The deliberately small serialized blend-mode vocabulary extended by issue #197. */
@@ -105,10 +106,6 @@ function channelBlend(backdrop: number, source: number, mode: BlendModeName): nu
   return source
 }
 
-function byte(value: number): number {
-  return Math.round(Math.min(1, Math.max(0, value)) * 255)
-}
-
 /**
  * Browser-free reference pixel for the normative sRGB, straight-input,
  * premultiplied-alpha source-over model. `sourceOpacity` is applied to source
@@ -133,8 +130,8 @@ export function compositeReferencePixel(
       + alphaBackdrop * channelBlend(backdropChannel, sourceChannel, mode)
     const premultiplied = alphaSource * blendedSource
       + alphaBackdrop * (1 - alphaSource) * backdropChannel
-    return byte(premultiplied / alphaOut)
+    return colorByte(premultiplied / alphaOut)
   })
 
-  return { r: output[0], g: output[1], b: output[2], a: byte(alphaOut) }
+  return { r: output[0], g: output[1], b: output[2], a: colorByte(alphaOut) }
 }

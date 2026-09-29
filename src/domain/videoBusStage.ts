@@ -5,7 +5,6 @@ import { effectDescriptorBoundsError, EFFECT_STACK_LIMITS } from './effectBounds
 import { cloneEffectDescriptor, effectParamsValidationError, effectRegistration, resolvePostCompositeEffectStack } from './effectStack'
 import { renderWorkSurfaceBudget } from './renderSurfaceBudget'
 import { peakPixelStackWork, pixelStackWorkBudget } from './pixelWorkBudget'
-import { spatialEffectScratchBytes } from './spatialEffectPixels'
 import { SPATIAL_EFFECT_PARAMETERS, type SpatialEffectKind, type SpatialPixelEffect } from './spatialEffectDefinitions'
 
 export function videoBusStacks(doc: TimelineDoc): readonly (readonly EffectDescriptor[])[] {
@@ -44,10 +43,6 @@ export function resolveVideoBusEffects(effects: readonly EffectDescriptor[], pix
 const MAXIMUM_SPATIAL_STAGES: readonly SpatialPixelEffect[] = (Object.keys(SPATIAL_EFFECT_PARAMETERS) as SpatialEffectKind[])
   .map((kind) => ({ kind, params: Object.freeze({ color: '#000000',
     ...Object.fromEntries(Object.entries(SPATIAL_EFFECT_PARAMETERS[kind]).map(([key, spec]) => [key, spec.max])) }) }))
-export function videoBusScratchBytes(width: number, height: number, projectWidth = width, projectHeight = height): number {
-  const geometry = { surfaceWidth: width, surfaceHeight: height, projectWidth, projectHeight }
-  return Math.max(...MAXIMUM_SPATIAL_STAGES.map((stage) => spatialEffectScratchBytes(stage, geometry)))
-}
 export function videoBusAdditionalBytes(width: number, height: number, projectWidth = width, projectHeight = height): number {
   const geometry = { surfaceWidth: width, surfaceHeight: height, projectWidth, projectHeight }
   const budget = peakPixelStackWork(MAXIMUM_SPATIAL_STAGES.map((stage) => pixelStackWorkBudget([stage], geometry, 'shared-scratch')))

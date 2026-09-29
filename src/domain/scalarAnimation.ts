@@ -146,6 +146,20 @@ export function evaluateAnimationTrack(
 }
 
 /**
+ * evaluateAnimationTrack() for callers that have just accepted the complete
+ * animation. Every durable bound is at least as strict as the finite one
+ * checked above, so re-validating the keyframes per evaluation is redundant.
+ */
+export function evaluateValidatedAnimationTrack(
+  track: Pick<ClipAnimationTrack, 'keyframes'>,
+  frame: number,
+  fallback: number,
+): number {
+  if (!Number.isSafeInteger(frame)) return fallback
+  return evaluateValidatedAnimationTrackPosition(track, frame)
+}
+
+/**
  * Evaluate an ephemeral decoder/audio-clock boundary position. The caller
  * owns conversion from an exact integer timeline or sample boundary; this
  * value must never become authored or persisted geometry.

@@ -142,16 +142,7 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
   const uiForbidden = new Set(['engine', 'pipeline', 'workers'])
   const workerTypeModules = new Set([
     'workers/decode-types.ts',
-    'workers/decode-protocol.ts',
-    'workers/render-legacy-protocol.ts',
     'workers/render-protocol.ts',
-  ])
-  const currentRenderClosure = new Set([
-    'engine/render-bridge.ts',
-    'engine/render-legacy-bridge.ts',
-    'workers/render-legacy.ts',
-    'workers/render.worker.ts',
-    'workers/renderWorker/core.ts',
   ])
   const renderWorkerPipelineImports = new Map<string, ReadonlySet<string>>([
     ['workers/render.worker.ts', new Set([
@@ -176,11 +167,6 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
       'pipeline/render.ts',
       'pipeline/static-image.ts',
     ])],
-  ])
-  const retiredDecodeImplementations = new Set([
-    'engine/worker-bridge.ts',
-    'pipeline/decode.ts',
-    'workers/decode.worker.ts',
   ])
   const devImportAllowances = new Map<string, ReadonlySet<string>>([
     ['dev/ProxyEditingBenchmarkPanel.tsx', new Set(['app', 'domain', 'state'])],
@@ -272,13 +258,6 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
     }
 
     if (
-      currentRenderClosure.has(fromName)
-      && retiredDecodeImplementations.has(toName)
-    ) {
-      violations.push(`${edgeLabel(edge)} bypasses the legacy compatibility boundary`)
-    }
-
-    if (
       runtimeAreas.has(fromArea)
       && runtimeAreas.has(toArea)
       && fromArea !== toArea
@@ -287,10 +266,6 @@ function boundaryViolations(edges: readonly ImportEdge[]): string[] {
         || (
           fromName === 'engine/render-bridge.ts'
           && toName === 'workers/plugin-effect-bridge-protocol.ts'
-        )
-        || (
-          fromArea === 'workers'
-          && toName === 'engine/frame-cache.ts'
         )
         || renderWorkerPipelineImports.get(fromName)?.has(toName)
         || (
@@ -457,6 +432,36 @@ describe('architecture guard', () => {
     expect(launcherClosure).not.toContain('app/EditorShell.tsx')
     expect(launcherClosure).not.toContain('ui/Toolbar.tsx')
     expect(launcherClosure).not.toContain('ui/Inspector.tsx')
+    // Editor runtimes register project teardown via app/editorRuntimeLifecycle
+    // and media inspection loads on first use, so the launcher never
+    // evaluates them or Mediabunny.
+    for (const editorRuntime of [
+      'app/previewController.ts',
+      'app/transportController.ts',
+      'app/sourceMonitorController.ts',
+      'app/sourceMonitorPlaybackController.ts',
+      'app/sourceMonitorPreviewController.ts',
+      'app/multicamMonitorController.ts',
+      'app/voiceoverCaptureOwner.ts',
+      'app/avCaptureOwner.ts',
+      'app/mediaVisualsController.ts',
+      'app/mediaImportController.ts',
+      'app/mediaInspection.ts',
+      'app/mediaCompatibilityController.ts',
+      'app/proxyController.ts',
+      'engine/render-bridge.ts',
+      'pipeline/playback-audio.ts',
+      'pipeline/render.ts',
+      'pipeline/export.ts',
+      'pipeline/mediaCompatibilityProbe.ts',
+      'codecs/mediaCodecFallbacks.ts',
+    ]) expect(launcherClosure).not.toContain(editorRuntime)
+    expect(edges.filter((edge) => (
+      !edge.typeOnly
+      && !edge.dynamic
+      && /^(?:mediabunny|@mediabunny\/)/.test(edge.specifier)
+      && launcherClosure.has(moduleName(edge.from))
+    )).map(edgeLabel)).toEqual([])
 
     const editorClosure = eagerRuntimeClosure(['app/EditorShell.tsx'], edges)
     expect(editorClosure).not.toContain('ui/ExportDialog.tsx')

@@ -18,7 +18,6 @@ export function useAnimationPointer(index: AnimationLaneIndex, zoom: number, sel
       if (!event.shiftKey && !event.ctrlKey && !event.metaKey && state.animationSelection.some((item) => animationKeyKey(item) === animationKeyKey(key))) state.setAnimationSelection(state.animationSelection, key)
       else select(row, offset, event.shiftKey, event.ctrlKey || event.metaKey)
       if (!useTransportStore.getState().animationSelection.some((item) => animationKeyKey(item) === animationKeyKey(key))) return
-      if (!useTransportStore.getState().animationSelection.length) return
       const target = event.currentTarget, pointer = event.pointerId
       try {
         const drag = beginAnimationKeyDrag(index, () => {

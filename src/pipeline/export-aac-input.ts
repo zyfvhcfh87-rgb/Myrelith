@@ -1,4 +1,6 @@
 /**
+ * Encoder-side audio input shared by the A/V sink and audio-only delivery.
+ *
  * Chrome's native AAC adapter needs two complete 1024-sample AAC frames
  * before it can flush reliably. Timeline mixing is intentionally aligned to
  * video frames, so high-frame-rate projects can produce smaller PCM chunks.
@@ -6,7 +8,13 @@
  * stable AAC-shaped stream to the encoder.
  */
 
-import { EXPORT_AUDIO_BLOCK_SAMPLES } from './export-audio'
+import {
+  AudioSample,
+  type AudioSampleSource,
+  type EncodedPacket,
+} from 'mediabunny'
+import { EXPORT_AUDIO_BLOCK_SAMPLES, type MixedAudioBlock } from './export-audio'
+import { requireNonNegativeSafeInteger } from '../domain/numeric'
 
 export const AAC_ENCODER_STARTUP_SAMPLES = EXPORT_AUDIO_BLOCK_SAMPLES * 2
 
@@ -17,12 +25,6 @@ export interface AacInputChunk {
 }
 
 export type AacInputWriter = (chunk: AacInputChunk) => Promise<void>
-
-function assertSampleIndex(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError(`${label} must be a non-negative safe integer`)
-  }
-}
 
 export class AacInputAssembler {
   private readonly channelCount: 1 | 2
@@ -53,7 +55,7 @@ export class AacInputAssembler {
 
   async add(chunk: AacInputChunk, write: AacInputWriter): Promise<void> {
     if (this.flushed) throw new Error('AAC input assembler is flushed')
-    assertSampleIndex(chunk.startSample, 'AAC chunk start')
+    requireNonNegativeSafeInteger(chunk.startSample, 'AAC chunk start')
     if (!Number.isSafeInteger(chunk.sampleCount) || chunk.sampleCount <= 0) {
       throw new RangeError('AAC chunk size must be a positive safe integer')
     }
@@ -103,5 +105,67 @@ export class AacInputAssembler {
       await this.emit(emitSize, write)
     }
     this.flushed = true
+  }
+}
+
+/** Interleave one mixed stereo bus block into the encoder's channel layout. */
+export function interleaveAudioBlock(
+  block: MixedAudioBlock,
+  channelCount: 1 | 2,
+): Float32Array {
+  const data = new Float32Array(block.sampleCount * channelCount)
+  for (let frame = 0; frame < block.sampleCount; frame++) {
+    if (channelCount === 1) {
+      // The internal mix bus stays stereo. An arithmetic mean preserves a
+      // duplicated mono source's level and cannot clip two bounded channels.
+      data[frame] = (block.channels[0][frame]! + block.channels[1][frame]!) / 2
+    } else {
+      data[frame * channelCount] = block.channels[0][frame]!
+      data[frame * channelCount + 1] = block.channels[1][frame]!
+    }
+  }
+  return data
+}
+
+/**
+ * AAC encodes whole 1024-sample packets. Narrow the final packet's container
+ * duration so the track ends at the exact rational sample boundary.
+ */
+export function trimAacPaddingPacket(
+  packet: EncodedPacket,
+  targetSamples: number,
+  sampleRate: number,
+): void {
+  const packetStart = Math.round(packet.timestamp * sampleRate)
+  const packetSamples = Math.round(packet.duration * sampleRate)
+  const remaining = Math.max(0, targetSamples - packetStart)
+  if (packetSamples <= remaining) return
+
+  // Mediabunny 1.50.9 invokes onEncodedPacket synchronously immediately
+  // before handing this same object to the muxer. Narrowing the final
+  // packet's duration removes codec padding without changing the exact PCM
+  // samples submitted.
+  ;(packet as unknown as { duration: number }).duration =
+    remaining / sampleRate
+}
+
+/** Submit one interleaved chunk to the encoder; the sample closes in finally. */
+export async function addInterleavedAudioChunk(
+  source: AudioSampleSource,
+  chunk: AacInputChunk,
+  channelCount: 1 | 2,
+  sampleRate: number,
+): Promise<void> {
+  const sample = new AudioSample({
+    data: chunk.data,
+    format: 'f32',
+    numberOfChannels: channelCount,
+    sampleRate,
+    timestamp: chunk.startSample / sampleRate,
+  })
+  try {
+    await source.add(sample)
+  } finally {
+    sample.close()
   }
 }

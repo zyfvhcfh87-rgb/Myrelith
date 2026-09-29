@@ -21,6 +21,13 @@ import {
   resumeSourcePreview,
   suspendSourcePreview,
 } from './sourceMonitorPreviewController'
+import { getSelectedPoolAssetId } from './sourcePoolSelection'
+
+export {
+  clearSelectedPoolAssetId,
+  getSelectedPoolAssetId,
+  setSelectedPoolAssetId,
+} from './sourcePoolSelection'
 
 const OPEN_REJECTION_MESSAGES: Readonly<
   Record<SourceMonitorOpenRejection, string>
@@ -35,7 +42,6 @@ export interface SourceMonitorStatusCopy {
   readonly lines: readonly string[]
 }
 
-let selectedPoolAssetId: string | null = null
 let lastStatusAssetId: string | null = null
 
 export function sourceMonitorOpenRejectionMessage(
@@ -78,18 +84,6 @@ export function sourceMonitorStatusCopy(): SourceMonitorStatusCopy | null {
     return { kind: 'runtime', lines: mediaCompatibilityRemediationLines(liveItem) }
   }
   return null
-}
-
-export function getSelectedPoolAssetId(): string | null {
-  return selectedPoolAssetId
-}
-
-export function setSelectedPoolAssetId(assetId: string | null): void {
-  selectedPoolAssetId = assetId
-}
-
-export function clearSelectedPoolAssetId(): void {
-  selectedPoolAssetId = null
 }
 
 export function sourceOpenDisabledReason(

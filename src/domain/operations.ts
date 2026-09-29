@@ -11,7 +11,6 @@ export {
   addCrossfadeWithSourceBounds,
   removeTransition,
   setCrossfadeDuration,
-  setCrossfadeDurationWithSourceBounds,
   setCrossfadeSettings,
   setCrossfadeSettingsWithSourceBounds,
 } from './operations/transitions'
@@ -46,17 +45,14 @@ export {
   removeClipKeyframe,
   removeEffectKeyframe,
   resetClipAnimationTrack,
-  resetEffectAnimationTrack,
   setClipKeyframe,
   setEffectKeyframe,
 } from './operations/animation'
 export type { ClipFramingOperationResult } from './operations/framing'
 export {
-  applyDynamicZoom,
   applyDynamicZoomWithResult,
   applyMotionTrackingWithResult,
   applyVideoStabilizationWithResult,
-  resetClipFramingAnimation,
   resetClipFramingAnimationWithResult,
   resetVideoStabilizationWithResult,
   updateClipVisualAtFrame,

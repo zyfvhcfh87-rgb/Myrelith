@@ -13,10 +13,18 @@ import {
 } from '../pipeline/avCaptureProtocol'
 import { scanFragmentedMp4 } from '../pipeline/fragmentedMp4Recovery'
 import type { VoiceoverDraftInfo } from '../domain/voiceoverDrafts'
+import {
+  listDraftFiles,
+  opfsDirectory,
+  opfsFileExists,
+  openSyncHandle,
+  probeDraftSize,
+  serveSerializedRequests,
+} from './opfsDraftWorker'
 
-type SyncFileHandle = FileSystemFileHandle & { createSyncAccessHandle(): Promise<AvSyncFile & {
+type CaptureSyncFile = AvSyncFile & {
   read(bytes: Uint8Array, options: { at: number }): number
-}> }
+}
 
 const post = (message: AvCaptureWorkerMessage) => globalThis.postMessage(message)
 
@@ -24,20 +32,8 @@ function validId(id: string): void {
   if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id)) throw new RangeError('Invalid capture id')
 }
 
-async function directory(create: boolean): Promise<FileSystemDirectoryHandle> {
-  const root = await navigator.storage.getDirectory()
-  return root.getDirectoryHandle(AV_CAPTURE_DIRECTORY, { create })
-}
-
-async function openSync(handle: FileSystemFileHandle) {
-  for (let attempt = 0; ; attempt++) {
-    try { return await (handle as SyncFileHandle).createSyncAccessHandle() }
-    catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === 'NoModificationAllowedError') || attempt >= 8) throw cause
-      await new Promise((resolve) => setTimeout(resolve, 25))
-    }
-  }
-}
+const directory = (create: boolean) => opfsDirectory(AV_CAPTURE_DIRECTORY, create)
+const openSync = (handle: FileSystemFileHandle) => openSyncHandle<CaptureSyncFile>(handle)
 
 /** Optional pass-through tap recording capture-clock facts for evidence runs. */
 function tap<T extends { timestamp: number; close(): void }>(
@@ -96,8 +92,7 @@ async function start(request: Extract<AvCaptureRequest, { type: 'start' }>): Pro
     if (!encoding) throw new Error('This browser cannot encode camera or screen video')
     const dir = await directory(true)
     const name = `${request.id}.mp4`
-    try { await dir.getFileHandle(name); throw new Error('Capture draft already exists') }
-    catch (cause) { if (!(cause instanceof DOMException && cause.name === 'NotFoundError')) throw cause }
+    if (await opfsFileExists(dir, name)) throw new Error('Capture draft already exists')
     const handle = await dir.getFileHandle(name, { create: true })
     created = { dir, name }
     file = await openSync(handle)
@@ -189,51 +184,17 @@ async function run(request: AvCaptureRequest): Promise<AvCaptureResult> {
       return { type: 'discard-id' }
     }
     case 'list': {
-      let dir: FileSystemDirectoryHandle
-      try { dir = await directory(false) }
-      catch (cause) {
-        if (cause instanceof DOMException && cause.name === 'NotFoundError') return { type: 'list', drafts: [] }
-        throw cause
-      }
-      const drafts: VoiceoverDraftInfo[] = []
-      for await (const entry of (dir as unknown as { values(): AsyncIterable<FileSystemHandle> }).values()) {
-        if (entry.kind !== 'file' || !entry.name.endsWith('.mp4')) continue
-        const id = entry.name.slice(0, -'.mp4'.length)
-        let sizeBytes: number | null
-        if (session?.id === id) sizeBytes = null
-        else {
-          try {
-            const sync = await (entry as SyncFileHandle).createSyncAccessHandle()
-            try { sizeBytes = sync.getSize() } finally { sync.close() }
-          } catch (cause) {
-            if (cause instanceof DOMException && cause.name === 'NoModificationAllowedError') sizeBytes = null
-            else throw cause
-          }
-        }
-        drafts.push({ id, sizeBytes, hasJournal: true, fileName: entry.name })
-      }
-      return { type: 'list', drafts: drafts.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) }
+      const drafts = await listDraftFiles<VoiceoverDraftInfo>(AV_CAPTURE_DIRECTORY, '.mp4', async (id, entry) => ({
+        id,
+        // The recording session holds the file's sync handle; skip the probe.
+        sizeBytes: session?.id === id ? null : await probeDraftSize(entry),
+        hasJournal: true,
+        fileName: entry.name,
+      }))
+      return { type: 'list', drafts }
     }
   }
 }
 
-// Every request is serialized so OPFS handles are never opened concurrently.
 // A stop queued behind a start is fine: start returns as soon as recording runs.
-let tail: Promise<void> = Promise.resolve()
-globalThis.onmessage = ({ data }: MessageEvent<AvCaptureRequest>) => {
-  const execute = async () => {
-    let reply: AvCaptureWorkerMessage
-    try { reply = { requestId: data.requestId, result: await run(data) } }
-    catch (cause) {
-      reply = { requestId: data.requestId, error: {
-        name: cause instanceof Error ? cause.name : 'Error',
-        message: cause instanceof Error ? cause.message : String(cause) } }
-    }
-    try { post(reply) }
-    catch (cause) {
-      post({ requestId: data.requestId, error: { name: 'DataCloneError',
-        message: cause instanceof Error ? cause.message : String(cause) } })
-    }
-  }
-  tail = tail.then(execute).catch(() => {})
-}
+globalThis.onmessage = serveSerializedRequests<AvCaptureRequest, AvCaptureResult>(run, post)

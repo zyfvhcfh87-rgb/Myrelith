@@ -4,7 +4,7 @@ import { clipAnimation, clipAnimationKeyframeCount, documentAnimationKeyframeGro
 import { effectDescriptorBoundsError, effectReplacementBudgetError } from './effectBounds'
 import { effectAnimationParameterSpec, effectParamsValidationError, MASK_EFFECT_TYPE, MASK_EFFECT_VERSION, maskParams, type MaskParams } from './effectStack'
 import { updateEffectParamsAtFrame } from './operations/effects'
-import { replaceProjectSequence, sequenceProjectWithinEditBudget, type SequenceProject } from './projectSequences'
+import { replaceProjectSequence, type SequenceProject } from './projectSequences'
 import { clipSourceTimeMap, sourceTicksAtTimelineOffset } from './sourceTimeMap'
 import type { ClipAnimation, EffectParamValue, TimelineDoc } from './schema'
 import { editMaskPathKeys, heldMaskPathAtFrame, maskPathAnimationStatus, type MaskPathKeyEdit } from './maskPathEditing'
@@ -24,8 +24,9 @@ function replaceMaskPathAnimation(doc: TimelineDoc, clipId: string, animation: C
 
 export function maskEditingTarget(doc: TimelineDoc, target: MaskEditTarget, frame: number) {
   if (doc.id !== target.sequenceId) throw new Error('The mask sequence is no longer active.')
-  const track = doc.tracks.find((track) => track.clips.some((clip) => clip.id === target.clipId))
-  const clip = track?.clips.find((clip) => clip.id === target.clipId)
+  const location = locateClip(doc, target.clipId)
+  const track = location?.track
+  const clip = location?.clip
   if (!track || !clip || track.kind !== 'video') throw new Error('Choose a visual clip mask.')
   if (track.locked) throw new Error('This mask is on a locked track.')
   if (track.hidden) throw new Error('Show this video track before editing its mask in Program.')
@@ -84,7 +85,7 @@ export function editMaskParamsAtFrame(project: SequenceProject, target: MaskEdit
   }
   if (next === doc) throw new Error('The mask edit could not be applied.')
   const candidate = replaceProjectSequence(project, doc.id, next)
-  if (candidate === project || !sequenceProjectWithinEditBudget(candidate)) throw new Error('This mask edit exceeds project limits.')
+  if (candidate === project) throw new Error('This mask edit exceeds project limits.')
   return next
 }
 
@@ -99,6 +100,6 @@ export function editMaskPathAnimation(project: SequenceProject, target: MaskEdit
   if (animation === clipAnimation(owner.clip)) return doc
   const next = replaceMaskPathAnimation(doc, target.clipId, animation)
   const candidate = replaceProjectSequence(project, doc.id, next)
-  if (candidate === project || !sequenceProjectWithinEditBudget(candidate)) throw new Error('This path edit exceeds project limits.')
+  if (candidate === project) throw new Error('This path edit exceeds project limits.')
   return next
 }

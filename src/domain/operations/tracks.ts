@@ -16,9 +16,15 @@ import {
   DEFAULT_NORMALIZE_TARGET_LUFS,
   normalizeGainFromLufs,
 } from '../audioLoudness';
+import { createEmptyTrack } from '../projectSettings';
 import { locateClip, reject, withoutLinkGroupId, withTrack } from './operationInternals';
 
 export { MAX_CLIP_VOLUME }
+
+/** Clip, track, and master gain share one [0, MAX_CLIP_VOLUME] UI clamp. */
+export function clampVolume(volume: number): number {
+  return Math.min(MAX_CLIP_VOLUME, Math.max(0, volume))
+}
 
 /** Per-track toggle flags (timeline header buttons). */
 export interface TrackFlagsPatch {
@@ -56,25 +62,7 @@ export function addTrack(doc: TimelineDoc, kind: TrackKind): TimelineDoc {
       if (m) max = Math.max(max, Number(m[1]))
     }
   }
-  const label = `${prefix}${max + 1}`
-  const track: Track = {
-    id: label,
-    kind,
-    name: label,
-    clips: [],
-    sequenceInstances: [],
-    multicamInstances: [],
-    adjustments: [],
-    transitions: [],
-    hidden: false,
-    muted: false,
-    solo: false,
-    locked: false,
-    volume: 1,
-    balance: 0,
-    videoEffects: [],
-    audioEffects: [],
-  }
+  const track = createEmptyTrack(`${prefix}${max + 1}`, kind)
 
   let lastOfKind = -1
   for (let t = 0; t < doc.tracks.length; t++) {
@@ -281,7 +269,7 @@ export function setClipVolume(
     return reject(doc, op, `volume must be a finite number, got ${volume}`)
   }
 
-  const clamped = Math.min(MAX_CLIP_VOLUME, Math.max(0, volume))
+  const clamped = clampVolume(volume)
   if (clamped === loc.clip.volume) return doc
 
   const clips = loc.track.clips.slice()
@@ -323,7 +311,7 @@ export function setTrackMixer(
 
   const volume = patch.volume === undefined
     ? trackVolume(track)
-    : Math.min(MAX_CLIP_VOLUME, Math.max(0, patch.volume))
+    : clampVolume(patch.volume)
   const balance = patch.balance === undefined
     ? trackBalance(track)
     : Math.min(MAX_AUDIO_BALANCE, Math.max(MIN_AUDIO_BALANCE, patch.balance))
@@ -356,7 +344,7 @@ export function setMasterAudio(
   const current = masterAudioSettings(doc)
   const volume = patch.volume === undefined
     ? current.volume
-    : Math.min(MAX_CLIP_VOLUME, Math.max(0, patch.volume))
+    : clampVolume(patch.volume)
   const balance = patch.balance === undefined
     ? current.balance
     : Math.min(MAX_AUDIO_BALANCE, Math.max(MIN_AUDIO_BALANCE, patch.balance))

@@ -1,8 +1,18 @@
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'vitest'
 import { createProjectFileSnapshot, parseProjectFile, serializeProjectFile } from '../domain/projectFile'
 import { createTimelineDoc } from '../domain/projectSettings'
 import { sequenceProjectFromTimeline, type SequenceProject } from '../domain/projectSequences'
-import { renderRevisionDigest } from './renderSnapshot'
+import { useDocumentStore } from '../state/documentStore'
+import { useMediaStore } from '../state/mediaStore'
+import {
+  clearActiveLocalProjectBindingId,
+  setActiveLocalProjectBindingId,
+} from './localProjectProvenance'
+import { captureRenderSnapshot } from './renderSnapshot'
+
+afterEach(() => {
+  clearActiveLocalProjectBindingId()
+})
 
 describe('render snapshot revisions', () => {
   test('keeps one digest across portable project round trips', async () => {
@@ -31,8 +41,14 @@ describe('render snapshot revisions', () => {
       colorLuts: reopened.colorLuts,
     }
 
-    await expect(renderRevisionDigest(project, [])).resolves.toBe(
-      await renderRevisionDigest(recovered, []),
-    )
+    useMediaStore.getState().clearAssets()
+    setActiveLocalProjectBindingId('local-project:digest')
+    useDocumentStore.getState().setProject(project)
+    const original = await captureRenderSnapshot()
+    useDocumentStore.getState().setProject(recovered)
+    const reopenedSnapshot = await captureRenderSnapshot()
+    expect(reopenedSnapshot.project).toBe(recovered)
+    expect(reopenedSnapshot.revision).toMatch(/^[0-9a-f]{64}$/)
+    expect(reopenedSnapshot.revision).toBe(original.revision)
   })
 })

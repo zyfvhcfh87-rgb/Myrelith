@@ -11,7 +11,6 @@ import { useDocumentStore } from '../../state/documentStore'
 import { useTransportStore } from '../../state/transportStore'
 
 type LinkingActionFeedback = {
-  kind: 'link' | 'unlink'
   doc: TimelineDoc
   selectedClipIds: readonly ClipId[]
   message: string
@@ -76,7 +75,6 @@ export default function LinkSelectionControls() {
 
     if (!resolution.eligible) {
       setActionFeedback({
-        kind: 'link',
         doc: latestDocStore.doc,
         selectedClipIds: latestSelection,
         message: latestResolution.eligible
@@ -88,7 +86,6 @@ export default function LinkSelectionControls() {
 
     if (!latestResolution.eligible) {
       setActionFeedback({
-        kind: 'link',
         doc: latestDocStore.doc,
         selectedClipIds: latestSelection,
         message: LINK_REASON_MESSAGES[latestResolution.reason],
@@ -101,7 +98,6 @@ export default function LinkSelectionControls() {
       latestResolution.audioClipId !== resolution.audioClipId
     ) {
       setActionFeedback({
-        kind: 'link',
         doc: latestDocStore.doc,
         selectedClipIds: latestSelection,
         message:
@@ -125,7 +121,6 @@ export default function LinkSelectionControls() {
       const afterSelection = useTransportStore.getState().selectedClipIds
       const afterResolution = resolveLinkSelection(afterDoc, afterSelection)
       setActionFeedback({
-        kind: 'link',
         doc: afterDoc,
         selectedClipIds: afterSelection,
         message: afterResolution.eligible
@@ -145,7 +140,6 @@ export default function LinkSelectionControls() {
 
     if (!showUnlink || !unlinkResolution.eligible) {
       setActionFeedback({
-        kind: 'unlink',
         doc: latestDocStore.doc,
         selectedClipIds: latestTransport.selectedClipIds,
         message: latestResolution.eligible
@@ -157,7 +151,6 @@ export default function LinkSelectionControls() {
 
     if (!latestResolution.eligible) {
       setActionFeedback({
-        kind: 'unlink',
         doc: latestDocStore.doc,
         selectedClipIds: latestTransport.selectedClipIds,
         message: latestResolution.message,
@@ -170,7 +163,6 @@ export default function LinkSelectionControls() {
       latestResolution.linkGroupId !== unlinkResolution.linkGroupId
     ) {
       setActionFeedback({
-        kind: 'unlink',
         doc: latestDocStore.doc,
         selectedClipIds: latestTransport.selectedClipIds,
         message:
@@ -189,7 +181,6 @@ export default function LinkSelectionControls() {
         afterTransport.selectedClipId,
       )
       setActionFeedback({
-        kind: 'unlink',
         doc: afterDoc,
         selectedClipIds: afterTransport.selectedClipIds,
         message: afterResolution.eligible

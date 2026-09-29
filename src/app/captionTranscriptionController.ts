@@ -6,6 +6,7 @@ import { projectSpeechCue } from '../domain/speechTimeline'
 import type { SpeechTranscript } from '../domain/speechTranscript'
 import type { CaptionItem, CaptionTrack, MediaAsset } from '../domain/schema'
 import { compareCaptionItems } from '../domain/captions'
+import { errorMessage } from '../domain/errors'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useTransportStore } from '../state/transportStore'
@@ -15,6 +16,7 @@ import { fingerprintLocalMediaSource } from './sourceFingerprint'
 import { MediaJobScheduler } from './mediaJobScheduler'
 import { mediaResourceAdmission } from './mediaResourceAdmission'
 import { registerDerivedDataOwner, derivedDataIsClearing } from './derivedDataOwners'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 import { registerSpeechRetirement, speechEssentialAdmissionPending, type SpeechRetirementReason } from './speechRetirement'
 import { SpeechWorkerJob, type SpeechWorkerPort } from './speechWorkerJob'
 
@@ -37,9 +39,8 @@ export interface SpeechControllerPort {
   createWorker?: () => SpeechWorkerPort
 }
 const realPort: SpeechControllerPort = { installed: installedSpeechModel, install: installSpeechModel, remove: removeSpeechModel,
-  async fetchBlob(url, signal) { const response = await fetch(url, { signal }); if (!response.ok) throw new Error('Connected source cannot be read'); return response.blob() }, fingerprint: fingerprintLocalMediaSource }
+  fetchBlob: (url, signal) => fetchObjectUrlBlob(url, signal, () => 'Connected source cannot be read'), fingerprint: fingerprintLocalMediaSource }
 const projectScope = () => { const state = useDocumentStore.getState(); return { project: state.project, generation: state.projectGeneration, sequence: state.activeSequenceId } }
-const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause)
 interface ActiveSpeech { scope: { project: object; generation: number; sequence: string }; abort: AbortController; done: Promise<void>; job: SpeechWorkerJob | null }
 interface ReviewOwner { session: CaptionEditSession; track: CaptionTrack }
 export class CaptionTranscriptionController {
@@ -75,7 +76,7 @@ export class CaptionTranscriptionController {
     this.snapshot = Object.freeze({ ...this.snapshot, ...patch })
     for (const listener of this.listeners) { try { listener() } catch { /* Observers never own cleanup. */ } }
   }
-  private fail(cause: unknown) { const detail = this.blocked ?? message(cause); this.publish({ phase: 'error', error: detail, message: detail }) }
+  private fail(cause: unknown) { const detail = this.blocked ?? errorMessage(cause); this.publish({ phase: 'error', error: detail, message: detail }) }
   private current(): boolean {
     const pin = this.pin, document = useDocumentStore.getState(), media = useMediaStore.getState()
     return pin !== null && pin.project === document.project && pin.projectGeneration === document.projectGeneration
@@ -270,7 +271,7 @@ export class CaptionTranscriptionController {
       this.epoch++
       this.publish({ phase: 'idle', rows: [], error: null, message: `Added ${items.length} captions. Undo removes the whole transcription.` })
       return true
-    } catch (cause) { this.publish({ error: message(cause) }); return false }
+    } catch (cause) { this.publish({ error: errorMessage(cause) }); return false }
   }
 }
 /** Source timestamps stay absolute; never pad or shift delayed audio. */

@@ -40,8 +40,12 @@ function writeUint32(view: DataView, offset: number, value: number): void {
   view.setUint32(offset, value, true)
 }
 
-/** Build an uncompressed ZIP. DOS timestamps stay zero so the archive is deterministic. */
-export function zipStore(entries: readonly ZipStoreEntry[]): Uint8Array {
+/**
+ * Build an uncompressed ZIP. DOS timestamps stay zero so the archive is
+ * deterministic. The result exactly spans its own buffer (offset 0), so
+ * callers may hand `result.buffer` on without another copy.
+ */
+export function zipStore(entries: readonly ZipStoreEntry[]): Uint8Array<ArrayBuffer> {
   if (entries.length > 65_535) throw new RangeError('ZIP STORE is limited to 65535 files')
   const encoded = entries.map((entry) => {
     const name = encodeUtf8Name(entry.name)
@@ -114,25 +118,4 @@ export function zipStore(entries: readonly ZipStoreEntry[]): Uint8Array {
   writeUint32(view, offset + 16, centralStart)
   writeUint16(view, offset + 20, 0)
   return output
-}
-
-export function unzipStore(buffer: Uint8Array): readonly ZipStoreEntry[] {
-  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
-  const entries: ZipStoreEntry[] = []
-  let offset = 0
-  while (offset + 4 <= buffer.byteLength && view.getUint32(offset, true) === 0x04034b50) {
-    const method = view.getUint16(offset + 8, true)
-    if (method !== 0) throw new Error('Only uncompressed ZIP STORE entries are readable here')
-    const crc = view.getUint32(offset + 14, true)
-    const size = view.getUint32(offset + 18, true)
-    const nameLength = view.getUint16(offset + 26, true)
-    const extraLength = view.getUint16(offset + 28, true)
-    const name = new TextDecoder().decode(buffer.subarray(offset + 30, offset + 30 + nameLength))
-    const dataStart = offset + 30 + nameLength + extraLength
-    const data = buffer.subarray(dataStart, dataStart + size)
-    if (crc32(data) !== crc) throw new Error(`ZIP CRC mismatch for ${name}`)
-    entries.push({ name, data: new Uint8Array(data) })
-    offset = dataStart + size
-  }
-  return Object.freeze(entries)
 }

@@ -10,7 +10,10 @@ import {
   MAX_EXPORT_VIDEO_BITRATE,
   MIN_EXPORT_VIDEO_BITRATE,
   MAX_KEY_FRAME_INTERVAL_MICROSECONDS,
+  assertBoundedSafeInteger,
   exportProfileIncludesAudio,
+  hasExactlyKeys,
+  isOneOf,
   validateExportProfile,
   type ExportAudioChannelLayout,
   type ExportBitrateMode,
@@ -25,7 +28,8 @@ import {
   MAX_EXPORT_DURATION_SECONDS,
   MAX_EXPORT_FRAME_COUNT,
 } from './exportWorkBudget'
-import type { ExportRange } from './exportRange'
+import { windowsSafeFileStem } from './fileNames'
+import { isRecord } from './guards'
 import { framesToSeconds } from './time'
 
 export type DeliveryKind = 'image-sequence' | 'audio-only' | 'alpha-video'
@@ -148,36 +152,6 @@ const AUDIO_ONLY_METADATA = Object.freeze({
 
 const MAX_PREFIX_CHARACTERS = 80
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function hasExactlyKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const keys = Object.keys(value)
-  return keys.length === expected.length && expected.every((key) => Object.hasOwn(value, key))
-}
-
-function isOneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
-  return typeof value === 'string' && values.some((candidate) => candidate === value)
-}
-
-function assertBoundedSafeInteger(
-  value: unknown,
-  label: string,
-  minimum: number,
-  maximum: number,
-): asserts value is number {
-  if (!Number.isSafeInteger(value)) {
-    throw new TypeError(`${label} must be a safe integer`)
-  }
-  if ((value as number) < minimum || (value as number) > maximum) {
-    throw new RangeError(`${label} must be between ${minimum} and ${maximum}`)
-  }
-}
-
 export function parseChapterPolicy(value: unknown): Readonly<ChapterPolicy> {
   if (!isRecord(value) || !hasExactlyKeys(value, ['mode'])) {
     throw new TypeError('Chapter policy must contain only mode')
@@ -192,15 +166,11 @@ export function parseChapterPolicy(value: unknown): Readonly<ChapterPolicy> {
 }
 
 /**
- * Mediabunny's MP4/WebM muxers do not write chapter metadata. Never advertise
- * container chapters; the sidecar is the honest delivery.
+ * Mediabunny's MP4/WebM muxers do not write chapter metadata, for any
+ * container. Never advertise container chapters; the sidecar is the honest
+ * delivery.
  */
-export function containerChapterSupport(
-  _container: 'mp4' | 'webm' | 'wav' | 'png-sequence',
-): 'unsupported' {
-  void _container
-  return 'unsupported'
-}
+export const CONTAINER_CHAPTER_SUPPORT = 'unsupported'
 
 export function isDeliveryProfile(
   value: unknown,
@@ -240,21 +210,14 @@ export function exportSettingsSummary(settings: Readonly<ExportSettingsUnion>): 
 }
 
 export function sanitizeDeliveryPrefix(value: string): string {
-  let base = value.trim().replace(/[. ]+$/g, '')
-  base = base.replace(/[<>:"/\\|?*]/g, '-')
-  base = base.replace(/^\.+/g, '')
-  base = base.replace(/\.png$/i, '')
-  base = Array.from(base, (character) =>
-    character.charCodeAt(0) < 32 ? '-' : character,
-  ).join('')
-  base = Array.from(base).slice(0, MAX_PREFIX_CHARACTERS).join('').replace(/[. ]+$/g, '')
-  if (
-    /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i
-      .test(base)
-  ) {
-    base = `myrelith-${base}`
-  }
-  return base || 'frame'
+  // Stripping leading dots and ".png" first is equivalent: the character
+  // replacements inside windowsSafeFileStem never touch '.', 'p', 'n' or 'g'.
+  const base = value
+    .trim()
+    .replace(/[. ]+$/g, '')
+    .replace(/^\.+/g, '')
+    .replace(/\.png$/i, '')
+  return windowsSafeFileStem(base, MAX_PREFIX_CHARACTERS) || 'frame'
 }
 
 export function imageSequencePadWidth(endFrameExclusive: number): number {
@@ -282,18 +245,6 @@ export function imageSequenceFileName(
     throw new RangeError('Image-sequence frame index exceeds the pad width')
   }
   return `${safePrefix}_${digits.padStart(padWidth, '0')}.png`
-}
-
-export function imageSequenceFileNames(
-  range: ExportRange,
-  prefix: string,
-): readonly string[] {
-  const padWidth = imageSequencePadWidth(range.endFrame)
-  const names: string[] = []
-  for (let frame = range.startFrame; frame < range.endFrame; frame++) {
-    names.push(imageSequenceFileName(prefix, frame, padWidth))
-  }
-  return Object.freeze(names)
 }
 
 function validateImageSequenceProfile(value: Record<string, unknown>): ImageSequenceProfile {

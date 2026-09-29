@@ -24,6 +24,9 @@ import {
 } from './motionAnalysis'
 import { isProceduralTitleClip } from './textOverlay'
 import { MAX_ANALYSIS_SAMPLES } from './analysisCache'
+import { errorMessage } from './errors'
+import { VIDEO_STABILIZATION_PROPERTIES } from './framingProperties'
+import { isPositiveSafeInteger } from './numeric'
 import type {
   Clip,
   ClipAnimationProperty,
@@ -38,7 +41,7 @@ import {
   sourceTicksAtTimelineOffset,
   timelineOffsetAtSourceTicks,
 } from './sourceTimeMap'
-import { framesToMicroseconds, microsecondsToFrames } from './time'
+import { framesToMicroseconds, isValidFrameRate } from './time'
 
 export const VIDEO_STABILIZATION_RESULT_VERSION = 3
 export const VIDEO_STABILIZATION_ALGORITHM_ID = 'builtin.video-stabilization'
@@ -52,13 +55,7 @@ export const MAX_STABILIZATION_SIMPLIFICATION_COMPARISONS = 4_000_000
 const PRE_ZOOM_CORNER_TOLERANCE_PX = STABILIZATION_CORNER_TOLERANCE_PX
   / MAX_STABILIZATION_SAFE_ZOOM
 
-export const VIDEO_STABILIZATION_PROPERTIES = [
-  'position-x',
-  'position-y',
-  'rotation',
-  'scale-x',
-  'scale-y',
-] as const satisfies readonly ClipAnimationProperty[]
+export { VIDEO_STABILIZATION_PROPERTIES }
 
 export interface VideoStabilizationAnalysisSample {
   readonly timestampUs: number
@@ -115,10 +112,6 @@ export type VideoStabilizationPlanResult =
   | { readonly ok: true; readonly plan: VideoStabilizationPlan }
   | { readonly ok: false; readonly reason: string }
 
-function positiveSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
-}
-
 function finiteTransform(transform: Transform): boolean {
   return Object.values(transform).every(Number.isFinite)
 }
@@ -139,13 +132,12 @@ export function videoStabilizationAvailabilityReason(
   }
   if (
     !source
-    || !positiveSafeInteger(source.width)
-    || !positiveSafeInteger(source.height)
+    || !isPositiveSafeInteger(source.width)
+    || !isPositiveSafeInteger(source.height)
     || !Number.isSafeInteger(source.firstTimestampUs)
-    || !positiveSafeInteger(source.frameRate.num)
-    || !positiveSafeInteger(source.frameRate.den)
+    || !isValidFrameRate(source.frameRate)
   ) return 'Stabilization needs a connected video source with exact dimensions and timing.'
-  if (!positiveSafeInteger(doc.width) || !positiveSafeInteger(doc.height)) {
+  if (!isPositiveSafeInteger(doc.width) || !isPositiveSafeInteger(doc.height)) {
     return 'Stabilization needs valid positive project dimensions.'
   }
   const visualError = clipVisualSettingsValidationError(clipVisualSettings(clip))
@@ -169,47 +161,6 @@ function safeBigIntNumber(value: bigint, label: string): number {
   return Number(value)
 }
 
-export function timestampToSourceTicks(
-  timestampUs: number,
-  projectFrameRate: FrameRate,
-): number {
-  if (!Number.isSafeInteger(timestampUs) || timestampUs < 0) {
-    throw new RangeError('Analysis timestamp is outside the connected source')
-  }
-  // WebCodecs timestamps are integer microseconds, so exact CFR boundaries
-  // such as 1/30 s may arrive one microsecond below their rational value. The
-  // decoder/render contract is zero-relative even when the container's first
-  // presentation timestamp is not zero.
-  const sourceFrame = microsecondsToFrames(
-    timestampUs,
-    projectFrameRate,
-  )
-  const ticks = BigInt(sourceFrame) * BigInt(SOURCE_TIME_TICKS_PER_FRAME)
-  return safeBigIntNumber(ticks, 'Analysis source time')
-}
-
-export function sourceTicksToTimestamp(
-  sourceTimeTicks: number,
-  projectFrameRate: FrameRate,
-  rounding: 'floor' | 'ceil',
-): number {
-  if (!Number.isSafeInteger(sourceTimeTicks) || sourceTimeTicks < 0) {
-    throw new RangeError('Mapped source time must be a non-negative safe integer')
-  }
-  if (!positiveSafeInteger(projectFrameRate.num) || !positiveSafeInteger(projectFrameRate.den)) {
-    throw new RangeError('Project frame rate must be a positive rational')
-  }
-  const numerator = BigInt(sourceTimeTicks) * BigInt(projectFrameRate.den)
-  const denominator = BigInt(projectFrameRate.num)
-  const offset = rounding === 'floor'
-    ? numerator / denominator
-    : (numerator + denominator - 1n) / denominator
-  return safeBigIntNumber(
-    offset,
-    'Stabilization source timestamp',
-  )
-}
-
 function conformedRequestTimestamp(
   sourceTimeTicks: number,
   projectFrameRate: FrameRate,
@@ -217,10 +168,9 @@ function conformedRequestTimestamp(
   if (!Number.isSafeInteger(sourceTimeTicks) || sourceTimeTicks < 0) {
     throw new RangeError('Rendered source time must be a non-negative safe integer')
   }
-  if (
-    !positiveSafeInteger(projectFrameRate.num)
-    || !positiveSafeInteger(projectFrameRate.den)
-  ) throw new RangeError('Rendered source frame rate must be a positive rational')
+  if (!isValidFrameRate(projectFrameRate)) {
+    throw new RangeError('Rendered source frame rate must be a positive rational')
+  }
   const conformedFrame = Math.floor(sourceTimeTicks / SOURCE_TIME_TICKS_PER_FRAME)
   return framesToMicroseconds(conformedFrame, projectFrameRate)
 }
@@ -442,7 +392,6 @@ function createProductStabilizationPath(
 }
 
 function transformedFrame(
-  doc: TimelineDoc,
   clip: Clip,
   source: VideoStabilizationSource,
   correction: SimilarityTransform,
@@ -497,9 +446,6 @@ function transformedFrame(
   if (!finiteTransform(transform) || nextScale <= 0) {
     throw new RangeError('Stabilization correction produced an invalid transform')
   }
-  // Touch the project here deliberately: this planner is project-space, and
-  // callers must not accidentally reuse a plan against a differently sized canvas.
-  void doc.width
   return transform
 }
 
@@ -527,7 +473,11 @@ function constrainReciprocalZoom(
   return interval.maximum >= interval.minimum
 }
 
-function reviewVideoStabilizationCoverage(
+/**
+ * Minimum shared extra zoom whose exact transformed crop covers the project,
+ * reading the transform stream exactly once.
+ */
+export function reviewVideoStabilizationCoverage(
   doc: TimelineDoc,
   clip: Clip,
   source: Pick<VideoStabilizationSource, 'width' | 'height'>,
@@ -585,16 +535,6 @@ function reviewVideoStabilizationCoverage(
   return Number.isFinite(zoom) && zoom >= 1
     ? { safeZoom: zoom, maximumScale }
     : null
-}
-
-/** Minimum shared extra zoom whose exact transformed crop covers the project. */
-export function requiredVideoStabilizationSafeZoom(
-  doc: TimelineDoc,
-  clip: Clip,
-  source: Pick<VideoStabilizationSource, 'width' | 'height'>,
-  transforms: Iterable<Transform>,
-): number | null {
-  return reviewVideoStabilizationCoverage(doc, clip, source, transforms)?.safeZoom ?? null
 }
 
 function visibleSourceCorners(
@@ -656,17 +596,23 @@ function interpolateTransform(
   }
 }
 
-function transformAtMappedFrame(
+/**
+ * Transform at clip frames requested in non-decreasing order, so one forward
+ * cursor serves a whole clip walk. Results may alias `frames`; callers copy
+ * before they own one.
+ */
+function mappedTransformCursor(
   frames: readonly VideoStabilizationFrame[],
-  frame: number,
-): Transform {
+): (frame: number) => Transform {
   let rightIndex = 0
-  while (rightIndex < frames.length && frames[rightIndex]!.frame < frame) rightIndex++
-  if (rightIndex === 0) return { ...frames[0]!.transform }
-  if (rightIndex >= frames.length) return { ...frames[frames.length - 1]!.transform }
-  const right = frames[rightIndex]!
-  if (right.frame === frame) return { ...right.transform }
-  return interpolateTransform(frames[rightIndex - 1]!, right, frame)
+  return (frame) => {
+    while (rightIndex < frames.length && frames[rightIndex]!.frame < frame) rightIndex++
+    if (rightIndex === 0) return frames[0]!.transform
+    if (rightIndex >= frames.length) return frames[frames.length - 1]!.transform
+    const right = frames[rightIndex]!
+    if (right.frame === frame) return right.transform
+    return interpolateTransform(frames[rightIndex - 1]!, right, frame)
+  }
 }
 
 function preserveRepeatedSourceFrameBoundaries(
@@ -706,6 +652,7 @@ function preserveRepeatedSourceFrameBoundaries(
     sourceTicksAtTimelineOffset(map, timelineOffset),
   )
   const protectedFrames = new Set<number>()
+  const transformAt = mappedTransformCursor(frames)
   let frame = 0
   while (frame < durationFrames) {
     const identity = displayIdentityAtTimelineOffset(frame)
@@ -722,7 +669,7 @@ function preserveRepeatedSourceFrameBoundaries(
       if (protectedFrames.size > MAX_KEYFRAMES_PER_TRACK) return null
     }
     if (exactTransform || end > start) {
-      const transform = exactTransform ?? transformAtMappedFrame(frames, start)
+      const transform = exactTransform ?? transformAt(start)
       byFrame.set(start, {
         frame: start,
         sourceTimeTicks: sourceTicksAtTimelineOffset(map, start),
@@ -821,24 +768,8 @@ function transformsAtEveryClipFrame(
   }
   return {
     *[Symbol.iterator](): Iterator<Transform> {
-      let rightIndex = 0
-      for (let frame = 0; frame < durationFrames; frame++) {
-        while (rightIndex < frames.length && frames[rightIndex]!.frame < frame) rightIndex++
-        if (rightIndex === 0) {
-          yield frames[0]!.transform
-          continue
-        }
-        if (rightIndex >= frames.length) {
-          yield frames[frames.length - 1]!.transform
-          continue
-        }
-        const right = frames[rightIndex]!
-        if (right.frame === frame) {
-          yield right.transform
-          continue
-        }
-        yield interpolateTransform(frames[rightIndex - 1]!, right, frame)
-      }
+      const transformAt = mappedTransformCursor(frames)
+      for (let frame = 0; frame < durationFrames; frame++) yield transformAt(frame)
     },
   }
 }
@@ -877,8 +808,8 @@ export function createVideoStabilizationPlan(
   if (!source) return { ok: false, reason: 'Stabilization source facts are missing.' }
   if (
     analysis.version !== VIDEO_STABILIZATION_RESULT_VERSION
-    || !positiveSafeInteger(analysis.width)
-    || !positiveSafeInteger(analysis.height)
+    || !isPositiveSafeInteger(analysis.width)
+    || !isPositiveSafeInteger(analysis.height)
     || analysis.samples.length < 2
     || analysis.samples[0]?.estimateFromPrevious !== null
     || analysis.samples.slice(1).some((sample, index) => (
@@ -914,7 +845,7 @@ export function createVideoStabilizationPlan(
       settings.smoothingRadiusFrames,
     )
   } catch (cause) {
-    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+    return { ok: false, reason: errorMessage(cause) }
   }
   const map = clipSourceTimeMap(clip)
   const frames: VideoStabilizationFrame[] = []
@@ -937,7 +868,6 @@ export function createVideoStabilizationPlan(
         frame,
         sourceTimeTicks,
         transform: transformedFrame(
-          doc,
           clip,
           source,
           productPath.corrections[index]!,
@@ -948,7 +878,7 @@ export function createVideoStabilizationPlan(
       })
     }
   } catch (cause) {
-    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+    return { ok: false, reason: errorMessage(cause) }
   }
   if (frames.length < 2) {
     return { ok: false, reason: 'The analyzed source does not map to at least two unique clip frames.' }
@@ -963,7 +893,7 @@ export function createVideoStabilizationPlan(
       frames,
     )
   } catch (cause) {
-    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+    return { ok: false, reason: errorMessage(cause) }
   }
   const simplified = repeatSafeFrames
     ? simplifyVideoStabilizationFrames(doc, clip, source, repeatSafeFrames)
@@ -983,7 +913,7 @@ export function createVideoStabilizationPlan(
       transformsAtEveryClipFrame(clip.timelineRange.durationFrames, simplified),
     )
   } catch (cause) {
-    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+    return { ok: false, reason: errorMessage(cause) }
   }
   if (coverage === null || coverage.safeZoom > MAX_STABILIZATION_SAFE_ZOOM) {
     return {

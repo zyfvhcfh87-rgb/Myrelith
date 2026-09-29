@@ -62,8 +62,6 @@ describe('SequenceInstanceView', () => {
     render(
       <SequenceInstanceView
         instance={instance}
-        trackId="V1"
-        trackKind="video"
         timelineOriginFrame={0}
         timelineWindowEndFrame={100}
       />,

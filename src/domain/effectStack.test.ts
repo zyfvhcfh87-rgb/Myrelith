@@ -6,6 +6,7 @@ import {
   COLOR_ADJUST_EFFECT_TYPE,
   COLOR_ADJUST_EFFECT_VERSION,
   createColorAdjustEffect,
+  effectParamsValidationError,
   migrateEffectDescriptor,
   resolveCanvasEffectStack,
   resolveEffectStack,
@@ -49,14 +50,13 @@ describe('effect registry and ordered evaluation', () => {
     expect(resolveCanvasEffectStack([], true)).toEqual({
       filter: null,
       pixelEffects: [],
-      pixelCorrections: [],
       effects: [],
     })
 
     const defaults = createColorAdjustEffect('fx-defaults')
     const defaultResolution = resolveCanvasEffectStack([defaults], false, false)
     expect(defaultResolution.filter).toBeNull()
-    expect(defaultResolution.pixelCorrections).toEqual([])
+    expect(defaultResolution.pixelEffects).toEqual([])
     expect(defaultResolution.effects[0].status).toBe('ready')
 
     const [resolution] = resolveEffectStack(createStack(), new Set())
@@ -75,7 +75,7 @@ describe('effect registry and ordered evaluation', () => {
 
     const unavailable = resolveCanvasEffectStack([first, second], true, false)
     expect(unavailable.filter).toBeNull()
-    expect(unavailable.pixelCorrections).toEqual([])
+    expect(unavailable.pixelEffects).toEqual([])
     expect(unavailable.effects.map((effect) => effect.status)).toEqual([
       'unsupported',
       'unsupported',
@@ -84,7 +84,10 @@ describe('effect registry and ordered evaluation', () => {
 
     const supported = resolveCanvasEffectStack([first, second], true, true)
     expect(supported.filter).toBeNull()
-    expect(supported.pixelCorrections).toEqual([first.params, second.params])
+    expect(supported.pixelEffects).toEqual([
+      { kind: 'color-adjust', params: first.params },
+      { kind: 'color-adjust', params: second.params },
+    ])
     expect(supported.effects.map((effect) => effect.status)).toEqual(['ready', 'ready'])
   })
 
@@ -138,6 +141,19 @@ describe('effect registry and ordered evaluation', () => {
     expect(migrated).toEqual(unknown)
     expect(migrated).not.toBe(unknown)
     expect(migrated.params).not.toBe(unknown.params)
+  })
+})
+
+describe('color-adjust parameter validation', () => {
+  test('reports the first out-of-range control and allows omitted temperature and tint', () => {
+    const error = (params: EffectDescriptor['params']) => effectParamsValidationError({
+      ...createColorAdjustEffect('fx'), params })
+    expect(error({ exposure: 0, contrast: 0, saturation: 0 })).toBeNull()
+    expect(error({ exposure: 99, contrast: 5, saturation: 0 })).toBe('exposure must be between -4 and 4')
+    expect(error({ exposure: 0, contrast: 0, saturation: 'x' })).toBe('saturation must be between -1 and 1')
+    expect(error({ exposure: 0, contrast: 0, saturation: 0, temperature: Infinity }))
+      .toBe('temperature must be between -1 and 1')
+    expect(error({ exposure: 0, contrast: 0, saturation: 0, tint: -2 })).toBe('tint must be between -1 and 1')
   })
 })
 

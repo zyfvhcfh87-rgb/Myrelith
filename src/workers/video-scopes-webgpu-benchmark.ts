@@ -1,5 +1,7 @@
 /** Browser-only, source-addressable Issue #75 benchmark. Not in the app graph. */
 
+import { bytesToHex } from '../domain/bytes'
+import { requirePositiveSafeInteger } from '../domain/numeric'
 import {
   analyzeVideoScopes,
   VIDEO_SCOPE_HISTOGRAM_BINS,
@@ -115,10 +117,7 @@ function createFixture(): Uint8ClampedArray {
 async function sha256(bytes: Uint8ClampedArray): Promise<string> {
   const copy = new Uint8Array(bytes.byteLength)
   copy.set(bytes)
-  const digest = await crypto.subtle.digest('SHA-256', copy.buffer)
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
+  return bytesToHex(await crypto.subtle.digest('SHA-256', copy.buffer))
 }
 
 function quantile(sorted: readonly number[], fraction: number): number {
@@ -147,19 +146,12 @@ function cpuOutputBytes(): number {
   ) * Uint16Array.BYTES_PER_ELEMENT
 }
 
-function positiveInteger(value: number, label: string): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${label} must be a positive safe integer`)
-  }
-  return value
-}
-
 export async function runVideoScopeWebGpuBenchmark(options: {
   readonly warmupIterations?: number
   readonly measuredIterations?: number
 } = {}): Promise<VideoScopeWebGpuBenchmarkArtifact> {
-  const warmupIterations = positiveInteger(options.warmupIterations ?? 10, 'warmupIterations')
-  const measuredIterations = positiveInteger(
+  const warmupIterations = requirePositiveSafeInteger(options.warmupIterations ?? 10, 'warmupIterations')
+  const measuredIterations = requirePositiveSafeInteger(
     options.measuredIterations ?? 60,
     'measuredIterations',
   )

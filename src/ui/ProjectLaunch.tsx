@@ -74,6 +74,7 @@ import {
   type RecoverySort,
 } from './projectRecoveryModel'
 import { FoldRevealTitle, SplitRevealHeading } from './LaunchTextEffects'
+import { formatFrameRate } from './frameRateLabel'
 
 const PROJECT_LAUNCH_HEADLINE_LINES = [
   'Your footage.',
@@ -86,12 +87,7 @@ function rateKey(rate: FrameRate): string {
 }
 
 function formatRate(rate: FrameRate): string {
-  const decimal = rate.den === 1
-    ? String(rate.num)
-    : (rate.num / rate.den)
-      .toFixed(3)
-      .replace(/0+$/, '')
-      .replace(/\.$/, '')
+  const decimal = formatFrameRate(rate)
   return rate.den === 1
     ? `${decimal} fps`
     : `${decimal} fps (${rate.num}/${rate.den})`

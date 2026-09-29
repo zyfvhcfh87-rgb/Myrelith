@@ -64,7 +64,7 @@ function useGradingEdit(target: ColorGradingTarget, effectId: string) {
 }
 
 type Edit = ReturnType<typeof useGradingEdit>
-type Animation = (parameter: string, value: number) => ReactNode
+type Animation = (parameter: string) => ReactNode
 export default function ColorGradingFields({ target, effect, disabled, animation }: { target: ColorGradingTarget; effect: EffectDescriptor; disabled: boolean; animation?: Animation }) {
   const edit = useGradingEdit(target, effect.id)
   const preview = useTransportStore((state) => state.colorGradingPreview)
@@ -83,7 +83,7 @@ export default function ColorGradingFields({ target, effect, disabled, animation
       {effect.type === COLOR_CURVES_TYPE && <CurveFields params={colorCurvesParams(params)} edit={edit} disabled={disabled} />}
       {effect.type === COLOR_WHEELS_TYPE && <WheelFields params={colorWheelsParams(params)} edit={edit} disabled={disabled} animation={animation} />}
       <GradingNumber label="Strength" value={Number(params.strength ?? 1)} min={0} max={1} disabled={disabled} onBegin={edit.begin} onCancel={edit.cancel} onCommit={(strength) => edit.commit({ strength })} />
-      {animation?.('strength', Number(params.strength ?? 1))}
+      {animation?.('strength')}
     </>}
     {edit.error && <p role="alert">{edit.error}</p>}
   </div>
@@ -180,7 +180,7 @@ function Wheel({ group, params, edit, disabled, animation }: { group: ColorWheel
     <GradingNumber label={`${label} brightness`} value={position.mean} min={limit.min} max={limit.max} disabled={disabled} onBegin={edit.begin} onCancel={edit.cancel} onCommit={(mean) => edit.commit(patch(colorWheelBrightness(values, group, mean)))} />
     {COLOR_RGB.map((channel, index) => <div key={channel}>
       <GradingNumber label={`${label} ${channel}`} value={values[index]} min={limit.min} max={limit.max} disabled={disabled} onBegin={edit.begin} onCancel={edit.cancel} onCommit={(value) => edit.commit({ [`${group}${channel}`]: value })} />
-      {animation?.(`${group}${channel}`, values[index])}
+      {animation?.(`${group}${channel}`)}
     </div>)}
     <p className="inspector-note">Arrows adjust hue; Shift ×10. Home centers hue. Brightness keeps channel differences.</p>
   </fieldset>

@@ -1,4 +1,13 @@
 import { describe, expect, test, vi } from 'vitest'
+
+const planCalls = vi.hoisted(() => ({ count: 0 }))
+vi.mock('../domain/multicamMonitor', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../domain/multicamMonitor')>()
+  return { ...actual, createMulticamMonitorPlan: (...args: Parameters<typeof actual.createMulticamMonitorPlan>) => {
+    planCalls.count++
+    return actual.createMulticamMonitorPlan(...args)
+  } }
+})
 import { createMulticamMonitorSession, type MonitorContext } from './multicamMonitorSession'
 import { MediaResourceAdmission } from './mediaResourceAdmission'
 import type { MulticamMonitorBridgeOptions, MulticamMonitorCleanup } from './multicamMonitorWorkerBridge'
@@ -60,6 +69,16 @@ function harness(count = 2) {
 }
 
 describe('multicam monitor lifetime', () => {
+  test('reuses one authored plan across ticks and tile frames until the definition changes', async () => {
+    const h = harness(); planCalls.count = 0
+    h.session.enable(); h.advance(61); await flush(); h.advance(61, true); await flush()
+    expect(h.session.snapshot().presentation.phase).toBe('live')
+    expect(h.draw).toHaveBeenCalled()
+    expect(planCalls.count).toBe(1)
+    h.setContext({ definition: { ...h.context().definition } }); h.session.tick()
+    expect(planCalls.count).toBe(2)
+    h.session.dispose()
+  })
   test('normal off holds admission until close acknowledgement; priority work still preempts synchronously', async () => {
     const h = harness(); h.session.enable(); h.advance(61); await flush()
     const close = h.holdClose(); h.session.disable()

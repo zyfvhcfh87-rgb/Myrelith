@@ -74,6 +74,12 @@ export function createMulticamMonitorSession(deps: MonitorSessionDeps) {
   let previous: MonitorContext | null = null
   let samples: WindowSamples = newWindow()
   let lastCleanup: MulticamMonitorCleanup | null = null
+  // Planning re-validates the whole definition, so reuse it while the context
+  // keeps the same definition, instance and rate objects. Document edits
+  // replace those objects (sameContext relies on the same identities), so an
+  // identity hit means the authored inputs are unchanged.
+  let planMemo: { readonly definition: MulticamDefinition; readonly instance: MulticamInstance; readonly rate: FrameRate
+    readonly plan: ReturnType<typeof createMulticamMonitorPlan> } | null = null
   const canvases = new Map<string, { canvas: HTMLCanvasElement; lost: () => void }>()
 
   function newWindow(): WindowSamples {
@@ -99,9 +105,22 @@ export function createMulticamMonitorSession(deps: MonitorSessionDeps) {
     baseline = null; baselineWindows = 0; samples = newWindow()
     publish({ phase, detail: reason, angles: {} })
   }
+  function planAt(context: MonitorContext) {
+    if (planMemo?.definition !== context.definition || planMemo.instance !== context.instance || planMemo.rate !== context.rate) {
+      planMemo = { definition: context.definition, instance: context.instance, rate: context.rate,
+        plan: createMulticamMonitorPlan(context.definition, context.instance, context.rate) }
+    }
+    return planMemo.plan(context.frame)
+  }
+  /** The freshly read context while this owner is still current, else null. */
+  function currentContext(owner: Attempt): MonitorContext | null {
+    if (disposed || !presentation.enabled || attempt !== owner || owner.abort.signal.aborted
+      || !deps.visible() || !deps.available()) return null
+    const context = deps.read()
+    return context && sameContext(owner.context, context) ? context : null
+  }
   function valid(owner: Attempt): boolean {
-    return !disposed && presentation.enabled && attempt === owner && !owner.abort.signal.aborted
-      && deps.visible() && deps.available() && sameContext(owner.context, deps.read())
+    return currentContext(owner) !== null
   }
   async function start(context: MonitorContext, activeId: string) {
     const owner: Attempt = { abort: new AbortController(), context, activeId, quality: presentation.quality,
@@ -131,9 +150,9 @@ export function createMulticamMonitorSession(deps: MonitorSessionDeps) {
       owner.bridge = (deps.createBridge ?? createMulticamMonitorWorkerBridge)({ sources, width, height,
         onFailure: (reason) => { if (attempt === owner) stop(reason) },
         onFrame: (id, _requestId, _timestampUs, bitmap, latencyMs) => {
-          if (!valid(owner) || !owner.live) return
-          const current = deps.read()!
-          const plan = createMulticamMonitorPlan(current.definition, current.instance, current.rate)(current.frame)
+          const current = currentContext(owner)
+          if (!current || !owner.live) return
+          const plan = planAt(current)
           const timeUs = plan?.angles.find((angle) => angle.angleId === id)?.sourceTimeUs
           if (!plan || plan.activeAngleId === id || timeUs == null || timeUs >= (owner.sourceDurations.get(id) ?? 0)) return
           const canvas = canvases.get(id)?.canvas
@@ -173,7 +192,7 @@ export function createMulticamMonitorSession(deps: MonitorSessionDeps) {
     if (attempt && attempt.context.sourceIdentity !== current.sourceIdentity) {
       stop('Angle sources or proxy freshness changed. Retry with the current media.'); previous = current; return
     }
-    const plan = createMulticamMonitorPlan(current.definition, current.instance, current.rate)(current.frame)
+    const plan = planAt(current)
     const seek = previous?.playing && current.playing && Math.abs(current.frame - previous.frame
       - (current.audioTime - previous.audioTime) * current.rate.num / current.rate.den) > 2
     const changed = attempt && (!sameContext(attempt.context, current) || attempt.activeId !== plan?.activeAngleId)
@@ -297,4 +316,3 @@ export function createMulticamMonitorSession(deps: MonitorSessionDeps) {
       canvases: canvases.size, surfacePixels: [...canvases.values()].reduce((sum, { canvas }) => sum + canvas.width * canvas.height, 0), lastCleanup, lastHealth }),
   }
 }
-export type MulticamMonitorSession = ReturnType<typeof createMulticamMonitorSession>

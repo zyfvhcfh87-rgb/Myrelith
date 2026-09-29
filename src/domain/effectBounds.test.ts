@@ -1,13 +1,22 @@
 import { CURRENT_TIMELINE_SCHEMA_VERSION } from './projectFile'
 import { describe, expect, test } from 'vitest'
-import type { Clip, EffectDescriptor, TimelineDoc, Track } from './schema'
+import type { AudioEffectDescriptor, Clip, EffectDescriptor, TimelineDoc, Track } from './schema'
 import {
   EFFECT_STACK_LIMITS,
   documentEffectBudgetUsage,
   effectAppendBudgetError,
+  effectCollectionAppendBudgetError,
   effectDescriptorBoundsError,
   effectReplacementBudgetError,
 } from './effectBounds'
+import {
+  AUDIO_EFFECT_STACK_LIMITS,
+  audioEffectAppendBudgetError,
+  audioEffectCollectionAppendBudgetError,
+  audioEffectIdExists,
+  audioEffectReplacementBudgetError,
+  documentAudioEffectBudgetUsage,
+} from './audioEffectBounds'
 
 function effect(
   id: string,
@@ -176,5 +185,67 @@ describe('shared effect stack budgets', () => {
     expect(effectReplacementBudgetError(stringDoc, stringTarget, exactString)).toBeNull()
     expect(effectReplacementBudgetError(stringDoc, stringTarget, overString))
       .toMatch(/10000000 effect-string characters in total/)
+  })
+})
+
+describe('audio effect stack budgets share the video rules with audio wording', () => {
+  const full = Object.fromEntries(Array.from(
+    { length: EFFECT_STACK_LIMITS.maxEffectParams },
+    (_value, index) => [`p-${index}`, index],
+  ))
+  const chunk = { value: 'x'.repeat(EFFECT_STACK_LIMITS.maxEffectStringCharacters) }
+  const audioDoc = (clipEffects: AudioEffectDescriptor[], trackEffects: AudioEffectDescriptor[] = [],
+    masterEffects: AudioEffectDescriptor[] = []): TimelineDoc => ({
+    ...docWithEffects([]),
+    masterAudio: { volume: 1, balance: 0, muted: false, audioEffects: masterEffects },
+    tracks: [{
+      id: 'A1', name: 'A1', kind: 'audio', transitions: [], hidden: false, muted: false, solo: false, locked: false,
+      audioEffects: trackEffects, clips: [{ ...clip('audio-clip'), audioEffects: clipEffects }],
+    }],
+  })
+  const many = (count: number, params: EffectDescriptor['params'] = {}) =>
+    Array.from({ length: count }, (_value, index) => effect(`a-${index}`, params))
+
+  test('reports exact aggregate, per-stack, and replacement messages', () => {
+    const total = audioDoc(many(9_000), many(999), many(1))
+    expect(documentAudioEffectBudgetUsage(total).effects).toBe(10_000)
+    expect(audioEffectCollectionAppendBudgetError(total, [])).toBeNull()
+    expect(audioEffectCollectionAppendBudgetError(total, [effect('over')]))
+      .toBe('project exceeds 10000 audio effects in total')
+    expect(audioEffectCollectionAppendBudgetError(audioDoc(many(196, full)), [effect('over')]))
+      .toBe('project exceeds 50000 audio-effect parameters in total')
+    expect(audioEffectCollectionAppendBudgetError(audioDoc(many(153, chunk)), [effect('over')]))
+      .toBe('project exceeds 10000000 audio-effect-string characters in total')
+    const stack = many(EFFECT_STACK_LIMITS.maxEffectsPerClip)
+    expect(audioEffectAppendBudgetError(audioDoc([]), stack, effect('over')))
+      .toBe('audio-effect stack has reached the 256-effect limit')
+    const target = effect('target')
+    const nearFull = audioDoc([...many(195, full), target])
+    expect(audioEffectReplacementBudgetError(nearFull, target, target)).toBeNull()
+    expect(audioEffectReplacementBudgetError(nearFull, target, effect('target', full)))
+      .toBe('project exceeds 50000 audio-effect parameters in total')
+    expect(AUDIO_EFFECT_STACK_LIMITS).toEqual({
+      maxEffectsPerStack: EFFECT_STACK_LIMITS.maxEffectsPerClip,
+      maxEffectParams: EFFECT_STACK_LIMITS.maxEffectParams,
+      maxTotalEffects: EFFECT_STACK_LIMITS.maxTotalEffects,
+      maxTotalEffectParams: EFFECT_STACK_LIMITS.maxTotalEffectParams,
+      maxTotalEffectStringCharacters: EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters,
+      maxEffectStringCharacters: EFFECT_STACK_LIMITS.maxEffectStringCharacters,
+      maxIdCharacters: EFFECT_STACK_LIMITS.maxIdCharacters,
+      maxTypeAndParamKeyCharacters: EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters,
+      maxFiniteMagnitude: EFFECT_STACK_LIMITS.maxFiniteMagnitude,
+    })
+  })
+
+  test('keeps the exact video wording and finds audio ids on every owner', () => {
+    expect(effectCollectionAppendBudgetError(docWithEffects(many(10_000)), [effect('over')]))
+      .toBe('project exceeds 10000 effects in total')
+    expect(effectCollectionAppendBudgetError(docWithEffects(many(196, full)), [effect('over')]))
+      .toBe('project exceeds 50000 effect parameters in total')
+    expect(effectCollectionAppendBudgetError(docWithEffects(many(153, chunk)), [effect('over')]))
+      .toBe('project exceeds 10000000 effect-string characters in total')
+    const doc = audioDoc([effect('on-clip')], [effect('on-track')], [effect('on-master')])
+    for (const id of ['on-clip', 'on-track', 'on-master']) expect(audioEffectIdExists(doc, id)).toBe(true)
+    expect(audioEffectIdExists(doc, 'missing')).toBe(false)
   })
 })

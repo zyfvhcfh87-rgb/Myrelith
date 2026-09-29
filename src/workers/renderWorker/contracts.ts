@@ -6,7 +6,6 @@ import type { Composite2D } from '../../pipeline/render';
 import type { WebGl2LensRemapBackend } from '../../pipeline/lensRemapWebgl';
 import { type DecodedStaticImage, type StaticImageDecodedByteReserver } from '../../pipeline/static-image';
 import type { BitmapLike } from '../decode-types';
-import { type LegacyRenderWorkerEnv } from '../render-legacy';
 import type { FromRenderWorker } from '../render-protocol';
 import type { DecodedVideoFrame, WorkerVideoSource } from '../video-source';
 
@@ -36,7 +35,7 @@ export const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
 }
 
 /** Everything the core needs from the outside world. */
-export interface RenderWorkerEnv extends LegacyRenderWorkerEnv {
+export interface RenderWorkerEnv {
   post(msg: FromRenderWorker, transfer?: Transferable[]): void
   /** Open one worker-owned Mediabunny source for a structured-cloned Blob. */
   openVideoSource(
@@ -56,10 +55,14 @@ export interface RenderWorkerEnv extends LegacyRenderWorkerEnv {
   invalidateDecoderRuntime(): void
   /** Normalize orientation and copy a streamed frame. Does not close it. */
   createStreamingBitmap(frame: DecodedVideoFrame): Promise<BitmapLike>
+  /** Drop the normalizer's reusable surface after every copy has settled. */
+  releaseStreamingBitmapSurface?(): void
   /** Create the scratch compositing surface (new OffscreenCanvas). */
   createCanvas(width: number, height: number): RenderCanvasLike
   /** Create this worker owner's one reusable manual lens-remap backend. */
   createLensRemapBackend?(): WebGl2LensRemapBackend
+  /** Monotonic milliseconds for render timing and scope cadence. */
+  now(): number
   /** Yield non-critical analysis until after the current render task. */
   schedule?(callback: () => void): void
   /** Analyze the tiny scope sample away from the render worker when available. */
@@ -71,7 +74,3 @@ export interface RenderWorkerEnv extends LegacyRenderWorkerEnv {
   /** Terminate analysis resources and settle after the child worker retires. */
   releaseVideoScopes?(): Promise<void>
 }
-
-/* ------------------------------------------------------------------ */
-/* Core                                                                 */
-/* ------------------------------------------------------------------ */

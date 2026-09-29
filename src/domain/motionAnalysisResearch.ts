@@ -2,7 +2,6 @@
 
 import {
   DEFAULT_MOTION_ANALYSIS_BUDGET,
-  IDENTITY_SIMILARITY_TRANSFORM,
   MOTION_ANALYSIS_ALGORITHM_VERSION,
   applySimilarityTransform,
   composeSimilarityTransforms,
@@ -11,7 +10,6 @@ import {
   estimateGlobalMotion,
   estimateGlobalMotionSequence,
   invertSimilarityTransform,
-  similarityFromPathSample,
   type GrayFrame,
   type MotionAnalysisCancellationCheck,
   type SimilarityTransform,
@@ -603,14 +601,4 @@ export function runMotionAnalysisResearch(
       boxTracking: tracking.boxPassed ? 'go' : 'no-go',
     },
   }
-}
-
-/** Exported solely for deterministic unit checks of transform composition. */
-export function researchIdentityTransform(): SimilarityTransform {
-  return similarityFromPathSample({ x: 0, y: 0, angleRadians: 0, logScale: 0 })
-}
-
-export function researchFixtureIdentityIsExact(): boolean {
-  const identity = researchIdentityTransform()
-  return JSON.stringify(identity) === JSON.stringify(IDENTITY_SIMILARITY_TRANSFORM)
 }

@@ -205,13 +205,9 @@ export default function ExportProfilePicker({
     onDraftValidityChange(numericDraftsValid)
   }, [numericDraftsValid, onDraftValidityChange])
 
-  const makeCustom = (next: Readonly<ExportProfile>): void => {
-    onChangeProfile(next)
-  }
-
   const changeAudioLayout = (layout: ExportAudioChannelLayout): void => {
     if (layout === 'off') {
-      makeCustom(updateExportProfile(profile, {
+      onChangeProfile(updateExportProfile(profile, {
         audioCodec: null,
         audioChannelLayout: 'off',
         audioBitrate: null,
@@ -219,7 +215,7 @@ export default function ExportProfilePicker({
       }))
       return
     }
-    makeCustom(updateExportProfile(profile, {
+    onChangeProfile(updateExportProfile(profile, {
       audioCodec: audioCodecForContainer(profile.container),
       audioChannelLayout: layout,
       audioBitrate: profile.audioBitrate ?? 192_000,
@@ -313,7 +309,7 @@ export default function ExportProfilePicker({
               title="Output media container"
               value={profile.container}
               disabled={disabled}
-              onChange={(event) => makeCustom(changeExportContainer(
+              onChange={(event) => onChangeProfile(changeExportContainer(
                 profile,
                 event.currentTarget.value as ExportContainer,
               ))}
@@ -330,7 +326,7 @@ export default function ExportProfilePicker({
               title="Video encoder codec"
               value={profile.videoCodec}
               disabled={disabled}
-              onChange={(event) => makeCustom(updateExportProfile(profile, {
+              onChange={(event) => onChangeProfile(updateExportProfile(profile, {
                 videoCodec: event.currentTarget.value as ExportVideoCodec,
               }))}
             >
@@ -392,7 +388,7 @@ export default function ExportProfilePicker({
             disabled={disabled}
             resetKey={selectionId}
             onValidityChange={markNumericValidity}
-            onCommit={(videoBitrate) => makeCustom(updateExportProfile(
+            onCommit={(videoBitrate) => onChangeProfile(updateExportProfile(
               profile,
               { videoBitrate },
             ))}
@@ -405,7 +401,7 @@ export default function ExportProfilePicker({
               title="Constant or variable video bitrate"
               value={profile.videoBitrateMode}
               disabled={disabled}
-              onChange={(event) => makeCustom(updateExportProfile(profile, {
+              onChange={(event) => onChangeProfile(updateExportProfile(profile, {
                 videoBitrateMode: event.currentTarget.value as ExportBitrateMode,
               }))}
             >
@@ -428,7 +424,7 @@ export default function ExportProfilePicker({
             disabled={disabled || profile.audioChannelLayout === 'off'}
             resetKey={selectionId}
             onValidityChange={markNumericValidity}
-            onCommit={(audioBitrate) => makeCustom(updateExportProfile(
+            onCommit={(audioBitrate) => onChangeProfile(updateExportProfile(
               profile,
               { audioBitrate },
             ))}
@@ -441,7 +437,7 @@ export default function ExportProfilePicker({
               title="Constant or variable audio bitrate"
               value={profile.audioBitrateMode ?? 'variable'}
               disabled={disabled || profile.audioChannelLayout === 'off'}
-              onChange={(event) => makeCustom(updateExportProfile(profile, {
+              onChange={(event) => onChangeProfile(updateExportProfile(profile, {
                 audioBitrateMode: event.currentTarget.value as ExportBitrateMode,
               }))}
             >
@@ -464,7 +460,7 @@ export default function ExportProfilePicker({
             disabled={disabled}
             resetKey={selectionId}
             onValidityChange={markNumericValidity}
-            onCommit={(keyFrameIntervalMicroseconds) => makeCustom(
+            onCommit={(keyFrameIntervalMicroseconds) => onChangeProfile(
               updateExportProfile(profile, { keyFrameIntervalMicroseconds }),
             )}
           />
@@ -477,7 +473,7 @@ export default function ExportProfilePicker({
               title="Download to memory or stream to a user-selected file"
               value={profile.destination}
               disabled={disabled}
-              onChange={(event) => makeCustom(updateExportProfile(profile, {
+              onChange={(event) => onChangeProfile(updateExportProfile(profile, {
                 destination: event.currentTarget.value as ExportDestination,
               }))}
             >

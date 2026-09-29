@@ -1,3 +1,7 @@
+import { bytesToHex } from '../../domain/bytes'
+
+export { bytesToHex }
+
 const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
 
 export function utf8Bytes(value: string): Uint8Array {
@@ -16,12 +20,6 @@ export function hexBytes(value: string): Uint8Array {
     { length: value.length / 2 },
     (_unused, index) => Number.parseInt(value.slice(index * 2, index * 2 + 2), 16),
   )
-}
-
-export function bytesToHex(value: Uint8Array): string {
-  return [...value]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
 }
 
 export function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {

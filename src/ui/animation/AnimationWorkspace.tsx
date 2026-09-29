@@ -5,7 +5,7 @@ import { ANIMATION_EDIT_LIMITS, animationKeyAt, animationKeyKey, animationLaneKe
 import { animationEditorController, getAnimationEditorContext, subscribeAnimationDeclarations } from '../../app/animationEditorController'
 import { animationCommandResult, bindAnimationLane, closeAnimationWorkspace } from '../../app/animationWorkspaceController'
 import { calculateTimelineZoomGeometry, clampTimelineZoom } from '../timeline/timelineZoom'
-import AnimationGrid from './AnimationGrid'
+import AnimationGrid, { ANIMATION_GRID_GUTTER_PX } from './AnimationGrid'
 import AnimationKeyControls from './AnimationKeyControls'
 import './animation.css'
 
@@ -97,7 +97,7 @@ export default function AnimationWorkspace({ onClose = closeAnimationWorkspace }
   }
   function viewport(action: 'in' | 'out' | 'fit' | 'reset' | 'left' | 'right') {
     animationEditorController.cancel()
-    const transport = useTransportStore.getState(), width = Math.max(1, (root.current?.querySelector<HTMLElement>('[role="grid"]')?.clientWidth || 600) - 248)
+    const transport = useTransportStore.getState(), width = Math.max(1, (root.current?.querySelector<HTMLElement>('[role="grid"]')?.clientWidth || 600) - ANIMATION_GRID_GUTTER_PX)
     let first = Infinity, last = 0
     for (const row of rows) if (row.frames.length) { first = Math.min(first, row.globalFrames[0]); last = Math.max(last, row.globalFrames.at(-1)!) }
     if (!Number.isFinite(first)) first = 0

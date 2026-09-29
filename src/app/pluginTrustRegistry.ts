@@ -1,3 +1,4 @@
+import { hasExactKeys, isRecord } from '../domain/guards'
 import type {
   PluginCompatibilityResult,
   PluginManifestV1,
@@ -71,10 +72,6 @@ export interface PluginPackageIdentity {
 export interface PluginTrustBinding {
   readonly pluginId: string
   readonly signerFingerprint: Sha256Identity
-}
-
-export interface PluginPackageBinding extends PluginTrustBinding {
-  readonly packageDigest: Sha256Identity
 }
 
 export interface PluginTrustPolicy {
@@ -318,19 +315,12 @@ export function appendPluginDiagnostic(
 }
 
 function unknownRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
-}
-
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const actual = Object.keys(value)
-  return actual.length === keys.length && keys.every((key) => actual.includes(key))
+  return isRecord(value) ? value : null
 }
 
 function parseBinding(value: unknown): PluginTrustBinding | null {
   const record = unknownRecord(value)
-  if (!record || !exactKeys(record, BINDING_KEYS)
+  if (!record || !hasExactKeys(record, BINDING_KEYS)
     || typeof record.pluginId !== 'string'
     || !PLUGIN_ID.test(record.pluginId)
     || !isSha256Identity(record.signerFingerprint)) return null
@@ -351,7 +341,7 @@ export function parsePersistedPluginTrustPolicy(value: unknown): PersistedPlugin
     })
   }
   const record = unknownRecord(value)
-  if (!record || !exactKeys(record, PERSISTED_POLICY_KEYS)
+  if (!record || !hasExactKeys(record, PERSISTED_POLICY_KEYS)
     || record.schemaVersion !== PLUGIN_TRUST_POLICY_SCHEMA_VERSION
     || !Number.isSafeInteger(record.revision)
     || (record.revision as number) < 0

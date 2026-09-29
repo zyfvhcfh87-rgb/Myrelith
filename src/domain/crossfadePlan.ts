@@ -525,7 +525,8 @@ export function resolveCrossfadeGeometry(
   }
 }
 
-function windowsOverlap(
+/** Half-open overlap for two resolved crossfade windows. */
+export function crossfadeWindowsOverlap(
   left: { startFrame: number; endFrame: number },
   right: { startFrame: number; endFrame: number },
 ): boolean {
@@ -551,7 +552,7 @@ function overlapsAnotherTransition(
     )
     if (transition.durationFrames > otherTimelineMaximum) continue
     const otherWindow = transitionWindow(other)
-    if (otherWindow && windowsOverlap(window, otherWindow)) return true
+    if (otherWindow && crossfadeWindowsOverlap(window, otherWindow)) return true
   }
   return false
 }
@@ -723,15 +724,12 @@ function crossfadeAudioStructure(
 }
 
 function audioPlan(
-  doc: TimelineDoc,
   seam: CrossfadeSeam,
+  partners: CrossfadeAudioPartnerIndex,
   rate: FrameRate,
   catalog: SourceBoundsCatalog,
 ): CrossfadeAudioPlan {
-  const structure = crossfadeAudioStructure(
-    seam,
-    createCrossfadeAudioPartnerIndex(doc),
-  )
+  const structure = crossfadeAudioStructure(seam, partners)
   if (structure.status !== 'available') return structure
   const fromPartner = structure.from
   const toPartner = structure.to
@@ -827,7 +825,8 @@ interface StructuralCrossfadeAudioCandidate
   audio: Extract<CrossfadeAudioStructure, { status: 'available' }>
 }
 
-function markOverlappingCandidates<T>(
+/** Add every entry whose window overlaps another entry's window. */
+export function markOverlappingCandidates<T>(
   entries: readonly T[],
   windowOf: (entry: T) => CrossfadeAudioClipWindow,
   conflicts: Set<T>,
@@ -854,6 +853,45 @@ function markOverlappingCandidates<T>(
   }
 }
 
+interface TrackCrossfadeIndex {
+  track: Track
+  clips: TrackClipIndex
+  transitionIds: ReadonlyMap<TransitionId, { transition: Transition; count: number }>
+  structural: readonly StructuralCrossfadeCandidate[]
+  /** Structurally valid seams whose window overlaps another on the track. */
+  overlapping: ReadonlySet<Transition>
+}
+
+/** Seam structure and same-track window conflicts for one track, O(n log n). */
+function createTrackCrossfadeIndex(track: Track): TrackCrossfadeIndex {
+  const clips = createTrackClipIndex(track)
+  const transitionIds = new Map<TransitionId, { transition: Transition; count: number }>()
+  for (const transition of track.transitions) {
+    const existing = transitionIds.get(transition.id)
+    if (existing) existing.count += 1
+    else transitionIds.set(transition.id, { transition, count: 1 })
+  }
+  const structural: StructuralCrossfadeCandidate[] = []
+  for (const transition of track.transitions) {
+    if (transitionIds.get(transition.id)!.count !== 1) continue
+    const seam = resolveIndexedSeam(track, transition, clips)
+    if (typeof seam === 'string') continue
+    const window = transitionWindow(seam)
+    if (
+      !window
+      || transition.durationFrames > maximumDuration(
+        timelineCapacities(seam.from, seam.to),
+      )
+    ) continue
+    structural.push({ seam, window })
+  }
+  const conflicts = new Set<StructuralCrossfadeCandidate>()
+  markOverlappingCandidates(structural, (candidate) => candidate.window, conflicts)
+  const overlapping = new Set<Transition>()
+  for (const candidate of conflicts) overlapping.add(candidate.seam.transition)
+  return { track, clips, transitionIds, structural, overlapping }
+}
+
 /**
  * One O(n log n) index for linked-audio handle windows. With a source catalog,
  * it applies the same capacity-before-cross-track-conflict order as the final
@@ -868,29 +906,9 @@ export function createCrossfadeAudioWindowIndex(
   const audioCandidates: StructuralCrossfadeAudioCandidate[] = []
   for (const track of doc.tracks) {
     if (track.kind !== 'video') continue
-    const clips = createTrackClipIndex(track)
-    const idCounts = new Map<TransitionId, number>()
-    for (const transition of track.transitions) {
-      idCounts.set(transition.id, (idCounts.get(transition.id) ?? 0) + 1)
-    }
-    const structural: StructuralCrossfadeCandidate[] = []
-    for (const transition of track.transitions) {
-      if (idCounts.get(transition.id) !== 1) continue
-      const seam = resolveIndexedSeam(track, transition, clips)
-      if (typeof seam === 'string') continue
-      const window = transitionWindow(seam)
-      if (
-        !window
-        || transition.durationFrames > maximumDuration(
-          timelineCapacities(seam.from, seam.to),
-        )
-      ) continue
-      structural.push({ seam, window })
-    }
-    const conflicts = new Set<StructuralCrossfadeCandidate>()
-    markOverlappingCandidates(structural, (candidate) => candidate.window, conflicts)
+    const { structural, overlapping } = createTrackCrossfadeIndex(track)
     for (const candidate of structural) {
-      if (conflicts.has(candidate)) continue
+      if (overlapping.has(candidate.seam.transition)) continue
       if (catalog !== undefined) {
         const videoCapacity = pairCapacities(
           candidate.seam.from,
@@ -971,6 +989,72 @@ export function resolveCrossfadePlan(
   if (typeof resolved === 'string') {
     return { status: 'invalid', reason: resolved }
   }
+  return finishCrossfadePlan(
+    resolved,
+    trackId,
+    (window) => overlapsAnotherTransition(resolved, window),
+    () => createCrossfadeAudioPartnerIndex(doc),
+    doc.frameRate,
+    catalog,
+  )
+}
+
+export type CrossfadePlanResolver = (
+  trackId: TrackId,
+  transitionId: TransitionId,
+) => CrossfadePlanResolution
+
+/**
+ * resolveCrossfadePlan() for many seams of one document. Each track's clip
+ * index and overlap set, and the linked-audio partner index, are built once,
+ * so resolving every transition is O(T log T + C) instead of O(T²·C). Owned
+ * by one planning run: its doc and catalog must not change while in use.
+ */
+export function createCrossfadePlanResolver(
+  doc: TimelineDoc,
+  catalog: SourceBoundsCatalog,
+): CrossfadePlanResolver {
+  // Keyed like doc.tracks.find(): a duplicated track id resolves the first.
+  const tracks = new Map<TrackId, TrackCrossfadeIndex | null>()
+  let partners: CrossfadeAudioPartnerIndex | null = null
+  const partnerIndex = () => partners ??= createCrossfadeAudioPartnerIndex(doc)
+  return (trackId, transitionId) => {
+    let index = tracks.get(trackId)
+    if (index === undefined) {
+      const track = doc.tracks.find((candidate) => candidate.id === trackId)
+      index = track ? createTrackCrossfadeIndex(track) : null
+      tracks.set(trackId, index)
+    }
+    if (index === null) return { status: 'invalid', reason: 'track-not-found' }
+    const entry = index.transitionIds.get(transitionId)
+    if (!entry) return { status: 'invalid', reason: 'transition-not-found' }
+    if (entry.count !== 1) {
+      return { status: 'invalid', reason: 'ambiguous-transition-id' }
+    }
+    const resolved = resolveIndexedSeam(index.track, entry.transition, index.clips)
+    if (typeof resolved === 'string') {
+      return { status: 'invalid', reason: resolved }
+    }
+    const { overlapping } = index
+    return finishCrossfadePlan(
+      resolved,
+      trackId,
+      () => overlapping.has(entry.transition),
+      partnerIndex,
+      doc.frameRate,
+      catalog,
+    )
+  }
+}
+
+function finishCrossfadePlan(
+  resolved: CrossfadeSeam,
+  trackId: TrackId,
+  overlapsAnother: (window: { startFrame: number; endFrame: number }) => boolean,
+  partners: () => CrossfadeAudioPartnerIndex,
+  rate: FrameRate,
+  catalog: SourceBoundsCatalog,
+): CrossfadePlanResolution {
   const window = transitionWindow(resolved)
   if (!window) return { status: 'invalid', reason: 'unsafe-window' }
 
@@ -985,7 +1069,7 @@ export function resolveCrossfadePlan(
       maximumDurationFrames: timelineMaximum,
     }
   }
-  if (overlapsAnotherTransition(resolved, window)) {
+  if (overlapsAnother(window)) {
     return { status: 'invalid', reason: 'overlapping-transition' }
   }
 
@@ -993,7 +1077,7 @@ export function resolveCrossfadePlan(
     resolved.from,
     resolved.to,
     'video',
-    doc.frameRate,
+    rate,
     catalog,
   )
   if (videoCapacity.status === 'unavailable') {
@@ -1044,7 +1128,7 @@ export function resolveCrossfadePlan(
         ? 0
         : sourceFrameAtTimelineOffset(clipSourceTimeMap(resolved.to), 0),
     },
-    audio: audioPlan(doc, resolved, doc.frameRate, catalog),
+    audio: audioPlan(resolved, partners(), rate, catalog),
   }
   return { status: 'available', plan }
 }
@@ -1118,7 +1202,8 @@ export function evaluateCrossfadeUpdate(
   return resolveCrossfadePlan({ ...doc, tracks }, trackId, transitionId, catalog)
 }
 
-function clipOpacity(clip: Clip): number {
+/** Drawable clip opacity: 0 when non-finite or non-positive, at most 1. */
+export function clipOpacity(clip: Clip): number {
   if (!Number.isFinite(clip.opacity) || clip.opacity <= 0) return 0
   return Math.min(1, clip.opacity)
 }

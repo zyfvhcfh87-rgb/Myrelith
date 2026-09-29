@@ -7,7 +7,7 @@ import MaskEditorToggle from './MaskEditorToggle'
 import MaskPathAnimation from './MaskPathAnimation'
 import { commitMaskParams } from '../app/maskEditingController'
 import { SPATIAL_EFFECT_PARAMETERS, spatialEffectKind, spatialEffectParams } from '../state/editorUi'
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type {
   Clip,
   EffectDescriptor,
@@ -143,7 +143,6 @@ function updateAtFrame(
 
 function EffectParameterAnimation({ clip, effect, parameter, spec }: {
   clip: Clip; effect: EffectDescriptor; parameter: string; spec: EffectAnimationParameterSpec
-  value: number; playheadFrame: number; locked: boolean
 }) {
   const track = effectAnimationTrack(clip.animation ?? { tracks: [] }, effect.id, parameter)
   return <div className="inspector-effect-animation" aria-label={`${spec.label} animation`}>
@@ -268,9 +267,6 @@ function MaskFields({
                 effect={effect}
                 parameter={parameter}
                 spec={spec}
-                value={numericValue}
-                playheadFrame={playheadFrame}
-                locked={locked}
               />
             )}
           </div>
@@ -411,8 +407,7 @@ function SpatialFields({ clip, effect, playheadFrame, locked }: { clip: Clip; ef
       <NumericField label={spec.label} value={Number(params[parameter])} min={spec.min} max={spec.max} step={spec.step}
         disabled={locked} testId={`inspector-effect-${kind}-${parameter}-${effect.id}`}
         onCommit={(value) => updateAtFrame(clip, effect, playheadFrame, { [parameter]: value })} />
-      {clip.text === undefined && <EffectParameterAnimation clip={clip} effect={effect} parameter={parameter} spec={spec}
-        value={Number(params[parameter])} playheadFrame={playheadFrame} locked={locked} />}
+      {clip.text === undefined && <EffectParameterAnimation clip={clip} effect={effect} parameter={parameter} spec={spec} />}
     </div>)}
     {(kind === 'drop-shadow' || kind === 'outline') && <label className="inspector-field"><span className="inspector-field-label">Effect color</span>
       <input type="color" value={String(params.color)} disabled={locked} onChange={(event) => updateAtFrame(clip, effect, playheadFrame, { color: event.target.value })} />
@@ -436,16 +431,15 @@ export default function EffectStackInspector({
   const selectedIds = effectSelection.clipId === clip.id
     ? effectSelection.ids.filter((id) => clip.effects.some((effect) => effect.id === id))
     : []
-  const probes = {
-    color: createColorAdjustEffect('__effect-budget-color__'),
-    chroma: createChromaKeyEffect('__effect-budget-chroma__'),
-    mask: createMaskEffect('__effect-budget-mask__', 'rectangle'),
-  }
-  const limits = {
-    color: effectAppendBudgetError(doc, clip, probes.color),
-    chroma: effectAppendBudgetError(doc, clip, probes.chroma),
-    mask: effectAppendBudgetError(doc, clip, probes.mask),
-  }
+  // Each probe walks every effect in the document. `clip` is a fresh
+  // playhead-resolved copy on every render, but the resolver keeps its effects
+  // array unless an animated effect value changes, so key on that array.
+  const effects = clip.effects
+  const limits = useMemo(() => ({
+    color: effectAppendBudgetError(doc, { effects }, createColorAdjustEffect('__effect-budget-color__')),
+    chroma: effectAppendBudgetError(doc, { effects }, createChromaKeyEffect('__effect-budget-chroma__')),
+    mask: effectAppendBudgetError(doc, { effects }, createMaskEffect('__effect-budget-mask__', 'rectangle')),
+  }), [doc, effects])
   const addBudgetReasonBaseId = useId()
   const addBudgetReasons = [...new Set(
     [limits.color, limits.chroma, limits.mask]
@@ -534,7 +528,7 @@ export default function EffectStackInspector({
                       (enabled) => store().setEffectEnabled(clip.id, effect.id, enabled),
                     )}
                     <ColorGradingFields target={{ kind: 'clip', sequenceId: doc.id, clipId: clip.id }} effect={effect} disabled={locked}
-                      animation={(parameter, value) => <ColorGradingAnimation target={{ kind: 'clip', sequenceId: doc.id, clipId: clip.id }} effect={effect} parameter={parameter} value={value} disabled={locked} />} />
+                      animation={(parameter) => <ColorGradingAnimation target={{ kind: 'clip', sequenceId: doc.id, clipId: clip.id }} effect={effect} parameter={parameter} />} />
                     <SpatialFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />
                     {editableColor && <ColorFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />}
                     {editableMask && <MaskFields clip={clip} effect={effect} playheadFrame={playheadFrame} locked={locked} />}

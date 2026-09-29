@@ -1,3 +1,5 @@
+import { bytesToHex } from '../domain/bytes'
+import { isSha256Hex } from '../domain/guards'
 import {
   PLUGIN_MANIFEST_LIMITS,
   negotiatePluginCompatibility,
@@ -5,6 +7,7 @@ import {
   type PluginCompatibilityResult,
   type PluginManifestV1,
 } from '../domain/pluginManifest'
+import { deepFreeze } from './pluginControllerShared'
 
 export const PLUGIN_PACKAGE_LIMITS = Object.freeze({
   maxArchiveBytes: 32 * 1024 * 1024,
@@ -559,7 +562,7 @@ function signatureEnvelope(bytes: Uint8Array): SignatureEnvelope {
     const record = candidate as Readonly<Record<string, JsonValue>>
     exactKeys(record, ['length', 'path', 'sha256'], 'signature-invalid', `signature.json.entries[${index}]`)
     const sha256 = stringValue(record.sha256, 'signature-invalid', `signature.json.entries[${index}].sha256`)
-    if (!/^[0-9a-f]{64}$/u.test(sha256)) {
+    if (!isSha256Hex(sha256)) {
       fail('signature-invalid', `signature.json.entries[${index}].sha256 must be lowercase SHA-256 hex.`)
     }
     return {
@@ -626,10 +629,6 @@ function base64urlDecode(value: string, expectedLength: number, path: string): U
   return bytes
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
 function ownedBuffer(bytes: Uint8Array): ArrayBuffer {
   return Uint8Array.from(bytes).buffer
 }
@@ -646,12 +645,6 @@ function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
     offset += chunk.byteLength
   }
   return output
-}
-
-function deepFreeze<T>(value: T): T {
-  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value
-  for (const nested of Object.values(value)) deepFreeze(nested)
-  return Object.freeze(value)
 }
 
 function bigEndianU32(value: number): Uint8Array {

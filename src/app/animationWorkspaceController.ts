@@ -5,7 +5,7 @@ import { createAnimationSnapSession } from '../domain/animationSnapping'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import { usePreferencesStore } from '../state/preferencesStore'
-import { createAnimationBindingController } from './animationBindingController'
+import { bindAnimationParameter } from './animationBindingController'
 import { animationEditorController, getAnimationEditorContext } from './animationEditorController'
 
 export function animationCommandResult(error: string | null, success: string): void {
@@ -17,8 +17,7 @@ export function closeAnimationWorkspace(): void {
 }
 export function bindAnimationLane(lane: AnimationLaneAddress): string | null {
   if (lane.kind !== 'effect' || lane.owner.kind !== 'clip') return 'Only clip plugin lanes can be bound here.'
-  const binding = createAnimationBindingController(() => getAnimationEditorContext().plugins)
-  return binding.bind(binding.begin(), lane.owner.id, lane.effectId, lane.parameter)
+  return bindAnimationParameter(() => getAnimationEditorContext().plugins, lane.owner.id, lane.effectId, lane.parameter)
 }
 export function beginAnimationKeyDrag(index: AnimationLaneIndex, onEnd: () => void) {
   const state = useTransportStore.getState(), document = useDocumentStore.getState().doc

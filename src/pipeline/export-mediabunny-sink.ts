@@ -1,9 +1,6 @@
-import { validateExportRange, exportSampleBoundary, type ExportRange } from '../domain/exportRange'
 /** Transactional buffered/direct-file Mediabunny export sink. */
-import { hasVideoBusEffects, videoBusRenderBudgetError } from '../domain/videoBusStage'
-
+import { validateExportRange, exportSampleBoundary, type ExportRange } from '../domain/exportRange'
 import {
-  AudioSample,
   AudioSampleSource,
   BufferTarget,
   CanvasSource,
@@ -14,7 +11,7 @@ import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import type { TimelineDoc } from '../domain/schema'
 import type { SequenceProject } from '../domain/projectSequences'
 import type { TimelineAudioMixPlan } from '../domain/audioMixPlan'
-import { docDurationFrames, projectReachableSequences } from '../domain/selectors'
+import { docDurationFrames } from '../domain/selectors'
 import { framesToSeconds } from '../domain/time'
 import { exportAudioEncoderSampleRate, type ExportProfile } from '../domain/exportProfile'
 import {
@@ -35,10 +32,12 @@ import {
   resampleMixedAudioBlock,
   scaleExportSampleIndex,
   type ExportAudioResampleCarry,
-  type MixedAudioBlock,
 } from './export-audio'
 import {
   AacInputAssembler,
+  addInterleavedAudioChunk,
+  interleaveAudioBlock,
+  trimAacPaddingPacket,
   type AacInputChunk,
 } from './export-aac-input'
 import { createMediabunnyExportAudioSource } from './export-mediabunny-audio-source'
@@ -47,18 +46,7 @@ import {
   createMediabunnyOutputFormat,
   mediabunnyExportImplementationUnavailableReason,
 } from './export-mediabunny-profile'
-import type { Composite2D, TransitionSurfaces } from './render'
-import {
-  createDocumentLensRemapProvider,
-  documentHasSupportedLensCorrection,
-  documentHasUnsupportedLensCorrection,
-  WebGl2LensRemapBackend,
-} from './lensRemapWebgl'
-import { LensRemapUnavailableError } from './lensRemap'
-
-const SRGB_2D_CONTEXT: CanvasRenderingContext2DSettings = {
-  colorSpace: 'srgb',
-}
+import { createExportRenderSurfaces } from './export-render-surfaces'
 
 function assertVideoSinkInputs(
   doc: TimelineDoc,
@@ -117,42 +105,6 @@ async function cancelSetup(
   throw primary
 }
 
-function interleaveAudioBlock(
-  block: MixedAudioBlock,
-  channelCount: 1 | 2,
-): Float32Array {
-  const data = new Float32Array(block.sampleCount * channelCount)
-  for (let frame = 0; frame < block.sampleCount; frame++) {
-    if (channelCount === 1) {
-      // The internal mix bus stays stereo. An arithmetic mean preserves a
-      // duplicated mono source's level and cannot clip two bounded channels.
-      data[frame] = (block.channels[0][frame] + block.channels[1][frame]) / 2
-    } else {
-      data[frame * channelCount] = block.channels[0][frame]
-      data[frame * channelCount + 1] = block.channels[1][frame]
-    }
-  }
-  return data
-}
-
-function trimAacPaddingPacket(
-  packet: EncodedPacket,
-  targetSamples: number,
-  sampleRate: number,
-): void {
-  const packetStart = Math.round(packet.timestamp * sampleRate)
-  const packetSamples = Math.round(packet.duration * sampleRate)
-  const remaining = Math.max(0, targetSamples - packetStart)
-  if (packetSamples <= remaining) return
-
-  // Mediabunny 1.50.9 invokes onEncodedPacket synchronously immediately
-  // before handing this same object to the muxer. AAC encodes whole 1024-
-  // sample packets; narrowing the final packet's container duration removes
-  // codec padding without changing the exact PCM samples submitted.
-  ;(packet as unknown as { duration: number }).duration =
-    remaining / sampleRate
-}
-
 /** Creates and starts the selected buffered or direct-file Mediabunny sink. */
 export async function createMediabunnyExportSink(
   doc: TimelineDoc,
@@ -189,12 +141,11 @@ export async function createMediabunnyExportSink(
   const audioSettings = settings.audioChannelLayout === 'off' || !hasTimelineAudio
     ? null
     : settings
-  const includeAudio = audioSettings !== null
-  const frameRate = assertVideoSinkInputs(doc, settings, includeAudio)
+  const hasAudio = audioSettings !== null
+  const frameRate = assertVideoSinkInputs(doc, settings, hasAudio)
   const outputAudioChannels = audioSettings
     ? (audioSettings.audioChannelLayout === 'mono' ? 1 : 2)
     : null
-  const hasAudio = audioSettings !== null
   const window = range ? validateExportRange(doc, range) : { startFrame: 0, endFrame: docDurationFrames(doc) }
   const expectedFrames = window.endFrame
   const encoderSampleRate = audioSettings && audioSettings.audioCodec
@@ -209,73 +160,12 @@ export async function createMediabunnyExportSink(
     ) - firstAudioSample
     : 0
 
-  if (typeof OffscreenCanvas === 'undefined') {
-    throw new Error('OffscreenCanvas is not supported in this browser')
-  }
-
-  const lensDocument = projectTarget
-    ? {
-        ...doc,
-        masterVideoEffects: projectReachableSequences(projectTarget.project, projectTarget.sequenceId).flatMap((sequence) => sequence.masterVideoEffects ?? []),
-        tracks: projectReachableSequences(
-          projectTarget.project,
-          projectTarget.sequenceId,
-        ).flatMap((sequence) => sequence.tracks),
-      }
-    : doc
-
-  if (hasVideoBusEffects(lensDocument)) {
-    const error = videoBusRenderBudgetError(doc.width, doc.height)
-    if (error) throw new RangeError(error)
-  }
-  if (documentHasUnsupportedLensCorrection(lensDocument)) {
-    throw new LensRemapUnavailableError(
-      'Export is blocked because this project contains a preserved future lens-correction version.',
-    )
-  }
-
-  let lensBackend: WebGl2LensRemapBackend | null = null
-  try {
-    if (documentHasSupportedLensCorrection(lensDocument)) {
-      lensBackend = new WebGl2LensRemapBackend()
-    }
-  } catch (cause) {
-    throw new LensRemapUnavailableError(
-      `Export lens correction is unavailable: ${cause instanceof Error ? cause.message : String(cause)}`,
-      true,
-      cause,
-    )
-  }
-  let lensRemapProvider
-  try {
-    lensRemapProvider = createDocumentLensRemapProvider(
-      lensDocument,
-      lensBackend,
-      doc.width,
-      doc.height,
-      true,
-    )
-  } catch (cause) {
-    lensBackend?.dispose()
-    throw cause
-  }
-
-  let canvas: OffscreenCanvas
-  try {
-    canvas = new OffscreenCanvas(doc.width, doc.height)
-  } catch (cause) {
-    lensBackend?.dispose()
-    throw cause
-  }
-  const context = canvas.getContext('2d', options?.alpha
-    ? { colorSpace: 'srgb', alpha: true }
-    : SRGB_2D_CONTEXT)
-  if (!context) {
-    lensBackend?.dispose()
-    canvas.width = 1
-    canvas.height = 1
-    throw new Error('Could not create the export 2D context')
-  }
+  const surfaces = createExportRenderSurfaces(doc, {
+    alpha: options?.alpha === true,
+    label: 'export',
+    projectTarget,
+  })
+  const { canvas } = surfaces
 
   const format = createMediabunnyOutputFormat(settings.container)
   let fileTarget: DirectFileExportTarget | null
@@ -284,9 +174,7 @@ export async function createMediabunnyExportSink(
       ? await createDirectFileExportTarget(fileDestination)
       : null
   } catch (cause) {
-    lensBackend?.dispose()
-    canvas.width = 1
-    canvas.height = 1
+    surfaces.release()
     throw cause
   }
   let bufferTarget: BufferTarget | null = null
@@ -298,9 +186,7 @@ export async function createMediabunnyExportSink(
     try {
       await fileTarget?.abort(cause)
     } finally {
-      lensBackend?.dispose()
-      canvas.width = 1
-      canvas.height = 1
+      surfaces.release()
     }
     throw cause
   }
@@ -349,9 +235,7 @@ export async function createMediabunnyExportSink(
     try {
       return await cancelSetup(output, mixer, fileTarget, cause)
     } finally {
-      lensBackend?.dispose()
-      canvas.width = 1
-      canvas.height = 1
+      surfaces.release()
     }
   }
 
@@ -369,27 +253,7 @@ export async function createMediabunnyExportSink(
     && outputAudioChannels !== null
     ? new AacInputAssembler(outputAudioChannels)
     : null
-  let transitionSurfaces: TransitionSurfaces | null = null
-  let renderSurfacesReleased = false
-
-  const releaseRenderSurfaces = (): void => {
-    if (renderSurfacesReleased) return
-    renderSurfacesReleased = true
-    lensBackend?.dispose()
-    lensBackend = null
-    if (transitionSurfaces) {
-      for (const surface of [transitionSurfaces.leg.canvas, transitionSurfaces.group.canvas]) {
-        const owned = surface as OffscreenCanvas
-        owned.width = 1
-        owned.height = 1
-      }
-      transitionSurfaces = null
-    }
-    canvas.width = 1
-    canvas.height = 1
-  }
-
-  const cancelWithReason = (reason?: unknown): Promise<void> => {
+  const cancel = (reason?: unknown): Promise<void> => {
     if (state === 'finalized' || state === 'canceled') {
       return Promise.resolve()
     }
@@ -414,7 +278,7 @@ export async function createMediabunnyExportSink(
       } catch (cause) {
         failure ??= cause
       } finally {
-        releaseRenderSurfaces()
+        surfaces.release()
         state = 'canceled'
       }
       if (failure !== undefined) throw failure
@@ -422,11 +286,9 @@ export async function createMediabunnyExportSink(
     return cancelPromise
   }
 
-  const cancel = (reason?: unknown): Promise<void> => cancelWithReason(reason)
-
   const failAfterCancel = async (primary: unknown): Promise<never> => {
     try {
-      await cancelWithReason(primary)
+      await cancel(primary)
     } catch (cleanupCause) {
       if (cleanupCause instanceof DirectFileAbortError) {
         throw cleanupCause
@@ -442,18 +304,12 @@ export async function createMediabunnyExportSink(
     if (!audioSource || outputAudioChannels === null) {
       throw new Error('Export audio source is unavailable')
     }
-    const sample = new AudioSample({
-      data: chunk.data,
-      format: 'f32',
-      numberOfChannels: outputAudioChannels,
-      sampleRate: encoderSampleRate,
-      timestamp: chunk.startSample / encoderSampleRate,
-    })
-    try {
-      await audioSource.add(sample)
-    } finally {
-      sample.close()
-    }
+    await addInterleavedAudioChunk(
+      audioSource,
+      chunk,
+      outputAudioChannels,
+      encoderSampleRate,
+    )
   }
 
   const addFrame = async (
@@ -521,7 +377,7 @@ export async function createMediabunnyExportSink(
     } catch (cause) {
       return failAfterCancel(cause)
     } finally {
-      releaseRenderSurfaces()
+      surfaces.release()
     }
 
     state = 'finalized'
@@ -548,44 +404,10 @@ export async function createMediabunnyExportSink(
         nextFrame++
       } catch (cause) { return failAfterCancel(cause) }
     },
-    ctx: context as Composite2D,
+    ctx: surfaces.ctx,
     compositeBackground: options?.alpha ? 'transparent' : 'opaque',
-    transitionSurfaceProvider: {
-      get: () => {
-        if (transitionSurfaces) return transitionSurfaces
-        const legCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const legContext = legCanvas.getContext('2d', {
-          ...SRGB_2D_CONTEXT,
-          willReadFrequently: true,
-          ...(options?.alpha ? { alpha: true } : {}),
-        })
-        const groupCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const groupContext = groupCanvas.getContext('2d', {
-          ...SRGB_2D_CONTEXT,
-          willReadFrequently: true,
-          ...(options?.alpha ? { alpha: true } : {}),
-        })
-        if (!legContext || !groupContext) {
-          legCanvas.width = 1
-          legCanvas.height = 1
-          groupCanvas.width = 1
-          groupCanvas.height = 1
-          throw new Error('Could not create export transition 2D contexts')
-        }
-        transitionSurfaces = {
-          leg: {
-            canvas: legCanvas,
-            ctx: legContext as Composite2D,
-          },
-          group: {
-            canvas: groupCanvas,
-            ctx: groupContext as Composite2D,
-          },
-        }
-        return transitionSurfaces
-      },
-    },
-    lensRemapProvider,
+    transitionSurfaceProvider: surfaces.transitionSurfaceProvider,
+    lensRemapProvider: surfaces.lensRemapProvider,
     addFrame,
     finalize,
     cancel,

@@ -1,7 +1,7 @@
 import { COLOR_LUT_TYPE, type PortableColorLutV1 } from './colorLut'
 import { colorLutsForEffects, mergeColorLuts, projectVideoEffects } from './colorLutCatalog'
 import { effectRegistration } from './effectStack'
-import { createProjectEffectIdAllocator, replaceProjectSequence, sequenceById, sequenceProjectWithinEditBudget, type SequenceProject } from './projectSequences'
+import { createProjectEffectIdAllocator, replaceProjectSequence, sequenceById, type SequenceProject } from './projectSequences'
 import type { EffectDescriptor } from './schema'
 
 export type ColorGradingTarget = { readonly sequenceId: string } & (
@@ -45,8 +45,9 @@ export function applyColorLutToProject(project: SequenceProject, target: ColorGr
   }
   if (!found) throw new Error('The grading target no longer exists.')
   const base = merged.catalog === project.colorLuts ? project : { ...project, colorLuts: merged.catalog }
+  // replaceProjectSequence returns its input unless the candidate is within the edit budget.
   const candidate = replaceProjectSequence(base, target.sequenceId, next)
-  if (candidate === base || !sequenceProjectWithinEditBudget(candidate)) throw new Error('The correction exceeds the project effect or identity budget.')
+  if (candidate === base) throw new Error('The correction exceeds the project effect or identity budget.')
   if (merged.catalog === project.colorLuts && JSON.stringify(next) === JSON.stringify(sequence)) return project
   return candidate
 }

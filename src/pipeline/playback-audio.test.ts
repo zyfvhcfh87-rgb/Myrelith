@@ -16,7 +16,17 @@ import type {
   Track,
   Transition,
 } from '../domain/schema'
-import { createLimiterEffect } from '../domain/audioEffectStack'
+import {
+  createAudioEffectChain,
+  createLimiterEffect,
+} from '../domain/audioEffectStack'
+import { clipAudioGainsAtLocalFrame } from '../domain/audioMixPlan'
+import {
+  PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES,
+  processAudioBufferWithChain,
+} from '../domain/audioDsp'
+import { clipLocalFrameAtSeconds } from '../domain/time'
+import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import {
@@ -823,6 +833,64 @@ describe('startTimelineAudioPlayback scheduling', () => {
       2_205 / 4_409,
       6,
     )
+    await session.stop()
+  })
+
+  test('folds multichannel media onto the project grid exactly like the per-sample fold', async () => {
+    const clip = makeClip('project-rate-surround', 0, 1)
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 1)
+    const h = makePlaybackHarness({ lookaheadSeconds: 0.2 })
+    let seed = 29
+    const random = (): number => {
+      seed = (seed * 16_807) % 2_147_483_647
+      return seed / 1_073_741_823.5 - 1
+    }
+    const planes = [0, 1].map(() => Array.from({ length: 6 }, () =>
+      Float32Array.from({ length: 2_205 }, () => random()),
+    ))
+    h.media.enqueue(
+      clip.assetId,
+      makeCursor(planes.map((buffer, index) => ({
+        buffer: makePlanarAudioBuffer(buffer, 44_100),
+        timestamp: index * 0.05,
+        duration: 0.05,
+      }))).cursor,
+    )
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.output.scheduled).toHaveLength(2)
+    for (const [index, event] of h.output.scheduled.entries()) {
+      // Reference: the former per-sample fold of the lower frame, which only
+      // interpolates toward a contiguous next buffer at the tail.
+      const expectedLeft = new Float32Array(2_400)
+      const expectedRight = new Float32Array(2_400)
+      for (let sample = 0; sample < 2_400; sample++) {
+        const position = Math.max(
+          0,
+          ((index * 2_400 + sample) / 48_000 - index * 0.05) * 44_100,
+        )
+        const lower = Math.min(2_204, Math.floor(position))
+        const fraction = Math.max(0, Math.min(1, position - lower))
+        const first = foldDecodedFrameToStereo(planes[index]!, lower)
+        const second = index === 0 && lower === 2_204 && fraction > 1e-10
+          ? foldDecodedFrameToStereo(planes[1]!, 0)
+          : first
+        expectedLeft[sample] = first[0] + (second[0] - first[0]) * fraction
+        expectedRight[sample] = first[1] + (second[1] - first[1]) * fraction
+      }
+      expect(Array.from(event.buffer.getChannelData(0)))
+        .toEqual(Array.from(expectedLeft))
+      expect(Array.from(event.buffer.getChannelData(1)))
+        .toEqual(Array.from(expectedRight))
+    }
     await session.stop()
   })
 
@@ -2074,6 +2142,79 @@ describe('createWebAudioPlaybackOutput ownership', () => {
     // The balance stage was baked ahead of DSP, so only the meter splitter exists.
     expect(h.splitters).toHaveLength(1)
 
+    output.stop()
+  })
+
+  test('bakes animated clip gains before clip effects exactly like per-sample gains', () => {
+    const h = makeWebAudioHarness('running')
+    const output = createWebAudioPlaybackOutput(h.context)
+    const rate = 4_800
+    const leftSource = Float32Array.from({ length: 2_400 }, (_, index) => Math.sin(index / 7))
+    const rightSource = Float32Array.from({ length: 2_400 }, (_, index) => Math.cos(index / 5))
+    const limiter = createLimiterEffect('afx-animated-limiter')
+    limiter.params.ceilingDb = -3
+    const request: ScheduledPlaybackAudio = {
+      clipId: 'clip-with-animated-input-gain',
+      buffer: makePlanarAudioBuffer([leftSource, rightSource], rate),
+      timelineStartTime: 0.25,
+      when: 10,
+      offset: 0.1,
+      duration: 0.3,
+      volume: 0.8,
+      envelope: null,
+      balance: 0,
+      leftGain: 1,
+      rightGain: 1,
+      clipTimelineStartFrame: 2,
+      frameRate: F10,
+      volumeAnimation: {
+        property: 'volume',
+        keyframes: [
+          { frame: 0, value: 0.2, easing: { type: 'linear' } },
+          { frame: 6, value: 1.5, easing: { type: 'linear' } },
+        ],
+      },
+      balanceAnimation: {
+        property: 'balance',
+        keyframes: [
+          { frame: 1, value: -0.75, easing: { type: 'linear' } },
+          { frame: 5, value: 0.5, easing: { type: 'linear' } },
+        ],
+      },
+      audioEffects: [limiter],
+    }
+    output.schedule(request)
+
+    // Reference: the former slice + fresh gain object per sample.
+    const start = Math.floor(request.offset * rate)
+    const count = Math.round(request.duration * rate)
+    const left = leftSource.slice(start, start + count)
+    const right = rightSource.slice(start, start + count)
+    for (let index = 0; index < count; index++) {
+      const gains = clipAudioGainsAtLocalFrame(
+        {
+          volume: request.volume,
+          balance: 0,
+          volumeAnimation: request.volumeAnimation!,
+          balanceAnimation: request.balanceAnimation!,
+        },
+        clipLocalFrameAtSeconds(2, request.timelineStartTime + index / rate, F10),
+      )
+      left[index] *= gains.volume * gains.leftGain
+      right[index] *= gains.volume * gains.rightGain
+    }
+    processAudioBufferWithChain(
+      left,
+      right,
+      createAudioEffectChain([limiter], rate),
+      PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES,
+    )
+
+    const processed = h.sources[0]?.buffer
+    expect(processed?.length).toBe(count)
+    expect(Array.from(processed!.getChannelData(0))).toEqual(Array.from(left))
+    expect(Array.from(processed!.getChannelData(1))).toEqual(Array.from(right))
+    expect(h.sources[0]?.start).toHaveBeenCalledWith(10, 0, count / rate)
     output.stop()
   })
 

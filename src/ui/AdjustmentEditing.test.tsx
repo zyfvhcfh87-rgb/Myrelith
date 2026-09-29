@@ -129,4 +129,41 @@ describe('adjustment editor surfaces', () => {
     expect(useDocumentStore.getState().doc.tracks[0].adjustments).toHaveLength(2)
     expect(useDocumentStore.getState().past).toHaveLength(2)
   })
+
+  test('capture failure still previews, and pointerleave cancels without wedging', () => {
+    const { document, item } = documentWithAdjustment()
+    resetDocumentStoreForTest(document)
+    render(
+      <AdjustmentView
+        adjustment={item}
+        trackId="V1"
+        locked={false}
+        timelineOriginFrame={0}
+        timelineWindowEndFrame={100}
+      />,
+    )
+    const view = screen.getByRole('button', { name: 'Look pass, adjustment layer' })
+    const before = useDocumentStore.getState().doc
+    const captureSpy = vi.spyOn(view, 'setPointerCapture').mockImplementation(() => {
+      throw new DOMException('inactive pointer')
+    })
+
+    try {
+      fireEvent.pointerDown(view, { pointerId: 5, button: 0, clientX: 20 })
+      expect(useTransportStore.getState().adjustmentEditPreview).toMatchObject({
+        adjustmentId: item.id,
+        kind: 'move',
+        deltaFrames: 0,
+      })
+
+      fireEvent.pointerLeave(view, { pointerId: 5, clientX: 30 })
+      fireEvent.pointerUp(view, { pointerId: 5, button: 0, clientX: 30 })
+
+      expect(useTransportStore.getState().adjustmentEditPreview).toBeNull()
+      expect(useDocumentStore.getState().doc).toBe(before)
+      expect(useDocumentStore.getState().past).toHaveLength(0)
+    } finally {
+      captureSpy.mockRestore()
+    }
+  })
 })

@@ -148,6 +148,45 @@ describe('timeline marquee selection', () => {
     expect(useDocumentStore.getState().past).toBe(historyBefore)
   })
 
+  test('pointerdown on a compound instance never opens an empty-lane marquee', () => {
+    const [v1, v2] = makeDoc().tracks
+    useDocumentStore.getState().setDoc({
+      ...makeDoc(),
+      tracks: [v1, {
+        ...v2,
+        sequenceInstances: [{
+          kind: 'sequence',
+          id: 'scene',
+          name: 'Scene',
+          sequenceId: 'child',
+          sourceStartFrame: 0,
+          timelineRange: { startFrame: 100, durationFrames: 40 },
+        }],
+      }],
+    })
+    useTransportStore.getState().setSelectedClip('A')
+    render(<Timeline />)
+
+    fireEvent.pointerDown(screen.getByTestId('sequence-instance-scene'), {
+      pointerId: 73,
+      button: 0,
+      clientX: 110,
+      clientY: 110,
+    })
+    fireEvent.pointerUp(window, {
+      pointerId: 73,
+      button: 0,
+      clientX: 110,
+      clientY: 110,
+    })
+
+    expect(useTransportStore.getState()).toMatchObject({
+      selectedClipIds: ['A'],
+      selectedClipId: 'A',
+      selectionMarquee: null,
+    })
+  })
+
   test('secondary empty-lane dragging preserves the existing selection', () => {
     useTransportStore.getState().setSelectedClip('A')
     render(<Timeline />)

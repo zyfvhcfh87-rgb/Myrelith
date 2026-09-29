@@ -1,5 +1,6 @@
 /** Historical generation provenance. It makes no claim about edited text accuracy. */
 import { captionIntentEqual, inspectCaptionIntent, type CaptionIntentDescriptor, type CaptionIntentValue } from './captionIntent'
+import { isSha256Hex } from './guards'
 
 export type CaptionOriginDescriptor = CaptionIntentDescriptor
 export interface CaptionCueOriginV1 {
@@ -26,7 +27,6 @@ type Inspection<T> =
   | { readonly kind: 'supported'; readonly params: Readonly<T>; readonly descriptor: CaptionOriginDescriptor; readonly serializedUtf8Bytes: number }
 
 const portableId = (v: CaptionIntentValue): boolean => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(v)
-const digest = (v: CaptionIntentValue): boolean => typeof v === 'string' && /^[0-9a-f]{64}$/u.test(v)
 const integer = (min: number, max = Number.MAX_SAFE_INTEGER) => (v: CaptionIntentValue): boolean =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= min && v <= max
 const CUE = { runId: portableId, sourceStartSample: integer(0), sourceSampleCount: integer(1) }
@@ -34,12 +34,12 @@ const TRACK = {
   ...CUE,
   modelId: (v) => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(v),
   modelRevision: (v) => typeof v === 'string' && /^(?:[0-9a-f]{40}|composite:[0-9a-f]{64})$/u.test(v),
-  manifestDigest: digest,
+  manifestDigest: isSha256Hex,
   runtimeVersion: (v) => typeof v === 'string' && /^[0-9][A-Za-z0-9.+_-]*$/u.test(v),
   language: (v) => typeof v === 'string' && /^(?:und|[A-Za-z]{2,8})(?:-[A-Za-z0-9]{1,8})*$/u.test(v),
   sourceAssetId: portableId,
   sourceFingerprintAlgorithm: (v) => v === 'sha256-sampled-v1' || v === 'sha256-full-v1',
-  sourceFingerprintDigest: digest,
+  sourceFingerprintDigest: isSha256Hex,
   sourceSampleRate: integer(1, 768_000),
   targetFrameOffset: integer(0, 1_000_000_000),
 } satisfies Record<keyof CaptionTrackOriginV1, (value: CaptionIntentValue) => boolean>

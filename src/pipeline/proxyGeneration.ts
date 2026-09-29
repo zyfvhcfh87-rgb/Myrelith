@@ -22,6 +22,7 @@ import {
   refineVideoDecoderBudget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
+import { abortError, errorMessage } from '../domain/errors'
 import {
   DEFAULT_PROXY_PARAMETERS,
   proxyOutputDimensions,
@@ -108,16 +109,12 @@ export interface ProxyEncoderProbeResult {
   readonly reason?: string
 }
 
-function abortError(): Error {
-  const error = new Error('Proxy generation was canceled')
-  error.name = 'AbortError'
-  return error
-}
+const PROXY_GENERATION_CANCELED = 'Proxy generation was canceled'
 
 function throwIfAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return
   if (signal.reason instanceof Error) throw signal.reason
-  throw abortError()
+  throw abortError(PROXY_GENERATION_CANCELED)
 }
 
 function assertFrameIndex(frame: number, frameCount: number): void {
@@ -228,7 +225,7 @@ const realEncoderProbeDeps: ProxyEncoderProbeDeps = {
       }
       return {
         supported: false,
-        reason: cause instanceof Error ? cause.message : String(cause),
+        reason: errorMessage(cause),
       }
     }
   },
@@ -299,7 +296,7 @@ export async function probeProxyEncoderSupport(
   } catch (cause) {
     return {
       supported: false,
-      reason: `Could not verify AVC proxy encoding: ${cause instanceof Error ? cause.message : String(cause)}`,
+      reason: `Could not verify AVC proxy encoding: ${errorMessage(cause)}`,
     }
   }
 }
@@ -346,10 +343,10 @@ export async function probeProxyInputSupport(
       ? { supported: true, reason: `Input decoder verified: ${pathLabel}.` }
       : { supported: false, reason: `Proxy input is unsupported: ${support.failure.detail}` }
   } catch (cause) {
-    if (signal?.aborted) throw abortError()
+    if (signal?.aborted) throw abortError(PROXY_GENERATION_CANCELED)
     return {
       supported: false,
-      reason: `Could not verify the proxy input: ${cause instanceof Error ? cause.message : String(cause)}`,
+      reason: `Could not verify the proxy input: ${errorMessage(cause)}`,
     }
   } finally {
     input.dispose()
@@ -486,7 +483,7 @@ export async function generateEditingProxy(
     }
     if (destination && !finalized) await destination.abort(cause)
     if (request.signal?.aborted && !(cause instanceof Error && cause.name === 'AbortError')) {
-      throw abortError()
+      throw abortError(PROXY_GENERATION_CANCELED)
     }
     throw cause
   } finally {

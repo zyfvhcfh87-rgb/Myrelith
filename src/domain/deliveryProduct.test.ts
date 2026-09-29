@@ -7,12 +7,11 @@ import {
   DEFAULT_IMAGE_SEQUENCE_PROFILE,
   assertChapterDelivery,
   assertDeliveryWorkBudget,
-  containerChapterSupport,
+  CONTAINER_CHAPTER_SUPPORT,
   deliveryFileExtension,
   deliveryProductLabel,
   deliveryWorkBudgetReason,
   imageSequenceFileName,
-  imageSequenceFileNames,
   imageSequencePadWidth,
   isDeliveryProfile,
   parseChapterPolicy,
@@ -41,8 +40,7 @@ describe('delivery products', () => {
     expect(isDeliveryProfile(DEFAULT_EXPORT_PROFILE)).toBe(false)
     expect(parseExportSettings(DEFAULT_EXPORT_PROFILE)).toEqual(DEFAULT_EXPORT_PROFILE)
     expect(isDeliveryProfile(DEFAULT_IMAGE_SEQUENCE_PROFILE)).toBe(true)
-    expect(containerChapterSupport('mp4')).toBe('unsupported')
-    expect(containerChapterSupport('webm')).toBe('unsupported')
+    expect(CONTAINER_CHAPTER_SUPPORT).toBe('unsupported')
   })
 
   test('names PNG frames from absolute range frames with deterministic padding', () => {
@@ -50,12 +48,43 @@ describe('delivery products', () => {
     expect(imageSequencePadWidth(100_000)).toBe(5)
     expect(imageSequencePadWidth(1_000_000)).toBe(6)
     expect(imageSequenceFileName('frame', 7, 5)).toBe('frame_00007.png')
-    expect(imageSequenceFileNames({ startFrame: 10, endFrame: 13 }, 'plate')).toEqual([
+    const padWidth = imageSequencePadWidth(13)
+    expect([10, 11, 12].map((frame) => imageSequenceFileName('plate', frame, padWidth))).toEqual([
       'plate_00010.png',
       'plate_00011.png',
       'plate_00012.png',
     ])
     expect(sanitizeDeliveryPrefix('../evil/name.png')).toBe('-evil-name')
+  })
+
+  test('prefix sanitizing matches its original step order on awkward names', () => {
+    // The pre-refactor implementation, kept verbatim as an oracle.
+    const original = (value: string): string => {
+      let base = value.trim().replace(/[. ]+$/g, '')
+      base = base.replace(/[<>:"/\\|?*]/g, '-')
+      base = base.replace(/^\.+/g, '')
+      base = base.replace(/\.png$/i, '')
+      base = Array.from(base, (character) =>
+        character.charCodeAt(0) < 32 ? '-' : character,
+      ).join('')
+      base = Array.from(base).slice(0, 80).join('').replace(/[. ]+$/g, '')
+      if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i.test(base)) {
+        base = `myrelith-${base}`
+      }
+      return base || 'frame'
+    }
+    const pieces = [
+      '', ' ', '.', '..', '<', '/', 'con', 'COM1', 'clock$', 'name', '\u0001',
+      '\u{1f3ac}', '.png', '.PNG', ' .', 'x'.repeat(79),
+    ]
+    for (const first of pieces) {
+      for (const second of pieces) {
+        for (const third of pieces) {
+          const value = `${first}${second}${third}`
+          expect(sanitizeDeliveryPrefix(value)).toBe(original(value))
+        }
+      }
+    }
   })
 
   test('rejects inverted codec/container pairs without substituting another format', () => {

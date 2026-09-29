@@ -1,5 +1,6 @@
 import { parseExportSettings, parseChapterPolicy, DEFAULT_CHAPTER_POLICY, type ChapterPolicy, type ExportSettingsUnion } from './deliveryProduct'
 import type { ExportRange } from './exportRange'
+import { isSha256Hex } from './guards'
 
 export const MAX_RENDER_RECORDS = 100
 export const MAX_RENDER_LIBRARY_BYTES = 1024 * 1024
@@ -49,7 +50,7 @@ export function parseRenderJob(value: unknown): RenderJob {
   if (!Number.isSafeInteger(range.startFrame) || !Number.isSafeInteger(range.endFrame) || (range.startFrame as number) < 0 || (range.endFrame as number) <= (range.startFrame as number)
     || !Number.isSafeInteger(v.attempts) || (v.attempts as number) < 0 || (v.attempts as number) > 1_000_000
     || !statuses.includes(v.status as string) || !deliveries.includes(v.delivery as string)
-    || typeof v.revision !== 'string' || !/^[a-f0-9]{64}$/.test(v.revision)) throw new TypeError('Invalid render job facts.')
+    || !isSha256Hex(v.revision)) throw new TypeError('Invalid render job facts.')
   return Object.freeze({ id:string(v.id,128), name:string(v.name,128), sequenceId:string(v.sequenceId,256), binding:string(v.binding,512), revision:v.revision,
     range:Object.freeze({startFrame:range.startFrame as number,endFrame:range.endFrame as number}), profile:parseExportSettings(v.profile),
     chapters: hasChapters ? parseChapterPolicy(v.chapters) : DEFAULT_CHAPTER_POLICY,

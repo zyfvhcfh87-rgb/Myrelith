@@ -374,7 +374,7 @@ describe('Inspector', () => {
     transport().setSelectedClip('clipA')
     render(<Inspector />)
 
-    act(() => transport().setClipVisualPreview({
+    act(() => transport().setOwnedClipVisualPreview('visual-gesture', {
       clipId: 'clipA',
       transform: { ...clipA().transform, x: 88, rotation: 12 },
       visual: {
@@ -389,7 +389,7 @@ describe('Inspector', () => {
     expect(clipA().transform.x).toBe(0)
     expect(doc().past).toHaveLength(0)
 
-    act(() => transport().setClipVisualPreview(null))
+    act(() => transport().setOwnedClipVisualPreview('visual-gesture', null))
     expect(screen.getByTestId('inspector-x')).toHaveValue(0)
   })
 

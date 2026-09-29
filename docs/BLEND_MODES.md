@@ -93,10 +93,10 @@ and preserves the existing premultiplied-alpha dissolve contract.
   `overlay`. The concrete context is probed at use time; the probe restores the
   incoming composite operation in `finally`. A rejected/throwing mode uses
   `source-over` without losing stored intent.
-- `blendModeCapabilities.ts` selects Canvas2D first, then only an explicitly
-  registered parity-verified WebGL implementation, then compatibility normal.
-  No WebGL shader is registered in this slice because current Canvas2D covers
-  the allow-list; the seam prevents an implicit or partially supported path.
+- `blendModeCapabilities.ts` only probes Canvas2D; an unsupported mode falls
+  back to compatibility normal. There is no WebGL blend path: current Canvas2D
+  covers the allow-list, and the never-registered WebGL selection seam was
+  removed in the 2026-09-29 cleanup.
 - Every destination, text, leg, group, scale, and clear mutation is inside a
   save/restore `try/finally`. Text and transition scratch surfaces are borrowed
   from their preview/export owner, cleared before and after every borrowed path

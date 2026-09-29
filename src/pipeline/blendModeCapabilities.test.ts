@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'vitest'
-import { BLEND_MODE_NAMES, resolveBlendMode } from '../domain/blendModes'
+import { BLEND_MODE_NAMES } from '../domain/blendModes'
 import {
   probeCanvasBlendMode,
-  selectBlendModeBackend,
   type CanvasBlendProbeContext,
 } from './blendModeCapabilities'
 
@@ -51,26 +50,6 @@ describe('blend-mode capability adapter', () => {
       supported: false,
       operation: 'source-over',
     })
-  })
-
-  test('selects Canvas, registered WebGL parity, then compatibility in order', () => {
-    const mode = resolveBlendMode('screen')
-    expect(selectBlendModeBackend(mode, {
-      supportsCanvas2D: () => true,
-      supportsWebGL: () => true,
-    })).toEqual({ backend: 'canvas2d', effective: 'screen' })
-    expect(selectBlendModeBackend(mode, {
-      supportsCanvas2D: () => false,
-      supportsWebGL: () => true,
-    })).toEqual({ backend: 'webgl', effective: 'screen' })
-    expect(selectBlendModeBackend(mode, {
-      supportsCanvas2D: () => false,
-      supportsWebGL: () => false,
-    })).toEqual({ backend: 'compatibility', effective: 'normal' })
-    expect(selectBlendModeBackend(resolveBlendMode('future-soft-light'), {
-      supportsCanvas2D: () => true,
-      supportsWebGL: () => true,
-    })).toEqual({ backend: 'compatibility', effective: 'normal' })
   })
 })
 

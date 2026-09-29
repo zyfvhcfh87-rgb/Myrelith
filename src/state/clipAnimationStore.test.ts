@@ -2,6 +2,13 @@ import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { beforeEach, describe, expect, test } from 'vitest'
 import type { Clip, TimelineDoc } from '../domain/schema'
 import { defaultClipAnimation } from '../domain/clipAnimation'
+import {
+  moveClipKeyframe,
+  removeClipKeyframe,
+  resetClipAnimationTrack,
+  setClipKeyframe,
+} from '../domain/operations'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import { useDocumentStore } from './documentStore'
 
 const linear = { type: 'linear' } as const
@@ -63,20 +70,19 @@ describe('clip animation store history', () => {
   })
 
   test('each edit is one undoable entry and redo restores byte-identical state', () => {
-    const store = useDocumentStore.getState()
-    store.setClipKeyframe('clip-1', 'position-x', {
+    commitDocumentEdit(setClipKeyframe, 'clip-1', 'position-x', {
       frame: 0,
       value: 0,
       easing: linear,
     })
-    store.setClipKeyframe('clip-1', 'position-x', {
+    commitDocumentEdit(setClipKeyframe, 'clip-1', 'position-x', {
       frame: 10,
       value: 100,
       easing: linear,
     })
     const beforeMove = JSON.stringify(useDocumentStore.getState().doc)
 
-    useDocumentStore.getState().moveClipKeyframe('clip-1', 'position-x', 10, 15)
+    commitDocumentEdit(moveClipKeyframe, 'clip-1', 'position-x', 10, 15)
     const afterMove = JSON.stringify(useDocumentStore.getState().doc)
 
     expect(useDocumentStore.getState().past).toHaveLength(3)
@@ -87,22 +93,21 @@ describe('clip animation store history', () => {
     useDocumentStore.getState().redo()
     expect(JSON.stringify(useDocumentStore.getState().doc)).toBe(afterMove)
 
-    useDocumentStore.getState().removeClipKeyframe('clip-1', 'position-x', 15)
+    commitDocumentEdit(removeClipKeyframe, 'clip-1', 'position-x', 15)
     expect(useDocumentStore.getState().past).toHaveLength(4)
-    useDocumentStore.getState().resetClipAnimationTrack('clip-1', 'position-x')
+    commitDocumentEdit(resetClipAnimationTrack, 'clip-1', 'position-x')
     expect(useDocumentStore.getState().past).toHaveLength(5)
     expect(animation()).toEqual({ tracks: [], effectTracks: [] })
   })
 
   test('rejected and idempotent edits do not pollute history', () => {
-    const store = useDocumentStore.getState()
-    store.setClipKeyframe('clip-1', 'opacity', {
+    commitDocumentEdit(setClipKeyframe, 'clip-1', 'opacity', {
       frame: 0,
       value: 2,
       easing: linear,
     })
-    store.moveClipKeyframe('clip-1', 'opacity', 99, 100)
-    store.resetClipAnimationTrack('clip-1', 'opacity')
+    commitDocumentEdit(moveClipKeyframe, 'clip-1', 'opacity', 99, 100)
+    commitDocumentEdit(resetClipAnimationTrack, 'clip-1', 'opacity')
 
     expect(useDocumentStore.getState().past).toHaveLength(0)
     expect(animation()).toEqual({ tracks: [], effectTracks: [] })

@@ -61,7 +61,6 @@ import {
   videoCompositionRequests,
   videoCompositionRequestKey,
   type PlannedCrossfadeFrameRequest,
-  type PlannedVideoFrameRequest,
   type VideoCompositionPlan,
   type TextOverlayPlanItem,
   type TitleCompositionPlanItem,
@@ -69,6 +68,7 @@ import {
 import type { VideoFrameRequest } from '../domain/crossfadePlan'
 import { clipVisualSettings } from '../domain/clipInspector'
 import {
+  canvasImageSourceSize,
   LensRemapUnavailableError,
   rethrowLensRemapUnavailable,
   type LensRemapProvider,
@@ -505,7 +505,7 @@ async function compositeAdmittedFrame(
             ? orderedPixelSurfaces(transitionSurfaceProvider)
             : null
           if (plannedSurfaces && effectStagePlan) {
-            await compositeOrderedPixelMediaLayer(
+            await compositeIsolatedMediaLayer(
               doc,
               target,
               plannedSurfaces,
@@ -513,10 +513,16 @@ async function compositeAdmittedFrame(
               correctedImage,
               blend,
               presentationScale,
-              effectStagePlan,
-              videoEffectStageExecutor,
-              item.frame,
-              grading,
+              (legCtx, size) => applyPlannedEffectsToSurface(
+                legCtx,
+                effectStagePlan,
+                videoEffectStageExecutor,
+                size.width,
+                size.height,
+                doc,
+                item.frame,
+                grading,
+              ),
             )
           } else if (
             effectStagePlan?.requiresOrderedPixelPath
@@ -526,15 +532,22 @@ async function compositeAdmittedFrame(
               'Canvas pixel access is unavailable for fail-closed plugin composition',
             )
           } else if (requiresPixelEffects(gradingPixels ? transitionSurfaceProvider.get().leg.ctx : target, clip, grading)) {
-            await compositePixelCorrectedMediaLayer(
+            await compositeIsolatedMediaLayer(
               doc,
               target,
-              transitionSurfaceProvider,
+              transitionSurfaceProvider.get(),
               request,
               correctedImage,
               blend,
               presentationScale,
-              grading,
+              (legCtx, size) => applyPixelEffectsToSurface(
+                legCtx,
+                clip,
+                size.width,
+                size.height,
+                doc,
+                grading,
+              ),
             )
           } else {
             drawClip(target, doc, request, correctedImage, blend)
@@ -625,14 +638,8 @@ function drawTextClip(
   opacity: number,
   blendMode: BlendModeResolution,
 ): void {
-  if (!supportsTextDrawing(ctx)) {
-    throw new TypeError('The compositor context does not support text drawing.')
-  }
   const text = clip.text
   if (!text) throw new TypeError('Text composition item has no text payload.')
-  const validationError = textPropsValidationError(text)
-  if (validationError) throw new RangeError(validationError)
-
   drawTextPayload(
     ctx,
     doc,
@@ -766,7 +773,7 @@ function drawTitleElements(
   surfaces: TransitionSurfaces, doc: TimelineDoc, elements: readonly TitlePaintElement[],
   scale: { readonly x: number; readonly y: number },
 ): void {
-  const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
+  const size = surfaceSize(doc, scale)
   inPresentationSpace(surfaces.leg.ctx, scale, () => {
     clearSurface(surfaces.leg.ctx, doc)
     for (const paint of elements) {
@@ -780,12 +787,14 @@ function drawTitleElements(
           clearSurface(surfaces.group.ctx, doc)
           drawTitleElement(surfaces.group.ctx, doc, paint)
         })
-        surfaces.leg.ctx.save()
-        try {
-          surfaces.leg.ctx.globalAlpha = paint.element.opacity
-          applyCanvasBlendMode(surfaces.leg.ctx, NORMAL_BLEND_MODE)
-          surfaces.leg.ctx.drawImage(surfaces.group.canvas, 0, 0, width, height, 0, 0, doc.width, doc.height)
-        } finally { surfaces.leg.ctx.restore() }
+        blitSurface(
+          surfaces.leg.ctx,
+          surfaces.group.canvas,
+          size,
+          doc,
+          paint.element.opacity,
+          NORMAL_BLEND_MODE,
+        )
       } finally { releaseSurfacePixels(surfaces.group.ctx, doc, scale) }
     }
   })
@@ -818,8 +827,7 @@ async function compositeTransitionGroup(
   grading?: ColorGradingFrame,
 ): Promise<void> {
   const ready: ClipId[] = []
-  const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
-  const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
+  const size = surfaceSize(doc, presentationScale)
   let borrowedSurfaces: TransitionSurfaces | null = null
 
   try {
@@ -873,8 +881,8 @@ async function compositeTransitionGroup(
             surfaces.leg.ctx,
             request.effectStagePlan!,
             videoEffectStageExecutor,
-            surfaceWidth,
-            surfaceHeight,
+            size.width,
+            size.height,
             doc,
             timelineFrame,
             grading,
@@ -883,8 +891,8 @@ async function compositeTransitionGroup(
           await applyPixelEffectsToSurface(
             surfaces.leg.ctx,
             request.clip,
-            surfaceWidth,
-            surfaceHeight,
+            size.width,
+            size.height,
             doc,
             grading,
           )
@@ -898,8 +906,8 @@ async function compositeTransitionGroup(
             surfaces.leg.canvas,
             0,
             0,
-            surfaceWidth,
-            surfaceHeight,
+            size.width,
+            size.height,
             0,
             0,
             doc.width,
@@ -921,24 +929,7 @@ async function compositeTransitionGroup(
     if (ready.length === 0) return
     await applyVideoBusToSurface(surfaces.group.ctx, trackEffects, doc, presentationScale, grading)
 
-    destination.save()
-    try {
-      destination.globalAlpha = 1
-      applyCanvasBlendMode(destination, blendMode)
-      destination.drawImage(
-        surfaces.group.canvas,
-        0,
-        0,
-        surfaceWidth,
-        surfaceHeight,
-        0,
-        0,
-        doc.width,
-        doc.height,
-      )
-    } finally {
-      destination.restore()
-    }
+    blitSurface(destination, surfaces.group.canvas, size, doc, 1, blendMode)
     drawn.push(...ready)
   } catch (e) {
     rethrowLensRemapUnavailable(e)
@@ -986,6 +977,55 @@ function clearSurface(ctx: Composite2D, doc: TimelineDoc): void {
   }
 }
 
+interface SurfaceSize {
+  readonly width: number
+  readonly height: number
+}
+
+/** Pixel size of a presentation-scaled scratch surface for this document. */
+function surfaceSize(
+  doc: Pick<TimelineDoc, 'width' | 'height'>,
+  scale: { readonly x: number; readonly y: number },
+): SurfaceSize {
+  return {
+    width: Math.max(1, Math.round(doc.width * scale.x)),
+    height: Math.max(1, Math.round(doc.height * scale.y)),
+  }
+}
+
+/**
+ * Paint one completed presentation-sized scratch surface over the whole
+ * document. A null blend mode writes plain source-over without a probe.
+ */
+function blitSurface(
+  target: Composite2D,
+  source: CanvasImageSource,
+  size: SurfaceSize,
+  doc: Pick<TimelineDoc, 'width' | 'height'>,
+  opacity: number,
+  blendMode: BlendModeResolution | null,
+): void {
+  target.save()
+  try {
+    target.globalAlpha = opacity
+    if (blendMode) applyCanvasBlendMode(target, blendMode)
+    else target.globalCompositeOperation = 'source-over'
+    target.drawImage(
+      source,
+      0,
+      0,
+      size.width,
+      size.height,
+      0,
+      0,
+      doc.width,
+      doc.height,
+    )
+  } finally {
+    target.restore()
+  }
+}
+
 /**
  * Draw one clip's image with its Transform + opacity. The image's natural
  * size is its pixel size; the default placement (identity Transform)
@@ -1005,24 +1045,7 @@ function drawClip(
   const clip: Clip = request.clip
   const t = clip.transform
   const visual = clipVisualSettings(clip)
-  const dimensions = image as unknown as {
-    readonly displayWidth?: number
-    readonly displayHeight?: number
-    readonly width?: number
-    readonly height?: number
-    readonly videoWidth?: number
-    readonly videoHeight?: number
-    readonly naturalWidth?: number
-    readonly naturalHeight?: number
-  }
-  const imageWidth = dimensions.displayWidth
-    ?? dimensions.videoWidth
-    ?? dimensions.naturalWidth
-    ?? dimensions.width
-  const imageHeight = dimensions.displayHeight
-    ?? dimensions.videoHeight
-    ?? dimensions.naturalHeight
-    ?? dimensions.height
+  const { width: imageWidth, height: imageHeight } = canvasImageSourceSize(image)
   if (
     typeof imageWidth !== 'number'
     || typeof imageHeight !== 'number'
@@ -1074,19 +1097,21 @@ function drawClip(
   }
 }
 
-async function compositePixelCorrectedMediaLayer(
+/**
+ * Isolate one complete media layer on the leg surface, run its pixel effect
+ * step there, then blend the finished layer onto `destination` once.
+ */
+async function compositeIsolatedMediaLayer(
   doc: TimelineDoc,
   destination: Composite2D,
-  surfaceProvider: TransitionSurfaceProvider,
+  surfaces: TransitionSurfaces,
   request: VideoFrameRequest,
   image: CanvasImageSource,
   blendMode: BlendModeResolution,
   presentationScale: { readonly x: number; readonly y: number },
-  grading?: ColorGradingFrame,
+  applyEffects: (ctx: Composite2D, size: SurfaceSize) => Promise<void>,
 ): Promise<void> {
-  const surfaces = surfaceProvider.get()
-  const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
-  const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
+  const size = surfaceSize(doc, presentationScale)
   try {
     inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
       clearSurface(surfaces.leg.ctx, doc)
@@ -1100,94 +1125,15 @@ async function compositePixelCorrectedMediaLayer(
         1,
       )
     })
-    await applyPixelEffectsToSurface(
-      surfaces.leg.ctx,
-      request.clip,
-      surfaceWidth,
-      surfaceHeight,
+    await applyEffects(surfaces.leg.ctx, size)
+    blitSurface(
+      destination,
+      surfaces.leg.canvas,
+      size,
       doc,
-      grading,
+      request.opacity,
+      blendMode,
     )
-    destination.save()
-    try {
-      destination.globalAlpha = request.opacity
-      applyCanvasBlendMode(destination, blendMode)
-      destination.drawImage(
-        surfaces.leg.canvas,
-        0,
-        0,
-        surfaceWidth,
-        surfaceHeight,
-        0,
-        0,
-        doc.width,
-        doc.height,
-      )
-    } finally {
-      destination.restore()
-    }
-  } finally {
-    releaseSurfacePixels(surfaces.leg.ctx, doc, presentationScale)
-  }
-}
-
-/** Isolate one complete media layer for a unified authored-order pixel plan. */
-async function compositeOrderedPixelMediaLayer(
-  doc: TimelineDoc,
-  destination: Composite2D,
-  surfaces: TransitionSurfaces,
-  request: PlannedVideoFrameRequest,
-  image: CanvasImageSource,
-  blendMode: BlendModeResolution,
-  presentationScale: { readonly x: number; readonly y: number },
-  effectStagePlan: VideoEffectStagePlan,
-  videoEffectStageExecutor: VideoEffectStageExecutor | null | undefined,
-  timelineFrame: number,
-  grading?: ColorGradingFrame,
-): Promise<void> {
-  const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
-  const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
-  try {
-    inPresentationSpace(surfaces.leg.ctx, presentationScale, () => {
-      clearSurface(surfaces.leg.ctx, doc)
-      drawClip(
-        surfaces.leg.ctx,
-        doc,
-        request,
-        image,
-        NORMAL_BLEND_MODE,
-        false,
-        1,
-      )
-    })
-    await applyPlannedEffectsToSurface(
-      surfaces.leg.ctx,
-      effectStagePlan,
-      videoEffectStageExecutor,
-      surfaceWidth,
-      surfaceHeight,
-      doc,
-      timelineFrame,
-      grading,
-    )
-    destination.save()
-    try {
-      destination.globalAlpha = request.opacity
-      applyCanvasBlendMode(destination, blendMode)
-      destination.drawImage(
-        surfaces.leg.canvas,
-        0,
-        0,
-        surfaceWidth,
-        surfaceHeight,
-        0,
-        0,
-        doc.width,
-        doc.height,
-      )
-    } finally {
-      destination.restore()
-    }
   } finally {
     releaseSurfacePixels(surfaces.leg.ctx, doc, presentationScale)
   }
@@ -1219,8 +1165,7 @@ async function compositeProceduralLayer(
 ): Promise<void> {
   const { clip, opacity, effectStagePlan, frame: timelineFrame } = item
   const surfaces = surfaceProvider.get()
-  const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
-  const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
+  const size = surfaceSize(doc, presentationScale)
   try {
     if (item.kind === 'title') {
       drawTitleElements(surfaces, doc, item.title.elements, presentationScale)
@@ -1248,8 +1193,8 @@ async function compositeProceduralLayer(
         surfaces.leg.ctx,
         effectStagePlan,
         videoEffectStageExecutor,
-        surfaceWidth,
-        surfaceHeight,
+        size.width,
+        size.height,
         doc,
         timelineFrame,
         grading,
@@ -1258,8 +1203,8 @@ async function compositeProceduralLayer(
       await applyPixelEffectsToSurface(
         surfaces.leg.ctx,
         clip,
-        surfaceWidth,
-        surfaceHeight,
+        size.width,
+        size.height,
         doc,
         grading,
       )
@@ -1278,8 +1223,8 @@ async function compositeProceduralLayer(
           surfaces.leg.canvas,
           0,
           0,
-          surfaceWidth,
-          surfaceHeight,
+          size.width,
+          size.height,
           0,
           0,
           doc.width,
@@ -1422,56 +1367,45 @@ async function compositePostCompositeAdjustment(
     || !surfaces.leg.ctx.putImageData
   ) return
 
-  const surfaceWidth = Math.max(1, Math.round(doc.width * presentationScale.x))
-  const surfaceHeight = Math.max(1, Math.round(doc.height * presentationScale.y))
+  const size = surfaceSize(doc, presentationScale)
   try {
     surfaces.leg.ctx.save()
     try {
       surfaces.leg.ctx.globalAlpha = 1
       surfaces.leg.ctx.globalCompositeOperation = 'source-over'
-      surfaces.leg.ctx.clearRect(0, 0, surfaceWidth, surfaceHeight)
+      surfaces.leg.ctx.clearRect(0, 0, size.width, size.height)
       surfaces.leg.ctx.drawImage(
         destination.canvas,
         0,
         0,
-        surfaceWidth,
-        surfaceHeight,
+        size.width,
+        size.height,
         0,
         0,
-        surfaceWidth,
-        surfaceHeight,
+        size.width,
+        size.height,
       )
     } finally {
       surfaces.leg.ctx.restore()
     }
 
-    const imageData = readEffectPixels(surfaces.leg.ctx, surfaceWidth, surfaceHeight, pixelGrading)
+    const imageData = readEffectPixels(surfaces.leg.ctx, size.width, size.height, pixelGrading)
     await applySurfacePixelEffects(imageData.data, resolution.pixelEffects, {
-      surfaceWidth,
-      surfaceHeight,
+      surfaceWidth: size.width,
+      surfaceHeight: size.height,
       projectWidth: doc.width,
       projectHeight: doc.height,
     }, grading)
     writeEffectPixels(surfaces.leg.ctx, imageData, pixelGrading)
 
-    destination.save()
-    try {
-      destination.globalAlpha = adjustment.opacity
-      destination.globalCompositeOperation = 'source-over'
-      destination.drawImage(
-        surfaces.leg.canvas,
-        0,
-        0,
-        surfaceWidth,
-        surfaceHeight,
-        0,
-        0,
-        doc.width,
-        doc.height,
-      )
-    } finally {
-      destination.restore()
-    }
+    blitSurface(
+      destination,
+      surfaces.leg.canvas,
+      size,
+      doc,
+      adjustment.opacity,
+      null,
+    )
   } finally {
     releaseSurfacePixels(surfaces.leg.ctx, doc, presentationScale)
   }
@@ -1483,7 +1417,7 @@ async function applyVideoBusToSurface(ctx: Composite2D, effects: readonly Effect
   if (resolution.pixelEffects.length === 0) return
   const pixelGrading = resolution.pixelEffects.some(isColorGradingPixel) ? grading : undefined
   if (!ctx.getImageData || !ctx.putImageData) throw new VideoEffectStageExecutionError('Canvas pixel access is unavailable for video-bus effects.')
-  const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
+  const { width, height } = surfaceSize(doc, scale)
   try {
     const data = readEffectPixels(ctx, width, height, pixelGrading)
     await applySurfacePixelEffects(data.data, resolution.pixelEffects, { surfaceWidth: width, surfaceHeight: height, projectWidth: doc.width, projectHeight: doc.height }, grading)
@@ -1501,7 +1435,6 @@ async function compositeVideoTrackBus(
 ): Promise<void> {
   if (!effects?.length || resolveVideoBusEffects(effects, true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT).pixelEffects.length === 0) { await paint(destination, blend); return }
   const { group } = provider.get()
-  const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
   try {
     group.ctx.save()
     try {
@@ -1510,12 +1443,7 @@ async function compositeVideoTrackBus(
       await paint(group.ctx, NORMAL_BLEND_MODE)
     } finally { group.ctx.restore() }
     await applyVideoBusToSurface(group.ctx, effects, doc, scale, grading)
-    destination.save()
-    try {
-      destination.globalAlpha = 1
-      applyCanvasBlendMode(destination, blend)
-      destination.drawImage(group.canvas, 0, 0, width, height, 0, 0, doc.width, doc.height)
-    } finally { destination.restore() }
+    blitSurface(destination, group.canvas, surfaceSize(doc, scale), doc, 1, blend)
   } finally { releaseSurfacePixels(group.ctx, doc, scale) }
 }
 
@@ -1524,18 +1452,16 @@ async function compositeOpaqueVideoBus(doc: TimelineDoc, destination: Composite2
   if (resolveVideoBusEffects(effects, true, grading?.context ?? EMPTY_COLOR_GRADING_CONTEXT).pixelEffects.length === 0) return
   if (!destination.canvas) throw new VideoEffectStageExecutionError('Canvas source access is unavailable for video-bus effects.')
   const { leg } = provider.get()
-  const width = Math.max(1, Math.round(doc.width * scale.x)), height = Math.max(1, Math.round(doc.height * scale.y))
+  const size = surfaceSize(doc, scale)
   try {
     leg.ctx.save()
     try {
       leg.ctx.globalAlpha = 1; leg.ctx.globalCompositeOperation = 'source-over'
-      leg.ctx.clearRect(0, 0, width, height)
-      leg.ctx.drawImage(destination.canvas, 0, 0, width, height, 0, 0, width, height)
+      leg.ctx.clearRect(0, 0, size.width, size.height)
+      leg.ctx.drawImage(destination.canvas, 0, 0, size.width, size.height, 0, 0, size.width, size.height)
     } finally { leg.ctx.restore() }
     await applyVideoBusToSurface(leg.ctx, effects, doc, scale, grading)
-    destination.save()
-    try { destination.globalAlpha = 1; destination.globalCompositeOperation = 'source-over'; destination.drawImage(leg.canvas, 0, 0, width, height, 0, 0, doc.width, doc.height) }
-    finally { destination.restore() }
+    blitSurface(destination, leg.canvas, size, doc, 1, null)
   } finally { releaseSurfacePixels(leg.ctx, doc, scale) }
 }
 

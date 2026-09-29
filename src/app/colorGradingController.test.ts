@@ -5,6 +5,8 @@ import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSe
 import { sequenceProjectFromTimeline } from '../domain/projectSequences'
 import { DEFAULT_COLOR_WHEELS, COLOR_WHEELS_TYPE } from '../domain/colorWheels'
 import { useDocumentStore } from '../state/documentStore'
+import { setEffectKeyframe } from '../domain/operations'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import { useTransportStore } from '../state/transportStore'
 import { MAX_KEYFRAMES_PER_TRACK } from '../domain/clipAnimation'
 import { createAdjustmentItem } from '../domain/adjustmentItems'
@@ -49,7 +51,7 @@ test.each(['cancel', 'project', 'selection', 'adjustment-selection', 'playhead',
 })
 
 test('animated scalar gestures preview and commit keys at the captured frame, without changing static channels', () => {
-  useDocumentStore.getState().setEffectKeyframe('clip', 'grade', 'gainR', { frame: 0, value: 1, easing: { type: 'linear' } })
+  commitDocumentEdit(setEffectKeyframe, 'clip', 'grade', 'gainR', { frame: 0, value: 1, easing: { type: 'linear' } })
   useTransportStore.getState().setPlayheadFrame(15)
   const before = useDocumentStore.getState(), edit = beginColorGradingEdit(target, 'grade')
   edit.preview({ gainR: 1.5, gainG: 1.2 })

@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'vitest'
 import type { Clip } from '../../domain/schema'
 import {
+  clipSourceTimeMap,
   defaultSourceTimeMap,
   sourceTimeMapWithSpeedPoint,
   sourceTimeSpeedRateFromPercent,
 } from '../../domain/sourceTimeMap'
-import { clipAutomationMarkers, clipSpeedSegments } from './clipAutomationPlan'
+import {
+  clipAutomationMarkers,
+  sourceTimeMapSpeedSegments,
+} from './clipAutomationPlan'
 
 function clip(): Clip {
   return {
@@ -74,7 +78,10 @@ describe('clip automation timeline planning', () => {
     )
     input.sourceTimeMap = map
 
-    expect(clipSpeedSegments(input)).toEqual([
+    expect(sourceTimeMapSpeedSegments(
+      clipSourceTimeMap(input),
+      input.timelineRange.durationFrames,
+    )).toEqual([
       expect.objectContaining({ startFrame: 0, endFrame: 20, label: '100%', tone: 'normal' }),
       expect.objectContaining({ startFrame: 20, endFrame: 40, label: '50%', tone: 'slow' }),
       expect.objectContaining({ startFrame: 40, endFrame: 70, label: '100%', tone: 'normal' }),

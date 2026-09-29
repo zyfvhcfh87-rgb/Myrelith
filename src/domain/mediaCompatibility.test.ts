@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'vitest'
 import type { MediaAsset } from './schema'
 import {
-  acceptPartialTrackImport,
   MediaAssetRuntimeError,
+  mediaAssetRuntimeError,
   partialTrackImportOption,
+  reapplyPartialTrackImport,
   withMediaRuntimeFailure,
   type MediaCompatibilityReport,
   type MediaTrackCompatibility,
@@ -169,6 +170,31 @@ describe('runtime media compatibility', () => {
     expect(error.message).toBe(failure.detail)
     expect(error.cause).toBe(cause)
   })
+
+  test('runtime error attribution passes through only an exact asset, surface and track match', () => {
+    const cause = new Error('x'.repeat(3_000))
+    const wrapped = mediaAssetRuntimeError('asset-audio', 'export', 'audio', 'decode-failed', cause)
+    expect(wrapped.failure).toEqual({
+      surface: 'export',
+      trackKind: 'audio',
+      reason: 'decode-failed',
+      detail: 'x'.repeat(2_048),
+    })
+    expect(wrapped.cause).toBe(cause)
+
+    expect(mediaAssetRuntimeError('asset-audio', 'export', 'audio', 'resource-limit', wrapped))
+      .toBe(wrapped)
+    const otherSurface = mediaAssetRuntimeError(
+      'asset-audio', 'audio-playback', 'audio', 'resource-limit', wrapped,
+    )
+    expect(otherSurface).not.toBe(wrapped)
+    expect(otherSurface.failure.surface).toBe('audio-playback')
+    expect(otherSurface.failure.reason).toBe('resource-limit')
+    expect(mediaAssetRuntimeError('asset-audio', 'export', null, 'decode-failed', wrapped))
+      .not.toBe(wrapped)
+    expect(mediaAssetRuntimeError('other-asset', 'export', 'audio', 'decode-failed', wrapped))
+      .not.toBe(wrapped)
+  })
 })
 
 describe('explicit partial-track import', () => {
@@ -190,7 +216,7 @@ describe('explicit partial-track import', () => {
     }
 
     expect(partialTrackImportOption(report)).toBe('video-only')
-    const accepted = acceptPartialTrackImport(asset, report, 'video-only')
+    const accepted = reapplyPartialTrackImport(asset, report, 'video-only')
 
     expect(accepted).not.toBeNull()
     expect(accepted?.asset).toMatchObject({
@@ -231,7 +257,7 @@ describe('explicit partial-track import', () => {
     }
 
     expect(partialTrackImportOption(report)).toBe('audio-only')
-    const accepted = acceptPartialTrackImport(asset, report, 'audio-only')
+    const accepted = reapplyPartialTrackImport(asset, report, 'audio-only')
 
     expect(accepted).not.toBeNull()
     expect(accepted?.asset).toMatchObject({
@@ -266,8 +292,8 @@ describe('explicit partial-track import', () => {
       detail: 'The report does not identify a failing track kind.',
     }
     expect(partialTrackImportOption(ambiguous)).toBeNull()
-    expect(acceptPartialTrackImport(asset, ambiguous, 'video-only')).toBeNull()
-    expect(acceptPartialTrackImport(asset, ambiguous, 'audio-only')).toBeNull()
+    expect(reapplyPartialTrackImport(asset, ambiguous, 'video-only')).toBeNull()
+    expect(reapplyPartialTrackImport(asset, ambiguous, 'audio-only')).toBeNull()
 
     const unsafe: MediaCompatibilityReport = {
       ...ambiguous,
@@ -278,12 +304,13 @@ describe('explicit partial-track import', () => {
       ],
     }
     expect(partialTrackImportOption(unsafe)).toBeNull()
-    expect(acceptPartialTrackImport(asset, unsafe, 'video-only')).toBeNull()
-    expect(acceptPartialTrackImport(asset, unsafe, 'audio-only')).toBeNull()
+    expect(reapplyPartialTrackImport(asset, unsafe, 'video-only')).toBeNull()
+    expect(reapplyPartialTrackImport(asset, unsafe, 'audio-only')).toBeNull()
 
+    // A ready report offers nothing new, but a saved choice still reapplies.
     expect(partialTrackImportOption(readyReport())).toBeNull()
     expect(
-      acceptPartialTrackImport(asset, readyReport(), 'video-only'),
-    ).toBeNull()
+      reapplyPartialTrackImport(asset, readyReport(), 'video-only')?.asset,
+    ).toMatchObject({ kind: 'video', partialTrackSelection: 'video-only', hasAudio: false })
   })
 })

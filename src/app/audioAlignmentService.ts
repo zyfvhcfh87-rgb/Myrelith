@@ -1,5 +1,6 @@
 import { mediaAssetDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import { audioFeatureIdentity, type AudioFeatureCacheEntry } from '../domain/analysisCache'
+import { errorMessage } from '../domain/errors'
 import { correlateAudioFingerprints, decodeAudioFingerprint, encodeAudioFingerprint,
   MULTICAM_ALIGNMENT_LIMITS as LIMITS, type AudioAlignmentResult, type AudioFingerprint } from '../domain/multicamAlignment'
 import { audioFeatureKeyPreimage, audioPairKeyPreimage, type AudioFeatureIdentity } from '../domain/multicamAlignmentProvenance'
@@ -8,6 +9,7 @@ import { analysisStorage, type AnalysisStorage } from './analysisStorage'
 import { createAudioAlignmentWorker } from './audioAlignmentWorkerBridge'
 import { derivedDataIsClearing, registerDerivedDataOwner } from './derivedDataOwners'
 import { MediaJobScheduler, type MediaJobContext } from './mediaJobScheduler'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 import { fingerprintLocalMediaSource, sha256Hex } from './sourceFingerprint'
 
 export interface AudioAlignmentSource { readonly angleId: string; readonly asset: MediaAsset; readonly startBin: number }
@@ -51,9 +53,11 @@ export async function yieldAlignmentControl(): Promise<void> {
 }
 export async function readAlignmentBlob(asset: MediaAsset, signal: AbortSignal): Promise<Blob> {
   if (!asset.objectUrl.startsWith('blob:')) throw new Error('Alignment requires a connected local source')
-  const response = await fetch(asset.objectUrl, { signal })
-  if (!response.ok) throw new Error('The local audio source could not be read')
-  const blob = await response.blob()
+  const blob = await fetchObjectUrlBlob(
+    asset.objectUrl,
+    signal,
+    () => 'The local audio source could not be read',
+  )
   if (blob.size !== asset.size) throw new Error('The connected source size changed')
   return blob
 }
@@ -182,7 +186,7 @@ export class AudioAlignmentService {
         } catch (cause) {
           current()
           cached = null
-          warnings.push(`Cache unavailable for ${source.asset.fileName}: ${cause instanceof Error ? cause.message : String(cause)}`)
+          warnings.push(`Cache unavailable for ${source.asset.fileName}: ${errorMessage(cause)}`)
         }
         current()
         if (cached) {
@@ -215,7 +219,7 @@ export class AudioAlignmentService {
             if (transaction) await transaction.rollback()
             if (staged) await staged.discard()
             current()
-            warnings.push(`Could not cache ${source.asset.fileName}: ${cause instanceof Error ? cause.message : String(cause)}`)
+            warnings.push(`Could not cache ${source.asset.fileName}: ${errorMessage(cause)}`)
           }
         }
       } finally { worker.close() }

@@ -173,6 +173,35 @@ describe('project audio mix plan', () => {
     expect(childMaster?.parentTrackId).toBe('root-A1')
   })
 
+  test('each instance of a reused child maps its own range and buses', () => {
+    const child = sequence('child', [audioTrack('child-A1', [clip('leaf', 2)])])
+    const root = sequence('root', [
+      audioTrack('root-A1', [], [
+        nested('first-use', 'child', 10, 4, 6),
+        nested('second-use', 'child', 40, 0, 10),
+      ]),
+    ])
+
+    const plan = createProjectTimelineAudioMixPlan(
+      project(root, child),
+      'root',
+      new Map(),
+    )
+
+    expect(plan.clips.map(({ timelineStartFrame, timelineEndFrame, sourceStartFrame, sourceEndFrame }) => (
+      [timelineStartFrame, timelineEndFrame, sourceStartFrame, sourceEndFrame]
+    ))).toEqual([[10, 16, 2, 8], [42, 50, 0, 8]])
+    expect(new Set(plan.clips.map((item) => item.clipId)).size).toBe(2)
+    const leafBuses = plan.clips.map((item) => (
+      plan.tracks.find((track) => track.trackId === item.trackId)
+    ))
+    expect(leafBuses[0]?.trackId).not.toBe(leafBuses[1]?.trackId)
+    expect(leafBuses[0]?.parentTrackId).not.toBe(leafBuses[1]?.parentTrackId)
+    // root-A1, two child masters, two child track buses.
+    expect(plan.tracks).toHaveLength(5)
+    expect(plan.tracks.filter((track) => track.parentTrackId === 'root-A1')).toHaveLength(2)
+  })
+
   test('an uncovered child range contributes silence', () => {
     const child = sequence('child', [audioTrack('child-A1', [clip('leaf', 0, 2)])])
     const root = sequence('root', [

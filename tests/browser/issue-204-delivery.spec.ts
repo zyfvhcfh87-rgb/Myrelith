@@ -61,7 +61,7 @@ test('PNG sequence, WAV audio-only, sidecar JSON, and classic MP4 stay honest', 
 
     const ep = '/src/app/exportController.ts'
     const products = '/src/domain/deliveryProduct.ts'
-    const zip = '/src/pipeline/zipStore.ts'
+    const zip = '/src/test/zipStoreReader.ts'
     const profiles = '/src/domain/exportProfile.ts'
     const caps = '/src/app/exportCapabilitiesController.ts'
     const mb = '/node_modules/.vite/deps/mediabunny.js'

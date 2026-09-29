@@ -21,6 +21,7 @@ import {
   type CollectMediaPreflightItem,
   type CollectMediaSourceFact,
 } from '../domain/collectMedia'
+import { errorMessage } from '../domain/errors'
 import {
   createProjectFileSnapshot,
   serializeProjectFile,
@@ -55,6 +56,7 @@ import { projectFileName } from './projectPersistenceController'
 import { proxyStorage } from './proxyStorage'
 import { fingerprintLocalMediaSource } from './sourceFingerprint'
 import { localTitleTemplateStorage } from './localTitleTemplateStorage'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 
 export type CollectMediaPhase =
   | 'idle'
@@ -145,11 +147,7 @@ const realDeps: CollectMediaControllerDeps = {
   ),
   queryMediaPermission: queryLocalMediaPermission,
   readHandleFile: (handle) => handle.getFile(),
-  fetchBlob: async (url, signal) => {
-    const response = await fetch(url, { signal })
-    if (!response.ok) throw new Error(`Media source returned HTTP ${response.status}`)
-    return response.blob()
-  },
+  fetchBlob: fetchObjectUrlBlob,
   listProxyStates: () => useProxyStore.getState().assets.values(),
   readProxyFile: (entry) => proxyStorage.readEntryFile(entry),
   loadTitleLibrary: () => localTitleTemplateStorage.load(),
@@ -179,7 +177,7 @@ function messageFrom(cause: unknown): string {
   if (isCollectMediaPermissionFailure(cause)) {
     return 'Write permission to the destination was lost.'
   }
-  return cause instanceof Error ? cause.message : String(cause)
+  return errorMessage(cause)
 }
 
 function stopRemaining(

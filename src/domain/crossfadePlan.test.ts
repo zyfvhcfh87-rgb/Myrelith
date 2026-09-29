@@ -11,6 +11,7 @@ import type {
 } from './schema'
 import {
   createCrossfadeAudioWindowIndex,
+  createCrossfadePlanResolver,
   crossfadeFrameGroupAt,
   evaluateCrossfadeDraft,
   evaluateCrossfadeUpdate,
@@ -896,5 +897,119 @@ describe('canonical crossfade planner', () => {
       status: 'invalid',
       reason: 'unsafe-window',
     })
+  })
+})
+
+describe('per-document crossfade plan resolver', () => {
+  function random(seed: number): () => number {
+    let state = seed >>> 0
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0
+      let value = state
+      value = Math.imul(value ^ (value >>> 15), value | 1)
+      value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
+      return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296
+    }
+  }
+
+  function randomFixture(seed: number) {
+    const next = random(seed)
+    const int = (min: number, max: number) => min + Math.floor(next() * (max - min + 1))
+    const chance = (probability: number) => next() < probability
+    const pick = <T>(values: readonly T[]) => values[int(0, values.length - 1)]
+    const usAtFrame = (frame: number) => Math.round(frame * 1_000_000 / 30)
+    const bounds = new Map<AssetId, MediaSourceBounds>()
+    const tracks: Track[] = []
+    let clipSerial = 0
+    const videoTrackCount = int(1, 3)
+    for (let trackIndex = 0; trackIndex < videoTrackCount; trackIndex++) {
+      const clips: Clip[] = []
+      const audioClips: Clip[] = []
+      let cursor = int(0, 5)
+      for (let clipIndex = 0, count = int(2, 12); clipIndex < count; clipIndex++) {
+        const duration = int(3, 30)
+        const id = chance(0.02) && clips.length ? pick(clips).id : `c${clipSerial++}`
+        const assetId = `asset-${int(0, 9)}`
+        const linkGroupId = chance(0.7) ? `g${int(0, 25)}` : undefined
+        const sourceStart = int(0, 40)
+        const sourceMode = chance(0.15) ? 'still' : 'timed'
+        clips.push(clip(id, assetId, cursor, duration, sourceStart, {
+          linkGroupId, sourceMode }))
+        if (linkGroupId && chance(0.8)) {
+          const shift = chance(0.1) ? int(-2, 2) : 0
+          audioClips.push(clip(`a-${id}-${clipSerial++}`, assetId, Math.max(0, cursor + shift),
+            duration, sourceStart, { linkGroupId }))
+        }
+        cursor += duration + (chance(0.1) ? int(1, 4) : 0)
+      }
+      const transitions: Transition[] = []
+      for (let index = 0; index + 1 < clips.length; index++) {
+        if (!chance(0.75)) continue
+        const toIndex = chance(0.08) ? int(0, clips.length - 1) : index + 1
+        const id = chance(0.03) && transitions.length ? pick(transitions).id : `x${trackIndex}-${index}`
+        transitions.push(transition(id, clips[index].id, clips[toIndex].id,
+          chance(0.03) ? 0 : int(1, chance(0.2) ? 36 : 10), chance(0.7)))
+      }
+      tracks.push({ ...track(`V${trackIndex}`, 'video', clips, transitions), locked: chance(0.3) })
+      if (audioClips.length) {
+        const audio = track(`A${trackIndex}`, 'audio',
+          audioClips.toSorted((left, right) => left.timelineRange.startFrame - right.timelineRange.startFrame))
+        if (chance(0.1)) audio.transitions = transitions.slice(0, 1)
+        tracks.push({ ...audio, locked: chance(0.3) })
+      }
+    }
+    if (chance(0.2)) tracks.push({ ...tracks[0], clips: tracks[0].clips.slice(1) })
+    for (let asset = 0; asset < 10; asset++) {
+      const kind = int(0, 9)
+      if (kind === 0) continue
+      const stream = (): MediaSourceBounds['video'] => {
+        if (chance(0.08)) return null
+        if (chance(0.08)) return { status: 'unknown' }
+        const first = chance(0.3) ? int(0, 20) : 0
+        return { status: 'exact', firstTimestampUs: usAtFrame(first),
+          endTimestampUs: usAtFrame(first + int(40, 200)) }
+      }
+      bounds.set(`asset-${asset}`, { video: stream(), audio: stream() })
+    }
+    return { project: doc(tracks), bounds }
+  }
+
+  test('matches resolveCrossfadePlan for every seam of randomized documents', () => {
+    const statuses = new Map<string, number>()
+    const count = (key: string) => statuses.set(key, (statuses.get(key) ?? 0) + 1)
+    for (let seed = 1; seed <= 400; seed++) {
+      const { project, bounds } = randomFixture(seed)
+      const resolve = createCrossfadePlanResolver(project, bounds)
+      const queries = project.tracks.flatMap((candidate) => [
+        ...candidate.transitions.map((entry) => [candidate.id, entry.id] as const),
+        [candidate.id, 'missing-transition'] as const,
+      ])
+      queries.push(['missing-track', 'x0-0'])
+      const order = random(seed * 7919)
+      for (let index = queries.length - 1; index > 0; index--) {
+        const swap = Math.floor(order() * (index + 1));
+        [queries[index], queries[swap]] = [queries[swap], queries[index]]
+      }
+      for (const [trackId, transitionId] of queries) {
+        const expected = resolveCrossfadePlan(project, trackId, transitionId, bounds)
+        expect(resolve(trackId, transitionId)).toEqual(expected)
+        count(expected.status === 'available'
+          ? `available/audio-${expected.plan.audio.status}`
+          : `${expected.status}/${expected.reason}`)
+      }
+    }
+    for (const key of [
+      'available/audio-available',
+      'available/audio-unavailable',
+      'available/audio-disabled',
+      'invalid/overlapping-transition',
+      'invalid/ambiguous-transition-id',
+      'invalid/endpoints-not-ordered-adjacent',
+      'invalid/not-video-track',
+      'invalid/transition-not-found',
+      'invalid/track-not-found',
+      'unavailable/source-catalog-missing',
+      'unavailable/duration-exceeds-video-capacity',
+    ]) expect(statuses.get(key) ?? 0, key).toBeGreaterThan(0)
   })
 })

@@ -1,38 +1,56 @@
 /** App composition for the disposable monitor. UI registers surfaces through this facade. */
 import { monitorSourceReservation } from '../domain/multicamMonitor'
+import type { MediaAsset, MulticamDefinition } from '../domain/schema'
 import type { MulticamMonitorSource } from '../pipeline/multicamMonitorProtocol'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { INITIAL_MULTICAM_MONITOR, useMulticamMonitorStore } from '../state/multicamMonitorStore'
-import { useProxyStore } from '../state/proxyStore'
+import { useProxyStore, type ProxyAssetState } from '../state/proxyStore'
 import { useTransportStore } from '../state/transportStore'
 import { derivedDataIsClearing, registerDerivedDataOwner } from './derivedDataOwners'
 import { mediaResourceAdmission } from './mediaResourceAdmission'
 import { createMulticamMonitorSession, type MonitorContext } from './multicamMonitorSession'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 import { subscribePreviewRenderCompletions } from './previewController'
 import { getProxyPreviewSource } from './proxyController'
 import { getAudioPlaybackDiagnostics, getPlaybackClockContext } from './transportController'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
-function readContext(instanceId: string): MonitorContext | null {
-  const { project, doc } = useDocumentStore.getState()
-  const selected = doc.tracks.flatMap((track) => track.multicamInstances ?? []).find((item) => item.id === instanceId)
-  if (!selected) return null
-  const instance = doc.tracks.filter((track) => track.kind === 'video').flatMap((track) => track.multicamInstances ?? [])
-    .find((item) => item.id === selected.id || (!!selected.linkGroupId && item.linkGroupId === selected.linkGroupId))
-  if (!instance) return null
-  const definition = project.multicams?.find((item) => item.id === instance.multicamId)
-  if (!definition) return null
-  const transport = useTransportStore.getState()
-  const audio = getAudioPlaybackDiagnostics()
-  const audioTime = transport.isPlaying ? getPlaybackClockContext().currentTime : 0
-  const sourceIdentity = JSON.stringify(definition.angles.map((angle) => {
-    const asset = useMediaStore.getState().assets.get(angle.assetId)
-    const proxy = useProxyStore.getState().assets.get(angle.assetId)
-    return [angle.assetId, asset?.objectUrl, asset?.sourceBounds, proxy?.phase, proxy?.entry?.cacheKey]
-  }))
-  return { projectId: project.id, sequenceId: doc.id, definition, instance, rate: doc.frameRate, sourceIdentity,
-    frame: transport.playheadFrame, playing: transport.isPlaying, scrubbing: transport.isScrubbing, audioTime,
-    audioHealthy: !audio || audio.scheduledThroughContextTime >= audioTime - .05 }
+/** One mounted monitor's context reader; it owns the source-identity memo below. */
+function createContextReader(instanceId: string): () => MonitorContext | null {
+  // Media and proxy stores replace their asset Maps on every change and edits
+  // replace the definition, so these three identities key the serialized
+  // source identity. The tick loop reads this on every transport change.
+  let identityMemo: { readonly definition: MulticamDefinition; readonly assets: ReadonlyMap<string, MediaAsset>
+    readonly proxies: ReadonlyMap<string, ProxyAssetState>; readonly value: string } | null = null
+  const sourceIdentityOf = (definition: MulticamDefinition): string => {
+    const assets = useMediaStore.getState().assets, proxies = useProxyStore.getState().assets
+    if (identityMemo?.definition !== definition || identityMemo.assets !== assets || identityMemo.proxies !== proxies) {
+      identityMemo = { definition, assets, proxies, value: JSON.stringify(definition.angles.map((angle) => {
+        const asset = assets.get(angle.assetId)
+        const proxy = proxies.get(angle.assetId)
+        return [angle.assetId, asset?.objectUrl, asset?.sourceBounds, proxy?.phase, proxy?.entry?.cacheKey]
+      })) }
+    }
+    return identityMemo.value
+  }
+  return () => {
+    const { project, doc } = useDocumentStore.getState()
+    const selected = doc.tracks.flatMap((track) => track.multicamInstances ?? []).find((item) => item.id === instanceId)
+    if (!selected) return null
+    const instance = doc.tracks.filter((track) => track.kind === 'video').flatMap((track) => track.multicamInstances ?? [])
+      .find((item) => item.id === selected.id || (!!selected.linkGroupId && item.linkGroupId === selected.linkGroupId))
+    if (!instance) return null
+    const definition = project.multicams?.find((item) => item.id === instance.multicamId)
+    if (!definition) return null
+    const transport = useTransportStore.getState()
+    const audio = getAudioPlaybackDiagnostics()
+    const audioTime = transport.isPlaying ? getPlaybackClockContext().currentTime : 0
+    return { projectId: project.id, sequenceId: doc.id, definition, instance, rate: doc.frameRate,
+      sourceIdentity: sourceIdentityOf(definition),
+      frame: transport.playheadFrame, playing: transport.isPlaying, scrubbing: transport.isScrubbing, audioTime,
+      audioHealthy: !audio || audio.scheduledThroughContextTime >= audioTime - .05 }
+  }
 }
 
 async function prepareSources(context: MonitorContext, ids: readonly string[], signal: AbortSignal): Promise<readonly MulticamMonitorSource[]> {
@@ -57,9 +75,11 @@ async function prepareSources(context: MonitorContext, ids: readonly string[], s
     if (!asset || !bounds || bounds.status !== 'exact' || asset.width === null || asset.height === null) throw new Error(`${angle.name}: reconnect the original or generate a fresh editing proxy.`)
     if (context.definition.angles.length > 4) throw new Error('Five to eight angles require fresh 720p editing proxies.')
     monitorSourceReservation(asset.width, asset.height)
-    const response = await fetch(asset.objectUrl, { signal })
-    if (!response.ok) throw new Error(`${angle.name}: the original could not be read.`)
-    const blob = await response.blob()
+    const blob = await fetchObjectUrlBlob(
+      asset.objectUrl,
+      signal,
+      () => `${angle.name}: the original could not be read.`,
+    )
     signal.throwIfAborted()
     if (useMediaStore.getState().assets.get(angle.assetId) !== asset) throw new Error(`${angle.name}: the original changed while preparing previews.`)
     sources.push({ id, blob, representation: 'original', width: asset.width, height: asset.height,
@@ -71,7 +91,7 @@ async function prepareSources(context: MonitorContext, ids: readonly string[], s
 let mounted: ReturnType<typeof createMountedMonitor> | null = null
 function createMountedMonitor(instanceId: string) {
   const session = createMulticamMonitorSession({ admission: mediaResourceAdmission,
-    read: () => readContext(instanceId), visible: () => document.visibilityState === 'visible',
+    read: createContextReader(instanceId), visible: () => document.visibilityState === 'visible',
     available: () => !derivedDataIsClearing(), now: () => performance.now(), prepare: prepareSources,
     publish: (value) => useMulticamMonitorStore.setState(value),
   })
@@ -116,6 +136,7 @@ export function disposeMulticamMonitor(): void {
   const owner = mounted; mounted = null; owner?.dispose()
   useMulticamMonitorStore.setState({ ...INITIAL_MULTICAM_MONITOR })
 }
+registerLoadedEditorRuntime('multicamMonitor', disposeMulticamMonitor)
 export function setMulticamMonitorEnabled(enabled: boolean): void {
   if (enabled) mounted?.session.enable()
   else mounted?.session.disable()

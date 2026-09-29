@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import PluginActionButton from './PluginActionButton'
 import PluginDiagnostics from './PluginDiagnostics'
-import type { InstalledPluginView, PluginPackageStatus } from './pluginUiTypes'
+import { pluginEffectStatusLabel } from './pluginUiCopy'
+import type { InstalledPluginView } from './pluginUiTypes'
 
 export type PluginManagerPhase = 'loading' | 'ready' | 'error'
 
@@ -17,19 +18,6 @@ export interface PluginManagerPanelProps {
   readonly onDisablePlugin: (pluginId: string) => void
   readonly onUninstallPlugin: (pluginId: string) => void
   readonly onClearDiagnostics: (pluginId: string) => void
-}
-
-function statusLabel(status: PluginPackageStatus): string {
-  switch (status) {
-    case 'ready': return 'Ready'
-    case 'disabled': return 'Disabled'
-    case 'incompatible': return 'Incompatible'
-    case 'failed': return 'Failed'
-    case 'revoked': return 'Revoked'
-    case 'untrusted': return 'Trust required'
-    case 'quarantined': return 'Quarantined'
-    case 'safe-mode': return 'Safe mode'
-  }
 }
 
 function PluginCard({
@@ -69,7 +57,7 @@ function PluginCard({
           <p><code>{plugin.id}</code> · version {plugin.version}</p>
         </div>
         <span className="plugin-status" data-status={plugin.status}>
-          {statusLabel(plugin.status)}
+          {pluginEffectStatusLabel(plugin.status)}
         </span>
       </div>
       <p className="plugin-package-detail">{plugin.statusDetail}</p>

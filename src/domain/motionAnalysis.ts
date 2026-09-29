@@ -6,6 +6,8 @@
  * this module only sees small owned grayscale buffers and pure numeric facts.
  */
 
+import { requirePositiveSafeInteger } from './numeric'
+
 export interface GrayFrame {
   readonly width: number
   readonly height: number
@@ -98,12 +100,6 @@ function checkCancellation(cancelled?: MotionAnalysisCancellationCheck): void {
   if (cancelled?.()) throw new MotionAnalysisCancelledError()
 }
 
-function positiveSafeInteger(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${label} must be a positive safe integer`)
-  }
-}
-
 function finitePositive(value: number, label: string): void {
   if (!Number.isFinite(value) || value <= 0) {
     throw new RangeError(`${label} must be finite and positive`)
@@ -111,15 +107,15 @@ function finitePositive(value: number, label: string): void {
 }
 
 export function validateMotionAnalysisBudget(budget: MotionAnalysisBudget): void {
-  positiveSafeInteger(budget.maxWidth, 'maxWidth')
-  positiveSafeInteger(budget.maxHeight, 'maxHeight')
-  positiveSafeInteger(budget.maxFrames, 'maxFrames')
-  positiveSafeInteger(budget.maxFeatures, 'maxFeatures')
-  positiveSafeInteger(budget.patchRadius, 'patchRadius')
-  positiveSafeInteger(budget.searchRadius, 'searchRadius')
-  positiveSafeInteger(budget.maxRansacHypotheses, 'maxRansacHypotheses')
+  requirePositiveSafeInteger(budget.maxWidth, 'maxWidth')
+  requirePositiveSafeInteger(budget.maxHeight, 'maxHeight')
+  requirePositiveSafeInteger(budget.maxFrames, 'maxFrames')
+  requirePositiveSafeInteger(budget.maxFeatures, 'maxFeatures')
+  requirePositiveSafeInteger(budget.patchRadius, 'patchRadius')
+  requirePositiveSafeInteger(budget.searchRadius, 'searchRadius')
+  requirePositiveSafeInteger(budget.maxRansacHypotheses, 'maxRansacHypotheses')
   finitePositive(budget.inlierThreshold, 'inlierThreshold')
-  positiveSafeInteger(budget.maxRetainedBytes, 'maxRetainedBytes')
+  requirePositiveSafeInteger(budget.maxRetainedBytes, 'maxRetainedBytes')
   if (
     budget.maxWidth > DEFAULT_MOTION_ANALYSIS_BUDGET.maxWidth
     || budget.maxHeight > DEFAULT_MOTION_ANALYSIS_BUDGET.maxHeight
@@ -141,8 +137,8 @@ export function motionHypothesisPairRanks(
   matchCount: number,
   maxHypotheses: number,
 ): number[] {
-  positiveSafeInteger(matchCount, 'matchCount')
-  positiveSafeInteger(maxHypotheses, 'maxHypotheses')
+  requirePositiveSafeInteger(matchCount, 'matchCount')
+  requirePositiveSafeInteger(maxHypotheses, 'maxHypotheses')
   if (
     matchCount > DEFAULT_MOTION_ANALYSIS_BUDGET.maxFeatures
     || maxHypotheses > DEFAULT_MOTION_ANALYSIS_BUDGET.maxRansacHypotheses
@@ -172,8 +168,8 @@ export function validateGrayFrame(
   budget: MotionAnalysisBudget = DEFAULT_MOTION_ANALYSIS_BUDGET,
 ): void {
   validateMotionAnalysisBudget(budget)
-  positiveSafeInteger(frame.width, 'frame width')
-  positiveSafeInteger(frame.height, 'frame height')
+  requirePositiveSafeInteger(frame.width, 'frame width')
+  requirePositiveSafeInteger(frame.height, 'frame height')
   if (frame.width > budget.maxWidth || frame.height > budget.maxHeight) {
     throw new RangeError('Motion-analysis frame exceeds the reviewed dimensions')
   }
@@ -775,8 +771,8 @@ export function createStabilizationPlan(
   strength: number,
   smoothingRadius: number,
 ): StabilizationPlan {
-  positiveSafeInteger(width, 'stabilization width')
-  positiveSafeInteger(height, 'stabilization height')
+  requirePositiveSafeInteger(width, 'stabilization width')
+  requirePositiveSafeInteger(height, 'stabilization height')
   if (
     width > DEFAULT_MOTION_ANALYSIS_BUDGET.maxWidth
     || height > DEFAULT_MOTION_ANALYSIS_BUDGET.maxHeight

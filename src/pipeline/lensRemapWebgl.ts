@@ -14,6 +14,7 @@ import {
   RENDER_SURFACE_BYTES_PER_PIXEL,
 } from '../domain/renderSurfaceBudget'
 import {
+  canvasImageSourceSize,
   LensRemapUnavailableError,
   type LensRemapProvider,
 } from './lensRemap'
@@ -481,24 +482,7 @@ function sourceDimensions(source: CanvasImageSource): {
   readonly width: number
   readonly height: number
 } {
-  const value = source as unknown as {
-    readonly displayWidth?: number
-    readonly displayHeight?: number
-    readonly width?: number
-    readonly height?: number
-    readonly videoWidth?: number
-    readonly videoHeight?: number
-    readonly naturalWidth?: number
-    readonly naturalHeight?: number
-  }
-  const width = value.displayWidth
-    ?? value.videoWidth
-    ?? value.naturalWidth
-    ?? value.width
-  const height = value.displayHeight
-    ?? value.videoHeight
-    ?? value.naturalHeight
-    ?? value.height
+  const { width, height } = canvasImageSourceSize(source)
   if (
     typeof width !== 'number'
     || typeof height !== 'number'

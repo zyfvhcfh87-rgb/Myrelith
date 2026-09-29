@@ -3,11 +3,11 @@ import { clipAnimation, resolveClipAnimationAtFrame } from './clipAnimation'
 import { animationParameterIdentityError } from './animationParameterIdentity'
 import { effectAnimationParameterSpec, effectSupportsSurface } from './effectStack'
 import { clipVisualSettings, defaultClipTransform, defaultClipVisualSettings } from './clipInspector'
-import { projectTitleAnimationError } from './animationProjectBudget'
-import { replaceProjectSequence, sequenceById, type SequenceProject } from './projectSequences'
+import type { SequenceProject } from './projectSequences'
 import { reanchorProceduralAnimation } from './sourceTimeMap'
 import { textPropsValidationError } from './textOverlay'
-import { createTitleElementIdAllocator, projectTitleOwnershipError } from './titleOwnership'
+import { createTitleElementIdAllocator } from './titleOwnership'
+import { locateTitleClipOwner, replaceOwnedTitleClip } from './titleEditing'
 import type { TitleTextElementV1 } from './titleElements'
 
 export type TitleUpgradeResult =
@@ -18,10 +18,9 @@ export function upgradeLegacyTextTitle(
   project: SequenceProject, sequenceId: string, clipId: string, factory: () => string,
 ): TitleUpgradeResult {
   try {
-    const sequence = sequenceById(project, sequenceId)
-    const track = sequence?.tracks.find((item) => item.clips.some((clip) => clip.id === clipId))
-    const clip = track?.clips.find((item) => item.id === clipId)
-    if (!sequence || !track || !clip) return { ok: false, reason: 'The text clip no longer exists.' }
+    const owner = locateTitleClipOwner(project, { sequenceId, clipId })
+    if (!owner) return { ok: false, reason: 'The text clip no longer exists.' }
+    const { track, clip } = owner
     if (track.locked) return { ok: false, reason: 'Unlock the track before upgrading this title.' }
     if (clip.title !== undefined && clip.text === undefined) return { ok: true, project, elementId: null }
     if (clip.text === undefined || clip.title !== undefined || track.kind !== 'video') return { ok: false, reason: 'Choose one compact text clip on a video track.' }
@@ -62,14 +61,8 @@ export function upgradeLegacyTextTitle(
       transform: defaultClipTransform(), visual: defaultClipVisualSettings(),
       animation: reanchorProceduralAnimation(clipAnimation(clip)),
     }
-    const document = { ...sequence, tracks: sequence.tracks.map((item) => item !== track ? item : {
-      ...item, clips: item.clips.map((item) => item === clip ? replacement : item),
-    }) }
-    const candidate = { ...project, sequences: project.sequences.map((item) => item === sequence ? document : item) }
-    const error = projectTitleOwnershipError(candidate) ?? projectTitleAnimationError(candidate)
-    if (error) return { ok: false, reason: error }
-    const next = replaceProjectSequence(project, sequenceId, document)
-    return next === project ? { ok: false, reason: 'This upgrade exceeds the complete project limits.' }
-      : { ok: true, project: next, elementId: element.id }
+    // Ownership, animation and project-limit rejections throw into the catch below.
+    const next = replaceOwnedTitleClip(project, owner, replacement, 'This upgrade exceeds the complete project limits.')
+    return { ok: true, project: next, elementId: element.id }
   } catch (error) { return { ok: false, reason: error instanceof Error ? error.message : 'The title could not be upgraded.' } }
 }

@@ -8,18 +8,13 @@
  */
 
 import { addCrossfade } from './operations'
+import { createDefaultClip } from './operations/creation'
 import { defaultMasterAudio } from './audioMixer'
-import { DEFAULT_BLEND_MODE } from './blendModes'
-import { defaultClipAnimation } from './clipAnimation'
-import {
-  defaultClipAudioSettings,
-  defaultClipTransform,
-  defaultClipVisualSettings,
-} from './clipInspector'
+import { isRecord } from './guards'
 import type { PortableAssetDescriptor } from './projectFile/projectTypes'
 import { PROJECT_FILE_LIMITS } from './projectFile/projectTypes'
 import { MAX_PROJECT_NAME_CHARACTERS } from './projectLimits'
-import { createTimelineDoc, type ProjectSettings } from './projectSettings'
+import { createEmptyTrack, createTimelineDoc, type ProjectSettings } from './projectSettings'
 import type {
   AssetKind,
   Clip,
@@ -85,15 +80,10 @@ export interface OtioLossEntry {
   readonly detail: string
 }
 
+/** What the interchange dialog reports per sequence. */
 export interface OtioSequenceSummary {
-  readonly name: string
-  readonly videoTracks: number
-  readonly audioTracks: number
   readonly clips: number
-  readonly gaps: number
   readonly transitions: number
-  readonly markers: number
-  readonly offlineMedia: number
 }
 
 export interface OtioMediaSummary {
@@ -208,10 +198,6 @@ const AUDIO_EXTENSIONS = new Set([
   '.wav', '.mp3', '.aac', '.m4a', '.flac', '.ogg', '.opus', '.aif', '.aiff', '.ac3',
 ])
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.mxf', '.mkv', '.webm', '.m4v'])
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function lossLog(): LossLog {
   return { entries: [], omitted: 0 }
@@ -422,59 +408,6 @@ function sourceBoundsForKind(kind: AssetKind): MediaSourceBounds {
   return {
     video: { status: 'unknown' },
     audio: null,
-  }
-}
-
-function emptyTrack(id: string, kind: TrackKind, name: string, hidden: boolean): Track {
-  return {
-    id,
-    kind,
-    name,
-    clips: [],
-    sequenceInstances: [],
-    multicamInstances: [],
-    adjustments: [],
-    transitions: [],
-    hidden,
-    muted: false,
-    solo: false,
-    locked: false,
-    volume: 1,
-    balance: 0,
-    videoEffects: [],
-    audioEffects: [],
-  }
-}
-
-function buildClip(
-  id: string,
-  assetId: string,
-  name: string,
-  start: number,
-  duration: number,
-  sourceStart: number,
-  still: boolean,
-): Clip {
-  const sourceDuration = still ? 1 : duration
-  const sourceStartFrame = still ? 0 : sourceStart
-  return {
-    id,
-    assetId,
-    name,
-    sourceMode: still ? 'still' : 'timed',
-    sourceRange: { startFrame: sourceStartFrame, durationFrames: sourceDuration },
-    sourceTimeMap: defaultSourceTimeMap(sourceStartFrame, sourceDuration),
-    timelineRange: { startFrame: start, durationFrames: duration },
-    transform: defaultClipTransform(),
-    opacity: 1,
-    blendMode: DEFAULT_BLEND_MODE,
-    volume: 1,
-    lensCorrection: null,
-    visual: defaultClipVisualSettings(),
-    audio: defaultClipAudioSettings(),
-    animation: defaultClipAnimation(),
-    effects: [],
-    audioEffects: [],
   }
 }
 
@@ -782,12 +715,11 @@ function importTrackChildren(
   assets: Map<string, AssetDraft>,
   log: LossLog,
   depth: number,
-): { clips: PlacedClip[]; transitions: Array<{ from: number; to: number; duration: number; path: string }>; gaps: number; markers: TimelineMarker[] } {
+): { clips: PlacedClip[]; transitions: Array<{ from: number; to: number; duration: number; path: string }>; markers: TimelineMarker[] } {
   const clips: PlacedClip[] = []
   const transitions: Array<{ from: number; to: number; duration: number; path: string }> = []
   const markers: TimelineMarker[] = []
   let cursor = 0
-  let gaps = 0
   let pending: { duration: number; path: string } | null = null
 
   const takePending = (nextClipIndex: number | null): void => {
@@ -846,7 +778,6 @@ function importTrackChildren(
       takePending(null)
       if (duration && duration > 0) {
         cursor += duration
-        gaps += 1
       }
       continue
     }
@@ -883,14 +814,12 @@ function importTrackChildren(
         addLoss(log, 'clip', childPath, 'Disabled clip was replaced with a gap')
         takePending(null)
         cursor += duration
-        gaps += 1
         continue
       }
       if (!asset) {
         addLoss(log, 'clip', childPath, 'Clip without supported media was replaced with a gap')
         takePending(null)
         cursor += duration
-        gaps += 1
         continue
       }
       const nextIndex = clips.length
@@ -915,7 +844,6 @@ function importTrackChildren(
       takePending(null)
       if (nestedDuration > 0) {
         cursor += nestedDuration
-        gaps += 1
       }
       continue
     }
@@ -923,7 +851,7 @@ function importTrackChildren(
     takePending(null)
   }
   takePending(null)
-  return { clips, transitions, gaps, markers }
+  return { clips, transitions, markers }
 }
 
 function shiftMarkers(
@@ -1022,7 +950,6 @@ function importOneTimeline(
   ]
   const importedTracks: Track[] = []
   let totalClips = 0
-  let totalGaps = 0
   let totalTransitions = 0
   const stackChildren = childrenOf(tracksValue)
   for (let index = 0; index < stackChildren.length; index++) {
@@ -1073,7 +1000,7 @@ function importOneTimeline(
         markers: shiftMarkers(placed.markers, null, offset),
       }
     }
-    const track = emptyTrack(
+    const track = createEmptyTrack(
       factory('track'),
       kind,
       boundedName(readOptionalString(trackValue.name), kind === 'video' ? 'V' : 'A'),
@@ -1081,20 +1008,17 @@ function importOneTimeline(
     )
     for (const clip of placed.clips) {
       if (!clip.asset) continue
-      const still = clip.asset.descriptor.kind === 'image'
-      track.clips.push(buildClip(
-        factory('clip'),
-        clip.asset.descriptor.id,
-        clip.name,
-        clip.start,
-        clip.duration,
-        clip.sourceStart,
-        still,
-      ))
+      track.clips.push(createDefaultClip({
+        id: factory('clip'),
+        assetId: clip.asset.descriptor.id,
+        name: clip.name,
+        still: clip.asset.descriptor.kind === 'image',
+        sourceStartFrame: clip.sourceStart,
+        timelineRange: { startFrame: clip.start, durationFrames: clip.duration },
+      }))
     }
     importedTracks.push(track)
     totalClips += track.clips.length
-    totalGaps += placed.gaps
     markers.push(...placed.markers)
     markers.push(...shiftMarkers(
       collectMarkers(trackValue, trackPath, settings.frameRate, 0, factory, log),
@@ -1137,14 +1061,8 @@ function importOneTimeline(
   }
   document.markers = [...markers].sort(compareTimelineMarkers)
   const summary: OtioSequenceSummary = {
-    name: document.name,
-    videoTracks: videos.length,
-    audioTracks: audios.length,
     clips: totalClips,
-    gaps: totalGaps,
     transitions: totalTransitions,
-    markers: document.markers.length,
-    offlineMedia: [...assets.values()].length,
   }
   return { document, summary }
 }
@@ -1236,16 +1154,17 @@ export function planOtioImport(
   if (sequences.length === 0) {
     throw new OtioInterchangeError('empty', 'The OTIO file did not contain an importable timeline')
   }
-  const descriptors = [...assets.values()].map((draft) => draft.descriptor)
+  const drafts = [...assets.values()]
+  const descriptors = drafts.map((draft) => draft.descriptor)
   const preview: OtioImportPreview = {
     schemaLabel: OTIO_COMPATIBILITY_LABEL,
     sequences: summaries,
-    media: descriptors.map((descriptor) => ({
+    media: drafts.map(({ descriptor, targetUrl }) => ({
       id: descriptor.id,
       fileName: descriptor.fileName,
       kind: descriptor.kind,
       offline: true,
-      targetUrl: [...assets.values()].find((draft) => draft.descriptor.id === descriptor.id)?.targetUrl ?? null,
+      targetUrl,
     })),
     losses: log.entries,
     omittedLosses: log.omitted,
@@ -1508,14 +1427,8 @@ export function serializeOtioExport(
   const preview: OtioImportPreview = {
     schemaLabel: OTIO_COMPATIBILITY_LABEL,
     sequences: project.sequences.map((sequence) => ({
-      name: sequence.name,
-      videoTracks: sequence.tracks.filter((track) => track.kind === 'video').length,
-      audioTracks: sequence.tracks.filter((track) => track.kind === 'audio').length,
       clips: sequence.tracks.reduce((sum, track) => sum + track.clips.length, 0),
-      gaps: 0,
       transitions: sequence.tracks.reduce((sum, track) => sum + track.transitions.length, 0),
-      markers: sequence.markers?.length ?? 0,
-      offlineMedia: 0,
     })),
     media: [...catalog.values()].map((descriptor) => ({
       id: descriptor.id,

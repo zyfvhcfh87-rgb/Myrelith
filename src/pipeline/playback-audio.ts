@@ -16,6 +16,7 @@ import {
 } from 'mediabunny'
 import {
   MediaAssetRuntimeError,
+  mediaAssetRuntimeError,
   type MediaRuntimeFailure,
 } from '../domain/mediaCompatibility'
 import {
@@ -34,7 +35,6 @@ import type {
   TrackId,
 } from '../domain/schema'
 import {
-  clipAudioGainsAtLocalFrame,
   createTimelineAudioMixPlan,
   crossfadeAudioGain,
   isRampedAudioClipPlan,
@@ -46,6 +46,8 @@ import {
   type TimelineAudioRampedClipPlan,
   type TimelineAudioMixPlan,
   type TimelineAudioTrackBus,
+  writeClipAudioGainsAtLocalFrame,
+  type MutableClipAudioGains,
 } from '../domain/audioMixPlan'
 import { timelineAudioMixerGraph } from '../domain/audioMixer'
 import { createAudioEffectChain } from '../domain/audioEffectStack'
@@ -69,7 +71,8 @@ import {
   AUDIO_METER_FFT_SIZE,
   measureAudioMeterSample,
 } from '../domain/audioMeter'
-import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
+import { foldPlanarBlockToStereo } from '../domain/audioChannelMix'
+import { throwIfAborted } from '../domain/errors'
 import { sourceTicksToSeconds } from '../domain/sourceTimeMap'
 import {
   AUDIO_STRETCH_MAX_SESSIONS,
@@ -77,6 +80,7 @@ import {
   audioStretchSourceLeadSamples,
   createConstantRateAudioStretcher,
   createRampedAudioStretcher,
+  isSupportedStretchSampleRate,
   rampedAudioSourceSampleAtOutputSample,
   type ConstantRateAudioStretcher,
   type StereoPcm,
@@ -89,31 +93,6 @@ export const PLAYBACK_EQUAL_POWER_CURVE_POINTS = 129
 
 const TIME_EPSILON = 1e-7
 const EMPTY_SOURCE_BOUNDS: SourceBoundsCatalog = new Map()
-
-function runtimeFailureDetail(cause: unknown): string {
-  const detail = cause instanceof Error ? cause.message : String(cause)
-  return detail.slice(0, 2_048)
-}
-
-function playbackAssetError(
-  assetId: AssetId,
-  reason: MediaRuntimeFailure['reason'],
-  cause: unknown,
-  trackKind: MediaRuntimeFailure['trackKind'] = null,
-): MediaAssetRuntimeError {
-  if (
-    cause instanceof MediaAssetRuntimeError
-    && cause.assetId === assetId
-    && cause.failure.surface === 'audio-playback'
-    && cause.failure.trackKind === trackKind
-  ) return cause
-  return new MediaAssetRuntimeError(assetId, {
-    surface: 'audio-playback',
-    trackKind,
-    reason,
-    detail: runtimeFailureDetail(cause),
-  }, cause)
-}
 
 export interface ResolvedPlaybackAsset {
   blob: Blob
@@ -148,6 +127,14 @@ export interface PlaybackAudioMediaSource {
   close(): Promise<void>
 }
 
+function audioBufferPlanes(buffer: AudioBuffer): Float32Array[] {
+  const planes: Float32Array[] = []
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    planes.push(buffer.getChannelData(channel))
+  }
+  return planes
+}
+
 /**
  * Convert decoded PCM to the same project-rate grid used by export before any
  * time stretch or clip DSP. Same-rate and structural test buffers pass through.
@@ -161,6 +148,12 @@ function projectRatePlaybackCursor(
   let nextOutputSample: number | null = null
   let closed = false
   const epsilon = 1e-10
+  // Grow-only stereo fold of the current decoded buffer. Float64 keeps each
+  // multichannel fold sum exact until the interpolation below.
+  let foldedLeft = new Float64Array(0)
+  let foldedRight = new Float64Array(0)
+  const nextLeft = new Float64Array(1)
+  const nextRight = new Float64Array(1)
 
   const pull = async (): Promise<IteratorResult<PlaybackAudioBuffer, void>> => {
     if (lookahead) {
@@ -208,14 +201,23 @@ function projectRatePlaybackCursor(
         if (outputLength <= 0) continue
         nextOutputSample = endSample
 
-        const channels = Array.from(
-          { length: buffer.numberOfChannels },
-          (_value, channel) => buffer.getChannelData(channel),
+        if (foldedLeft.length < buffer.length) {
+          foldedLeft = new Float64Array(buffer.length)
+          foldedRight = new Float64Array(buffer.length)
+        }
+        foldPlanarBlockToStereo(
+          audioBufferPlanes(buffer),
+          0,
+          buffer.length,
+          foldedLeft,
+          foldedRight,
         )
         const output = context.createBuffer(2, outputLength, targetSampleRate)
         const left = output.getChannelData(0)
         const right = output.getChannelData(1)
         let nextBuffer: PlaybackAudioBuffer | null | undefined
+        // Folded first frame of a contiguous next buffer, resolved once.
+        let hasNextFolded = false
 
         for (let outputIndex = 0; outputIndex < outputLength; outputIndex++) {
           const outputSample = outputStart + outputIndex
@@ -225,35 +227,40 @@ function projectRatePlaybackCursor(
           )
           const lower = Math.min(buffer.length - 1, Math.floor(sourcePosition))
           const fraction = Math.max(0, Math.min(1, sourcePosition - lower))
-          let nextPlanes: readonly Float32Array[] | null = null
-          let nextFrame = lower + 1
-          if (nextFrame >= buffer.length && fraction > epsilon) {
+          const firstLeft = foldedLeft[lower]!
+          const firstRight = foldedRight[lower]!
+          let secondLeft = firstLeft
+          let secondRight = firstRight
+          if (lower + 1 >= buffer.length && fraction > epsilon) {
             if (nextBuffer === undefined) {
               lookahead = await inner.next()
               nextBuffer = lookahead.done ? null : lookahead.value
-            }
-            if (nextBuffer) {
-              const gap = Math.abs(nextBuffer.timestamp - sourceEndTime)
-              if (
-                gap <= 1.5 / sourceRate
-                && nextBuffer.buffer.numberOfChannels >= 1
-                && nextBuffer.buffer.numberOfChannels <= 32
-                && nextBuffer.buffer.length >= 1
-              ) {
-                nextPlanes = Array.from(
-                  { length: nextBuffer.buffer.numberOfChannels },
-                  (_value, channel) => nextBuffer!.buffer.getChannelData(channel),
-                )
-                nextFrame = 0
+              if (nextBuffer) {
+                const gap = Math.abs(nextBuffer.timestamp - sourceEndTime)
+                if (
+                  gap <= 1.5 / sourceRate
+                  && nextBuffer.buffer.numberOfChannels >= 1
+                  && nextBuffer.buffer.numberOfChannels <= 32
+                  && nextBuffer.buffer.length >= 1
+                ) {
+                  foldPlanarBlockToStereo(
+                    audioBufferPlanes(nextBuffer.buffer),
+                    0,
+                    1,
+                    nextLeft,
+                    nextRight,
+                  )
+                  hasNextFolded = true
+                }
               }
             }
+            if (hasNextFolded) {
+              secondLeft = nextLeft[0]!
+              secondRight = nextRight[0]!
+            }
           }
-          const first = foldDecodedFrameToStereo(channels, lower)
-          const second = nextPlanes
-            ? foldDecodedFrameToStereo(nextPlanes, nextFrame)
-            : first
-          left[outputIndex] = first[0] + (second[0] - first[0]) * fraction
-          right[outputIndex] = first[1] + (second[1] - first[1]) * fraction
+          left[outputIndex] = firstLeft + (secondLeft - firstLeft) * fraction
+          right[outputIndex] = firstRight + (secondRight - firstRight) * fraction
         }
 
         return {
@@ -759,7 +766,7 @@ export function createMediabunnyPlaybackAudioSource(
       try {
         resolved = await resolveAsset(assetId)
       } catch (cause) {
-        throw playbackAssetError(assetId, 'resource-unavailable', cause)
+        throw mediaAssetRuntimeError(assetId, 'audio-playback', null, 'resource-unavailable', cause)
       }
       const { blob } = resolved
       if (closed) throw new Error('Playback audio source is closed')
@@ -771,7 +778,7 @@ export function createMediabunnyPlaybackAudioSource(
           formats: ALL_FORMATS,
         })
       } catch (cause) {
-        throw playbackAssetError(assetId, 'resource-unavailable', cause)
+        throw mediaAssetRuntimeError(assetId, 'audio-playback', null, 'resource-unavailable', cause)
       }
       openInputs.add(input)
       try {
@@ -796,11 +803,12 @@ export function createMediabunnyPlaybackAudioSource(
           ),
         })
         if (!support.decodable) {
-          throw playbackAssetError(
+          throw mediaAssetRuntimeError(
             assetId,
+            'audio-playback',
+            'audio',
             support.failure.reason,
             new Error(support.failure.detail),
-            'audio',
           )
         }
         if (closed) throw new Error('Playback audio source is closed')
@@ -858,8 +866,7 @@ export function createMediabunnyPlaybackAudioSource(
     let iterator: AsyncIterator<PlaybackAudioBuffer, void>
     try {
       const stretchSampleRate = request.stretchSampleRate ?? asset.sampleRate
-      const supportedStretchRate = [44_100, 48_000, 96_000]
-        .includes(stretchSampleRate)
+      const supportedStretchRate = isSupportedStretchSampleRate(stretchSampleRate)
       const startTime = request.stretchLead && supportedStretchRate
         ? Math.max(
             0,
@@ -982,23 +989,27 @@ export function createEqualPowerPlaybackCurve(
   return values
 }
 
-function playbackClipGainsAtTime(
+/**
+ * Writes the clip gains at one timeline time into `target`, which callers
+ * reuse across samples. Unanimated requests carry precomputed stereo gains.
+ */
+function writePlaybackClipGainsAtTime(
   request: ScheduledPlaybackAudio,
   timelineTime: number,
-): ReturnType<typeof clipAudioGainsAtLocalFrame> {
+  target: MutableClipAudioGains,
+): void {
   if (
     request.clipTimelineStartFrame === undefined
     || request.frameRate === undefined
     || (request.volumeAnimation == null && request.balanceAnimation == null)
   ) {
-    return {
-      volume: request.volume,
-      balance: request.balance ?? 0,
-      leftGain: request.leftGain ?? 1,
-      rightGain: request.rightGain ?? 1,
-    }
+    target.volume = request.volume
+    target.balance = request.balance ?? 0
+    target.leftGain = request.leftGain ?? 1
+    target.rightGain = request.rightGain ?? 1
+    return
   }
-  return clipAudioGainsAtLocalFrame(
+  writeClipAudioGainsAtLocalFrame(
     {
       volume: request.volume,
       balance: request.balance ?? 0,
@@ -1010,6 +1021,7 @@ function playbackClipGainsAtTime(
       timelineTime,
       request.frameRate,
     ),
+    target,
   )
 }
 
@@ -1074,11 +1086,12 @@ function playbackHasShapedGain(request: ScheduledPlaybackAudio): boolean {
 
 function samplePlaybackGainCurve(request: ScheduledPlaybackAudio): Float32Array {
   const values = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+  const gains = { volume: 1, balance: 0, leftGain: 1, rightGain: 1 }
   for (let index = 0; index < values.length; index++) {
     const timelineTime = request.timelineStartTime
       + request.duration * index / (values.length - 1)
-    values[index] = playbackClipGainsAtTime(request, timelineTime).volume
-      * playbackEnvelopeAtTime(request, timelineTime)
+    writePlaybackClipGainsAtTime(request, timelineTime, gains)
+    values[index] = gains.volume * playbackEnvelopeAtTime(request, timelineTime)
   }
   return values
 }
@@ -1146,18 +1159,14 @@ function foldPlaybackBufferToStereo(
   if (channelCount < 1 || channelCount > 32) {
     throw new RangeError('Playback audio buffer has an invalid channel count')
   }
-  const planes: Float32Array[] = []
-  for (let index = 0; index < channelCount; index++) {
-    planes.push(buffer.getChannelData(index))
-  }
   const stereo = context.createBuffer(2, buffer.length, buffer.sampleRate)
-  const left = stereo.getChannelData(0)
-  const right = stereo.getChannelData(1)
-  for (let frame = 0; frame < buffer.length; frame++) {
-    const folded = foldDecodedFrameToStereo(planes, frame)
-    left[frame] = folded[0]
-    right[frame] = folded[1]
-  }
+  foldPlanarBlockToStereo(
+    audioBufferPlanes(buffer),
+    0,
+    buffer.length,
+    stereo.getChannelData(0),
+    stereo.getChannelData(1),
+  )
   return stereo
 }
 
@@ -1255,28 +1264,48 @@ function processScheduledClipBuffer(
   const rightSource = buffer.numberOfChannels > 1
     ? buffer.getChannelData(1)
     : leftSource
-  const left = leftSource.slice(start, start + count)
-  const right = rightSource.slice(start, start + count)
+  const processed = context.createBuffer(2, count, rate)
+  const left = processed.getChannelData(0)
+  const right = processed.getChannelData(1)
+  left.set(leftSource.subarray(start, start + count))
+  right.set(rightSource.subarray(start, start + count))
   // Clip gain, fades/crossfades, and balance are part of the clip input to
   // its effect stack. Bake those sample-accurate stages before stateful DSP,
   // matching TimelineAudioMixer's export order exactly.
+  const gains = { volume: 1, balance: 0, leftGain: 1, rightGain: 1 }
   for (let index = 0; index < count; index++) {
     const timelineTime = request.timelineStartTime + index / rate
-    const gains = playbackClipGainsAtTime(request, timelineTime)
+    writePlaybackClipGainsAtTime(request, timelineTime, gains)
     const envelope = playbackEnvelopeAtTime(request, timelineTime)
     left[index] *= envelope * gains.volume * gains.leftGain
     right[index] *= envelope * gains.volume * gains.rightGain
   }
   processAudioBufferWithChain(left, right, chain, PLAYBACK_AUDIO_DSP_BLOCK_SAMPLES)
-  const processed = context.createBuffer(2, count, rate)
-  processed.getChannelData(0).set(left)
-  processed.getChannelData(1).set(right)
   return {
     buffer: processed,
     offset: 0,
     duration: count / rate,
     preprocessed: true,
   }
+}
+
+/** Splitter -> one gain per channel -> merger; callers set or automate gains. */
+function createStereoGainStage(context: AudioContext): {
+  input: AudioNode
+  output: AudioNode
+  left: GainNode
+  right: GainNode
+  nodes: AudioNode[]
+} {
+  const splitter = context.createChannelSplitter(2)
+  const left = context.createGain()
+  const right = context.createGain()
+  const merger = context.createChannelMerger(2)
+  splitter.connect(left, 0)
+  splitter.connect(right, 1)
+  left.connect(merger, 0, 0)
+  right.connect(merger, 0, 1)
+  return { input: splitter, output: merger, left, right, nodes: [splitter, left, right, merger] }
 }
 
 function createBalanceStage(
@@ -1289,17 +1318,10 @@ function createBalanceStage(
     passthrough.gain.value = 1
     return { input: passthrough, output: passthrough, nodes: [passthrough] }
   }
-  const splitter = context.createChannelSplitter(2)
-  const left = context.createGain()
-  const right = context.createGain()
-  const merger = context.createChannelMerger(2)
-  left.gain.value = leftGain
-  right.gain.value = rightGain
-  splitter.connect(left, 0)
-  splitter.connect(right, 1)
-  left.connect(merger, 0, 0)
-  right.connect(merger, 0, 1)
-  return { input: splitter, output: merger, nodes: [splitter, left, right, merger] }
+  const stage = createStereoGainStage(context)
+  stage.left.gain.value = leftGain
+  stage.right.gain.value = rightGain
+  return stage
 }
 
 interface TrackPlaybackBus {
@@ -1389,6 +1411,9 @@ export function createWebAudioPlaybackOutput(
 
   const nodes = new Set<ActiveOutputNode>()
   const clipChains = new Map<ClipId, AudioEffectChain>()
+  // Fade/envelope splits schedule one decoded buffer several times. Decoded
+  // buffers are never written after decode, so fold each one once per output.
+  const foldedBuffers = new WeakMap<AudioBuffer, AudioBuffer>()
   let stopped = false
   let graphDisconnected = false
   let armed = false
@@ -1418,7 +1443,13 @@ export function createWebAudioPlaybackOutput(
     if (stopped) return
     const source = context.createBufferSource()
     const gain = context.createGain()
-    const playbackBuffer = foldPlaybackBufferToStereo(context, request.buffer)
+    let playbackBuffer = foldedBuffers.get(request.buffer)
+    if (!playbackBuffer) {
+      playbackBuffer = foldPlaybackBufferToStereo(context, request.buffer)
+      if (playbackBuffer !== request.buffer) {
+        foldedBuffers.set(request.buffer, playbackBuffer)
+      }
+    }
     let scheduledBuffer = playbackBuffer
     let scheduledOffset = request.offset
     let scheduledDuration = request.duration
@@ -1448,6 +1479,11 @@ export function createWebAudioPlaybackOutput(
     if (clipInputPreprocessed) gain.gain.value = 1
     else scheduleNodeGain(gain.gain, request)
     source.connect(gain)
+    const destination = (
+      request.trackId !== undefined
+        ? trackBuses.get(request.trackId)?.input
+        : undefined
+    ) ?? clipDestination
     const balanceNodes: AudioNode[] = []
     if (
       !clipInputPreprocessed
@@ -1460,44 +1496,28 @@ export function createWebAudioPlaybackOutput(
         )
       )
     ) {
-      const splitter = context.createChannelSplitter(2)
-      const left = context.createGain()
-      const right = context.createGain()
-      const merger = context.createChannelMerger(2)
+      const balance = createStereoGainStage(context)
       if (request.balanceAnimation != null) {
         const leftCurve = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
         const rightCurve = new Float32Array(PLAYBACK_EQUAL_POWER_CURVE_POINTS)
+        const gains = { volume: 1, balance: 0, leftGain: 1, rightGain: 1 }
         for (let index = 0; index < leftCurve.length; index++) {
           const timelineTime = request.timelineStartTime
             + request.duration * index / (leftCurve.length - 1)
-          const gains = playbackClipGainsAtTime(request, timelineTime)
+          writePlaybackClipGainsAtTime(request, timelineTime, gains)
           leftCurve[index] = gains.leftGain
           rightCurve[index] = gains.rightGain
         }
-        left.gain.setValueCurveAtTime(leftCurve, request.when, request.duration)
-        right.gain.setValueCurveAtTime(rightCurve, request.when, request.duration)
+        balance.left.gain.setValueCurveAtTime(leftCurve, request.when, request.duration)
+        balance.right.gain.setValueCurveAtTime(rightCurve, request.when, request.duration)
       } else {
-        left.gain.value = request.leftGain ?? 1
-        right.gain.value = request.rightGain ?? 1
+        balance.left.gain.value = request.leftGain ?? 1
+        balance.right.gain.value = request.rightGain ?? 1
       }
-      gain.connect(splitter)
-      splitter.connect(left, 0)
-      splitter.connect(right, 1)
-      left.connect(merger, 0, 0)
-      right.connect(merger, 0, 1)
-      const destination = (
-        request.trackId !== undefined
-          ? trackBuses.get(request.trackId)?.input
-          : undefined
-      ) ?? clipDestination
-      merger.connect(destination)
-      balanceNodes.push(splitter, left, right, merger)
+      gain.connect(balance.input)
+      balance.output.connect(destination)
+      balanceNodes.push(...balance.nodes)
     } else {
-      const destination = (
-        request.trackId !== undefined
-          ? trackBuses.get(request.trackId)?.input
-          : undefined
-      ) ?? clipDestination
       gain.connect(destination)
     }
 
@@ -1637,12 +1657,6 @@ const realDeps: PlaybackAudioDeps = {
   lookaheadSeconds: PLAYBACK_AUDIO_LOOKAHEAD_SECONDS,
   startLeadSeconds: PLAYBACK_AUDIO_START_LEAD_SECONDS,
   pumpIntervalMs: PLAYBACK_AUDIO_PUMP_INTERVAL_MS,
-}
-
-function abortedError(): Error {
-  const error = new Error('Playback audio startup was cancelled')
-  error.name = 'AbortError'
-  return error
 }
 
 function validateDeps(deps: PlaybackAudioDeps): void {
@@ -1817,19 +1831,19 @@ export async function startTimelineAudioPlayback(
       admittedStretchClips.delete(plan.clipId)
       if (stopped) return null
       failedClips.add(plan.clipId)
-      const reason =
+      const classified =
         cause instanceof MediaAssetRuntimeError
         && cause.assetId === plan.assetId
         && cause.failure.surface === 'audio-playback'
-          ? cause.failure.reason
-          : 'decode-failed'
-      const trackKind =
-        cause instanceof MediaAssetRuntimeError
-        && cause.assetId === plan.assetId
-        && cause.failure.surface === 'audio-playback'
-          ? cause.failure.trackKind
-          : 'audio'
-      warnMedia(plan, 'source-open', cause, reason, trackKind)
+          ? cause.failure
+          : null
+      warnMedia(
+        plan,
+        'source-open',
+        cause,
+        classified ? classified.reason : 'decode-failed',
+        classified ? classified.trackKind : 'audio',
+      )
       return null
     }
   }
@@ -1854,10 +1868,7 @@ export async function startTimelineAudioPlayback(
       const wrapped = state.pending
       const buffer = wrapped.buffer
       const sampleRate = buffer.sampleRate
-      if (
-        !Number.isSafeInteger(sampleRate)
-        || ![44_100, 48_000, 96_000].includes(sampleRate)
-      ) {
+      if (!isSupportedStretchSampleRate(sampleRate)) {
         throw new RangeError(
           'Audio stretch sample rate must be 44100, 48000, or 96000',
         )
@@ -1891,15 +1902,14 @@ export async function startTimelineAudioPlayback(
         buffer.length - sourceFrame,
         AUDIO_STRETCH_RECHUNK_FRAMES - written,
       )
-      const planes = Array.from(
-        { length: buffer.numberOfChannels },
-        (_value, channel) => buffer.getChannelData(channel),
+      foldPlanarBlockToStereo(
+        audioBufferPlanes(buffer),
+        sourceFrame,
+        copied,
+        left,
+        right,
+        written,
       )
-      for (let index = 0; index < copied; index++) {
-        const folded = foldDecodedFrameToStereo(planes, sourceFrame + index)
-        left[written + index] = folded[0]
-        right[written + index] = folded[1]
-      }
       written += copied
       state.pendingFrameOffset = sourceFrame + copied
       state.stretchSourceTime =
@@ -2259,13 +2269,13 @@ export async function startTimelineAudioPlayback(
   options.signal?.addEventListener('abort', abortHandler, { once: true })
 
   try {
-    if (options.signal?.aborted) throw abortedError()
+    throwIfAborted(options.signal, 'Playback audio startup was cancelled')
     const initialEnd = Math.min(
       durationTime,
       fromTime + deps.lookaheadSeconds,
     )
     const initialEvents = await prepareInterval(fromTime, initialEnd)
-    if (options.signal?.aborted) throw abortedError()
+    throwIfAborted(options.signal, 'Playback audio startup was cancelled')
 
     const minimumLead = options.minimumStartLeadSeconds ?? 0
     if (!Number.isFinite(minimumLead) || minimumLead < 0) {

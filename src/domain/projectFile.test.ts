@@ -40,7 +40,7 @@ import {
 import { EFFECT_STACK_LIMITS } from './effectBounds'
 import { pluginEffectType } from './pluginManifest'
 import { dynamicZoomRequestFromPreset } from './dynamicZoom'
-import { addEffect, applyDynamicZoom, updateEffectParams } from './operations'
+import { addEffect, applyDynamicZoomWithResult, updateEffectParams } from './operations'
 import {
   DEFAULT_MANUAL_LENS_CORRECTION,
   type LensCorrectionIntent,
@@ -1227,12 +1227,12 @@ describe('portable project file', () => {
 
   test('round-trips dynamic zoom output as ordinary transform keyframes', () => {
     const original = makeProject()
-    original.sequences[0] = applyDynamicZoom(
+    original.sequences[0] = applyDynamicZoomWithResult(
       original.sequences[0],
       'clip-a',
       { width: 3_840, height: 2_160 },
       dynamicZoomRequestFromPreset('reframe-left-right', 90),
-    )
+    ).doc
     const authored = original.sequences[0].tracks[0].clips[0].animation
 
     const parsed = parseProjectFile(serializeProjectFile(original))

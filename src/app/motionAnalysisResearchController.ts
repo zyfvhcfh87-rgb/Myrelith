@@ -5,6 +5,7 @@ import {
   MediaJobScheduler,
   type MediaJobSchedulerSnapshot,
 } from './mediaJobScheduler'
+import { motionAnalysisAbortError } from './motionAnalysisWorkerBridge'
 import type {
   MotionAnalysisResearchEvidence,
   MotionResearchProgress,
@@ -73,10 +74,6 @@ export function motionAnalysisResearchDiagnostics(): MotionResearchRuntimeDiagno
 
 function errorMessage(cause: unknown): string {
   return cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause)
-}
-
-function motionAnalysisAbortError(): DOMException {
-  return new DOMException('Motion analysis was cancelled', 'AbortError')
 }
 
 async function probeWorker(signal?: AbortSignal): Promise<boolean> {

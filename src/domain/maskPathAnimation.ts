@@ -1,5 +1,6 @@
 /** Held path values and budget hooks; shared timeline traversal belongs to #199. */
 import { EFFECT_STACK_LIMITS, isUnsafeEffectParamKey } from './effectBounds'
+import { isPlainRecord } from './guards'
 import { maskBezierPathValidationError, MAX_MASK_PATH_CHARACTERS } from './maskPath'
 import { MAX_KEYFRAME_FRAME } from './scalarAnimation'
 import type { EffectDescriptor } from './schema'
@@ -34,11 +35,6 @@ export interface EffectPathAnimationTrack {
   keyframes: EffectPathAnimationKeyframe[]
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
-}
-
 function exactKeys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
   const keys = Object.keys(value)
   return keys.length <= required.length + optional.length
@@ -52,7 +48,7 @@ function boundedString(value: unknown, maximum: number): value is string {
 
 /** Structural bounds intentionally do not parse opaque, future or malformed path values. */
 export function effectPathAnimationTrackBoundsError(value: unknown, requireSourceTicks = false): string | null {
-  if (!record(value) || !exactKeys(value, ['effectId', 'parameter', 'valueType', 'valueVersion', 'keyframes'])) return 'Path tracks must have the exact versioned envelope.'
+  if (!isPlainRecord(value) || !exactKeys(value, ['effectId', 'parameter', 'valueType', 'valueVersion', 'keyframes'])) return 'Path tracks must have the exact versioned envelope.'
   if (!boundedString(value.effectId, EFFECT_STACK_LIMITS.maxIdCharacters)) return 'Path effect identity is missing or too long.'
   if (!boundedString(value.parameter, EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters) || isUnsafeEffectParamKey(value.parameter)) return 'Path parameter identity is invalid.'
   if (!boundedString(value.valueType, EFFECT_STACK_LIMITS.maxTypeAndParamKeyCharacters)) return 'Path value type is missing or too long.'
@@ -60,11 +56,11 @@ export function effectPathAnimationTrackBoundsError(value: unknown, requireSourc
   if (!Array.isArray(value.keyframes) || value.keyframes.length < 1 || value.keyframes.length > MASK_PATH_ANIMATION_LIMITS.keysPerTrack) return 'A path track requires 1 to 256 keys.'
   let previous = -Infinity
   for (const key of value.keyframes) {
-    if (!record(key) || !exactKeys(key, ['frame', 'value', 'easing'], ['sourceTimeTicks'])) return 'Path keys must have the exact frame/value/easing envelope.'
+    if (!isPlainRecord(key) || !exactKeys(key, ['frame', 'value', 'easing'], ['sourceTimeTicks'])) return 'Path keys must have the exact frame/value/easing envelope.'
     if (!Number.isSafeInteger(key.frame) || Math.abs(key.frame as number) > MASK_PATH_ANIMATION_LIMITS.maximumFrameMagnitude || (key.frame as number) <= previous) return 'Path frames must be bounded, strictly increasing unique integers.'
     if ((requireSourceTicks || Object.hasOwn(key, 'sourceTimeTicks')) && !Number.isSafeInteger(key.sourceTimeTicks)) return 'Path source ticks must be safe integers.'
     if (typeof key.value !== 'string' || key.value.length > MAX_MASK_PATH_CHARACTERS) return 'A path value exceeds its 2,048-character bound.'
-    if (!record(key.easing) || !exactKeys(key.easing, ['type']) || key.easing.type !== 'hold') return 'Path v1 timing supports hold easing only.'
+    if (!isPlainRecord(key.easing) || !exactKeys(key.easing, ['type']) || key.easing.type !== 'hold') return 'Path v1 timing supports hold easing only.'
     previous = key.frame as number
   }
   return null
@@ -86,13 +82,6 @@ function collectionError(tracks: readonly EffectPathAnimationTrack[], maximum: n
 
 export function effectPathAnimationTracksBoundsError(tracks: readonly EffectPathAnimationTrack[], requireSourceTicks = false): string | null {
   return collectionError(tracks, MASK_PATH_ANIMATION_LIMITS.tracksPerClip, requireSourceTicks)
-}
-
-/** Budget the complete candidate first; this bounded value hook does not own history. */
-export function cloneEffectPathAnimationTrack(track: EffectPathAnimationTrack): EffectPathAnimationTrack {
-  const error = effectPathAnimationTrackBoundsError(track)
-  if (error) throw new RangeError(error)
-  return { ...track, keyframes: track.keyframes.map((key) => ({ ...key, easing: { type: 'hold' } })) }
 }
 
 export type PreparedEffectPathAnimationTrack =
@@ -145,7 +134,7 @@ export function maskPathAnimationSnapshotBudget(snapshot: MaskPathAnimationSnaps
   if (!Array.isArray(snapshot.tracks) || snapshot.tracks.length > MASK_PATH_ANIMATION_LIMITS.projectKeys) return { ok: false, reason: 'Too many path animation tracks.' }
   let declaredKeys = 0
   for (const track of snapshot.tracks) {
-    if (!record(track) || !Array.isArray(track.keyframes)) return { ok: false, reason: 'Path keyframes must be an array.' }
+    if (!isPlainRecord(track) || !Array.isArray(track.keyframes)) return { ok: false, reason: 'Path keyframes must be an array.' }
     declaredKeys += track.keyframes.length
     if (declaredKeys > MASK_PATH_ANIMATION_LIMITS.projectKeys) return { ok: false, reason: 'A project or clipboard exceeds 4,096 path keys.' }
   }

@@ -13,6 +13,7 @@ import {
   clipVisualSettings,
 } from '../domain/clipInspector'
 import { resolveClipAnimationAtFrame } from '../domain/clipAnimation'
+import { clamp } from '../domain/numeric'
 import type { ClipVisualPatch } from '../domain/operations'
 import { findClip, trackOfClip } from '../domain/selectors'
 import type {
@@ -81,10 +82,6 @@ const SCALE_CORNERS: readonly ScaleCorner[] = [
   'bottom-left',
   'bottom-right',
 ]
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value))
-}
 
 function measureViewport(
   canvas: HTMLCanvasElement | null,

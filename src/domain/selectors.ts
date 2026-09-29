@@ -10,19 +10,16 @@ import type {
   ClipId,
   Track,
   TimelineDoc,
-  Transition,
 } from './schema'
 import { clipAnimation } from './clipAnimation'
 import { clipAudioSettings } from './clipInspector'
 import {
   createCrossfadeAudioWindowIndex,
-  resolveCrossfadeGeometry,
   type CrossfadeAudioClipWindow,
   type CrossfadeAudioWindowIndex,
 } from './crossfadePlan'
 import {
   clipSourceTimeMap,
-  sourceFrameAtTimelineFrame,
   sourceTimeAudioPolicy,
   sourceTimeAudioWindowIsSilent,
 } from './sourceTimeMap'
@@ -311,44 +308,4 @@ export function projectOutputMediaAssetIds(
     )) ids.add(assetId)
   }
   return ids
-}
-
-/**
- * Map a timeline frame to the source-asset frame the clip shows there.
- * Stills always resolve frame 0; timed clips use the canonical rational map.
- * Only meaningful inside clip.timelineRange; callers check that via
- * activeClipAt/rangeContains.
- */
-export function clipSourceFrame(clip: Clip, timelineFrame: number): number {
-  return sourceFrameAtTimelineFrame(clip, timelineFrame)
-}
-
-/**
- * One structurally valid crossfade resolved against its owning track.
- * Operations use the same geometry as rendering so an authored transition
- * cannot be accepted only to fall back to a hard cut in the compositor.
- */
-export interface ResolvedCrossfade {
-  transition: Transition
-  from: Clip
-  to: Clip
-  startFrame: number
-  endFrame: number
-  durationFrames: number
-}
-
-/** Resolve one transition using the canonical centered crossfade geometry. */
-export function resolveCrossfade(
-  track: Track,
-  transition: Transition,
-): ResolvedCrossfade | null {
-  return resolveCrossfadeGeometry(track, transition)
-}
-
-/** Half-open overlap for two resolved crossfade windows. */
-export function crossfadeWindowsOverlap(
-  left: Pick<ResolvedCrossfade, 'startFrame' | 'endFrame'>,
-  right: Pick<ResolvedCrossfade, 'startFrame' | 'endFrame'>,
-): boolean {
-  return left.startFrame < right.endFrame && right.startFrame < left.endFrame
 }

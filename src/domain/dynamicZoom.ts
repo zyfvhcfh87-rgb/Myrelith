@@ -13,6 +13,7 @@ import {
   animationEasingValidationError,
   clipAnimation,
   clipAnimationValidationError,
+  cloneAnimationEasing,
   documentAnimationKeyframeGrowthAllowed,
   isClipPropertyAnimated,
   LINEAR_ANIMATION_EASING,
@@ -24,6 +25,7 @@ import {
   MIN_CLIP_SCALE,
   transformScaleValidationError,
 } from './clipInspector'
+import { isPositiveSafeInteger } from './numeric'
 import type {
   Clip,
   ClipAnimationEasing,
@@ -139,10 +141,6 @@ export const DYNAMIC_ZOOM_PRESETS: readonly DynamicZoomPreset[] = [
   },
 ]
 
-function cloneEasing(easing: ClipAnimationEasing): ClipAnimationEasing {
-  return easing.type === 'cubic-bezier' ? { ...easing } : { type: easing.type }
-}
-
 export function dynamicZoomPreset(id: DynamicZoomPresetId): DynamicZoomPreset {
   const preset = DYNAMIC_ZOOM_PRESETS.find((item) => item.id === id)
   if (!preset) throw new RangeError(`Unknown dynamic zoom preset: ${id}`)
@@ -150,7 +148,7 @@ export function dynamicZoomPreset(id: DynamicZoomPresetId): DynamicZoomPreset {
     ...preset,
     start: { ...preset.start },
     end: { ...preset.end },
-    easing: cloneEasing(preset.easing),
+    easing: cloneAnimationEasing(preset.easing),
   }
 }
 
@@ -170,7 +168,7 @@ export function dynamicZoomRequestFromPreset(
 export function reverseDynamicZoomEasing(
   easing: ClipAnimationEasing,
 ): ClipAnimationEasing {
-  if (easing.type !== 'cubic-bezier') return cloneEasing(easing)
+  if (easing.type !== 'cubic-bezier') return cloneAnimationEasing(easing)
   return {
     type: 'cubic-bezier',
     x1: 1 - easing.x2,
@@ -189,10 +187,6 @@ export function reverseDynamicZoomRequest(
     durationFrames: request.durationFrames,
     easing: reverseDynamicZoomEasing(request.easing),
   }
-}
-
-function positiveSafeDimension(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
 }
 
 function framingValidationError(
@@ -226,10 +220,10 @@ export function dynamicZoomAvailabilityReason(
   if (clip.timelineRange.durationFrames < MIN_DYNAMIC_ZOOM_DURATION_FRAMES) {
     return 'Dynamic zoom needs a clip with at least 2 frames.'
   }
-  if (!source || !positiveSafeDimension(source.width) || !positiveSafeDimension(source.height)) {
+  if (!source || !isPositiveSafeInteger(source.width) || !isPositiveSafeInteger(source.height)) {
     return 'Dynamic zoom needs known positive source dimensions. Relink or re-import this media first.'
   }
-  if (!positiveSafeDimension(doc.width) || !positiveSafeDimension(doc.height)) {
+  if (!isPositiveSafeInteger(doc.width) || !isPositiveSafeInteger(doc.height)) {
     return 'Dynamic zoom needs valid positive project dimensions.'
   }
   const visualError = clipVisualSettingsValidationError(clipVisualSettings(clip))
@@ -373,7 +367,7 @@ function framingTrack(
   return {
     property,
     keyframes: [
-      { frame: 0, value: startValue, easing: cloneEasing(easing) },
+      { frame: 0, value: startValue, easing: cloneAnimationEasing(easing) },
       { frame: endFrame, value: endValue, easing: LINEAR_ANIMATION_EASING },
     ],
   }

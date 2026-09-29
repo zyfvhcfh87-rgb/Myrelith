@@ -1,5 +1,5 @@
 import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
-import { createPluginVideoEffectContributionSnapshot, resolveVideoEffectStagePlan } from '../domain/pluginVideoEffectStagePlan'
+import { createPluginVideoEffectContributionSnapshot, createVideoEffectStagePlanner } from '../domain/pluginVideoEffectStagePlan'
 import { applyVideoEffectStagePlanToRgba } from './videoEffectStageExecution'
 import { ColorGradingCancelledError, type ColorGradingFrame } from './colorGradingRuntime'
 import { expandedTitleProject } from '../test/titleOwnerFixtures'
@@ -129,7 +129,7 @@ function exportPluginPlan() {
     descriptorVersion: 1, entrypoint: 'myrelith_fixture', parameters: [],
     availability: 'ready', detail: 'Ready.',
   }])
-  const plan = resolveVideoEffectStagePlan(clip, 0, snapshot)
+  const plan = createVideoEffectStagePlanner(snapshot).planClip(clip, 0)
   if (!plan?.requiresOrderedPixelPath) throw new Error('fixture must resolve a real ready plugin plan')
   return plan
 }

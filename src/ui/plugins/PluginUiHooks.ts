@@ -14,13 +14,17 @@ export function usePluginUi(): PluginUiContextValue {
 }
 
 export function usePluginAppSnapshot(): PluginAppSnapshot {
-  const { controller } = usePluginUi()
-  const subscribe = useCallback(
-    (notify: () => void) => controller.subscribe(() => notify()),
-    [controller],
-  )
-  const getSnapshot = useCallback(() => controller.getSnapshot(), [controller])
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const snapshot = useOptionalPluginAppSnapshot()
+  if (!snapshot) throw new Error('Plugin UI requires PluginUiProvider.')
+  return snapshot
+}
+
+/**
+ * Fire-and-forget controller command from a UI event. Its rejection is
+ * deliberately swallowed so it never surfaces as an unhandled rejection.
+ */
+export function ignorePluginCommandRejection(promise: Promise<unknown>): void {
+  void promise.catch(() => {})
 }
 
 export function useOptionalPluginEditorSnapshot(): PluginAppEditorSnapshot | null {
@@ -37,8 +41,13 @@ export function useOptionalPluginEditorSnapshot(): PluginAppEditorSnapshot | nul
 }
 
 export function useOptionalPluginAppSnapshot(): PluginAppSnapshot | null {
-  const value = useOptionalPluginUi()
-  const subscribe = useCallback((notify: () => void) => value?.controller.subscribe(() => notify()) ?? (() => {}), [value])
-  const getSnapshot = useCallback(() => value?.controller.getSnapshot() ?? null, [value])
+  // Key on the controller, not the context value, which also changes with
+  // manager open/selection state.
+  const controller = useOptionalPluginUi()?.controller ?? null
+  const subscribe = useCallback(
+    (notify: () => void) => controller?.subscribe(() => notify()) ?? (() => {}),
+    [controller],
+  )
+  const getSnapshot = useCallback(() => controller?.getSnapshot() ?? null, [controller])
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }

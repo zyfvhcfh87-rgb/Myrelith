@@ -6,6 +6,8 @@
  * surface; ordinary scrolling stays exactly 1 logical pixel per CSS pixel.
  */
 
+import { clamp } from '../../domain/numeric'
+
 /** Safely below Chromium's ~33.55Mpx and Firefox's smaller layout ceiling. */
 export const MAX_TIMELINE_SURFACE_PX = 16_000_000
 const MAX_REBASE_EDGE_PX = 2_000_000
@@ -32,10 +34,6 @@ function finitePositive(value: number, fallback: number): number {
 function safeWholeFrames(value: number, minimum: number): number {
   if (!Number.isFinite(value)) return minimum
   return Math.max(minimum, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(value)))
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value))
 }
 
 /** Build one bounded physical window over an arbitrarily long frame range. */
@@ -104,7 +102,28 @@ export function frameAtTimelineClientX(
     originFrame,
     zoom,
   )
-  return Math.min(maximum, Math.max(minimum, frame))
+  return clamp(frame, minimum, maximum)
+}
+
+/**
+ * Frame under the pointer inside one rendered clip. Its element starts at the
+ * clip's origin-clamped visible start, and the result stays within the clip.
+ */
+export function frameAtTimelineRangeClientX(
+  clientX: number,
+  elementLeftPx: number,
+  range: { readonly startFrame: number; readonly durationFrames: number },
+  timelineOriginFrame: number,
+  zoom: number,
+): number {
+  return frameAtTimelineClientX(
+    clientX,
+    elementLeftPx,
+    Math.max(range.startFrame, timelineOriginFrame),
+    zoom,
+    range.startFrame,
+    range.startFrame + range.durationFrames,
+  )
 }
 
 /**

@@ -186,7 +186,6 @@ describe('mediaPoolModel', () => {
       ['diagnostic'],
       ['c'],
     ])
-    expect(rows.map((row) => row.itemStartIndex)).toEqual([0, 2, 3])
     expect(window.rowHeights).toEqual([112, 310, 112])
     expect(window.totalHeight).toBe(558)
   })
@@ -401,18 +400,18 @@ describe('mediaPoolModel', () => {
     )).toEqual(['mystery', 'still', 'voice', 'camera'])
   })
 
-  test('breaks remaining sort ties by catalog index then stable asset id', () => {
+  test('breaks remaining sort ties by catalog index regardless of input order', () => {
     const items = [
       {
-        ...item('beta'),
+        ...item('late'),
         fileName: 'Same.mp4',
         catalogIndex: 4,
         durationMicroseconds: 2_000_000,
       },
       {
-        ...item('alpha'),
+        ...item('middle'),
         fileName: 'Same.mp4',
-        catalogIndex: 4,
+        catalogIndex: 2,
         durationMicroseconds: 2_000_000,
       },
       {
@@ -425,9 +424,9 @@ describe('mediaPoolModel', () => {
 
     expect(sortMediaPoolItems(items, 'duration', 'descending').map(
       (candidate) => candidate.id,
-    )).toEqual(['early', 'alpha', 'beta'])
+    )).toEqual(['early', 'middle', 'late'])
     expect(sortMediaPoolItems(items, 'name', 'ascending').map(
       (candidate) => candidate.id,
-    )).toEqual(['early', 'alpha', 'beta'])
+    )).toEqual(['early', 'middle', 'late'])
   })
 })

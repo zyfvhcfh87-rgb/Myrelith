@@ -7,6 +7,7 @@ import {
   type MaskPoint,
   type ParsedMaskPath,
 } from './maskPath'
+import { clamp } from './numeric'
 
 export type MaskPathPart =
   | { readonly kind: 'anchor'; readonly index: number }
@@ -88,10 +89,6 @@ export function maskPathPartPoint(path: ParsedMaskPath, part: MaskPathPart): Mas
 
 function interpolate(left: MaskPoint, right: MaskPoint, amount: number): MaskPoint {
   return { x: left.x + (right.x - left.x) * amount, y: left.y + (right.y - left.y) * amount }
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value))
 }
 
 function movePoint(path: ParsedMaskPath, part: MaskPathPart, requested: MaskPoint): ParsedMaskPath {

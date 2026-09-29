@@ -3,13 +3,12 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest'
-import { INITIAL_TRANSPORT_STATE, useTransportStore } from './transportStore'
+import { useTransportStore } from './transportStore'
 
 const getState = () => useTransportStore.getState()
 
 beforeEach(() => {
-  useTransportStore.getState().setClipVisualPreview(null)
-  useTransportStore.setState({ ...INITIAL_TRANSPORT_STATE })
+  useTransportStore.getState().resetTransport()
 })
 
 describe('transportStore', () => {

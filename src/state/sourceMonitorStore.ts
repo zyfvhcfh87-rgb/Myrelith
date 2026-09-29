@@ -12,15 +12,12 @@ import { defaultSourcePatch } from '../domain/threePointEdit'
 import {
   advanceSourcePlayhead,
   clearSourceIn,
-  clearSourceMarks,
   clearSourceOut,
-  closeSourceMonitor,
   jumpSourceToEnd,
   jumpSourceToIn,
   jumpSourceToOut,
   jumpSourceToStart,
   openSourceMonitor,
-  parkSourcePlayback,
   requestMonitorPlayback,
   resetSourceSession,
   scrubSourcePlayhead,
@@ -55,7 +52,6 @@ export interface SourceMonitorStore extends SourceMonitorState {
   stepFrame(deltaFrames: number): void
   advancePlayhead(deltaFrames: number): void
   stopPlayback(): void
-  parkPlayback(): void
   jumpToStart(): void
   jumpToEnd(): void
   jumpToIn(): void
@@ -64,7 +60,6 @@ export interface SourceMonitorStore extends SourceMonitorState {
   setOut(): void
   clearIn(): void
   clearOut(): void
-  clearMarks(): void
   resetSession(): void
   stepShuttle(key: SourceMonitorShuttleKey): void
   requestPlayback(requested: 'program' | 'source'): MonitorPlaybackHandoff
@@ -132,7 +127,7 @@ export const useSourceMonitorStore = create<SourceMonitorStore>()((set, get) => 
 
     closeSource: () => {
       set((state) => {
-        const session = closeSourceMonitor(state.session)
+        const session = null
         const playbackOwner = state.playbackOwner === 'source'
           ? 'none'
           : state.playbackOwner
@@ -155,7 +150,6 @@ export const useSourceMonitorStore = create<SourceMonitorStore>()((set, get) => 
     advancePlayhead: (deltaFrames) =>
       applySession((session) => advanceSourcePlayhead(session, deltaFrames)),
     stopPlayback: () => applySession(stopSourcePlayback),
-    parkPlayback: () => applySession(parkSourcePlayback),
     jumpToStart: () => applySession(jumpSourceToStart),
     jumpToEnd: () => applySession(jumpSourceToEnd),
     jumpToIn: () => applySession(jumpSourceToIn),
@@ -164,7 +158,6 @@ export const useSourceMonitorStore = create<SourceMonitorStore>()((set, get) => 
     setOut: () => applySession(setSourceOut),
     clearIn: () => applySession(clearSourceIn),
     clearOut: () => applySession(clearSourceOut),
-    clearMarks: () => applySession(clearSourceMarks),
     resetSession: () => applySession(resetSourceSession),
     stepShuttle: (key) => applySession((session) => stepSourceShuttle(session, key)),
 

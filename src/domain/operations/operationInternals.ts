@@ -1,5 +1,5 @@
 import type { AdjustmentItem, Clip, ClipId, MulticamInstance, SequenceInstance, TimeRange, TimelineDoc, Track, TrackId, Transition, TransitionId } from '../schema';
-import { crossfadeWindowsOverlap, resolveCrossfade } from '../selectors';
+import { resolveCrossfadeGeometry, type CrossfadeGeometry } from '../crossfadePlan';
 import { rangeOverlap } from '../time';
 
 /** Where a clip lives inside a doc. */
@@ -156,11 +156,49 @@ export function withTrack(
   return { ...doc, tracks }
 }
 
-/** Transition array positions whose definitions resolve without overlap. */
+interface TrackClipSlot {
+  index: number
+  count: number
+}
+
+/**
+ * Canonical crossfade geometry for every transition on one track, from one
+ * clip-id index instead of a track scan per transition. A seam needs unique,
+ * ordered-adjacent endpoints; once the index proves that, the canonical
+ * resolver sees only that adjacent pair — it reads nothing else from the
+ * track — so every other rule (and the resulting window) stays its own.
+ */
+function resolveTrackCrossfades(track: Track): Array<CrossfadeGeometry | null> {
+  const slots = new Map<ClipId, TrackClipSlot>()
+  for (let index = 0; index < track.clips.length; index++) {
+    const slot = slots.get(track.clips[index].id)
+    if (slot) slot.count += 1
+    else slots.set(track.clips[index].id, { index, count: 1 })
+  }
+  return track.transitions.map((transition) => {
+    const from = slots.get(transition.fromClipId)
+    const to = slots.get(transition.toClipId)
+    if (
+      !from
+      || !to
+      || from.count !== 1
+      || to.count !== 1
+      || to.index !== from.index + 1
+    ) return null
+    return resolveCrossfadeGeometry(
+      { ...track, clips: [track.clips[from.index], track.clips[to.index]] },
+      transition,
+    )
+  })
+}
+
+/**
+ * Transition array positions whose definitions resolve without overlap.
+ * Duplicate ids invalidate every copy; two overlapping windows invalidate
+ * each other (resolved duplicates still count as overlap partners).
+ */
 export function validTransitionIndexes(track: Track): Set<number> {
-  const resolved = track.transitions.map((transition) =>
-    resolveCrossfade(track, transition),
-  )
+  const resolved = resolveTrackCrossfades(track)
   const invalid = new Set<number>()
   const indexesById = new Map<TransitionId, number[]>()
 
@@ -178,19 +216,22 @@ export function validTransitionIndexes(track: Track): Set<number> {
     }
   }
 
-  for (let left = 0; left < resolved.length; left++) {
-    const leftWindow = resolved[left]
-    if (!leftWindow) continue
-    for (let right = left + 1; right < resolved.length; right++) {
-      const rightWindow = resolved[right]
-      if (
-        rightWindow &&
-        crossfadeWindowsOverlap(leftWindow, rightWindow)
-      ) {
-        invalid.add(left)
-        invalid.add(right)
-      }
+  // Sorted by start, a window overlaps an earlier one exactly when the
+  // running maximum end passes its start, and a later one exactly when the
+  // next start falls before its end (windows are never empty).
+  const windows: Array<{ index: number; startFrame: number; endFrame: number }> = []
+  resolved.forEach((window, index) => {
+    if (window) windows.push({ index, startFrame: window.startFrame, endFrame: window.endFrame })
+  })
+  windows.sort((left, right) => left.startFrame - right.startFrame)
+  let maximumEnd = -Infinity
+  for (let i = 0; i < windows.length; i++) {
+    const window = windows[i]
+    const next = windows[i + 1]
+    if (maximumEnd > window.startFrame || (next && next.startFrame < window.endFrame)) {
+      invalid.add(window.index)
     }
+    maximumEnd = Math.max(maximumEnd, window.endFrame)
   }
 
   const indexes = new Set<number>()

@@ -1,3 +1,4 @@
+import { boundedPluginUiText } from './pluginUiCopy'
 import type { PluginDiagnosticView } from './pluginUiTypes'
 
 interface PluginDiagnosticsProps {
@@ -26,7 +27,7 @@ export default function PluginDiagnostics({
                 <code>{diagnostic.code}</code>
                 <time>{diagnostic.occurredAtLabel}</time>
               </div>
-              <p>{diagnostic.message.slice(0, 512)}</p>
+              <p>{boundedPluginUiText(diagnostic.message)}</p>
             </li>
           ))}
         </ol>

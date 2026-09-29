@@ -1,10 +1,16 @@
-import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../../domain/projectFile'
+import {
+  CURRENT_TIMELINE_SCHEMA_VERSION,
+  type PortableAssetDescriptor,
+} from '../../domain/projectFile'
 import { describe, expect, test } from 'vitest'
-import type { Clip, TimelineDoc, Track } from '../../domain/schema'
+import type { Clip, MediaAsset, TimelineDoc, Track } from '../../domain/schema'
 import { defaultTextProps } from '../../domain/textOverlay'
 import {
   gestureBoundsForClip,
-  linkedGestureBounds,
+  gestureMembers,
+  gestureMembersBounds,
+  type AssetDurationFramesForClip,
+  timelineAssetDurationFrames,
   type GestureMode,
 } from './gestureBounds'
 
@@ -78,6 +84,20 @@ const durations = new Map([
 ])
 
 const durationFor = (member: Clip): number => durations.get(member.assetId) ?? 0
+
+/** One owner gesture, resolved through the same member closure the hook uses. */
+function linkedGestureBounds(
+  doc: TimelineDoc,
+  ownerClipId: string,
+  mode: GestureMode,
+  assetDurationFramesForClip: AssetDurationFramesForClip,
+) {
+  return gestureMembersBounds(
+    gestureMembers(doc, [ownerClipId]),
+    mode,
+    assetDurationFramesForClip,
+  )
+}
 
 describe('gestureBoundsForClip', () => {
   test('keeps plain trim-start constrained by both timeline and source floors', () => {
@@ -171,7 +191,7 @@ describe('gestureBoundsForClip', () => {
   })
 })
 
-describe('linkedGestureBounds', () => {
+describe('gestureMembersBounds', () => {
   test.each<[GestureMode, number, number]>([
     ['move', -35, Number.POSITIVE_INFINITY],
     ['slide', -35, Number.POSITIVE_INFINITY],
@@ -224,5 +244,31 @@ describe('linkedGestureBounds', () => {
       minDelta: 0,
       maxDelta: 0,
     })
+  })
+})
+
+describe('gestureMembers', () => {
+  test('multiple roots share one deduplicated owner/link closure', () => {
+    expect(
+      gestureMembers(linkedDoc(), ['audio', 'video', 'missing'])
+        .map((member) => member.id),
+    ).toEqual(['audio', 'video'])
+  })
+})
+
+describe('timelineAssetDurationFrames', () => {
+  test('prefers connected media, falls back to the descriptor, and fails closed', () => {
+    const media = {
+      assets: new Map([['connected', { durationFrames: 12 } as MediaAsset]]),
+      descriptors: new Map([
+        ['connected', { durationMicroseconds: 9_000_000 } as PortableAssetDescriptor],
+        ['offline', { durationMicroseconds: 2_000_000 } as PortableAssetDescriptor],
+      ]),
+    }
+    const rate = { num: 30, den: 1 }
+
+    expect(timelineAssetDurationFrames(media, 'connected', rate)).toBe(12)
+    expect(timelineAssetDurationFrames(media, 'offline', rate)).toBe(60)
+    expect(timelineAssetDurationFrames(media, 'unknown', rate)).toBe(0)
   })
 })

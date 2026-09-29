@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   decodeMotionAnalysisWindows,
-  extractMotionAnalysisGrayFrame,
+  createMotionAnalysisGrayFrameExtractor,
   motionAnalysisDisplaySize,
   motionAnalysisOrientationPlan,
   motionAnalysisRetainedBytes,
@@ -364,6 +364,7 @@ describe('decodeMotionAnalysisWindows', () => {
     const rgba = new Uint8ClampedArray(320 * 180 * 4)
     rgba[0] = 255
     const context = {
+      clearRect: vi.fn(),
       save: vi.fn(),
       translate: vi.fn(),
       rotate: vi.fn(),
@@ -387,9 +388,13 @@ describe('decodeMotionAnalysisWindows', () => {
       }
     })
 
-    const result = extractMotionAnalysisGrayFrame(frame, 123, 320, 180, 90)
+    const extract = createMotionAnalysisGrayFrameExtractor()
+    const result = extract(frame, 123, 320, 180, 90)
 
     expect(canvases).toEqual([{ width: 320, height: 180 }])
+    expect(context.clearRect).toHaveBeenCalledWith(0, 0, 320, 180)
+    expect(context.clearRect.mock.invocationCallOrder[0])
+      .toBeLessThan(context.drawImage.mock.invocationCallOrder[0]!)
     expect(context.save).toHaveBeenCalledOnce()
     expect(context.translate).toHaveBeenCalledWith(320, 0)
     expect(context.rotate).toHaveBeenCalledWith(Math.PI / 2)
@@ -397,6 +402,21 @@ describe('decodeMotionAnalysisWindows', () => {
     expect(context.restore).toHaveBeenCalledOnce()
     expect(result).toMatchObject({ timestampUs: 123, width: 320, height: 180 })
     expect(result.pixels[0]).toBe(54)
+
+    // Same analysis size reuses the readback canvas; a new size replaces it.
+    const again = extract(frame, 124, 320, 180, 0)
+    expect(canvases).toHaveLength(1)
+    expect(context.clearRect).toHaveBeenCalledTimes(2)
+    expect(again.pixels).not.toBe(result.pixels)
+    expect(again.pixels[0]).toBe(54)
+    extract(frame, 125, 160, 90, 0)
+    expect(canvases).toEqual([
+      { width: 320, height: 180 },
+      { width: 160, height: 90 },
+    ])
+    expect(createMotionAnalysisGrayFrameExtractor()(frame, 126, 320, 180, 0))
+      .toMatchObject({ width: 320, height: 180 })
+    expect(canvases).toHaveLength(3)
   })
 
   it('preserves source-open remediation reasons across the worker protocol', () => {

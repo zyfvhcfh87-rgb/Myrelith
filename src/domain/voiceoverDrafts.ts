@@ -119,13 +119,6 @@ export function classifyVoiceoverDrafts(
   })
 }
 
-/** Only orphaned drafts may be deleted; kept and live drafts are protected. */
-export function isVoiceoverDraftDiscardable(
-  classification: VoiceoverDraftClassification,
-): boolean {
-  return classification.state === 'orphaned'
-}
-
 /**
  * A kept original may be removed from disk only when none of the assets that
  * reference it is used by any clip of the project.

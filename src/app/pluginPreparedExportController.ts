@@ -16,6 +16,8 @@ import {
   type PluginExportDocumentSnapshot,
   type PluginExportReviewToken,
 } from './pluginExportAttemptController'
+import { throwCleanupFailures } from './pluginControllerShared'
+import { bytesToHex } from '../domain/bytes'
 
 export type PluginPreparedExportControllerErrorCode =
   | 'closed'
@@ -98,9 +100,7 @@ interface RunningAttempt {
 function defaultPublicToken(): string {
   const bytes = new Uint8Array(18)
   globalThis.crypto.getRandomValues(bytes)
-  return `plugin-export-${[...bytes]
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('')}`
+  return `plugin-export-${bytesToHex(bytes)}`
 }
 
 function freezeAttemptSnapshot(
@@ -391,10 +391,7 @@ export function createPluginPreparedExportController(
           failures.push(cause)
         }
         snapshot = Object.freeze({ status: 'closed', token: null, attempt: null })
-        if (failures.length === 1) throw failures[0]
-        if (failures.length > 1) {
-          throw new AggregateError(failures, 'Plugin prepared export cleanup failed')
-        }
+        throwCleanupFailures(failures, 'Plugin prepared export cleanup failed')
       })
       return closePromise
     },

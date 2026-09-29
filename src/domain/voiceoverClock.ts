@@ -1,27 +1,9 @@
 /** Pure sample-grid rules for one pinned microphone take. No browser clock reads. */
+import { requireNonNegativeSafeInteger } from './numeric'
 import { audioSampleBoundary, type AudioSampleDocument } from './time'
 
 /** Physical timing is uncalibrated by default. Limit manual adjustment to ±0.5 s. */
 export const MAX_VOICEOVER_COMPENSATION_SECONDS = 0.5
-
-/** Convert a signed UI frame adjustment to samples; sample adjustment is authoritative. */
-export function voiceoverCompensationFromFrames(
-  frames: number,
-  doc: AudioSampleDocument,
-): number {
-  if (!Number.isSafeInteger(frames)) throw new RangeError('Compensation frames must be a safe integer')
-  const samples = audioSampleBoundary(Math.abs(frames), doc)
-  if (samples > Math.floor(doc.audioSampleRate * MAX_VOICEOVER_COMPENSATION_SECONDS)) {
-    throw new RangeError('Voiceover compensation exceeds the half-second sample bound')
-  }
-  return frames < 0 ? -samples : samples
-}
-
-function nonNegative(value: number, name: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError(`${name} must be a non-negative safe integer`)
-  }
-}
 
 function safe(value: bigint, name: string): number {
   if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -43,8 +25,8 @@ export function voiceoverCountInWindow(
   durationFrames: number,
   doc: AudioSampleDocument,
 ): { startSample: number; endSample: number } {
-  nonNegative(anchorSample, 'Anchor sample')
-  nonNegative(durationFrames, 'Count-in frames')
+  requireNonNegativeSafeInteger(anchorSample, 'Anchor sample')
+  requireNonNegativeSafeInteger(durationFrames, 'Count-in frames')
   sampleGrid(doc)
   const duration = audioSampleBoundary(durationFrames, doc)
   if (duration > anchorSample) throw new RangeError('Count-in precedes context sample zero')
@@ -58,9 +40,9 @@ export function voiceoverSampleAtTimelineFrame(
   targetFrame: number,
   doc: AudioSampleDocument,
 ): number {
-  nonNegative(frame, 'Timeline frame')
-  nonNegative(anchorSample, 'Anchor sample')
-  nonNegative(targetFrame, 'Target frame')
+  requireNonNegativeSafeInteger(frame, 'Timeline frame')
+  requireNonNegativeSafeInteger(anchorSample, 'Anchor sample')
+  requireNonNegativeSafeInteger(targetFrame, 'Target frame')
   sampleGrid(doc)
   return safe(
     BigInt(anchorSample) + BigInt(audioSampleBoundary(frame, doc)) -
@@ -76,9 +58,9 @@ export function voiceoverTimelineFrameAtSample(
   targetFrame: number,
   doc: AudioSampleDocument,
 ): number | null {
-  nonNegative(contextSample, 'Context sample')
-  nonNegative(anchorSample, 'Anchor sample')
-  nonNegative(targetFrame, 'Target frame')
+  requireNonNegativeSafeInteger(contextSample, 'Context sample')
+  requireNonNegativeSafeInteger(anchorSample, 'Anchor sample')
+  requireNonNegativeSafeInteger(targetFrame, 'Target frame')
   sampleGrid(doc)
   const projected = BigInt(audioSampleBoundary(targetFrame, doc)) +
     BigInt(contextSample) - BigInt(anchorSample)
@@ -88,10 +70,7 @@ export function voiceoverTimelineFrameAtSample(
   let frame = safe(projected * BigInt(doc.frameRate.num) / divisor, 'Timeline frame')
   // Frame boundaries round to the nearest sample, so the rational floor can
   // be adjacent to (but never far from) the containing frame.
-  const boundary = (f: number) => (
-    BigInt(f) * BigInt(doc.frameRate.den) * BigInt(doc.audioSampleRate) +
-    BigInt(doc.frameRate.num) / 2n
-  ) / BigInt(doc.frameRate.num)
+  const boundary = (f: number) => BigInt(audioSampleBoundary(f, doc))
   if (boundary(frame) > projected) frame--
   else if (frame < Number.MAX_SAFE_INTEGER - 1 &&
     boundary(frame + 1) <= projected) frame++
@@ -106,8 +85,8 @@ export function voiceoverStopBoundary(
   leadSamples: number,
   doc: AudioSampleDocument,
 ): { stopSample: number; stopFrame: number } {
-  nonNegative(nowSample, 'Current sample')
-  nonNegative(leadSamples, 'Stop lead samples')
+  requireNonNegativeSafeInteger(nowSample, 'Current sample')
+  requireNonNegativeSafeInteger(leadSamples, 'Stop lead samples')
   if (nowSample < anchorSample) throw new RangeError('Voiceover has not reached its anchor')
   const after = safe(BigInt(nowSample) + BigInt(leadSamples), 'Stop lead boundary')
   const containing = voiceoverTimelineFrameAtSample(after, anchorSample, startFrame, doc)
@@ -163,7 +142,7 @@ export function planVoiceoverSampleWindow(window: VoiceoverSampleWindow): Voiceo
   for (const [value, name] of [
     [anchorSample, 'Anchor sample'], [stopSample, 'Stop sample'],
     [inputStartSample, 'Input start sample'], [inputEndSample, 'Input end sample'],
-  ] as const) nonNegative(value, name)
+  ] as const) requireNonNegativeSafeInteger(value, name)
   if (stopSample < anchorSample || inputEndSample < inputStartSample) {
     throw new RangeError('Sample windows must have non-negative lengths')
   }
@@ -211,9 +190,9 @@ export function voiceoverLimitStop(
   maxSamples: number,
   doc: AudioSampleDocument,
 ): { stopSample: number; stopFrame: number } {
-  nonNegative(anchorSample, 'Anchor sample')
-  nonNegative(startFrame, 'Start frame')
-  nonNegative(maxSamples, 'Maximum samples')
+  requireNonNegativeSafeInteger(anchorSample, 'Anchor sample')
+  requireNonNegativeSafeInteger(startFrame, 'Start frame')
+  requireNonNegativeSafeInteger(maxSamples, 'Maximum samples')
   sampleGrid(doc)
   const startBoundary = audioSampleBoundary(startFrame, doc)
   const fits = (frames: number) =>
@@ -235,7 +214,7 @@ export function voiceoverLimitStop(
  * timeline window shifted by the signed compensation; its length is unchanged.
  */
 export function voiceoverCaptureSample(timelineSample: number, compensationSamples: number, audioSampleRate: number): number {
-  nonNegative(timelineSample, 'Timeline sample')
+  requireNonNegativeSafeInteger(timelineSample, 'Timeline sample')
   if (!Number.isSafeInteger(audioSampleRate) || audioSampleRate <= 0) {
     throw new RangeError('Audio sample rate must be a positive safe integer')
   }

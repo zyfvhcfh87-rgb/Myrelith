@@ -1,7 +1,7 @@
 import { isProceduralTitleClip, proceduralTextAssetId } from '../textOverlay'
 import { copyTitleForNewOwner, createTitleElementIdAllocator, projectTitleOwnershipError } from '../titleOwnership'
-import type { Clip, ClipId, EffectId, SourceTimeRate, SourceTimeMap, SourceTimeSpeedEasing, TimeRange, TimelineDoc, TrackId } from '../schema';
-import { clipAnimation, clipAnimationKeyframeCount, cloneClipAnimation, documentAnimationKeyframeGrowthAllowed, shiftClipAnimation, remapEffectAnimationIds } from '../clipAnimation';
+import type { Clip, ClipAnimation, ClipId, EffectId, SourceTimeRate, SourceTimeMap, SourceTimeSpeedEasing, TimeRange, TimelineDoc, TrackId } from '../schema';
+import { clipAnimation, clipAnimationKeyframeCount, documentAnimationKeyframeGrowthAllowed, shiftClipAnimation, remapEffectAnimationIds } from '../clipAnimation';
 import { rangeEnd, rangeOverlap } from '../time';
 import { effectCollectionAppendBudgetError } from '../effectBounds';
 import { audioEffectCollectionAppendBudgetError, clipAudioEffects } from '../audioEffectBounds';
@@ -132,13 +132,71 @@ export function splitClipAtFrame(
   return ownerError ? reject(doc, op, ownerError) : candidate
 }
 
+type EdgeTrimResult =
+  | { readonly ok: true; readonly clip: Clip }
+  | { readonly ok: false; readonly reason: string }
+
+/**
+ * Shared edge geometry for trim, ripple trim, and slide neighbors: resize one
+ * edge by a signed delta and place the clip at `startFrame` (a plain head trim
+ * moves the start; a ripple keeps it fixed). A timed head trim advances the
+ * source in-point and shifts clip-local keyframes so every key stays on the
+ * source frame it was authored against; procedural text restarts at source 0
+ * and re-anchors. A still changes only timeline geometry. Neighbor overlap
+ * and downstream movement stay with the caller.
+ */
+function trimClipEdge(
+  clip: Clip,
+  edge: TrimEdge,
+  deltaFrames: number,
+  startFrame: number,
+): EdgeTrimResult {
+  const durationFrames = edge === 'start'
+    ? clip.timelineRange.durationFrames - deltaFrames
+    : clip.timelineRange.durationFrames + deltaFrames
+  if (durationFrames < 1) {
+    return { ok: false, reason: 'clip duration cannot shrink below 1 frame' }
+  }
+  const stillSource = clip.sourceMode === 'still'
+  const textSource = isProceduralTitleClip(clip)
+  const sourceTimeMap = clipSourceTimeMap(clip)
+  const newSourceTimeMap = stillSource || textSource
+    ? defaultSourceTimeMap(0, stillSource ? 1 : durationFrames)
+    : edge === 'start'
+      ? sourceTimeMapAtOffset(sourceTimeMap, deltaFrames)
+      : sourceTimeMapForTimelineDuration(sourceTimeMap, durationFrames)
+  if (!stillSource && !textSource && newSourceTimeMap.sourceStartTicks < 0) {
+    return { ok: false, reason: 'no source material before the asset start' }
+  }
+  let animation: ClipAnimation | undefined
+  if (edge === 'start') {
+    const shifted = shiftClipAnimation(clipAnimation(clip), -deltaFrames)
+    if (!shifted) return { ok: false, reason: 'trim would exceed keyframe frame bounds' }
+    animation = textSource ? reanchorProceduralAnimation(shifted) : shifted
+  }
+  return {
+    ok: true,
+    clip: withClampedAudioFades({
+      ...clip,
+      timelineRange: { startFrame, durationFrames },
+      sourceRange: stillSource
+        ? clip.sourceRange
+        : textSource
+          ? { startFrame: 0, durationFrames }
+          : sourceRangeForMap(newSourceTimeMap, durationFrames),
+      sourceTimeMap: newSourceTimeMap,
+      ...(animation === undefined ? {} : { animation }),
+    }),
+  }
+}
+
 /**
  * Move one edge of a clip by a signed frame delta ("move the edge right" is
  * positive). A timed start trim advances the source in-point so the remaining
  * material still lines up. A still trim changes only timeline geometry, so
  * either edge can extend without inventing source frames. Rejected when the
  * result would be shorter than 1 frame, start before frame 0, or overlap a
- * neighbor.
+ * neighbor. A zero delta is a same-reference no-op.
  */
 export function trimClip(
   doc: TimelineDoc,
@@ -150,74 +208,24 @@ export function trimClip(
   if (!Number.isInteger(deltaFrames)) {
     return reject(doc, op, `deltaFrames must be an integer, got ${deltaFrames}`)
   }
+  if (deltaFrames === 0) return doc
   const loc = locateClip(doc, clipId)
   if (!loc) return reject(doc, op, `clip ${clipId} not found`)
   if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
 
-  const { clip } = loc
-  const tl = clip.timelineRange
-  const src = clip.sourceRange
-  const stillSource = clip.sourceMode === 'still'
-  const textSource = isProceduralTitleClip(clip)
-  const sourceTimeMap = clipSourceTimeMap(clip)
-
-  let newTl: TimeRange
-  let newSrc: TimeRange
-  let newSourceTimeMap = cloneSourceTimeMap(sourceTimeMap)
-  if (edge === 'start') {
-    newTl = {
-      startFrame: tl.startFrame + deltaFrames,
-      durationFrames: tl.durationFrames - deltaFrames,
-    }
-    if (newTl.durationFrames < 1) {
-      return reject(doc, op, 'clip duration cannot shrink below 1 frame')
-    }
-    newSourceTimeMap = stillSource || textSource
-      ? defaultSourceTimeMap(0, stillSource ? 1 : newTl.durationFrames)
-      : sourceTimeMapAtOffset(sourceTimeMap, deltaFrames)
-    if (!stillSource && !textSource && newSourceTimeMap.sourceStartTicks < 0) {
-      return reject(doc, op, 'no source material before the asset start')
-    }
-    newSrc = stillSource
-      ? src
-      : textSource
-        ? { startFrame: 0, durationFrames: newTl.durationFrames }
-        : sourceRangeForMap(newSourceTimeMap, newTl.durationFrames)
-  } else {
-    newTl = { startFrame: tl.startFrame, durationFrames: tl.durationFrames + deltaFrames }
-    if (newTl.durationFrames < 1) {
-      return reject(doc, op, 'clip duration cannot shrink below 1 frame')
-    }
-    newSourceTimeMap = stillSource || textSource
-      ? defaultSourceTimeMap(0, stillSource ? 1 : newTl.durationFrames)
-      : sourceTimeMapForTimelineDuration(sourceTimeMap, newTl.durationFrames)
-    newSrc = stillSource
-      ? src
-      : textSource
-        ? { startFrame: 0, durationFrames: newTl.durationFrames }
-        : sourceRangeForMap(newSourceTimeMap, newTl.durationFrames)
-  }
-
-  if (newTl.startFrame < 0) {
+  const tl = loc.clip.timelineRange
+  const startFrame = edge === 'start' ? tl.startFrame + deltaFrames : tl.startFrame
+  const trimmed = trimClipEdge(loc.clip, edge, deltaFrames, startFrame)
+  if (!trimmed.ok) return reject(doc, op, trimmed.reason)
+  if (startFrame < 0) {
     return reject(doc, op, 'clip cannot start before timeline frame 0')
   }
-  if (overlapsAny(loc.track, newTl, clipId)) {
+  if (overlapsAny(loc.track, trimmed.clip.timelineRange, clipId)) {
     return reject(doc, op, 'trim would overlap a neighboring clip')
   }
 
-  const nextAnimation = edge === 'start'
-    ? shiftClipAnimation(clipAnimation(clip), -deltaFrames)
-    : cloneClipAnimation(clipAnimation(clip))
-  if (!nextAnimation) return reject(doc, op, 'trim would exceed keyframe frame bounds')
-
   const clips = loc.track.clips.slice()
-  clips[loc.clipIndex] = withClampedAudioFades({
-    ...clip,
-    timelineRange: newTl,
-    sourceRange: newSrc,
-    sourceTimeMap: newSourceTimeMap,
-    animation: textSource && edge === 'start' ? reanchorProceduralAnimation(nextAnimation) : nextAnimation,
-  })
+  clips[loc.clipIndex] = trimmed.clip
   clips.sort(byStart)
   const nextTrack = reconcileTransitions(loc.track, { ...loc.track, clips })
   return withTrack(doc, loc.trackIndex, nextTrack)
@@ -487,14 +495,23 @@ export function moveClipsByDelta(
   }
   if (clipIds.length === 0 || deltaFrames === 0) return doc
 
+  // One index instead of a doc scan per id (a select-all nudge moves
+  // thousands); first occurrence wins, exactly like locateClip.
+  const locations = new Map<ClipId, { trackIndex: number; clip: Clip }>()
+  doc.tracks.forEach((track, trackIndex) => {
+    for (const clip of track.clips) {
+      if (!locations.has(clip.id)) locations.set(clip.id, { trackIndex, clip })
+    }
+  })
   const movingIds = new Set<ClipId>()
   const affectedTrackIndexes = new Set<number>()
   for (const clipId of clipIds) {
     if (movingIds.has(clipId)) continue
-    const loc = locateClip(doc, clipId)
+    const loc = locations.get(clipId)
     if (!loc) return reject(doc, op, `clip ${clipId} not found`)
-    if (loc.track.locked) {
-      return reject(doc, op, `track ${loc.track.id} is locked`)
+    const track = doc.tracks[loc.trackIndex]
+    if (track.locked) {
+      return reject(doc, op, `track ${track.id} is locked`)
     }
     const startFrame = loc.clip.timelineRange.startFrame + deltaFrames
     const endFrame = startFrame + loc.clip.timelineRange.durationFrames
@@ -616,7 +633,7 @@ export function rippleDelete(doc: TimelineDoc, clipId: ClipId): TimelineDoc {
  * the timeline. Positive delta shows later material (source in-point moves
  * forward). timelineRange is untouched, so neighbors can never be affected.
  * A still clip has no alternate source material, so slip is an intentional,
- * silent same-reference no-op.
+ * silent same-reference no-op, as is a zero delta.
  * Rejected when the source in-point would go below 0 or the resulting source
  * range would leave JavaScript's safe-integer frame domain. Slipping past the
  * END of the asset is validated at the store/UI layer, like trimClip
@@ -631,6 +648,7 @@ export function slipClip(
   if (!Number.isInteger(deltaFrames)) {
     return reject(doc, op, `deltaFrames must be an integer, got ${deltaFrames}`)
   }
+  if (deltaFrames === 0) return doc
   const loc = locateClip(doc, clipId)
   if (!loc) return reject(doc, op, `clip ${clipId} not found`)
   if (loc.clip.sourceMode === 'still' || isProceduralTitleClip(loc.clip)) return doc
@@ -709,7 +727,8 @@ export function slipClip(
  * unchanged. A side with a gap instead of a touching neighbor just slides
  * over the gap. Rejected when a touching neighbor would drop below 1
  * frame, the right neighbor's source would go below 0, the clip would
- * start before 0, or the result would overlap any other clip.
+ * start before 0, or the result would overlap any other clip. A zero delta is
+ * a same-reference no-op.
  */
 export function slideClip(
   doc: TimelineDoc,
@@ -720,6 +739,7 @@ export function slideClip(
   if (!Number.isInteger(deltaFrames)) {
     return reject(doc, op, `deltaFrames must be an integer, got ${deltaFrames}`)
   }
+  if (deltaFrames === 0) return doc
   const loc = locateClip(doc, clipId)
   if (!loc) return reject(doc, op, `clip ${clipId} not found`)
   if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
@@ -737,57 +757,20 @@ export function slideClip(
 
   if (left && rangeEnd(left.timelineRange) === tl.startFrame) {
     // Touching left neighbor: its tail follows our head.
-    const newDur = left.timelineRange.durationFrames + deltaFrames
-    if (newDur < 1) {
-      return reject(doc, op, 'left neighbor cannot shrink below 1 frame')
-    }
-    const leftIsText = isProceduralTitleClip(left)
-    const leftSourceTimeMap = leftIsText || left.sourceMode === 'still'
-      ? defaultSourceTimeMap(0, left.sourceMode === 'still' ? 1 : newDur)
-      : sourceTimeMapForTimelineDuration(clipSourceTimeMap(left), newDur)
-    clips[clipIndex - 1] = withClampedAudioFades({
-      ...left,
-      timelineRange: { ...left.timelineRange, durationFrames: newDur },
-      sourceRange: left.sourceMode === 'still'
-        ? left.sourceRange
-        : leftIsText
-          ? { startFrame: 0, durationFrames: newDur }
-        : sourceRangeForMap(leftSourceTimeMap, newDur),
-      sourceTimeMap: leftSourceTimeMap,
-    })
+    const trimmed = trimClipEdge(left, 'end', deltaFrames, left.timelineRange.startFrame)
+    if (!trimmed.ok) return reject(doc, op, `left neighbor: ${trimmed.reason}`)
+    clips[clipIndex - 1] = trimmed.clip
   }
   if (right && right.timelineRange.startFrame === rangeEnd(tl)) {
     // Touching right neighbor: its head follows our tail.
-    const newDur = right.timelineRange.durationFrames - deltaFrames
-    if (newDur < 1) {
-      return reject(doc, op, 'right neighbor cannot shrink below 1 frame')
-    }
-    const rightIsStill = right.sourceMode === 'still'
-    const rightIsText = isProceduralTitleClip(right)
-    const rightSourceTimeMap = rightIsStill || rightIsText
-      ? defaultSourceTimeMap(0, rightIsStill ? 1 : newDur)
-      : sourceTimeMapAtOffset(clipSourceTimeMap(right), deltaFrames)
-    if (!rightIsStill && !rightIsText && rightSourceTimeMap.sourceStartTicks < 0) {
-      return reject(doc, op, 'right neighbor has no source material before the asset start')
-    }
-    const rightAnimation = shiftClipAnimation(clipAnimation(right), -deltaFrames)
-    if (!rightAnimation) {
-      return reject(doc, op, 'slide would exceed right-neighbor keyframe frame bounds')
-    }
-    clips[clipIndex + 1] = withClampedAudioFades({
-      ...right,
-      timelineRange: {
-        startFrame: right.timelineRange.startFrame + deltaFrames,
-        durationFrames: newDur,
-      },
-      sourceRange: rightIsStill
-        ? right.sourceRange
-        : rightIsText
-          ? { startFrame: 0, durationFrames: newDur }
-        : sourceRangeForMap(rightSourceTimeMap, newDur),
-      sourceTimeMap: rightSourceTimeMap,
-      animation: rightIsText ? reanchorProceduralAnimation(rightAnimation) : rightAnimation,
-    })
+    const trimmed = trimClipEdge(
+      right,
+      'start',
+      deltaFrames,
+      right.timelineRange.startFrame + deltaFrames,
+    )
+    if (!trimmed.ok) return reject(doc, op, `right neighbor: ${trimmed.reason}`)
+    clips[clipIndex + 1] = trimmed.clip
   }
   clips[clipIndex] = {
     ...clip,
@@ -825,7 +808,8 @@ export function slideClip(
  * material is cut from (delta > 0) or restored to (delta < 0) the head and
  * downstream closes/opens accordingly; for edge 'end' positive delta
  * lengthens the tail and pushes downstream right. Gap preservation means
- * a ripple trim can never create an overlap.
+ * a ripple trim can never create an overlap. A head ripple re-bases
+ * keyframes exactly like trimClip. A zero delta is a same-reference no-op.
  */
 export function rippleTrim(
   doc: TimelineDoc,
@@ -837,65 +821,19 @@ export function rippleTrim(
   if (!Number.isInteger(deltaFrames)) {
     return reject(doc, op, `deltaFrames must be an integer, got ${deltaFrames}`)
   }
+  if (deltaFrames === 0) return doc
   const loc = locateClip(doc, clipId)
   if (!loc) return reject(doc, op, `clip ${clipId} not found`)
   if (loc.track.locked) return reject(doc, op, `track ${loc.track.id} is locked`)
 
-  const { clip } = loc
-  const tl = clip.timelineRange
-  const src = clip.sourceRange
+  const tl = loc.clip.timelineRange
   const oldEnd = rangeEnd(tl)
-  const stillSource = clip.sourceMode === 'still'
-  const textSource = isProceduralTitleClip(clip)
-  const sourceTimeMap = clipSourceTimeMap(clip)
-
-  let newClip: Clip
-  let shiftBy: number
-  if (edge === 'start') {
-    const newDur = tl.durationFrames - deltaFrames
-    if (newDur < 1) {
-      return reject(doc, op, 'clip duration cannot shrink below 1 frame')
-    }
-    const newSourceTimeMap = stillSource || textSource
-      ? defaultSourceTimeMap(0, stillSource ? 1 : newDur)
-      : sourceTimeMapAtOffset(sourceTimeMap, deltaFrames)
-    if (!stillSource && !textSource && newSourceTimeMap.sourceStartTicks < 0) {
-      return reject(doc, op, 'no source material before the asset start')
-    }
-    newClip = withClampedAudioFades({
-      ...clip,
-      timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
-      sourceRange: stillSource
-        ? src
-        : textSource
-          ? { startFrame: 0, durationFrames: newDur }
-        : sourceRangeForMap(newSourceTimeMap, newDur),
-      sourceTimeMap: newSourceTimeMap,
-    })
-    shiftBy = -deltaFrames
-  } else {
-    const newDur = tl.durationFrames + deltaFrames
-    if (newDur < 1) {
-      return reject(doc, op, 'clip duration cannot shrink below 1 frame')
-    }
-    const newSourceTimeMap = stillSource || textSource
-      ? defaultSourceTimeMap(0, stillSource ? 1 : newDur)
-      : sourceTimeMapForTimelineDuration(sourceTimeMap, newDur)
-    newClip = withClampedAudioFades({
-      ...clip,
-      timelineRange: { startFrame: tl.startFrame, durationFrames: newDur },
-      sourceRange: stillSource
-        ? src
-        : textSource
-          ? { startFrame: 0, durationFrames: newDur }
-        : sourceRangeForMap(newSourceTimeMap, newDur),
-      sourceTimeMap: newSourceTimeMap,
-    })
-    shiftBy = deltaFrames
-  }
+  const trimmed = trimClipEdge(loc.clip, edge, deltaFrames, tl.startFrame)
+  if (!trimmed.ok) return reject(doc, op, trimmed.reason)
+  const shiftBy = edge === 'start' ? -deltaFrames : deltaFrames
 
   const clips = loc.track.clips.map((c) => {
-    if (c.id === clipId) return newClip
+    if (c.id === clipId) return trimmed.clip
     if (c.timelineRange.startFrame >= oldEnd) {
       return {
         ...c,

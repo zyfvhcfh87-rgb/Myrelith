@@ -83,7 +83,7 @@ export function probeMotionAnalysisWorker(
   signal?: AbortSignal,
   workerFactory: () => MotionAnalysisWorkerLike = createWorker,
 ): Promise<boolean> {
-  if (signal?.aborted) return Promise.reject(abortError())
+  if (signal?.aborted) return Promise.reject(motionAnalysisAbortError())
   let worker: MotionAnalysisWorkerLike
   try {
     worker = workerFactory()
@@ -104,7 +104,7 @@ export function probeMotionAnalysisWorker(
       worker.terminate()
       action()
     }
-    const onAbort = () => finish(() => reject(abortError()))
+    const onAbort = () => finish(() => reject(motionAnalysisAbortError()))
     const onMessage = (event: MessageEvent<MotionAnalysisWorkerReply>) => {
       if (!isMotionAnalysisWorkerReply(event.data)) {
         finish(() => resolve(false))
@@ -136,7 +136,8 @@ export function probeMotionAnalysisWorker(
   })
 }
 
-function abortError(): DOMException {
+/** The cancellation error every motion-analysis owner rejects with. */
+export function motionAnalysisAbortError(): DOMException {
   return new DOMException('Motion analysis was cancelled', 'AbortError')
 }
 
@@ -276,7 +277,7 @@ export function runMotionAnalysisWorker(
   context: MediaJobContext,
   workerFactory: () => MotionAnalysisWorkerLike = createWorker,
 ): Promise<MotionAnalysisWorkerRunResult> {
-  if (context.signal.aborted) return Promise.reject(abortError())
+  if (context.signal.aborted) return Promise.reject(motionAnalysisAbortError())
   let worker: MotionAnalysisWorkerLike
   try {
     worker = workerFactory()
@@ -338,7 +339,7 @@ export function runMotionAnalysisWorker(
       settle(action)
       return true
     }
-    const onAbort = () => finish(() => reject(abortError()))
+    const onAbort = () => finish(() => reject(motionAnalysisAbortError()))
     const onError = (event: ErrorEvent) => {
       event.preventDefault()
       finish(() => reject(new MediaJobExecutionError(
@@ -380,7 +381,7 @@ export function runMotionAnalysisWorker(
         return
       }
       if (context.signal.aborted) {
-        finish(() => reject(abortError()))
+        finish(() => reject(motionAnalysisAbortError()))
         return
       }
       expectedWindowIndex++

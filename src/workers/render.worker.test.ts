@@ -2,20 +2,19 @@ import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 /**
  * workers/render.worker.test.ts — Phase 4.1b.
  *
- * Drives the render worker core with fake decoders/canvases and asserts
- * the properties multi-track preview depends on:
- *   1. one decoder per asset; per-asset batches are serialized, assets
- *      run independently; every VideoFrame closes on every path;
+ * Drives the render worker core with fake streaming sources/canvases and
+ * asserts the properties multi-track preview depends on:
+ *   1. clip-keyed playback lanes and one-shot seek cursors; every decoded
+ *      frame and copied bitmap closes exactly once on every path;
  *   2. double buffering: only the newest composite blits to the visible
  *      canvas — superseded composites answer 'superseded' and never blit;
- *   3. loans: a bitmap being composited cannot be evicted-and-closed by a
- *      later batch in the same composite (the PiP case), and returns to
- *      its cache afterwards;
- *   4. failures stay contained: bad batches, dead decoders and missing
- *      assets turn into missingClipIds, never crashes.
+ *   3. loans: a frame or retained still being composited cannot be closed by
+ *      replacement or release until that composite settles;
+ *   4. failures stay contained: failed opens, decode errors and missing
+ *      assets turn into missingClipIds or scoped errors, never crashes.
  *
- * Fakes model REAL WebCodecs semantics (queue growth, reset-unconfigures,
- * flush-emits, closed-bitmap draws throw) — see HANDOFF.md lessons.
+ * Fakes model real ownership semantics (closed-bitmap draws throw) — see
+ * HANDOFF.md lessons.
  */
 
 import { describe, expect, test, vi } from 'vitest'
@@ -43,15 +42,9 @@ import {
   StaticImageDecodeError,
   type DecodedStaticImage,
 } from '../pipeline/static-image'
-import type { ChunkPayload } from './decode-protocol'
+import type { BitmapLike } from './decode-types'
 import { PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION } from './plugin-effect-bridge-protocol'
 import type {
-  BitmapLike,
-  DecodableFrame,
-  VideoDecoderLike,
-} from './decode.worker'
-import type {
-  CompositeSourceEntry,
   FromRenderWorker,
   RenderFrameMessage,
   RenderMode,
@@ -62,7 +55,7 @@ import type {
 } from './render-protocol'
 import type { RenderCanvasLike, RenderWorkerEnv } from './render.worker'
 import {
-  createOrientedStreamingBitmap,
+  createOrientedBitmapNormalizer,
   createRenderWorkerCore,
   createVideoScopeAnalyzer,
 } from './render.worker'
@@ -89,15 +82,10 @@ const DECODE_BUDGET: LocalDecoderBudget = {
 
 const FRAME_US = 100_000
 let testPlanDoc: TimelineDoc | null = null
-const TOL_US = FRAME_US / 2
 
 /* ------------------------------------------------------------------ */
 /* Fakes                                                                */
 /* ------------------------------------------------------------------ */
-
-interface TrackedFrame extends DecodableFrame {
-  closed: boolean
-}
 
 interface TrackedBitmap extends BitmapLike {
   sourceTimestamp: number
@@ -111,7 +99,6 @@ interface TrackedStreamingFrame {
 }
 
 interface FakeOptions {
-  supported?: boolean
   supportsCanvasFilter?: boolean
   supportsCanvasPixels?: boolean
   now?: () => number
@@ -122,10 +109,6 @@ interface FakeOptions {
     height: number,
   ) => Promise<VideoScopeAnalysis>
   releaseVideoScopes?: () => Promise<void>
-  /** Drain one queue slot per microtask after each decode, like a live decoder. */
-  autoDrain?: boolean
-  /** decode() of the chunk at this timestamp fires the error callback. */
-  errorOnUs?: number
   /** Streaming bitmap normalization rejects at this source timestamp. */
   streamBitmapErrorOnUs?: number
   /** Holds streaming bitmap normalization for teardown-race tests. */
@@ -138,92 +121,8 @@ interface FakeOptions {
   decodeImage?: RenderWorkerEnv['decodeImage']
   /** Replaces the WebGL2 owner for lens capability and loss regressions. */
   createLensRemapBackend?: RenderWorkerEnv['createLensRemapBackend']
-}
-
-/** Same real-semantics fake as decode.worker.test.ts, plus an error hook. */
-class FakeDecoder implements VideoDecoderLike {
-  decodeQueueSize = 0
-  ondequeue: (() => void) | null = null
-  decoded: ChunkPayload[] = []
-  resetCount = 0
-  configureCount = 0
-  isClosed = false
-  private isConfigured = false
-  private pending: ChunkPayload[] = []
-
-  private readonly output: (frame: DecodableFrame) => void
-  private readonly errorCb: (e: { message: string }) => void
-  private readonly opts: FakeOptions
-  private readonly frames: TrackedFrame[]
-
-  constructor(
-    output: (frame: DecodableFrame) => void,
-    errorCb: (e: { message: string }) => void,
-    opts: FakeOptions,
-    frames: TrackedFrame[],
-  ) {
-    this.output = output
-    this.errorCb = errorCb
-    this.opts = opts
-    this.frames = frames
-  }
-
-  configure(): void {
-    this.configureCount++
-    this.isConfigured = true
-  }
-
-  decode(chunk: unknown): void {
-    if (this.isClosed || !this.isConfigured) {
-      throw new DOMException(
-        "Cannot call 'decode' on an unconfigured codec.",
-        'InvalidStateError',
-      )
-    }
-    const payload = chunk as ChunkPayload
-    if (this.opts.errorOnUs === payload.timestampUs) {
-      this.isClosed = true // a faulted decoder is closed, like Chrome
-      this.errorCb({ message: 'hardware decode fault' })
-      return
-    }
-    this.decoded.push(payload)
-    this.pending.push(payload)
-    this.decodeQueueSize++
-    if (this.opts.autoDrain) queueMicrotask(() => this.drain(1))
-  }
-
-  drain(count: number): void {
-    this.decodeQueueSize = Math.max(0, this.decodeQueueSize - count)
-    this.ondequeue?.()
-  }
-
-  async flush(): Promise<void> {
-    this.decodeQueueSize = 0
-    for (const payload of this.pending.splice(0)) {
-      const frame: TrackedFrame = {
-        timestamp: payload.timestampUs,
-        displayWidth: 320,
-        displayHeight: 180,
-        closed: false,
-        close() {
-          frame.closed = true
-        },
-      }
-      this.frames.push(frame)
-      this.output(frame)
-    }
-  }
-
-  reset(): void {
-    this.resetCount++
-    this.decodeQueueSize = 0
-    this.pending = []
-    this.isConfigured = false // per spec: reset() unconfigures the codec
-  }
-
-  close(): void {
-    this.isClosed = true
-  }
+  /** Observes the normalizer surface release during worker close. */
+  releaseStreamingBitmapSurface?: RenderWorkerEnv['releaseStreamingBitmapSurface']
 }
 
 class FakeStreamCursor implements VideoFrameCursor {
@@ -367,6 +266,67 @@ interface FakeSurface {
   resizePixelCounts: number[]
 }
 
+interface StubOrientationCanvas {
+  readonly canvas: { width: number; height: number }
+  readonly ops: Array<{ name: string; args: unknown[] }>
+}
+
+/** Stub OffscreenCanvas for the real normalizer; closed frames throw on draw. */
+function stubOrientationCanvases(): StubOrientationCanvas[] {
+  const canvases: StubOrientationCanvas[] = []
+  vi.stubGlobal('OffscreenCanvas', class {
+    width: number
+    height: number
+    private readonly ops: Array<{ name: string; args: unknown[] }> = []
+
+    constructor(width: number, height: number) {
+      this.width = width
+      this.height = height
+      canvases.push({ canvas: this, ops: this.ops })
+    }
+
+    getContext() {
+      return {
+        save: () => this.ops.push({ name: 'save', args: [] }),
+        restore: () => this.ops.push({ name: 'restore', args: [] }),
+        translate: (...args: unknown[]) => this.ops.push({ name: 'translate', args }),
+        rotate: (...args: unknown[]) => this.ops.push({ name: 'rotate', args }),
+        drawImage: (...args: unknown[]) => {
+          if ((args[0] as TrackedStreamingFrame).closeCount > 0) {
+            throw new DOMException('closed frame', 'InvalidStateError')
+          }
+          this.ops.push({ name: 'drawImage', args })
+        },
+      }
+    }
+
+    transferToImageBitmap() {
+      this.ops.push({ name: 'transfer', args: [] })
+      return { width: this.width, height: this.height, close: () => undefined }
+    }
+  })
+  return canvases
+}
+
+function trackedRawFrame(): TrackedStreamingFrame {
+  const raw: TrackedStreamingFrame = {
+    closeCount: 0,
+    close() {
+      raw.closeCount++
+    },
+  }
+  return raw
+}
+
+function rotatedFrame(
+  frame: TrackedStreamingFrame,
+  rotation: DecodedVideoFrame['rotation'],
+  displayWidth: number,
+  displayHeight: number,
+): DecodedVideoFrame {
+  return { timestampUs: 0, durationUs: FRAME_US, rotation, displayWidth, displayHeight, frame }
+}
+
 /** A canvas whose 2D ctx logs ops; drawing a closed bitmap THROWS (real). */
 function makeSurface(
   surface: CtxOp['surface'],
@@ -470,9 +430,7 @@ interface Harness {
   core: ReturnType<typeof createRenderWorkerCore>
   posts: FromRenderWorker[]
   postTransfers: Array<{ readonly message: FromRenderWorker; readonly transfer: Transferable[] }>
-  frames: TrackedFrame[]
   streamingFrames: TrackedStreamingFrame[]
-  bitmaps: TrackedBitmap[]
   streamingBitmaps: TrackedBitmap[]
   normalizations: Array<Omit<DecodedVideoFrame, 'frame'>>
   sourcesToOpen: FakeVideoSource[]
@@ -487,7 +445,6 @@ interface Harness {
   decodedImageSignals: AbortSignal[]
   invalidatedSourceIds: string[]
   runtimeInvalidationCount(): number
-  decoders: FakeDecoder[]
   ops: CtxOp[]
   visible: FakeSurface
   scratch: () => FakeSurface | null
@@ -503,9 +460,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     readonly message: FromRenderWorker
     readonly transfer: Transferable[]
   }> = []
-  const frames: TrackedFrame[] = []
   const streamingFrames: TrackedStreamingFrame[] = []
-  const bitmaps: TrackedBitmap[] = []
   const streamingBitmaps: TrackedBitmap[] = []
   const normalizations: Array<Omit<DecodedVideoFrame, 'frame'>> = []
   const sourcesToOpen: FakeVideoSource[] = []
@@ -520,7 +475,6 @@ function makeHarness(opts: FakeOptions = {}): Harness {
   const decodedImageSignals: AbortSignal[] = []
   const invalidatedSourceIds: string[] = []
   let runtimeInvalidations = 0
-  const decoders: FakeDecoder[] = []
   const ops: CtxOp[] = []
   const visible = makeSurface('visible', ops)
   let scratch: FakeSurface | null = null
@@ -533,28 +487,6 @@ function makeHarness(opts: FakeOptions = {}): Harness {
         : msg
       posts.push(delivered)
       postTransfers.push({ message: delivered, transfer })
-    },
-    createDecoder: (init) => {
-      const decoder = new FakeDecoder(init.output, init.error, opts, frames)
-      decoders.push(decoder)
-      return decoder
-    },
-    isConfigSupported: async () => ({ supported: opts.supported ?? true }),
-    createChunk: (payload) => payload,
-    createBitmap: async (frame) => {
-      const bitmap: TrackedBitmap = {
-        width: frame.displayWidth,
-        height: frame.displayHeight,
-        sourceTimestamp: frame.timestamp,
-        closed: false,
-        closeCount: 0,
-        close() {
-          bitmap.closeCount++
-          bitmap.closed = true
-        },
-      }
-      bitmaps.push(bitmap)
-      return bitmap
     },
     openVideoSource: async (blob, sourceId, budget) => {
       openedBlobs.push(blob)
@@ -622,7 +554,6 @@ function makeHarness(opts: FakeOptions = {}): Harness {
           bitmap.closed = true
         },
       }
-      bitmaps.push(bitmap)
       streamingBitmaps.push(bitmap)
       return bitmap
     },
@@ -654,15 +585,14 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     analyzeVideoScopes: opts.analyzeVideoScopes,
     releaseVideoScopes: opts.releaseVideoScopes,
     createLensRemapBackend: opts.createLensRemapBackend,
+    releaseStreamingBitmapSurface: opts.releaseStreamingBitmapSurface,
   }
 
   return {
     core: createRenderWorkerCore(env),
     posts,
     postTransfers,
-    frames,
     streamingFrames,
-    bitmaps,
     streamingBitmaps,
     normalizations,
     sourcesToOpen,
@@ -682,7 +612,6 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     decodedImageSignals,
     invalidatedSourceIds,
     runtimeInvalidationCount: () => runtimeInvalidations,
-    decoders,
     ops,
     visible,
     scratch: () => scratch,
@@ -733,32 +662,6 @@ function makeDoc(tracks: Track[]): TimelineDoc {
     height: 180,
     audioSampleRate: 48000,
     tracks,
-  }
-}
-
-function chunkAt(frame: number, type: 'key' | 'delta'): ChunkPayload {
-  return { type, timestampUs: frame * FRAME_US, durationUs: FRAME_US, data: new ArrayBuffer(4) }
-}
-
-/** An n-chunk GOP starting at `startFrame`: one keyframe, then deltas. */
-function gop(startFrame: number, n: number): ChunkPayload[] {
-  return Array.from({ length: n }, (_, i) =>
-    chunkAt(startFrame + i, i === 0 ? 'key' : 'delta'),
-  )
-}
-
-/** Entry the way the 4.1c bridge will build it (assets conformed, 10 fps). */
-function entry(
-  assetId: string,
-  sourceFrame: number,
-  chunks: ChunkPayload[] = [],
-): CompositeSourceEntry {
-  return {
-    assetId,
-    sourceFrame,
-    targetTimestampUs: sourceFrame * FRAME_US,
-    toleranceUs: TOL_US,
-    chunks,
   }
 }
 
@@ -956,13 +859,6 @@ function pluginVisualPlan(doc: TimelineDoc, frame = 0): VideoCompositionPlan {
   return createVideoCompositionPlanner(doc, bounds, contributions).planFrame(frame)
 }
 
-const cfgMsg = (assetId: string, setupId = 1): ToRenderWorker => ({
-  type: 'configureAsset',
-  assetId,
-  setupId,
-  config: { codec: 'avc1.640028' },
-})
-
 const openMsg = (
   assetId: string,
   blob = new Blob(['video']),
@@ -987,20 +883,6 @@ const openImageMsg = (
   blob,
 })
 
-function compMsg(
-  requestId: number,
-  frame: number,
-  sources: CompositeSourceEntry[],
-): ToRenderWorker {
-  return {
-    type: 'composite',
-    requestId,
-    frame,
-    plan: testVisualPlan(frame),
-    sources,
-  }
-}
-
 function renderMsg(
   requestId: number,
   frame: number,
@@ -1018,10 +900,9 @@ function renderMsg(
   }
 }
 
-async function setup(h: Harness, doc: TimelineDoc, assetIds: string[]): Promise<void> {
+async function setup(h: Harness, doc: TimelineDoc): Promise<void> {
   await h.core.handleMessage(initMsg(h))
   await h.core.handleMessage(docMsg(doc))
-  for (const assetId of assetIds) await h.core.handleMessage(cfgMsg(assetId))
 }
 
 async function setupStreaming(
@@ -1582,7 +1463,7 @@ describe('composite happy path', () => {
       analyzeVideoScopes: firstAnalysis,
       releaseVideoScopes,
     })
-    await setup(h, makeDoc([]), [])
+    await setup(h, makeDoc([]))
     await h.core.handleMessage({ type: 'setVideoScopes', enabled: true, generation: 1 })
     await h.core.handleMessage(renderMsg(1, 0, 'seek', []))
 
@@ -1612,7 +1493,7 @@ describe('composite happy path', () => {
       analyzeVideoScopes: delayedAnalysis,
       releaseVideoScopes,
     })
-    await setup(delayed, makeDoc([]), [])
+    await setup(delayed, makeDoc([]))
     await delayed.core.handleMessage({ type: 'setVideoScopes', enabled: true, generation: 7 })
     await delayed.core.handleMessage(renderMsg(3, 2, 'seek', []))
     scheduled.shift()?.()
@@ -1878,7 +1759,7 @@ describe('composite happy path', () => {
       schedule: (callback) => scheduled.push(callback),
       analyzeVideoScopes: analyze,
     })
-    await setup(h, makeDoc([]), [])
+    await setup(h, makeDoc([]))
     await h.core.handleMessage({ type: 'setVideoScopes', enabled: true, generation: 1 })
     await h.core.handleMessage(renderMsg(1, 0, 'seek', []))
     scheduled.shift()?.()
@@ -1899,18 +1780,23 @@ describe('composite happy path', () => {
     })
   })
 
-  test('two assets decode in their own decoders, draw bottom-to-top, blit once', async () => {
+  test('two assets draw bottom-to-top on scratch, then blit once', async () => {
     const h = makeHarness()
-    await setup(h, twoTrackDoc(), ['A', 'B'])
+    const a = new FakeVideoSource()
+    const b = new FakeVideoSource()
+    a.queueSeek(new FakeStreamCursor([streamDecoded(h, 2 * FRAME_US)]))
+    b.queueSeek(new FakeStreamCursor([streamDecoded(h, 2 * FRAME_US, 0, 160, 90)]))
+    await setupStreaming(h, twoTrackDoc(), [['A', a], ['B', b]])
     expect(h.posts.filter((p) => p.type === 'assetConfigured')).toHaveLength(2)
     // Canvases adopted the doc size.
     expect(h.visible.raw).toEqual({ width: 320, height: 180 })
     expect(h.scratch()?.raw).toEqual({ width: 320, height: 180 })
     expect(h.createdSurfaces()).toHaveLength(1)
 
-    await h.core.handleMessage(
-      compMsg(1, 2, [entry('A', 2, gop(0, 5)), entry('B', 2, gop(0, 5))]),
-    )
+    await h.core.handleMessage(renderMsg(1, 2, 'seek', [
+      streamEntry('a', 'A', 2),
+      streamEntry('b', 'B', 2),
+    ]))
 
     expect(doneFor(h, 1)).toMatchObject({
       status: 'drawn',
@@ -1918,30 +1804,20 @@ describe('composite happy path', () => {
       missingClipIds: [],
     })
 
-    // One decoder per asset, each fed its own batch.
-    expect(h.decoders).toHaveLength(2)
-    expect(h.decoders[0].decoded).toHaveLength(5)
-    expect(h.decoders[1].decoded).toHaveLength(5)
-
     // Compositing happened on the SCRATCH surface, newest-frame blit on the
     // visible one — and strictly after the clips were drawn.
     const draws = h.scratchDraws()
-    expect(draws).toHaveLength(2)
-    expect((draws[0].args[0] as TrackedBitmap).sourceTimestamp).toBe(2 * FRAME_US)
-    expect((draws[1].args[0] as TrackedBitmap).sourceTimestamp).toBe(2 * FRAME_US)
+    expect(draws.map((op) => (op.args[0] as TrackedBitmap).width)).toEqual([320, 160])
     const blits = h.blits()
     expect(blits).toHaveLength(1)
     expect(blits[0].args[0]).toBe(h.scratch()?.canvas) // scratch → visible
     expect(h.ops.indexOf(blits[0])).toBeGreaterThan(h.ops.indexOf(draws[1]))
 
-    // Every VideoFrame closed; pixels live on as cached bitmaps.
-    expect(h.frames).toHaveLength(10)
-    expect(h.frames.every((f) => f.closed)).toBe(true)
-    expect(h.bitmaps.filter((b) => !b.closed)).toHaveLength(10)
-
-    // close() proves the caches (and returned loans) own every bitmap.
+    // One-shot seek frames and their copies close once the composite settles.
+    expect(h.streamingFrames.map((frame) => frame.closeCount)).toEqual([1, 1])
+    expect(h.streamingBitmaps.map((bitmap) => bitmap.closeCount)).toEqual([1, 1])
     await h.core.handleMessage({ type: 'close' })
-    expect(h.bitmaps.every((b) => b.closed)).toBe(true)
+    expect([a.closeCount, b.closeCount]).toEqual([1, 1])
   })
 
   test('crossfades lazily allocate, clear, reuse, and resize isolated surfaces', async () => {
@@ -1960,12 +1836,17 @@ describe('composite happy path', () => {
     }
     const doc = makeDoc([track])
     const h = makeHarness()
-    await setup(h, doc, ['A', 'B'])
+    const a = new FakeVideoSource()
+    const b = new FakeVideoSource()
+    for (let render = 0; render < 2; render++) {
+      a.queueSeek(new FakeStreamCursor([streamDecoded(h, FRAME_US)]))
+      b.queueSeek(new FakeStreamCursor([streamDecoded(h, 0)]))
+    }
+    await setupStreaming(h, doc, [['A', a], ['B', b]])
+    const legs = () => [streamEntry('from', 'A', 1), streamEntry('to', 'B', 0)]
 
     expect(h.createdSurfaces()).toHaveLength(1)
-    await h.core.handleMessage(
-      compMsg(1, 1, [entry('A', 1, gop(0, 2)), entry('B', 0, gop(0, 1))]),
-    )
+    await h.core.handleMessage(renderMsg(1, 1, 'seek', legs()))
 
     expect(doneFor(h, 1)).toMatchObject({
       status: 'drawn',
@@ -2010,9 +1891,7 @@ describe('composite happy path', () => {
     expect(h.scratchDraws()[0].args[0]).toBe(firstSurfaces[2].canvas)
     expect(h.blits()).toHaveLength(1)
 
-    await h.core.handleMessage(
-      compMsg(2, 1, [entry('A', 1), entry('B', 0)]),
-    )
+    await h.core.handleMessage(renderMsg(2, 1, 'seek', legs()))
     expect(doneFor(h, 2)).toMatchObject({
       status: 'drawn',
       drawnClipIds: ['from', 'to'],
@@ -2113,12 +1992,15 @@ describe('composite happy path', () => {
       ]),
     )
     const h = makeHarness()
-    await setup(h, makeDoc([hardCutTrack]), ['A', 'B'])
-    const message = compMsg(1, 1, [
-      entry('A', 1, gop(0, 2)),
-      entry('B', 0, gop(0, 1)),
+    const a = new FakeVideoSource()
+    const b = new FakeVideoSource()
+    a.queueSeek(new FakeStreamCursor([streamDecoded(h, FRAME_US)]))
+    b.queueSeek(new FakeStreamCursor([streamDecoded(h, 0)]))
+    await setupStreaming(h, makeDoc([hardCutTrack]), [['A', a], ['B', b]])
+    const message = renderMsg(1, 1, 'seek', [
+      streamEntry('from', 'A', 1),
+      streamEntry('to', 'B', 0),
     ])
-    if (message.type !== 'composite') throw new Error('unexpected message')
     message.plan = carriedPlan
 
     await h.core.handleMessage(message)
@@ -2130,22 +2012,6 @@ describe('composite happy path', () => {
     })
     expect(h.createdSurfaces()).toHaveLength(3)
   })
-
-  test('a repeat composite is served from the caches: zero new decodes', async () => {
-    const h = makeHarness()
-    await setup(h, twoTrackDoc(), ['A', 'B'])
-    await h.core.handleMessage(
-      compMsg(1, 2, [entry('A', 2, gop(0, 5)), entry('B', 2, gop(0, 5))]),
-    )
-
-    // Same frame again — this time WITHOUT chunks (bridge cold-path spare).
-    await h.core.handleMessage(compMsg(2, 2, [entry('A', 2), entry('B', 2)]))
-
-    expect(doneFor(h, 2)).toMatchObject({ status: 'drawn', drawnClipIds: ['a', 'b'] })
-    expect(h.decoders[0].decoded).toHaveLength(5) // unchanged
-    expect(h.decoders[1].decoded).toHaveLength(5)
-    expect(h.blits()).toHaveLength(2)
-  })
 })
 
 /* ------------------------------------------------------------------ */
@@ -2153,97 +2019,25 @@ describe('composite happy path', () => {
 /* ------------------------------------------------------------------ */
 
 describe('supersession', () => {
-  test('a newer composite supersedes a parked one; only the newest blits', async () => {
-    const h = makeHarness() // no autoDrain: request 1 parks on backpressure
-    await setup(h, makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 20)])]), ['A'])
-
-    const first = h.core.handleMessage(compMsg(1, 11, [entry('A', 11, gop(0, 12))]))
-    await microtasks()
-    expect(h.decoders[0].decoded).toHaveLength(8) // parked at the high-water mark
-
-    const second = h.core.handleMessage(compMsg(2, 5, [entry('A', 5, gop(4, 3))]))
-    await Promise.all([first, second])
-
-    expect(doneFor(h, 1).status).toBe('superseded')
-    expect(doneFor(h, 2)).toMatchObject({ status: 'drawn', drawnClipIds: ['a'] })
-
-    // Request 1 never reached the visible canvas.
-    expect(h.blits()).toHaveLength(1)
-    // Fed: 8 of request 1's chunks, then (after a reset) request 2's 3.
-    expect(h.decoders[0].decoded.map((c) => c.timestampUs)).toEqual([
-      ...Array.from({ length: 8 }, (_, i) => i * FRAME_US),
-      4 * FRAME_US,
-      5 * FRAME_US,
-      6 * FRAME_US,
-    ])
-    await microtasks()
-    expect(h.frames.every((f) => f.closed)).toBe(true)
-  })
-
-  test('setDoc supersedes an in-flight composite (it rendered a stale doc)', async () => {
+  test('setDoc supersedes an in-flight render (it rendered a stale doc)', async () => {
     const h = makeHarness()
+    const source = new FakeVideoSource()
+    const parked = new FakeStreamCursor([], true)
+    source.queueSeek(parked)
     const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 20)])])
-    await setup(h, doc, ['A'])
+    await setupStreaming(h, doc, [['A', source]])
 
-    const inflight = h.core.handleMessage(compMsg(1, 11, [entry('A', 11, gop(0, 12))]))
+    const inflight = h.core.handleMessage(
+      renderMsg(1, 11, 'seek', [streamEntry('a', 'A', 11)]),
+    )
     await microtasks()
+    expect(parked.nextCount).toBe(1)
     await h.core.handleMessage(docMsg(doc))
     await inflight
 
     expect(doneFor(h, 1).status).toBe('superseded')
+    expect(parked.closeCount).toBe(1)
     expect(h.blits()).toHaveLength(0)
-  })
-})
-
-/* ------------------------------------------------------------------ */
-/* Loans + per-asset serialization (the PiP case)                       */
-/* ------------------------------------------------------------------ */
-
-describe('same-asset entries in one composite', () => {
-  test('batches run sequentially; the first bitmap survives the second batch flooding the cache', async () => {
-    const h = makeHarness({ autoDrain: true })
-    // Two clips of the SAME asset at different source offsets (PiP).
-    const doc = makeDoc([
-      makeTrack('V1', [makeClip('x', 'A', 0, 10, 0)]),
-      makeTrack('V2', [makeClip('y', 'A', 0, 10, 20)]),
-    ])
-    await setup(h, doc, ['A'])
-
-    // Frame 0 → x needs source frame 0, y needs source frame 20.
-    // y's 13-chunk batch overflows the 12-slot cache — without the loan,
-    // x's bitmap would be evicted+closed mid-composite and drawImage would
-    // throw (the fake models that).
-    await h.core.handleMessage(
-      compMsg(1, 0, [entry('A', 0, gop(0, 2)), entry('A', 20, gop(8, 13))]),
-    )
-
-    expect(doneFor(h, 1)).toMatchObject({
-      status: 'drawn',
-      drawnClipIds: ['x', 'y'],
-      missingClipIds: [],
-    })
-    // One decoder; strictly sequential batches (x's fully before y's).
-    expect(h.decoders).toHaveLength(1)
-    expect(h.decoders[0].decoded.map((c) => c.timestampUs)).toEqual([
-      0,
-      FRAME_US,
-      ...Array.from({ length: 13 }, (_, i) => (8 + i) * FRAME_US),
-    ])
-    const drawnTs = h.scratchDraws().map((op) => (op.args[0] as TrackedBitmap).sourceTimestamp)
-    expect(drawnTs).toEqual([0, 20 * FRAME_US])
-
-    // The loan went back into the cache: repeating frame 0 with NO chunks
-    // still draws x from cache (no new decodes for source frame 0).
-    const fedBefore = h.decoders[0].decoded.length
-    await h.core.handleMessage(
-      compMsg(2, 0, [entry('A', 0), entry('A', 20)]),
-    )
-    expect(doneFor(h, 2)).toMatchObject({ status: 'drawn', drawnClipIds: ['x', 'y'] })
-    expect(h.decoders[0].decoded).toHaveLength(fedBefore)
-
-    // Teardown still owns every bitmap exactly once.
-    await h.core.handleMessage({ type: 'close' })
-    expect(h.bitmaps.every((b) => b.closed)).toBe(true)
   })
 })
 
@@ -2267,90 +2061,30 @@ describe('failure containment', () => {
       }],
     }
     const h = makeHarness()
-    await setup(h, makeDoc([track]), [])
+    await setup(h, makeDoc([track]))
 
-    await h.core.handleMessage(compMsg(1, 1, []))
+    await h.core.handleMessage(renderMsg(1, 1, 'seek', []))
 
     expect(doneFor(h, 1)).toMatchObject({
       status: 'drawn',
       drawnClipIds: [],
       missingClipIds: ['from', 'to'],
     })
-    expect(h.decoders).toHaveLength(0)
-  })
-
-  test('an unconfigured asset turns into missingClipIds, not an error', async () => {
-    const h = makeHarness()
-    await setup(h, twoTrackDoc(), ['A']) // B never configured
-    await h.core.handleMessage(
-      compMsg(1, 2, [entry('A', 2, gop(0, 5)), entry('B', 2, gop(0, 5))]),
-    )
-    expect(doneFor(h, 1)).toMatchObject({
-      status: 'drawn',
-      drawnClipIds: ['a'],
-      missingClipIds: ['b'],
-    })
-  })
-
-  test('cold cache + empty chunks → missing (no decode, no crash)', async () => {
-    const h = makeHarness()
-    await setup(h, makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])]), ['A'])
-    await h.core.handleMessage(compMsg(1, 3, [entry('A', 3)]))
-    expect(doneFor(h, 1)).toMatchObject({ drawnClipIds: [], missingClipIds: ['a'] })
-    expect(h.decoders[0].decoded).toHaveLength(0)
-  })
-
-  test('a non-keyframe-first batch posts an error and the clip goes missing', async () => {
-    const h = makeHarness()
-    await setup(h, makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])]), ['A'])
-    await h.core.handleMessage(
-      compMsg(1, 3, [entry('A', 3, [chunkAt(2, 'delta'), chunkAt(3, 'delta')])]),
-    )
-    expect(h.posts).toContainEqual({
-      type: 'error',
-      requestId: 1,
-      assetId: 'A',
-      message: 'composite batch must start with a keyframe chunk',
-    })
-    expect(doneFor(h, 1).missingClipIds).toEqual(['a'])
-    expect(h.decoders[0].decoded).toHaveLength(0)
-  })
-
-  test('a decoder fault marks the asset dead: error posted, later composites just miss', async () => {
-    const h = makeHarness({ errorOnUs: 2 * FRAME_US })
-    await setup(h, twoTrackDoc(), ['A', 'B'])
-
-    await h.core.handleMessage(
-      compMsg(1, 2, [entry('A', 2, gop(0, 5)), entry('B', 2, gop(0, 5))]),
-    )
-    // Both decoders hit the poisoned timestamp — but nothing crashed and
-    // the composite still completed with both clips missing.
-    expect(
-      h.posts.filter((p) => p.type === 'error' && p.message === 'decoder: hardware decode fault'),
-    ).toHaveLength(2)
-    expect(doneFor(h, 1)).toMatchObject({
-      status: 'drawn',
-      drawnClipIds: [],
-      missingClipIds: ['a', 'b'],
-    })
-
-    // Dead assets stay dead (fast-miss) until reconfigured.
-    await h.core.handleMessage(compMsg(2, 2, [entry('A', 2, gop(0, 5)), entry('B', 2, gop(0, 5))]))
-    expect(doneFor(h, 2).missingClipIds).toEqual(['a', 'b'])
-
-    await microtasks()
-    expect(h.frames.every((f) => f.closed)).toBe(true)
   })
 
   test('a presentation-profile change supersedes an in-flight frame before blit', async () => {
     const h = makeHarness()
+    const source = new FakeVideoSource()
+    const parked = new FakeStreamCursor([], true)
+    source.queueSeek(parked)
     const doc = makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 20)])])
-    await setup(h, doc, ['A'])
+    await setupStreaming(h, doc, [['A', source]])
 
     const inflight = h.core.handleMessage(
-      compMsg(1, 11, [entry('A', 11, gop(0, 12))]),
+      renderMsg(1, 11, 'seek', [streamEntry('a', 'A', 11)]),
     )
     await microtasks()
+    expect(parked.nextCount).toBe(1)
     await h.core.handleMessage({
       type: 'setPresentationProfile',
       profile: resolvePresentationProfile(doc, {
@@ -2365,30 +2099,6 @@ describe('failure containment', () => {
     expect(h.blits()).toHaveLength(0)
     expect(h.visible.raw).toEqual({ width: 80, height: 45 })
   })
-
-  test('composite before init/setDoc posts an error tied to the request', async () => {
-    const h = makeHarness()
-    await h.core.handleMessage(compMsg(9, 0, []))
-    expect(h.posts).toContainEqual({
-      type: 'error',
-      requestId: 9,
-      message: 'composite before init/setDoc',
-    })
-  })
-
-  test('an unsupported codec posts an error and the asset never exists', async () => {
-    const h = makeHarness({ supported: false })
-    await setup(h, makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])]), ['A'])
-    expect(h.posts.find((message) => message.type === 'error')).toMatchObject({
-      type: 'error',
-      assetId: 'A',
-      setupId: 1,
-    })
-    expect(h.decoders).toHaveLength(0)
-
-    await h.core.handleMessage(compMsg(1, 3, [entry('A', 3, gop(0, 5))]))
-    expect(doneFor(h, 1).missingClipIds).toEqual(['a'])
-  })
 })
 
 /* ------------------------------------------------------------------ */
@@ -2396,40 +2106,6 @@ describe('failure containment', () => {
 /* ------------------------------------------------------------------ */
 
 describe('asset lifecycle', () => {
-  test('re-configuring an asset closes the old decoder and its cached bitmaps', async () => {
-    const h = makeHarness()
-    await setup(h, makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])]), ['A'])
-    await h.core.handleMessage(compMsg(1, 2, [entry('A', 2, gop(0, 5))]))
-    expect(h.bitmaps.filter((b) => !b.closed)).toHaveLength(5)
-
-    await h.core.handleMessage(cfgMsg('A'))
-
-    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
-    expect(h.decoders[0].isClosed).toBe(true)
-    expect(h.bitmaps.every((b) => b.closed)).toBe(true) // old stream released
-    expect(h.decoders).toHaveLength(2)
-
-    // The fresh decoder serves the same frame again (cache was cleared).
-    await h.core.handleMessage(compMsg(2, 2, [entry('A', 2, gop(0, 5))]))
-    expect(doneFor(h, 2).drawnClipIds).toEqual(['a'])
-    expect(h.decoders[1].decoded).toHaveLength(5)
-  })
-
-  test('releaseAsset frees everything; later composites miss cleanly', async () => {
-    const h = makeHarness()
-    await setup(h, makeDoc([makeTrack('V1', [makeClip('a', 'A', 0, 10)])]), ['A'])
-    await h.core.handleMessage(compMsg(1, 2, [entry('A', 2, gop(0, 5))]))
-
-    await h.core.handleMessage({ type: 'releaseAsset', assetId: 'A' })
-
-    expect(h.invalidatedSourceIds).toEqual(['A', 'A'])
-    expect(h.decoders[0].isClosed).toBe(true)
-    expect(h.bitmaps.every((b) => b.closed)).toBe(true)
-
-    await h.core.handleMessage(compMsg(2, 2, [entry('A', 2, gop(0, 5))]))
-    expect(doneFor(h, 2).missingClipIds).toEqual(['a'])
-  })
-
   test('streaming source identity and capability invalidation follow worker lifecycle', async () => {
     const h = makeHarness()
     const original = new FakeVideoSource()
@@ -2745,6 +2421,54 @@ describe('streaming playback lanes', () => {
       missingClipIds: ['b'],
     })
     expect(sourceA.playbackOptions).toHaveLength(1)
+  })
+
+  test('setDoc closes only lanes whose clip identity or document rate changed', async () => {
+    const h = makeHarness()
+    const sourceA = new FakeVideoSource()
+    const sourceB = new FakeVideoSource()
+    const firstTrimmed = new FakeStreamCursor([streamDecoded(h, 0)])
+    const secondTrimmed = new FakeStreamCursor([streamDecoded(h, 5 * FRAME_US)])
+    const kept = new FakeStreamCursor([streamDecoded(h, 0)])
+    sourceA.queuePlayback(firstTrimmed)
+    sourceA.queuePlayback(secondTrimmed)
+    sourceB.queuePlayback(kept)
+    const docWithTrim = (sourceStart: number) => makeDoc([
+      makeTrack('V1', [makeClip('trimmed', 'A', 0, 20, sourceStart)]),
+      makeTrack('V2', [makeClip('kept', 'B', 0, 20)]),
+    ])
+    await setupStreaming(h, docWithTrim(0), [['A', sourceA], ['B', sourceB]])
+    await h.core.handleMessage(renderMsg(1, 0, 'playback', [
+      streamEntry('trimmed', 'A', 0),
+      streamEntry('kept', 'B', 0),
+    ]))
+    expect(doneFor(h, 1)).toMatchObject({ drawnClipIds: ['trimmed', 'kept'] })
+
+    // A source trim changes one clip's decode identity; the other lane stays.
+    await h.core.handleMessage(docMsg(docWithTrim(5)))
+    expect(firstTrimmed.closeCount).toBe(1)
+    expect(kept.closeCount).toBe(0)
+
+    await h.core.handleMessage(renderMsg(2, 0, 'playback', [
+      streamEntry('trimmed', 'A', 5),
+      streamEntry('kept', 'B', 0),
+    ]))
+    expect(doneFor(h, 2)).toMatchObject({ drawnClipIds: ['trimmed', 'kept'] })
+    expect(sourceA.playbackCursors).toEqual([firstTrimmed, secondTrimmed])
+
+    // An equal replacement snapshot compares against the installed one.
+    await h.core.handleMessage(docMsg(docWithTrim(5)))
+    expect(secondTrimmed.closeCount).toBe(0)
+    expect(kept.closeCount).toBe(0)
+
+    // A document-rate change invalidates every lane, never the sources.
+    await h.core.handleMessage(docMsg({
+      ...docWithTrim(5),
+      frameRate: { num: 30, den: 1 },
+    }))
+    expect(secondTrimmed.closeCount).toBe(1)
+    expect(kept.closeCount).toBe(1)
+    expect([sourceA.closeCount, sourceB.closeCount]).toEqual([0, 0])
   })
 
   test('document updates preserve compatible lanes and prune removed clips', async () => {
@@ -3120,76 +2844,83 @@ describe('streaming frame ownership', () => {
   })
 
   test('the real normalizer bakes clockwise 90 and 270 degree rotation', async () => {
-    const canvases: Array<{
-      width: number
-      height: number
-      ops: Array<{ name: string; args: unknown[] }>
-    }> = []
-    vi.stubGlobal('OffscreenCanvas', class {
-      width: number
-      height: number
-      private readonly ops: Array<{ name: string; args: unknown[] }> = []
-
-      constructor(width: number, height: number) {
-        this.width = width
-        this.height = height
-        canvases.push({ width, height, ops: this.ops })
-      }
-
-      getContext() {
-        return {
-          save: () => this.ops.push({ name: 'save', args: [] }),
-          restore: () => this.ops.push({ name: 'restore', args: [] }),
-          translate: (...args: unknown[]) => this.ops.push({ name: 'translate', args }),
-          rotate: (...args: unknown[]) => this.ops.push({ name: 'rotate', args }),
-          drawImage: (...args: unknown[]) => this.ops.push({ name: 'drawImage', args }),
-        }
-      }
-
-      transferToImageBitmap() {
-        return { width: this.width, height: this.height, close: () => undefined }
-      }
-    })
-
+    const canvases = stubOrientationCanvases()
     try {
+      const normalizer = createOrientedBitmapNormalizer()
       const rawFrames: TrackedStreamingFrame[] = []
       for (const rotation of [90, 270] as const) {
-        const raw: TrackedStreamingFrame = {
-          closeCount: 0,
-          close() {
-            raw.closeCount++
-          },
-        }
+        const raw = trackedRawFrame()
         rawFrames.push(raw)
-        const bitmap = await createOrientedStreamingBitmap({
-          timestampUs: 0,
-          durationUs: FRAME_US,
-          rotation,
-          displayWidth: 180,
-          displayHeight: 320,
-          frame: raw,
-        })
+        const bitmap = await normalizer.normalize(rotatedFrame(raw, rotation, 180, 320))
         expect(bitmap).toMatchObject({ width: 180, height: 320 })
       }
 
+      // Same-size rotated frames reuse one worker-owned surface.
+      expect(canvases).toHaveLength(1)
       expect(canvases[0].ops).toEqual([
         { name: 'save', args: [] },
         { name: 'translate', args: [180, 0] },
         { name: 'rotate', args: [Math.PI / 2] },
         { name: 'drawImage', args: [rawFrames[0], 0, 0, 320, 180] },
         { name: 'restore', args: [] },
-      ])
-      expect(canvases[1].ops).toEqual([
+        { name: 'transfer', args: [] },
         { name: 'save', args: [] },
         { name: 'translate', args: [0, 320] },
         { name: 'rotate', args: [-Math.PI / 2] },
         { name: 'drawImage', args: [rawFrames[1], 0, 0, 320, 180] },
         { name: 'restore', args: [] },
+        { name: 'transfer', args: [] },
       ])
       expect(rawFrames.map((frame) => frame.closeCount)).toEqual([0, 0])
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  test('the orientation surface is replaced on resize, discarded on failure, and released', async () => {
+    const canvases = stubOrientationCanvases()
+    try {
+      const normalizer = createOrientedBitmapNormalizer()
+      await normalizer.normalize(rotatedFrame(trackedRawFrame(), 90, 180, 320))
+      await normalizer.normalize(rotatedFrame(trackedRawFrame(), 180, 320, 180))
+      expect(canvases.map(({ canvas }) => [canvas.width, canvas.height])).toEqual([
+        [180, 320],
+        [320, 180],
+      ])
+
+      const poisoned = trackedRawFrame()
+      poisoned.close()
+      await expect(normalizer.normalize(rotatedFrame(poisoned, 180, 320, 180)))
+        .rejects.toThrow('closed frame')
+      // A failed draw may leave partial pixels: that surface is never reused.
+      expect(canvases[1].canvas).toMatchObject({ width: 1, height: 1 })
+      await normalizer.normalize(rotatedFrame(trackedRawFrame(), 180, 320, 180))
+      expect(canvases).toHaveLength(3)
+
+      normalizer.release()
+      expect(canvases[2].canvas).toMatchObject({ width: 1, height: 1 })
+      normalizer.release()
+      await normalizer.normalize(rotatedFrame(trackedRawFrame(), 270, 180, 320))
+      expect(canvases).toHaveLength(4)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('worker close releases the orientation surface after sources close', async () => {
+    const source = new FakeVideoSource()
+    const sourceClosesAtRelease: number[] = []
+    const h = makeHarness({
+      releaseStreamingBitmapSurface: () => {
+        sourceClosesAtRelease.push(source.closeCount)
+      },
+    })
+    await setupStreaming(h, makeDoc([]), [['A', source]])
+
+    await h.core.handleMessage({ type: 'close' })
+
+    expect(sourceClosesAtRelease).toEqual([1])
+    expect(h.posts.at(-1)).toEqual({ type: 'closed' })
   })
 
   test('rotation metadata reaches normalization and raw frames close when copying fails', async () => {

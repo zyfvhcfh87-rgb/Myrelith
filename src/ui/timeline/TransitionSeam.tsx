@@ -1,6 +1,6 @@
 /** Exact visual/audio crossfade authoring at one timeline cut. */
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type {
   Clip,
   TrackId,
@@ -151,50 +151,50 @@ function availabilityText(
   return `${visual} Linked audio available up to ${audio.maximumDurationFrames} frames.`
 }
 
-export default function TransitionSeam({
+interface TransitionEditorProps {
+  readonly id: string
+  readonly trackId: TrackId
+  readonly locked: boolean
+  readonly from: Clip
+  readonly to: Clip
+  readonly transition?: Transition
+  readonly timelineMaximum: number
+  readonly onClose: (restoreFocus: boolean) => void
+}
+
+/**
+ * The open popover. It alone subscribes to the document and descriptors and
+ * evaluates availability, so closed seams stay idle on unrelated commits.
+ * Each open mounts it fresh from the latest committed settings.
+ */
+function TransitionEditor({
+  id,
   trackId,
   locked,
   from,
   to,
   transition,
-  timelineOriginFrame = 0,
-}: TransitionSeamProps) {
-  const contextMenu = useEditorContextMenu()
-  const zoom = useTransportStore((state) => state.zoom)
+  timelineMaximum,
+  onClose,
+}: TransitionEditorProps) {
   const doc = useDocumentStore((state) => state.doc)
   const descriptors = useMediaStore((state) => state.descriptors)
   const catalog = useMemo(
     () => createSourceBoundsCatalog(descriptors.values()),
     [descriptors],
   )
-  const timelineMaximum = centeredFitMaximum(from, to)
-  const defaultDuration = Math.min(DEFAULT_CROSSFADE_FRAMES, timelineMaximum)
-  const committedDuration = transition?.durationFrames ?? defaultDuration
+  const committedDuration = transition?.durationFrames
+    ?? Math.min(DEFAULT_CROSSFADE_FRAMES, timelineMaximum)
   const committedAudioEnabled = transition?.audio.enabled ?? true
   const committedCurve = transition?.audio.curve ?? 'equal-power'
   const endpointLabel = `${from.id} to ${to.id}`
-  const editorId = useId()
   const availabilityId = useId()
   const errorId = useId()
-  const rootRef = useRef<HTMLDivElement | null>(null)
-  const triggerRef = useRef<HTMLButtonElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const previousTransitionId = useRef(transition?.id)
-  const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(String(committedDuration))
   const [audioEnabled, setAudioEnabled] = useState(committedAudioEnabled)
   const [curve, setCurve] = useState<TransitionAudioCurve>(committedCurve)
   const [error, setError] = useState<string | null>(null)
-  const latestCommittedSettings = useRef({
-    durationFrames: committedDuration,
-    audioEnabled: committedAudioEnabled,
-    curve: committedCurve,
-  })
-  latestCommittedSettings.current = {
-    durationFrames: committedDuration,
-    audioEnabled: committedAudioEnabled,
-    curve: committedCurve,
-  }
 
   const draftDuration = (() => {
     const trimmed = draft.trim()
@@ -233,60 +233,19 @@ export default function TransitionSeam({
   const available = resolution?.status === 'available'
   const liveExplanation = availabilityText(resolution, timelineMaximum)
 
-  const resetDraft = (): void => {
-    const latest = latestCommittedSettings.current
-    setDraft(String(latest.durationFrames))
-    setAudioEnabled(latest.audioEnabled)
-    setCurve(latest.curve)
-    setError(null)
-  }
-
-  // External removal/replacement makes an open editor stale. Duration/audio
-  // undo/redo keeps the same id, so that editor stays open and resynchronizes.
   useEffect(() => {
-    if (previousTransitionId.current !== transition?.id) setOpen(false)
-    previousTransitionId.current = transition?.id
+    const frame = requestAnimationFrame(() => inputRef.current?.select())
+    return () => cancelAnimationFrame(frame)
+  }, [])
+
+  // Duration/audio undo/redo keeps the same id, so the open editor stays
+  // open and resynchronizes with the committed settings.
+  useEffect(() => {
     setDraft(String(committedDuration))
     setAudioEnabled(committedAudioEnabled)
     setCurve(committedCurve)
     setError(null)
-  }, [
-    committedAudioEnabled,
-    committedCurve,
-    committedDuration,
-    transition?.id,
-  ])
-
-  useEffect(() => {
-    if (locked && open) setOpen(false)
-  }, [locked, open])
-
-  useEffect(() => {
-    if (!open) return
-    const closeOnOutsidePointer = (event: PointerEvent): void => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false)
-        setDraft(String(committedDuration))
-        setAudioEnabled(committedAudioEnabled)
-        setCurve(committedCurve)
-        setError(null)
-      }
-    }
-    document.addEventListener('pointerdown', closeOnOutsidePointer, true)
-    return () =>
-      document.removeEventListener('pointerdown', closeOnOutsidePointer, true)
-  }, [
-    committedAudioEnabled,
-    committedCurve,
-    committedDuration,
-    open,
-  ])
-
-  const closeEditor = (restoreFocus: boolean): void => {
-    setOpen(false)
-    resetDraft()
-    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus())
-  }
+  }, [committedAudioEnabled, committedCurve, committedDuration])
 
   const submitSettings = (): void => {
     if (!draftSettings || draftSettings.durationFrames > maximum) {
@@ -323,15 +282,200 @@ export default function TransitionSeam({
       return
     }
     setError(null)
-    if (!transition) setOpen(false)
+    if (!transition) onClose(false)
   }
 
-  const seamFrame = from.timelineRange.startFrame
-    + from.timelineRange.durationFrames
   const active = transition !== undefined
   const durationTestId = active
     ? `transition-duration-${transition.id}`
     : `transition-duration-${from.id}-${to.id}`
+
+  return (
+    <form
+      id={id}
+      className="transition-editor"
+      aria-label={`${active ? 'Edit' : 'Add'} crossfade ${endpointLabel}`}
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault()
+        submitSettings()
+      }}
+    >
+      <label className="transition-editor-field">
+        <span>Crossfade duration in frames</span>
+        <input
+          ref={inputRef}
+          className="transition-duration"
+          data-testid={durationTestId}
+          aria-label="Crossfade duration in frames"
+          aria-invalid={draftDuration === null || !available || error !== null}
+          aria-describedby={`${availabilityId}${error ? ` ${errorId}` : ''}`}
+          type="number"
+          min={1}
+          max={maximum}
+          step={1}
+          inputMode="numeric"
+          value={draft}
+          disabled={locked}
+          onChange={(event) => {
+            setDraft(event.target.value)
+            setError(null)
+          }}
+        />
+      </label>
+
+      <label className="transition-audio-toggle">
+        <input
+          type="checkbox"
+          aria-label="Crossfade linked audio"
+          aria-describedby={availabilityId}
+          checked={audioEnabled}
+          disabled={locked}
+          onChange={(event) => {
+            setAudioEnabled(event.target.checked)
+            setError(null)
+          }}
+        />
+        <span>Crossfade linked audio</span>
+      </label>
+
+      <label className="transition-editor-field">
+        <span>Audio crossfade curve</span>
+        <select
+          className="transition-audio-curve"
+          aria-label="Audio crossfade curve"
+          aria-describedby={availabilityId}
+          value={curve}
+          disabled={locked || !audioEnabled}
+          onChange={(event) => {
+            setCurve(event.target.value as TransitionAudioCurve)
+            setError(null)
+          }}
+        >
+          <option value="equal-power">Equal power</option>
+          <option value="linear">Linear</option>
+        </select>
+      </label>
+
+      <p
+        id={availabilityId}
+        className={`transition-availability${available ? ' is-available' : ''}`}
+        role="status"
+        aria-live="polite"
+      >
+        {liveExplanation}
+      </p>
+
+      {error && (
+        <span
+          id={errorId}
+          className="transition-error"
+          role="alert"
+        >
+          {error}
+        </span>
+      )}
+
+      <div className="transition-editor-actions">
+        <button
+          type="submit"
+          className="transition-apply"
+          data-testid={`transition-submit-${from.id}-${to.id}`}
+          disabled={locked || !available}
+        >
+          {active ? 'Apply' : 'Add'}
+        </button>
+        {active && (
+          <button
+            type="button"
+            className="transition-remove"
+            data-testid={`transition-remove-${transition.id}`}
+            aria-label={`Remove crossfade ${endpointLabel}`}
+            disabled={locked}
+            onClick={() => {
+              const store = useDocumentStore.getState()
+              const before = store.doc
+              store.removeTransition(trackId, transition.id)
+              if (useDocumentStore.getState().doc === before) {
+                setError('This crossfade could not be removed.')
+              } else {
+                onClose(false)
+              }
+            }}
+          >
+            Remove
+          </button>
+        )}
+        <button
+          type="button"
+          className="transition-cancel"
+          onClick={() => onClose(true)}
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
+/**
+ * The seam trigger. memo'd with only a zoom subscription: structural sharing
+ * keeps untouched clip/transition props identical, so a commit elsewhere never
+ * re-renders a closed seam.
+ */
+function TransitionSeam({
+  trackId,
+  locked,
+  from,
+  to,
+  transition,
+  timelineOriginFrame = 0,
+}: TransitionSeamProps) {
+  const contextMenu = useEditorContextMenu()
+  const zoom = useTransportStore((state) => state.zoom)
+  const timelineMaximum = centeredFitMaximum(from, to)
+  const endpointLabel = `${from.id} to ${to.id}`
+  const editorId = useId()
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const previousTransitionId = useRef(transition?.id)
+  const [open, setOpen] = useState(false)
+  // Every open request remounts the editor, re-reading committed settings.
+  const [editorGeneration, setEditorGeneration] = useState(0)
+
+  const openEditor = (): void => {
+    setEditorGeneration((generation) => generation + 1)
+    setOpen(true)
+  }
+
+  const closeEditor = (restoreFocus: boolean): void => {
+    setOpen(false)
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+
+  // External removal/replacement makes an open editor stale.
+  useEffect(() => {
+    if (previousTransitionId.current !== transition?.id) setOpen(false)
+    previousTransitionId.current = transition?.id
+  }, [transition?.id])
+
+  useEffect(() => {
+    if (locked && open) setOpen(false)
+  }, [locked, open])
+
+  useEffect(() => {
+    if (!open) return
+    const closeOnOutsidePointer = (event: PointerEvent): void => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer, true)
+    return () =>
+      document.removeEventListener('pointerdown', closeOnOutsidePointer, true)
+  }, [open])
+
+  const seamFrame = from.timelineRange.startFrame
+    + from.timelineRange.durationFrames
+  const active = transition !== undefined
 
   return (
     <div
@@ -355,9 +499,7 @@ export default function TransitionSeam({
           uiActions: {
             openTransitionEditor: () => {
               if (!triggerRef.current?.isConnected) return false
-              setOpen(true)
-              resetDraft()
-              requestAnimationFrame(() => inputRef.current?.select())
+              openEditor()
               return true
             },
           },
@@ -391,141 +533,28 @@ export default function TransitionSeam({
         }
         disabled={locked || timelineMaximum < 1}
         onClick={() => {
-          const nextOpen = !open
-          setOpen(nextOpen)
-          resetDraft()
-          if (nextOpen) requestAnimationFrame(() => inputRef.current?.select())
+          if (open) setOpen(false)
+          else openEditor()
         }}
       >
         {active ? 'CF' : '+'}
       </button>
 
       {open && (
-        <form
+        <TransitionEditor
+          key={editorGeneration}
           id={editorId}
-          className="transition-editor"
-          aria-label={`${active ? 'Edit' : 'Add'} crossfade ${endpointLabel}`}
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault()
-            submitSettings()
-          }}
-        >
-          <label className="transition-editor-field">
-            <span>Crossfade duration in frames</span>
-            <input
-              ref={inputRef}
-              className="transition-duration"
-              data-testid={durationTestId}
-              aria-label="Crossfade duration in frames"
-              aria-invalid={draftDuration === null || !available || error !== null}
-              aria-describedby={`${availabilityId}${error ? ` ${errorId}` : ''}`}
-              type="number"
-              min={1}
-              max={maximum}
-              step={1}
-              inputMode="numeric"
-              value={draft}
-              disabled={locked}
-              onChange={(event) => {
-                setDraft(event.target.value)
-                setError(null)
-              }}
-            />
-          </label>
-
-          <label className="transition-audio-toggle">
-            <input
-              type="checkbox"
-              aria-label="Crossfade linked audio"
-              aria-describedby={availabilityId}
-              checked={audioEnabled}
-              disabled={locked}
-              onChange={(event) => {
-                setAudioEnabled(event.target.checked)
-                setError(null)
-              }}
-            />
-            <span>Crossfade linked audio</span>
-          </label>
-
-          <label className="transition-editor-field">
-            <span>Audio crossfade curve</span>
-            <select
-              className="transition-audio-curve"
-              aria-label="Audio crossfade curve"
-              aria-describedby={availabilityId}
-              value={curve}
-              disabled={locked || !audioEnabled}
-              onChange={(event) => {
-                setCurve(event.target.value as TransitionAudioCurve)
-                setError(null)
-              }}
-            >
-              <option value="equal-power">Equal power</option>
-              <option value="linear">Linear</option>
-            </select>
-          </label>
-
-          <p
-            id={availabilityId}
-            className={`transition-availability${available ? ' is-available' : ''}`}
-            role="status"
-            aria-live="polite"
-          >
-            {liveExplanation}
-          </p>
-
-          {error && (
-            <span
-              id={errorId}
-              className="transition-error"
-              role="alert"
-            >
-              {error}
-            </span>
-          )}
-
-          <div className="transition-editor-actions">
-            <button
-              type="submit"
-              className="transition-apply"
-              data-testid={`transition-submit-${from.id}-${to.id}`}
-              disabled={locked || !available}
-            >
-              {active ? 'Apply' : 'Add'}
-            </button>
-            {active && (
-              <button
-                type="button"
-                className="transition-remove"
-                data-testid={`transition-remove-${transition.id}`}
-                aria-label={`Remove crossfade ${endpointLabel}`}
-                disabled={locked}
-                onClick={() => {
-                  const store = useDocumentStore.getState()
-                  const before = store.doc
-                  store.removeTransition(trackId, transition.id)
-                  if (useDocumentStore.getState().doc === before) {
-                    setError('This crossfade could not be removed.')
-                  } else {
-                    closeEditor(false)
-                  }
-                }}
-              >
-                Remove
-              </button>
-            )}
-            <button
-              type="button"
-              className="transition-cancel"
-              onClick={() => closeEditor(true)}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+          trackId={trackId}
+          locked={locked}
+          from={from}
+          to={to}
+          transition={transition}
+          timelineMaximum={timelineMaximum}
+          onClose={closeEditor}
+        />
       )}
     </div>
   )
 }
+
+export default memo(TransitionSeam)

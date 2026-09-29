@@ -4,9 +4,9 @@ import { MAX_CAPTION_FILE_CHARACTERS, parseCaptionFile, type CaptionFileFormat }
 import { createCaptionTrack, findCaptionTrack, replaceCaptionItems } from '../domain/captions'
 import { utf8ByteLength } from '../domain/documentMemory'
 import type { CaptionItem, CaptionTrack, TextFontFamily } from '../domain/schema'
-import { useDocumentStore } from '../state/documentStore'
 import { CaptionEditSession, type CaptionEditReview } from './captionEditingController'
 import { MAX_CAPTION_FILE_BYTES, type CaptionTrackMetadata } from './captionFileController'
+import { watchProjectScope } from './captionProjectScope'
 import type { CaptionReviewSnapshot } from './captionReviewController'
 import { captionStyleSummary } from './captionStylePresentation'
 
@@ -70,14 +70,7 @@ export class CaptionImportController {
   getSnapshot = (): CaptionImportSnapshot => this.snapshot
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
-    if (!this.unsubscribeStore) {
-      let current = useDocumentStore.getState()
-      this.unsubscribeStore = useDocumentStore.subscribe(next => {
-        const changed = next.project !== current.project || next.projectGeneration !== current.projectGeneration || next.activeSequenceId !== current.activeSequenceId
-        current = next
-        if (changed) this.cancel()
-      })
-    }
+    if (!this.unsubscribeStore) this.unsubscribeStore = watchProjectScope(this.cancel)
     return () => {
       this.listeners.delete(listener)
       if (!this.listeners.size) { this.unsubscribeStore?.(); this.unsubscribeStore = null; this.cancel() }

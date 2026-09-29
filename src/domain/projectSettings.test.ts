@@ -14,7 +14,6 @@ import {
   PROJECT_AUDIO_SAMPLE_RATE_PRESETS,
   PROJECT_FRAME_RATE_PRESETS,
   PROJECT_RESOLUTION_PRESETS,
-  PROJECT_RESOLUTION_TIERS,
   validateProjectSettings,
 } from './projectSettings'
 import {
@@ -109,7 +108,6 @@ describe('project setting presets', () => {
         ],
       },
     ])
-    expect(PROJECT_RESOLUTION_TIERS).toEqual([720, 1080, 1440, 2160])
     expect(PROJECT_RESOLUTION_PRESETS).toEqual([
       { width: 1280, height: 720 },
       { width: 1920, height: 1080 },
@@ -156,7 +154,6 @@ describe('project setting presets', () => {
       && Object.isFrozen(preset.resolutions)
       && preset.resolutions.every(Object.isFrozen)
     ))).toBe(true)
-    expect(Object.isFrozen(PROJECT_RESOLUTION_TIERS)).toBe(true)
     expect(Object.isFrozen(PROJECT_RESOLUTION_PRESETS)).toBe(true)
     expect(PROJECT_RESOLUTION_PRESETS.every(Object.isFrozen)).toBe(true)
     expect(Object.isFrozen(PROJECT_FRAME_RATE_PRESETS)).toBe(true)
@@ -175,7 +172,7 @@ describe('project setting presets', () => {
       expect(ids.has(aspectRatio.id)).toBe(false)
       ids.add(aspectRatio.id)
       expect(aspectRatio.resolutions.map(({ tier }) => tier))
-        .toEqual(PROJECT_RESOLUTION_TIERS)
+        .toEqual([720, 1080, 1440, 2160])
 
       for (const resolution of aspectRatio.resolutions) {
         const key = `${resolution.width}x${resolution.height}`

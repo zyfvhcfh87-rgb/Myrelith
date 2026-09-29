@@ -6,7 +6,35 @@ still change.
 
 ## Unreleased
 
-No changes recorded yet.
+### Changed
+
+- The start screen downloads about half as much JavaScript: 840 kB instead of
+  1.77 MB, or 238 kB instead of 489 kB compressed. The editor and media engine
+  load when a project opens.
+- Editing large projects is faster. Each edit no longer re-checks the whole
+  undo history, crossfade and transition checks scale with many transitions,
+  and side panels stop redrawing on every playback frame.
+- Audio export and metering do less work per sample, and WAV export no longer
+  holds the whole program twice in memory.
+
+### Fixed
+
+- Clicking a trim, slip or slide handle without dragging no longer adds an
+  empty undo step.
+- Ripple-trimming a clip's start keeps its keyframes on the same picture.
+- Reset Audio now works on clips with keyframed volume.
+- Dragging a clip over a compound or multicam item on a hidden lane no longer
+  moves it onto that lane.
+- Track target buttons update when an earlier track is locked or deleted.
+- Sequence and multicam actions no longer report success when the edit was
+  refused.
+- Caption export checks no longer miss overlapping cues inside nested
+  sequences.
+- Videos with an extremely slow frame rate (for example, one still frame over a
+  long audio track) import correctly.
+- The Source Monitor returns to full quality after shuttle playback stops.
+- Projects and remembered media reopen after another tab upgrades local
+  storage, instead of failing until reload.
 
 ## [0.2.0-alpha.1] - 2026-08-23
 

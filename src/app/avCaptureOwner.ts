@@ -14,6 +14,7 @@ import {
   type AvCaptureMode,
   type AvCaptureSession,
 } from '../domain/avCaptureSession'
+import { errorMessage } from '../domain/errors'
 import { voiceoverDraftLockName } from '../domain/voiceoverDrafts'
 import type { AvRecorderProgress } from '../pipeline/avCaptureRecorder'
 import { useAvCaptureStore, type AvCaptureStatus, type ScreenAudioChoice } from '../state/avCaptureStore'
@@ -24,6 +25,7 @@ import { calibrateVideoClock, mediaStreamTrackProcessor, type AvVideoClockCalibr
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
 import { localMediaHandleRegistry } from './localMediaHandles'
 import { cancelMediaImport, importMediaFromHandle, type MediaImportResult } from './mediaImportController'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 type Bridge = Pick<AvCaptureBridge, 'start' | 'stop' | 'abort' | 'file' | 'discardId' | 'recover' | 'close'>
   & { onProgress: AvCaptureBridge['onProgress']; onSelfStop: AvCaptureBridge['onSelfStop']
@@ -85,10 +87,6 @@ function stopStreams(streams: readonly MediaStream[]): void {
   for (const stream of streams) for (const track of stream.getTracks()) {
     try { track.stop() } catch { /* already ended */ }
   }
-}
-
-function message(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 /** Distinguish denial, dismissal, a missing macOS screen permission, and device trouble. */
@@ -229,7 +227,7 @@ export class AvCaptureOwner {
           audio = microphone.getAudioTracks()[0] ?? null
         } catch (cause) {
           stopStreams(active.streams)
-          active.status.diagnostic = message(cause)
+          active.status.diagnostic = errorMessage(cause)
           await this.dispatch(active, { sessionId: active.state.sessionId, operation: 0, kind: 'failed',
             reason: avPermissionFailure(cause, 'camera') })
           return
@@ -261,7 +259,7 @@ export class AvCaptureOwner {
   private async denied(active: Active, cause: unknown): Promise<void> {
     this.discardMicrophone(active)
     if (!this.live(active, 'requesting', 0)) return
-    active.status.diagnostic = message(cause)
+    active.status.diagnostic = errorMessage(cause)
     await this.dispatch(active, { sessionId: active.state.sessionId, operation: 0, kind: 'failed',
       reason: avPermissionFailure(cause, active.options.mode) })
   }
@@ -315,7 +313,7 @@ export class AvCaptureOwner {
       await this.dispatch(active, { sessionId: active.state.sessionId, operation, kind: 'recording-started' })
     } catch (cause) {
       if (this.live(active, 'preparing', operation)) {
-        active.status.diagnostic = message(cause)
+        active.status.diagnostic = errorMessage(cause)
         await this.dispatch(active, { sessionId: active.state.sessionId, operation, kind: 'failed', reason: 'writer-failed' })
       }
     }
@@ -355,7 +353,7 @@ export class AvCaptureOwner {
           try {
             const recoveredBytes = await this.recoverFlushed(active)
             active.finalized = true
-            active.status.diagnostic = `${stopError ? `Recording stopped unexpectedly (${message(stopError)}); ` : ''}` +
+            active.status.diagnostic = `${stopError ? `Recording stopped unexpectedly (${errorMessage(stopError)}); ` : ''}` +
               `kept the ${(recoveredBytes / 1_048_576).toFixed(1)} MiB that was completely written.`
           } catch (cause) {
             if (!(cause instanceof Error && cause.name === 'UnrecoverableCapture')) throw cause
@@ -383,7 +381,7 @@ export class AvCaptureOwner {
       }
     } catch (cause) {
       stopStreams(active.streams)
-      active.status.diagnostic = message(cause)
+      active.status.diagnostic = errorMessage(cause)
       void this.dispatch(active, { sessionId: effect.sessionId, operation: effect.operation, kind: 'cleanup-failed' })
     }
   }
@@ -430,13 +428,13 @@ export class AvCaptureOwner {
       // The asset now exists in the pinned project: finish Keep even if its
       // teardown has begun, remembering the original under that project.
       try { await this.deps.rememberOriginal(imported.assetId, handle, binding) }
-      catch (cause) { active.status.diagnostic = `Recording kept, but its browser file grant could not be saved: ${message(cause)}` }
+      catch (cause) { active.status.diagnostic = `Recording kept, but its browser file grant could not be saved: ${errorMessage(cause)}` }
       bridge.close()
       active.bridge = null
       await this.dispatch(active, { sessionId: active.state.sessionId, operation, kind: 'kept', assetId: imported.assetId })
     } catch (cause) {
       if (!current()) return
-      active.status.diagnostic = message(cause)
+      active.status.diagnostic = errorMessage(cause)
       await this.dispatch(active, { sessionId: active.state.sessionId, operation, kind: 'keep-failed' })
     }
   }
@@ -575,3 +573,4 @@ export function getAvCaptureOwner(): AvCaptureOwner {
 export async function teardownAvCaptureForProjectChange(): Promise<void> {
   await owner?.teardownForProjectChange()
 }
+registerLoadedEditorRuntime('avCapture', teardownAvCaptureForProjectChange)

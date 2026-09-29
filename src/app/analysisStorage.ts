@@ -18,7 +18,10 @@ import {
   type AudioFeatureCacheEntry,
   type DerivedAnalysisCacheEntry,
 } from '../domain/analysisCache'
+import { errorMessage } from '../domain/errors'
+import { isSha256Hex } from '../domain/guards'
 import { audioFeatureKeyPreimage, type AudioFeatureIdentity } from '../domain/multicamAlignmentProvenance'
+import { writeFileHandle } from './fileSystemAccess'
 
 const DERIVED_DIRECTORY = 'myrelith-derived'
 const ANALYSIS_DIRECTORY = 'analysis-cache-v1'
@@ -100,10 +103,6 @@ function unavailable(cause: unknown): boolean {
   )
 }
 
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
-}
-
 function exactResultFileName(value: string): boolean {
   return /^[a-f0-9]{64}\.[a-f0-9]{32}\.bin$/.test(value)
 }
@@ -168,18 +167,7 @@ export class AnalysisStorage {
     }
     const directory = await this.directory(true)
     const handle = await directory.getFileHandle(MANIFEST_FILE, { create: true })
-    const writable = await handle.createWritable({ keepExistingData: false })
-    try {
-      await writable.write(serialized)
-      await writable.close()
-    } catch (cause) {
-      try {
-        await writable.abort(cause)
-      } catch {
-        // Preserve the manifest write failure.
-      }
-      throw cause
-    }
+    await writeFileHandle(handle, serialized)
   }
 
   private serialize<T>(operation: () => Promise<T>): Promise<T> {
@@ -205,7 +193,7 @@ export class AnalysisStorage {
     bytes: Uint8Array<ArrayBuffer>,
     audioIdentity?: AudioFeatureIdentity,
   ): Promise<StagedAnalysisResult> {
-    if (!/^[a-f0-9]{64}$/.test(cacheKey)) throw new TypeError('Invalid analysis cache key')
+    if (!isSha256Hex(cacheKey)) throw new TypeError('Invalid analysis cache key')
     if (
       bytes.byteOffset !== 0
       || bytes.byteLength !== bytes.buffer.byteLength
@@ -227,16 +215,9 @@ export class AnalysisStorage {
     const fileName = `${cacheKey}.${token}.bin`
     const directory = await this.directory(true)
     const handle = await directory.getFileHandle(fileName, { create: true })
-    const writable = await handle.createWritable({ keepExistingData: false })
     try {
-      await writable.write(bytes)
-      await writable.close()
+      await writeFileHandle(handle, bytes)
     } catch (cause) {
-      try {
-        await writable.abort(cause)
-      } catch {
-        // Preserve the result write failure.
-      }
       await this.removeFile(fileName).catch(() => undefined)
       throw cause
     }

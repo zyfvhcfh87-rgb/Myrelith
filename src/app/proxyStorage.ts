@@ -1,3 +1,5 @@
+import { errorMessage } from '../domain/errors'
+import { isSha256Hex } from '../domain/guards'
 import {
   MAX_PROXY_CACHE_ENTRIES,
   PROXY_CACHE_SCHEMA_VERSION,
@@ -66,10 +68,6 @@ function emptyManifest(): ProxyCacheManifest {
 
 function notFound(cause: unknown): boolean {
   return cause instanceof DOMException && cause.name === 'NotFoundError'
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 export class ProxyStorage {
@@ -155,7 +153,7 @@ export class ProxyStorage {
   }
 
   async prepareFileCapability(cacheKey: string): Promise<PreparedExportFileCapability> {
-    if (!/^[a-f0-9]{64}$/.test(cacheKey)) {
+    if (!isSha256Hex(cacheKey)) {
       throw new TypeError('Invalid proxy cache key')
     }
     const directory = await this.directory(true)

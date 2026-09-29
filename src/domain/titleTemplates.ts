@@ -11,6 +11,7 @@ import { createTextClip, insertClip } from './operations/creation'
 import { proceduralTextAssetId } from './textOverlay'
 import { validateFrameRate } from './projectFile/validationPrimitives'
 import { utf8ByteLength } from './documentMemory'
+import { isRecord } from './guards'
 
 export const TITLE_TEMPLATE_LIMITS = Object.freeze({ entries: 100, templateBytes: 1024 * 1024, libraryBytes: 8 * 1024 * 1024 })
 export interface TitleTemplateV1 {
@@ -21,7 +22,6 @@ export interface TitleTemplateV1 {
 export interface TitleTemplateSummary { readonly id: string; readonly name: string; readonly elements: number; readonly durationFrames: number; readonly canvasWidth: number; readonly canvasHeight: number; readonly frameRate: FrameRate }
 export interface TitleTemplateLibraryView { readonly templates: readonly TitleTemplateSummary[]; readonly unavailable: readonly { index: number; reason: string }[]; readonly readOnlyReason: string | null }
 export type TitleTemplateMutation = { readonly kind: 'save'; readonly template: TitleTemplateV1 } | { readonly kind: 'delete'; readonly id: string }
-function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
 function exact(value: Record<string, unknown>, keys: readonly string[]) { return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key)) }
 function fail(reason: string): never { throw new Error(reason) }
 export function titleTemplateNameError(name: unknown): string | null {
@@ -31,7 +31,7 @@ export function readTitleTemplate(value: unknown): TitleTemplateV1 {
   // The bounded descriptor walker rejects getters, cycles and non-JSON objects before enumeration or serialization.
   const budget = titlePayloadBudget({ title: value as TitleDefinition })
   if (!budget.ok) fail(budget.reason)
-  if (!record(value) || !exact(value, ['version', 'id', 'name', 'canvasWidth', 'canvasHeight', 'frameRate', 'durationFrames', 'title', 'titleTracks']) || value.version !== 1) fail('This title template version or envelope is unavailable.')
+  if (!isRecord(value) || !exact(value, ['version', 'id', 'name', 'canvasWidth', 'canvasHeight', 'frameRate', 'durationFrames', 'title', 'titleTracks']) || value.version !== 1) fail('This title template version or envelope is unavailable.')
   if (typeof value.id !== 'string' || !value.id.trim() || value.id.length > 256) fail('Invalid template identity.')
   const nameError = titleTemplateNameError(value.name); if (nameError) fail(nameError)
   for (const name of ['canvasWidth', 'canvasHeight'] as const) if (!Number.isSafeInteger(value[name]) || Number(value[name]) < 16 || Number(value[name]) > 65535) fail('Template canvas dimensions must be integers from 16 to 65,535.')
@@ -124,7 +124,7 @@ function parseTitleTemplateLibrary(raw: unknown): ParsedTitleTemplateLibrary {
   if (typeof raw !== 'string' || raw.length > TITLE_TEMPLATE_LIMITS.libraryBytes || utf8ByteLength(raw) > TITLE_TEMPLATE_LIMITS.libraryBytes) return unavailable('The local title library is invalid or exceeds 8 MiB. It remains untouched.')
   let parsed: unknown
   try { parsed = JSON.parse(raw) } catch { return unavailable('The local title library is corrupt. It remains untouched.') }
-  if (!record(parsed) || !exact(parsed, ['version', 'templates']) || parsed.version !== 1) return unavailable('This title library envelope is unavailable and read-only.')
+  if (!isRecord(parsed) || !exact(parsed, ['version', 'templates']) || parsed.version !== 1) return unavailable('This title library envelope is unavailable and read-only.')
   if (!Array.isArray(parsed.templates) || parsed.templates.length > TITLE_TEMPLATE_LIMITS.entries) return unavailable('The local title library exceeds 100 entries or is invalid.')
   try {
     if (parsed.templates.some((entry: unknown) => utf8ByteLength(JSON.stringify(entry)) > TITLE_TEMPLATE_LIMITS.templateBytes)) return unavailable('A stored title record exceeds 1 MiB. The library remains untouched.')
@@ -162,7 +162,7 @@ export function mutateTitleTemplateLibrary(raw: unknown, mutation: TitleTemplate
   if (mutation.kind === 'save') {
     const template = readTitleTemplate(mutation.template)
     if (entries.length >= TITLE_TEMPLATE_LIMITS.entries) fail('The local library already contains 100 templates.')
-    if (entries.some((entry) => record(entry) && (entry.id === template.id || typeof entry.name === 'string' && entry.name.toLowerCase() === template.name.toLowerCase()))) fail('A template already uses this identity or name.')
+    if (entries.some((entry) => isRecord(entry) && (entry.id === template.id || typeof entry.name === 'string' && entry.name.toLowerCase() === template.name.toLowerCase()))) fail('A template already uses this identity or name.')
     next.push(template)
   } else {
     next.splice(acceptedTemplateRecord(library, mutation.id).index, 1)

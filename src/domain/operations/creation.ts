@@ -11,6 +11,45 @@ import { clipSourceTimeMap, cloneSourceTimeMap, defaultSourceTimeMap, sourceRang
 import { byStart, locateClip, newId, overlapsAny, reconcileTransitions, reject, withTrack } from './operationInternals';
 
 /**
+ * The default-authored body every new clip starts from: unity 1x source map,
+ * identity transform, and default visual/audio/animation. A still keeps the
+ * canonical one-frame source at 0. Callers append kind-specific keys.
+ */
+export function createDefaultClip(input: {
+  readonly id: string
+  readonly assetId: string
+  readonly name: string
+  readonly still: boolean
+  readonly sourceStartFrame: number
+  readonly timelineRange: TimeRange
+}): Clip {
+  const sourceStartFrame = input.still ? 0 : input.sourceStartFrame
+  const sourceDurationFrames = input.still ? 1 : input.timelineRange.durationFrames
+  return {
+    id: input.id,
+    assetId: input.assetId,
+    name: input.name,
+    sourceMode: input.still ? 'still' : 'timed',
+    sourceRange: { startFrame: sourceStartFrame, durationFrames: sourceDurationFrames },
+    sourceTimeMap: defaultSourceTimeMap(sourceStartFrame, sourceDurationFrames),
+    timelineRange: {
+      startFrame: input.timelineRange.startFrame,
+      durationFrames: input.timelineRange.durationFrames,
+    },
+    transform: defaultClipTransform(),
+    opacity: 1,
+    blendMode: DEFAULT_BLEND_MODE,
+    volume: 1,
+    lensCorrection: null,
+    visual: defaultClipVisualSettings(),
+    audio: defaultClipAudioSettings(),
+    animation: defaultClipAnimation(),
+    effects: [],
+    audioEffects: [],
+  }
+}
+
+/**
  * Build a Clip that plays `asset` for `durationFrames` timeline frames,
  * starting at `timelineStartFrame`, from document-rate source frame
  * `sourceStartFrame`. Pure factory — it does NOT validate against a doc
@@ -26,30 +65,15 @@ export function clipFromAssetRange(
   durationFrames: number,
   linkGroupId?: string,
 ): Clip {
-  const still = asset.kind === 'image'
-  const sourceStart = still ? 0 : sourceStartFrame
-  const sourceDuration = still ? 1 : durationFrames
   return {
-    id: newId('clip'),
-    assetId: asset.id,
-    name: asset.fileName,
-    sourceMode: still ? 'still' : 'timed',
-    sourceRange: {
-      startFrame: sourceStart,
-      durationFrames: sourceDuration,
-    },
-    sourceTimeMap: defaultSourceTimeMap(sourceStart, sourceDuration),
-    timelineRange: { startFrame: timelineStartFrame, durationFrames },
-    transform: defaultClipTransform(),
-    opacity: 1,
-    blendMode: DEFAULT_BLEND_MODE,
-    volume: 1,
-    lensCorrection: null,
-    visual: defaultClipVisualSettings(),
-    audio: defaultClipAudioSettings(),
-    animation: defaultClipAnimation(),
-    effects: [],
-    audioEffects: [],
+    ...createDefaultClip({
+      id: newId('clip'),
+      assetId: asset.id,
+      name: asset.fileName,
+      still: asset.kind === 'image',
+      sourceStartFrame,
+      timelineRange: { startFrame: timelineStartFrame, durationFrames },
+    }),
     ...(linkGroupId ? { linkGroupId } : {}),
   }
 }
@@ -92,23 +116,14 @@ export function createTextClip(
   const error = textPropsValidationError(text)
   if (error) throw new RangeError(error)
   return {
-    id,
-    assetId: proceduralTextAssetId(id),
-    name: textOverlayName(content),
-    sourceMode: 'timed',
-    sourceRange: { startFrame: 0, durationFrames },
-    sourceTimeMap: defaultSourceTimeMap(0, durationFrames),
-    timelineRange: { startFrame, durationFrames },
-    transform: defaultClipTransform(),
-    opacity: 1,
-    blendMode: DEFAULT_BLEND_MODE,
-    volume: 1,
-    lensCorrection: null,
-    visual: defaultClipVisualSettings(),
-    audio: defaultClipAudioSettings(),
-    animation: defaultClipAnimation(),
-    effects: [],
-    audioEffects: [],
+    ...createDefaultClip({
+      id,
+      assetId: proceduralTextAssetId(id),
+      name: textOverlayName(content),
+      still: false,
+      sourceStartFrame: 0,
+      timelineRange: { startFrame, durationFrames },
+    }),
     text,
   }
 }

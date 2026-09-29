@@ -3,6 +3,9 @@
  * The handle is a one-shot app-owned capability and never enters Zustand.
  */
 
+import { writeFileHandle } from './fileSystemAccess'
+import { hasErrorName } from '../domain/errors'
+
 export interface ExportDirectoryPickerHost {
   readonly isSecureContext?: boolean
   readonly showDirectoryPicker?: (options?: {
@@ -37,13 +40,6 @@ const SECURITY_ERROR_REASON =
 
 function browserHost(): ExportDirectoryPickerHost {
   return window as Window & ExportDirectoryPickerHost
-}
-
-function namedError(cause: unknown, name: string): boolean {
-  return typeof cause === 'object'
-    && cause !== null
-    && 'name' in cause
-    && cause.name === name
 }
 
 class OneShotExportDirectoryDestination implements ExportDirectoryDestinationCapability {
@@ -93,8 +89,8 @@ export async function requestExportDirectoryDestination(
       destination: new OneShotExportDirectoryDestination(handle),
     }
   } catch (cause) {
-    if (namedError(cause, 'AbortError')) return { status: 'cancelled' }
-    if (namedError(cause, 'SecurityError')) {
+    if (hasErrorName(cause, 'AbortError')) return { status: 'cancelled' }
+    if (hasErrorName(cause, 'SecurityError')) {
       return { status: 'security-error', reason: SECURITY_ERROR_REASON }
     }
     throw cause
@@ -113,24 +109,13 @@ export function directoryWriterFromHandle(handle: FileSystemDirectoryHandle): {
         await handle.getFileHandle(name)
         return true
       } catch (cause) {
-        if (namedError(cause, 'NotFoundError')) return false
+        if (hasErrorName(cause, 'NotFoundError')) return false
         throw cause
       }
     },
     async write(name, bytes) {
       const file = await handle.getFileHandle(name, { create: true })
-      const writable = await file.createWritable({ keepExistingData: false })
-      try {
-        await writable.write(bytes.slice())
-        await writable.close()
-      } catch (cause) {
-        try {
-          await writable.abort()
-        } catch {
-          // Write failure remains primary.
-        }
-        throw cause
-      }
+      await writeFileHandle(file, bytes.slice())
     },
   }
 }

@@ -24,6 +24,9 @@ let disposed=false
 let initialized: Promise<void>|null=null
 let prepared: PluginPreparedExportController|null=null
 let integrityBlocked=false
+/** Jobs the queue may still start once their blocking need is resolved. */
+const RUNNABLE_STATUSES:ReadonlySet<RenderJob['status']>=new Set(['queued','needs-project','needs-media','needs-destination','needs-review'])
+const isRunnableJob=(row:RenderJob)=>RUNNABLE_STATUSES.has(row.status)
 const message=(cause:unknown)=> (cause instanceof Error?cause.message:String(cause)).slice(0,512)
 const publishError=(cause:unknown)=>useRenderQueueStore.setState({error:message(cause)})
 
@@ -114,7 +117,7 @@ function checkCancelled():void{if(cancelRequested||disposed)throw new DOMExcepti
 async function executeNext(destination?:ExportFileDestinationCapability, expectedId?:string, directory?:ExportDirectoryDestinationCapability):Promise<void>{
   const rows=await jobs()
   checkCancelled()
-  const job=rows.find(row=>['queued','needs-project','needs-media','needs-destination','needs-review'].includes(row.status))
+  const job=rows.find(isRunnableJob)
   if(!job)return
   if(expectedId && expectedId!==job.id)throw new Error('The queue order changed. Choose a destination for the new first job.')
   if(job.delivery==='uncertain'||integrityBlocked)throw new Error('Output cleanup is uncertain. Reload and inspect the selected file before retrying.')
@@ -191,7 +194,7 @@ export function runRenderQueue(destination?:ExportFileDestinationCapability,expe
 }
 /** Invoke directly from the click: do not await a storage read before the picker. */
 export async function chooseRenderDestination():Promise<void>{
-  const job=useRenderQueueStore.getState().jobs.find(row=>['queued','needs-destination','needs-project','needs-media','needs-review'].includes(row.status))
+  const job=useRenderQueueStore.getState().jobs.find(isRunnableJob)
   if(!job)throw new Error('The next job does not need a destination.')
   if(job.profile.destination==='directory'){
     const selected=await requestExportDirectoryDestination()
@@ -214,10 +217,9 @@ export async function cancelRenderQueue(asInterruption=false):Promise<void>{
   await running
 }
 export async function consumeRenderDownload(download:boolean):Promise<void>{
-  if(!result||result.value.destination!=='download')throw new Error('The download was lost. Retry this job.')
   const current=result
+  if(!current||current.value.destination!=='download')throw new Error('The download was lost. Retry this job.')
   const output=current.value
-  if(output.destination!=='download')throw new Error('The download was lost. Retry this job.')
   if(download){
     const url=URL.createObjectURL(new Blob([output.buffer],{type:output.mimeType}))
     try{const link=document.createElement('a');link.href=url;link.download=`render-${current.id}.${output.fileExtension}`;link.click()}finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}

@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import { createFakeIndexedDb } from '../test/fakeIndexedDb'
 import {
   LocalPluginStorageError,
   createLocalPluginStorage,
@@ -232,5 +233,50 @@ describe('local plugin storage boundary', () => {
       revision: 1,
     })
     expect(backend.generation).toBe(0)
+  })
+})
+
+describe('local plugin storage archive ownership', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  test('a replacement copies the caller archive exactly once', async () => {
+    const backend = memoryBackend()
+    const storage = createLocalPluginStorage(backend)
+    const candidate = record()
+    const slice = vi.spyOn(Uint8Array.prototype, 'slice')
+
+    await expect(storage.replace(candidate.pluginId, null, candidate)).resolves.toBe(true)
+    expect(slice).toHaveBeenCalledOnce()
+    const stored = backend.values.get(candidate.pluginId) as InstalledPluginRecord
+    expect(stored).not.toBe(candidate)
+    expect(stored.archiveBytes.buffer).not.toBe(candidate.archiveBytes.buffer)
+  })
+
+  test('IndexedDB compare-and-swap validates stored records without copying their archives', async () => {
+    const fake = createFakeIndexedDb()
+    vi.stubGlobal('indexedDB', fake.factory)
+    vi.resetModules()
+    const { localPluginStorage } = await import('./localPluginStorage')
+    for (const index of [1, 2]) {
+      const installed = record({ pluginId: `com.example.fixture${index}` })
+      await expect(localPluginStorage.replace(installed.pluginId, null, installed)).resolves.toBe(true)
+    }
+    const candidate = record({ pluginId: 'com.example.third', archiveBytes: new Uint8Array([7, 8, 9]) })
+    const slice = vi.spyOn(Uint8Array.prototype, 'slice')
+
+    await expect(localPluginStorage.replace(candidate.pluginId, null, candidate)).resolves.toBe(true)
+    expect(slice).toHaveBeenCalledOnce()
+    slice.mockRestore()
+    candidate.archiveBytes[0] = 0xff
+    expect((await localPluginStorage.load(candidate.pluginId))?.archiveBytes).toEqual(new Uint8Array([7, 8, 9]))
+    expect(await localPluginStorage.generation()).toBe(3)
+
+    fake.stores('myrelith-local-plugins').get('installations')!.set('com.example.corrupt', { pluginId: 'x' })
+    const next = record({ pluginId: 'com.example.fourth' })
+    await expect(localPluginStorage.replace(next.pluginId, null, next)).rejects.toThrow('invalid shape')
+    expect(await localPluginStorage.load(next.pluginId)).toBeNull()
   })
 })

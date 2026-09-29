@@ -1,5 +1,6 @@
 /** Bounded local Cube profile and exact portable binary64 data. No browser APIs. */
-import { clampColorUnit, colorByte, colorPixelRange, finiteColorNumber, type Rgb } from './colorChannels'
+import { clampColorUnit, colorByte, colorPixelRange, type Rgb } from './colorChannels'
+import { isFiniteInRange } from './numeric'
 
 export const COLOR_LUT_TYPE = 'builtin.cube-lut'
 export const COLOR_LUT_ENCODING = 'rgb-f64le-base64-v1'
@@ -39,7 +40,7 @@ export function colorLutSampleCount(kind: '1d' | '3d', size: number): number {
   return (kind === '1d' ? size : size ** 3) * 3
 }
 function checkedRgb(value: unknown): value is Rgb {
-  return Array.isArray(value) && value.length === 3 && value.every((v) => finiteColorNumber(v, -16, 16))
+  return Array.isArray(value) && value.length === 3 && value.every((v) => isFiniteInRange(v, -16, 16))
 }
 function domainError(min: unknown, max: unknown): string | null {
   if (!checkedRgb(min) || !checkedRgb(max)) return 'LUT domains need three finite values from -16 to 16.'
@@ -49,7 +50,7 @@ const DECIMAL = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/u
 function sampleNumber(token: string, line: number): number {
   if (token.length > COLOR_LUT_LIMITS.tokenBytes || !DECIMAL.test(token)) throw new ColorLutError('Expected a bounded decimal number.', line)
   const value = Number(token)
-  if (!finiteColorNumber(value, -16, 16)) throw new ColorLutError('LUT numbers must be finite and between -16 and 16.', line)
+  if (!isFiniteInRange(value, -16, 16)) throw new ColorLutError('LUT numbers must be finite and between -16 and 16.', line)
   return value === 0 ? 0 : value
 }
 function rgbTokens(tokens: readonly string[], line: number): Rgb {
@@ -153,7 +154,7 @@ function decodedSamples(data: string, count: number): Float64Array {
   const view = new DataView(samples.buffer)
   for (let i = 0; i < count; i++) {
     const value = view.getFloat64(i * 8, true)
-    if (!finiteColorNumber(value, -16, 16) || Object.is(value, -0)) throw new ColorLutError('LUT payload has invalid sample values.')
+    if (!isFiniteInRange(value, -16, 16) || Object.is(value, -0)) throw new ColorLutError('LUT payload has invalid sample values.')
     samples[i] = value
   }
   return samples
@@ -161,7 +162,7 @@ function decodedSamples(data: string, count: number): Float64Array {
 
 export function portableColorLut(id: string, name: string, parsed: ParsedColorLut): PortableColorLutV1 {
   if (parsed.samples.length !== colorLutSampleCount(parsed.kind, parsed.size)
-    || !parsed.samples.every((v) => finiteColorNumber(v, -16, 16))) throw new ColorLutError('Invalid LUT samples.')
+    || !parsed.samples.every((v) => isFiniteInRange(v, -16, 16))) throw new ColorLutError('Invalid LUT samples.')
   const result: PortableColorLutV1 = { version: 1, id, name, kind: parsed.kind, size: parsed.size,
     domainMin: [...parsed.domainMin], domainMax: [...parsed.domainMax], encoding: COLOR_LUT_ENCODING, data: encodeSamples(parsed.samples) }
   const error = colorLutMetadataError(result)
@@ -235,7 +236,7 @@ export function sampleColorLut(lut: DecodedColorLut, red: number, green: number,
 
 export function applyColorLut(rgba: Uint8ClampedArray, lut: DecodedColorLut, strength: number, start = 0, count = rgba.length / 4): void {
   colorPixelRange(rgba, start, count)
-  if (!finiteColorNumber(strength, 0, 1)) throw new ColorLutError('LUT strength must be between 0 and 1.')
+  if (!isFiniteInRange(strength, 0, 1)) throw new ColorLutError('LUT strength must be between 0 and 1.')
   if (strength === 0 || lut.identity) return
   const mapped = new Float64Array(3)
   for (let i = start * 4, end = (start + count) * 4; i < end; i += 4) {

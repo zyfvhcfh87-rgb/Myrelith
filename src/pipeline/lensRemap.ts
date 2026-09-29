@@ -39,3 +39,34 @@ export interface LensRemapProvider {
 export function rethrowLensRemapUnavailable(cause: unknown): void {
   if (cause instanceof LensRemapUnavailableError) throw cause
 }
+
+/**
+ * Probe a render source's pixel size: VideoFrame display size first, then
+ * video, image, and canvas/bitmap sizes. Unvalidated; each caller applies
+ * its own rule and error type.
+ */
+export function canvasImageSourceSize(source: CanvasImageSource): {
+  readonly width: number | undefined
+  readonly height: number | undefined
+} {
+  const value = source as unknown as {
+    readonly displayWidth?: number
+    readonly displayHeight?: number
+    readonly width?: number
+    readonly height?: number
+    readonly videoWidth?: number
+    readonly videoHeight?: number
+    readonly naturalWidth?: number
+    readonly naturalHeight?: number
+  }
+  return {
+    width: value.displayWidth
+      ?? value.videoWidth
+      ?? value.naturalWidth
+      ?? value.width,
+    height: value.displayHeight
+      ?? value.videoHeight
+      ?? value.naturalHeight
+      ?? value.height,
+  }
+}

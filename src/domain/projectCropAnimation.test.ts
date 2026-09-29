@@ -7,7 +7,7 @@ import { createAdjustmentItem, setAdjustmentOpacityKeyframe, resolveAdjustmentAt
 import { removeAnimationKeyframe } from './clipAnimation'
 
 describe('crop snapshot ownership and held tails', () => {
-  test('caches only the exact deeply frozen proof inputs, never a mutable nested crop', () => {
+  test('certifies the current nested crop on every call, frozen or not', () => {
     const project = foundationProject(), clip = project.sequences[0].tracks[0].clips[0]
     clip.animation = { tracks: [{ property: 'crop-left', keyframes: [scalarKey(0, 0.3)] }], effectTracks: [] }
     Object.freeze(project)
@@ -15,10 +15,7 @@ describe('crop snapshot ownership and held tails', () => {
     clip.visual!.crop.right = 0.8
     expect(certifyProjectCropAnimation(project)).toMatchObject({ ok: false, reason: 'unsafe-crop' })
     clip.visual!.crop.right = 0.2
-    freeze(project.sequences, true)
-    const certificate = certifyProjectCropAnimation(project)
-    expect(certificate.ok).toBe(true)
-    expect(certifyProjectCropAnimation(project)).toBe(certificate)
+    expect(certifyProjectCropAnimation(freeze(structuredClone(project), true)).ok).toBe(true)
     const changed = structuredClone(project)
     changed.sequences[0].tracks[0].clips[0].visual!.crop.right = 0.8
     expect(certifyProjectCropAnimation(freeze(changed, true))).toMatchObject({ ok: false, reason: 'unsafe-crop' })

@@ -7,6 +7,8 @@
  * document/media changes are written back after a short debounce.
  */
 
+import { errorMessage, hasErrorName } from '../domain/errors'
+import { windowsSafeFileStem } from '../domain/fileNames'
 import {
   createProjectFileSnapshot,
   PROJECT_FILE_EXTENSION,
@@ -173,34 +175,15 @@ const realDeps: ProjectPersistenceDeps = {
   },
 }
 
-function messageFrom(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
-}
-
-function isPickerCancellation(cause: unknown): boolean {
-  return typeof cause === 'object'
-    && cause !== null
-    && 'name' in cause
-    && cause.name === 'AbortError'
-}
-
 /** Windows-safe, extension-stable default for both picker and fallback. */
 export function projectFileName(projectName: string): string {
-  let base = projectName
-    .trim()
-    .replace(/[. ]+$/g, '')
-    .replace(/\.(?:myrelith|webcut)$/i, '')
-  base = base.replace(/[<>:"/\\|?*]/g, '-')
-  base = Array.from(base, (character) => (
-    character.charCodeAt(0) < 32 ? '-' : character
-  )).join('')
-  base = Array.from(base).slice(0, 80).join('').replace(/[. ]+$/g, '')
-  if (
-    /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$|clock\$)(?:\.|$)/i
-      .test(base)
-  ) {
-    base = `myrelith-${base}`
-  }
+  const base = windowsSafeFileStem(
+    projectName
+      .trim()
+      .replace(/[. ]+$/g, '')
+      .replace(/\.(?:myrelith|webcut)$/i, ''),
+    80,
+  )
   return `${base || 'untitled-project'}${PROJECT_FILE_EXTENSION}`
 }
 
@@ -402,7 +385,7 @@ export class ProjectPersistenceController {
       // must still be present when the browser checks this call.
       target = await this.deps.pickSaveFile(this.suggestedFileName())
     } catch (cause) {
-      if (isPickerCancellation(cause)) {
+      if (hasErrorName(cause, 'AbortError')) {
         this.finishCancelledOperation(operation)
         return { status: 'cancelled' }
       }
@@ -617,7 +600,7 @@ export class ProjectPersistenceController {
         recoveryError: null,
       })
     } catch (cause) {
-      const message = `Could not clear the recovery copy: ${messageFrom(cause)}`
+      const message = `Could not clear the recovery copy: ${errorMessage(cause)}`
       if (this.operationIsCurrent(operation)) {
         useProjectSessionStore.setState({
           recoveryPhase: 'error',
@@ -651,7 +634,7 @@ export class ProjectPersistenceController {
     operation: SaveOperation,
     cause: unknown,
   ): { status: 'failed'; message: string } {
-    const message = `Could not save the project: ${messageFrom(cause)}`
+    const message = `Could not save the project: ${errorMessage(cause)}`
     if (this.operationIsCurrent(operation)) {
       const hasUnsavedChanges = this.revision !== this.persistedRevision
       this.operation = null
@@ -728,7 +711,7 @@ export class ProjectPersistenceController {
       ) {
         useProjectSessionStore.setState({
           recoveryPhase: 'error',
-          recoveryError: `Could not update the recovery copy: ${messageFrom(cause)}`,
+          recoveryError: `Could not update the recovery copy: ${errorMessage(cause)}`,
         })
       }
       return
@@ -776,7 +759,7 @@ export class ProjectPersistenceController {
       ) {
         useProjectSessionStore.setState({
           recoveryPhase: 'error',
-          recoveryError: `Could not update the recovery copy: ${messageFrom(cause)}`,
+          recoveryError: `Could not update the recovery copy: ${errorMessage(cause)}`,
         })
       }
     } finally {

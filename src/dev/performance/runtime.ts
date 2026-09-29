@@ -32,7 +32,9 @@ import {
   defaultClipAudioSettings,
   defaultClipVisualSettings,
 } from '../../domain/clipInspector'
+import { errorMessage } from '../../domain/errors'
 import { exportPresetById } from '../../domain/exportProfile'
+import { isNonNegativeSafeInteger } from '../../domain/numeric'
 import type { PortableAssetDescriptor } from '../../domain/projectFile'
 import type {
   Clip,
@@ -604,10 +606,6 @@ export function summarizeMemorySamples(samples: readonly number[]): {
   }
 }
 
-function isNonNegativeSafeInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value) && Number(value) >= 0
-}
-
 function validatedProcessMemorySample(
   value: unknown,
   expectedBatchIndex: number,
@@ -728,10 +726,6 @@ export async function collectChromiumProcessMemoryEvidence(
     reason: null,
     samples,
   }
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 function sleep(milliseconds: number): Promise<void> {

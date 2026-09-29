@@ -94,10 +94,8 @@ non-negotiable rules. Re-read it at the start of every coding session.
     `workers/plugin-effect-bridge-protocol.ts`, the pure, versioned exact-key
     validator and ownership contract for its render-worker RPC; this allowance
     does not generalize to any other engine-to-worker runtime import,
-  - anyone may import `workers/decode-types.ts`,
-    `workers/decode-protocol.ts`, `workers/render-legacy-protocol.ts`, and
+  - anyone may import `workers/decode-types.ts` and
     `workers/render-protocol.ts` (types only, no runtime),
-  - `workers/` may import `engine/frame-cache.ts` (pure class, no deps),
   - `workers/render.worker.ts` remains the sole browser wiring entry and may
     import only `pipeline/lensRemapWebgl.ts` and `pipeline/static-image.ts` to
     construct the injected production backends. Its owned
@@ -155,9 +153,8 @@ non-negotiable rules. Re-read it at the start of every coding session.
     stamps are moved onto page time with an offset the app measures from the
     browser's frame capture times before recording (`app/avClockCalibration`),
     never from main-thread arrival time,
-  - `engine/worker-bridge.ts` references the worker FILE via
-    `new Worker(new URL(...))` — a URL, not a module import; the pipeline
-    chunk source reaches the bridge by injection, never by import.
+  - `engine/render-bridge.ts` references the render worker FILE via
+    `new Worker(new URL(...))` — a URL, not a module import.
 
 ## Non-negotiable rules
 
@@ -1213,6 +1210,15 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   lazy export controller. It may call a disposer only after that controller has
   registered itself; project exit must never import export code just to learn
   that no export was started.
+- `app/editorRuntimeLifecycle.ts` is the same kind of seam for the editor-only
+  runtime owners (preview, transport, source playback/preview, multicam
+  monitor, voiceover and camera/screen capture, media visuals, media import).
+  Each registers its teardown when its module evaluates; the editor chunk
+  evaluates them all before a project activates. `projectController/dependencies.ts`
+  owns the teardown order and skips owners that never loaded. Media inspection
+  (Mediabunny, still images, codec fallbacks) loads on first use. The launcher
+  graph must not statically reach these runtimes or any `mediabunny` import;
+  `src/test/architecture.test.ts` enforces this.
 - `app/launcher.css` eagerly imports launcher and lazy-state rules;
   `app/layout.css` is the lazy editor stylesheet manifest. Together their
   `styles/` imports retain the original global cascade order. Changing either
@@ -1502,17 +1508,6 @@ references: `FrameRate`, `RationalTime`, `TimeRange`, `MediaAsset`,
   the original locations. Directory handles and file bytes stay app-local.
   The UI reads only session summaries and controller facades.
 
-- Legacy worker messages — `src/workers/decode-protocol.ts` (compatibility):
-  `ToDecodeWorker` (`init`/`configure`/`seek`/`close`) and `FromDecodeWorker`
-  (`configured`/`frameReady`/`error`). Shared structural types live in
-  `decode-types.ts`; both files carry zero runtime code. The retired worker and
-  `engine/worker-bridge.ts` retain these contracts without being imported by
-  the current render path.
-  Timestamps are integer microseconds; frame-number conversion happens on
-  the bridge side. Seeks are latest-wins: only the newest seek is guaranteed
-  a `frameReady`; superseded seeks are resolved by the bridge, and a
-  worker `error` carrying a requestId also settles that request.
-
 Local effect presets use the exact versioned, bounded data contract in
 `domain/effectPresets.ts`. `app/localEffectPresetStorage.ts` owns one IndexedDB
 read/write transaction per mutation and closes each connection on completion
@@ -1538,9 +1533,9 @@ explicit selection; the store commits the complete validated batch once.
 src/
   domain/      time, schema, operations, selectors      (pure TS)
   state/       document, transport, media, project-session/library stores
-  engine/      playback-engine, render bridge, isolated legacy bridge, frame-cache
-  workers/     protocols/types, current render worker, isolated legacy delegates
-  pipeline/    demux, legacy chunk decode, render, export
+  engine/      playback-engine, render bridge
+  workers/     protocols/types, render worker
+  pipeline/    demux, render, export
   codecs/      realm-local lazy decoder registration and resource policy
   ui/          ProjectLaunch, Toolbar, MediaPool, Preview, Inspector,
                ExportDialog lifecycle owner + stateless export sections

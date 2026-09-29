@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   classifyVoiceoverDrafts,
-  isVoiceoverDraftDiscardable,
   keptOriginalRemovalEligible,
   voiceoverDraftIdsFromLockNames,
   voiceoverDraftLockName,
@@ -70,13 +69,13 @@ describe('voiceover draft classification', () => {
     expect(classified[0]).toMatchObject({ fileName: 'capture_a.mp4', state: 'kept', assetIds: ['asset'] })
   })
 
-  it('allows discard only for orphaned drafts', () => {
+  it('marks only unreferenced drafts outside the live session as orphaned', () => {
     const classified = classifyVoiceoverDrafts(
       [draft('a'), draft('b'), draft('c')],
       ['b'],
       [{ fileName: 'a.wav', projectBindingId: 'project-a', assetId: 'asset_a' }],
     )
-    expect(classified.map(isVoiceoverDraftDiscardable)).toEqual([false, false, true])
+    expect(classified.map((item) => item.state)).toEqual(['kept', 'live', 'orphaned'])
   })
 })
 

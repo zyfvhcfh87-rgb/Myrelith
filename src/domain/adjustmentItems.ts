@@ -22,9 +22,11 @@ import {
   clipAnimationValidationError,
   cloneAnimationEasing,
   documentAnimationKeyframeGrowthAllowed,
-  evaluateAnimationTrack,
   MAX_KEYFRAME_FRAME,
+  MAX_KEYFRAMES_PER_TRACK,
+  remapEffectAnimationIds,
 } from './clipAnimation'
+import { evaluateValidatedAnimationTrack } from './scalarAnimation'
 import {
   cloneEffectDescriptor,
   effectAnimationParameterSpec,
@@ -176,13 +178,6 @@ export function findAdjustment(
   adjustmentId: AdjustmentItemId,
 ): AdjustmentItem | null {
   return locateAdjustment(doc, adjustmentId)?.adjustment ?? null
-}
-
-export function trackOfAdjustment(
-  doc: TimelineDoc,
-  adjustmentId: AdjustmentItemId,
-): Track | null {
-  return locateAdjustment(doc, adjustmentId)?.track ?? null
 }
 
 export function locateAdjustment(
@@ -380,21 +375,6 @@ export function trimAdjustment(
   })
 }
 
-function remapAnimationEffectIds(
-  animation: AdjustmentAnimation,
-  replacements: ReadonlyMap<EffectId, EffectId>,
-): AdjustmentAnimation {
-  const clone = cloneAdjustmentAnimation(animation)
-  clone.effectTracks = clone.effectTracks.map((track) => ({
-    ...track,
-    effectId: replacements.get(track.effectId) ?? track.effectId,
-  }))
-  if (clone.effectPathTracks) clone.effectPathTracks = clone.effectPathTracks.map((track) => ({
-    ...track, effectId: replacements.get(track.effectId) ?? track.effectId,
-  }))
-  return clone
-}
-
 function duplicatePayload(item: AdjustmentItem): Omit<AdjustmentItem, 'timelineRange'> {
   const replacements = new Map<EffectId, EffectId>()
   const effects = item.effects.map((effect) => {
@@ -405,7 +385,7 @@ function duplicatePayload(item: AdjustmentItem): Omit<AdjustmentItem, 'timelineR
   return {
     ...item,
     id: newId('adjustment'),
-    animation: remapAnimationEffectIds(item.animation, replacements),
+    animation: remapEffectAnimationIds(item.animation, replacements) as AdjustmentAnimation,
     effects,
   }
 }
@@ -549,7 +529,7 @@ function upsertKeyframe(
   const next = keyframes.filter((candidate) => candidate.frame !== keyframe.frame)
   next.push(cloneAdjustmentKeyframe(keyframe))
   next.sort((left, right) => left.frame - right.frame)
-  if (next.length > 1_024) return null
+  if (next.length > MAX_KEYFRAMES_PER_TRACK) return null
   return next
 }
 
@@ -728,16 +708,13 @@ export function updateAdjustmentEffectParamsAtFrame(
   }
   let working = doc
   if (Object.keys(staticPatch).length > 0) {
+    let rejected = false
     working = updateAdjustmentEffect(doc, adjustmentId, effectId, operation, (current, index, effects) => {
       const next = { ...current, params: { ...current.params, ...staticPatch } }
-      const error = effectValidationError(next)
+      const error = effectValidationError(next) ?? effectReplacementBudgetError(doc, current, next)
       if (error) {
         reject(doc, operation, error)
-        return null
-      }
-      const budgetError = effectReplacementBudgetError(doc, current, next)
-      if (budgetError) {
-        reject(doc, operation, budgetError)
+        rejected = true
         return null
       }
       if (Object.entries(staticPatch).every(([key, value]) => current.params[key] === value)) return null
@@ -745,6 +722,8 @@ export function updateAdjustmentEffectParamsAtFrame(
       copy[index] = next
       return copy
     })
+    // One edit: a rejected static half must not let its animated keys through.
+    if (rejected) return doc
   }
   if (animated.size === 0) return working
   const nextLocation = locateAdjustment(working, adjustmentId)
@@ -780,7 +759,9 @@ export function updateAdjustmentEffectParamsAtFrame(
     left.effectId.localeCompare(right.effectId)
     || left.parameter.localeCompare(right.parameter)
   ))
-  return replaceAdjustmentAnimation(working, adjustmentId, animation, operation)
+  const next = replaceAdjustmentAnimation(working, adjustmentId, animation, operation)
+  // Nor may a rejected animated half leave the static half applied.
+  return next === working ? doc : next
 }
 
 export function setAdjustmentEffectKeyframe(
@@ -907,7 +888,7 @@ export function resolveAdjustmentAtFrame(
   const localFrame = timelineFrame - item.timelineRange.startFrame
   const opacityTrack = item.animation.tracks[0]
   const opacity = opacityTrack && (opacityTrack.propertyVersion ?? 1) === 1
-    ? evaluateAnimationTrack(opacityTrack, localFrame, item.opacity)
+    ? evaluateValidatedAnimationTrack(opacityTrack, localFrame, item.opacity)
     : item.opacity
   let effects: EffectDescriptor[] | null = null
   for (let index = 0; index < item.effects.length; index++) {
@@ -922,7 +903,7 @@ export function resolveAdjustmentAtFrame(
       const spec = effectAnimationParameterSpec(effect, track.parameter)
       const fallback = params[track.parameter]
       if (!spec || typeof fallback !== 'number') continue
-      const value = evaluateAnimationTrack(track, localFrame, fallback)
+      const value = evaluateValidatedAnimationTrack(track, localFrame, fallback)
       if (value < spec.min || value > spec.max || value === fallback) continue
       params[track.parameter] = value
       changed = true

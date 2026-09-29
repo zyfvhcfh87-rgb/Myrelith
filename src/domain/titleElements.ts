@@ -201,13 +201,6 @@ function visual(value: unknown): ClipVisualSettings {
   return result
 }
 
-export function titleFontValidationError(value: unknown): string | null {
-  try {
-    checkJson(value)
-    readFont(value)
-    return null
-  } catch (error) { if (error instanceof TitleDataError) return error.message; throw error }
-}
 function readFont(value: unknown): TitleFontIntent {
   const item = object(value)
   keys(item, ['family', 'fallbackFamily'])
@@ -258,6 +251,11 @@ function textStyle(value: unknown): TitleTextStyle {
   return result
 }
 
+const CURRENT_ELEMENT_KINDS: readonly string[] = ['text', 'rectangle', 'ellipse']
+function isCurrentElementHeader(version: number, kind: string): boolean {
+  return version === TITLE_VERSION && CURRENT_ELEMENT_KINDS.includes(kind)
+}
+
 function readElement(value: unknown): Exclude<TitleElementResult, InvalidTitle> {
   const item = object(value)
   const header = {
@@ -265,7 +263,7 @@ function readElement(value: unknown): Exclude<TitleElementResult, InvalidTitle> 
     kind: string(item.kind, TITLE_LIMITS.propertyAndFontCharacters),
     name: string(item.name, TITLE_LIMITS.nameCharacters), enabled: boolean(item.enabled),
   }
-  if (header.version !== TITLE_VERSION || !['text', 'rectangle', 'ellipse'].includes(header.kind)) {
+  if (!isCurrentElementHeader(header.version, header.kind)) {
     // All JSON members and the complete minimum header were validated above.
     const element = item as unknown as UnknownTitleElementIntent
     return { status: 'unsupported', element, reason: 'Unsupported title element kind or version.' }
@@ -296,9 +294,13 @@ export function readTitleElement(value: unknown): TitleElementResult {
   try { checkJson(value); return readElement(value) }
   catch (error) { if (error instanceof TitleDataError) return { status: 'invalid', reason: error.message }; throw error }
 }
-export function titleElementValidationError(value: unknown): string | null {
-  const result = readTitleElement(value)
-  return result.status === 'invalid' ? result.reason : null
+/**
+ * Supported element of a definition that readTitleDefinition already accepted:
+ * its current elements are parsed copies and the rest stay opaque intent, so
+ * the header alone decides. Never use this on unparsed input.
+ */
+export function parsedSupportedTitleElement(intent: TitleElementIntent): TitleElement | null {
+  return isCurrentElementHeader(intent.version, intent.kind) ? intent as TitleElement : null
 }
 export function readTitleDefinition(value: unknown): TitleDefinitionResult {
   try {
@@ -324,10 +326,6 @@ export function readTitleDefinition(value: unknown): TitleDefinitionResult {
     }
     return { status: 'supported', title: { version: TITLE_VERSION, elements } }
   } catch (error) { if (error instanceof TitleDataError) return { status: 'invalid', reason: error.message }; throw error }
-}
-export function titleDefinitionValidationError(value: unknown): string | null {
-  const result = readTitleDefinition(value)
-  return result.status === 'invalid' ? result.reason : null
 }
 
 export const TITLE_ANIMATION_PROPERTIES = Object.freeze([
@@ -390,11 +388,6 @@ export function titleAnimationPropertySpec(element: TitleElement, propertyVersio
     ...spec, propertyVersion: TITLE_PROPERTY_VERSION,
     min: Math.max(spec.min, paddingMinimum), minExclusive: paddingMinimum >= spec.min,
   } }
-}
-export function readTitleAnimationProperty(element: TitleElement, propertyVersion: number, propertyName: string):
-  { readonly status: 'available'; readonly value: number } | PropertyUnavailable {
-  const result = titleAnimationPropertySpec(element, propertyVersion, propertyName)
-  return result.status === 'available' ? { status: 'available', value: result.fallback } : result
 }
 export interface TitleAnimationValue {
   readonly propertyVersion: number

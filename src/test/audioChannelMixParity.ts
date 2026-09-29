@@ -1,9 +1,6 @@
 /** Shared mono, 3-channel, and 5.1 fixtures for preview/export fold-down parity. */
 
-import {
-  applyStereoBalanceToSample,
-  foldDecodedFrameToStereo,
-} from '../domain/audioChannelMix'
+import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import { stereoBalanceGains } from '../domain/clipInspector'
 
 export const PARITY_SAMPLE_RATE = 48_000
@@ -77,6 +74,16 @@ export function isolatedParityPlanes(
     if (index === hotChannel) plane.fill(1)
     return plane
   })
+}
+
+/** Apply already-resolved stereo balance gains after fold-down. */
+export function applyStereoBalanceToSample(
+  left: number,
+  right: number,
+  leftGain: number,
+  rightGain: number,
+): readonly [number, number] {
+  return [left * leftGain, right * rightGain]
 }
 
 export function expectedParityStereo(

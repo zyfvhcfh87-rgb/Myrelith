@@ -85,7 +85,7 @@ function meanSquareToLufs(meanSquare: number): number {
  * Annex 2's 48-tap, four-phase true-peak interpolation filter. One input
  * sample advances a fixed 12-sample history; each phase is evaluated without
  * allocating. This exposes inter-sample peaks that linear interpolation
- * cannot reveal.
+ * cannot reveal. Rows are history taps (newest first), columns are phases.
  */
 const TRUE_PEAK_PHASE_TAPS = Object.freeze([
   Object.freeze([0.0017089843750, -0.0291748046875, -0.0189208984375, -0.0083007812500]),
@@ -102,14 +102,43 @@ const TRUE_PEAK_PHASE_TAPS = Object.freeze([
   Object.freeze([-0.00830078125, -0.0189208984375, -0.0291748046875, 0.0017089843750]),
 ] as const)
 
-function advanceTruePeak(history: Float64Array, sample: number): number {
-  history.copyWithin(1, 0, history.length - 1)
-  history[0] = sample
+const TRUE_PEAK_TAP_COUNT = TRUE_PEAK_PHASE_TAPS.length
+const TRUE_PEAK_PHASES = 4
+
+/** The same coefficients, phase-major and flat for the per-sample loop. */
+const TRUE_PEAK_FLAT_TAPS = Float64Array.from(
+  { length: TRUE_PEAK_PHASES * TRUE_PEAK_TAP_COUNT },
+  (_, index) => TRUE_PEAK_PHASE_TAPS[index % TRUE_PEAK_TAP_COUNT][
+    Math.floor(index / TRUE_PEAK_TAP_COUNT)
+  ],
+)
+
+/**
+ * Newest-first sample history. The ring is stored twice so
+ * `ring[head + tap]` reads taps 0..11 in order without wrapping or shifting.
+ */
+interface TruePeakHistory {
+  readonly ring: Float64Array
+  head: number
+}
+
+function createTruePeakHistory(): TruePeakHistory {
+  return { ring: new Float64Array(2 * TRUE_PEAK_TAP_COUNT), head: 0 }
+}
+
+function advanceTruePeak(history: TruePeakHistory, sample: number): number {
+  const { ring } = history
+  const head = history.head === 0 ? TRUE_PEAK_TAP_COUNT - 1 : history.head - 1
+  history.head = head
+  ring[head] = sample
+  ring[head + TRUE_PEAK_TAP_COUNT] = sample
   let peak = Math.abs(sample)
-  for (let phase = 0; phase < 4; phase++) {
+  for (let phase = 0; phase < TRUE_PEAK_PHASES; phase++) {
+    const taps = phase * TRUE_PEAK_TAP_COUNT
+    // Same products summed in the same tap order as the table: bit-identical.
     let interpolated = 0
-    for (let tap = 0; tap < TRUE_PEAK_PHASE_TAPS.length; tap++) {
-      interpolated += history[tap] * TRUE_PEAK_PHASE_TAPS[tap][phase]
+    for (let tap = 0; tap < TRUE_PEAK_TAP_COUNT; tap++) {
+      interpolated += ring[head + tap] * TRUE_PEAK_FLAT_TAPS[taps + tap]
     }
     peak = Math.max(peak, Math.abs(interpolated))
   }
@@ -118,13 +147,13 @@ function advanceTruePeak(history: Float64Array, sample: number): number {
 
 function truePeakWithTail(
   measured: number,
-  leftHistory: Float64Array,
-  rightHistory: Float64Array,
+  leftHistory: TruePeakHistory,
+  rightHistory: TruePeakHistory,
 ): number {
-  const left = leftHistory.slice()
-  const right = rightHistory.slice()
+  const left = { ring: leftHistory.ring.slice(), head: leftHistory.head }
+  const right = { ring: rightHistory.ring.slice(), head: rightHistory.head }
   let peak = measured
-  for (let index = 1; index < TRUE_PEAK_PHASE_TAPS.length; index++) {
+  for (let index = 1; index < TRUE_PEAK_TAP_COUNT; index++) {
     peak = Math.max(
       peak,
       advanceTruePeak(left, 0),
@@ -146,8 +175,8 @@ export class LoudnessMeter {
   private readonly gatingSquares: number[] = []
   private measuredSamples = 0
   private truePeak = 0
-  private readonly truePeakHistoryL = new Float64Array(TRUE_PEAK_PHASE_TAPS.length)
-  private readonly truePeakHistoryR = new Float64Array(TRUE_PEAK_PHASE_TAPS.length)
+  private readonly truePeakHistoryL = createTruePeakHistory()
+  private readonly truePeakHistoryR = createTruePeakHistory()
 
   constructor(sampleRate: number, expectedSamples: number) {
     if (!Number.isFinite(sampleRate) || sampleRate <= 0) {

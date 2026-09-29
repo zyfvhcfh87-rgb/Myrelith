@@ -14,6 +14,7 @@ import {
   type PluginPreparedExportControllerDependencies,
 } from './pluginPreparedExportController'
 import { registerLoadedExportDisposer } from './exportLifecycle'
+import { throwCleanupFailures } from './pluginControllerShared'
 
 export type PluginPreparedExportPort = Pick<
   PluginPreparedExportController,
@@ -73,13 +74,6 @@ function frozenPort(
     start: (token, callbacks) => controller.start(token, callbacks),
     cancel: (reason) => controller.cancel(reason),
   })
-}
-
-function throwCleanupFailures(failures: readonly unknown[]): void {
-  if (failures.length === 1) throw failures[0]
-  if (failures.length > 1) {
-    throw new AggregateError(failures, 'Plugin prepared export owner cleanup failed')
-  }
 }
 
 class ProjectExportDisposalInProgressError extends Error {
@@ -146,7 +140,7 @@ export function createPluginPreparedExportOwner(
         failures.push(cause)
       }
       unregister()
-      throwCleanupFailures(failures)
+      throwCleanupFailures(failures, 'Plugin prepared export owner cleanup failed')
     })
     closePromise = completion
     dependencies.onClosing?.(completion)

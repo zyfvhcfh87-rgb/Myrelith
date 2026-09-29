@@ -1,5 +1,3 @@
-import type { PluginManifestV1 } from './pluginManifest'
-
 export const PLUGIN_WASM_BINARY_POLICY_VERSION = 1
 
 export type PluginWasmProfileId =
@@ -11,10 +9,13 @@ export interface PluginWasmProfileSelection {
   readonly profileId: PluginWasmProfileId
 }
 
-/** Select the whole-module binary policy from already-validated signed manifest facts. */
-export function selectPluginWasmProfile(
-  manifest: Pick<PluginManifestV1, 'contributions'>,
-): PluginWasmProfileSelection {
+/**
+ * Select the whole-module binary policy from already-validated signed facts:
+ * a manifest, or the verified activation bundle derived from one.
+ */
+export function selectPluginWasmProfile(manifest: {
+  readonly contributions: readonly { readonly migrations: readonly unknown[] }[]
+}): PluginWasmProfileSelection {
   const hasMigration = manifest.contributions.some(
     (contribution) => contribution.migrations.length > 0,
   )

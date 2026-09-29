@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { mountMulticamMonitor } from '../app/multicamMonitorController'
 import { openSourceAsset } from '../app/sourceMonitorController'
 import type { MulticamAngle } from '../domain/schema'
@@ -151,7 +151,6 @@ export default function MulticamControls() {
   const descriptors = useMediaStore((state) => state.descriptors)
   const assets = useMediaStore((state) => state.assets)
   const visuals = useMediaStore((state) => state.visuals)
-  const playheadFrame = useTransportStore((state) => state.playheadFrame)
   const selectedInstanceId = useMulticamSelectionStore(
     (state) => state.selectedInstanceId,
   )
@@ -172,7 +171,14 @@ export default function MulticamControls() {
       ? createMulticamInstancePresentation(definition, selectedInstance)
       : null
   ), [definition, selectedInstance])
-  const playheadPresentation = instancePresentation?.atPlayhead(playheadFrame) ?? null
+  // Only a selected multicam item makes the playhead relevant; without one
+  // this always-mounted panel must not re-render on every playback frame.
+  const playheadFrame = useTransportStore((state) => (
+    instancePresentation ? state.playheadFrame : null
+  ))
+  const playheadPresentation = playheadFrame === null
+    ? null
+    : instancePresentation?.atPlayhead(playheadFrame) ?? null
   const definitionFrame = playheadPresentation?.definitionFrame ?? 0
   const playheadInside = playheadPresentation?.inside ?? false
   const selectedAngleId = playheadPresentation?.selectedAngleId ?? null
@@ -186,8 +192,16 @@ export default function MulticamControls() {
     if (selectedInstanceId && !setupOpen) return mountMulticamMonitor(selectedInstanceId)
   }, [selectedInstanceId, setupOpen])
 
+  // Handlers read the playhead at event time (HANDOFF: route by getState()),
+  // so a shortcut in the same tick as a seek never uses a stale render.
+  const presentationNow = () => {
+    const frame = useTransportStore.getState().playheadFrame
+    return { frame, presentation: instancePresentation?.atPlayhead(frame) ?? null }
+  }
+
   const cutToAngle = (angleId: string): boolean => {
-    if (!definition || !playheadInside) {
+    const { frame, presentation } = presentationNow()
+    if (!definition || !presentation?.inside) {
       setStatus('Place the playhead inside the multicam item before cutting.')
       return false
     }
@@ -198,17 +212,18 @@ export default function MulticamControls() {
     const accepted = editDefinition({
       kind: 'cut',
       definitionId: definition.id,
-      frame: definitionFrame,
+      frame: presentation.definitionFrame,
       angleId,
     })
     setStatus(accepted
-      ? `Cut authored at frame ${playheadFrame}.`
+      ? `Cut authored at frame ${frame}.`
       : 'That cut could not be authored.')
     return accepted
   }
 
   const rollCut = (delta: -1 | 1): void => {
-    if (!definition || !selectedInstance || !playheadInside) {
+    const { presentation } = presentationNow()
+    if (!definition || !selectedInstance || !presentation?.inside) {
       setStatus('Place the playhead inside the multicam item before rolling a cut.')
       return
     }
@@ -216,7 +231,7 @@ export default function MulticamControls() {
       setStatus('Unlock every lane that uses this multicam before editing its definition.')
       return
     }
-    const cutFrame = playheadPresentation?.switchFrame ?? 0
+    const cutFrame = presentation.switchFrame
     if (cutFrame === 0) {
       setStatus('There is no preceding authored cut to roll at this playhead.')
       return
@@ -231,24 +246,31 @@ export default function MulticamControls() {
       : 'That roll would cross a neighbouring cut.')
   }
 
+  // One window listener for the panel's lifetime; it routes through the
+  // latest committed render's handler instead of re-subscribing per render.
+  const shortcutHandlerRef = useRef<((event: KeyboardEvent) => void) | null>(null)
+  useLayoutEffect(() => {
+    shortcutHandlerRef.current = definition && selectedInstance
+      ? (event) => {
+          if (!event.altKey || event.ctrlKey || event.metaKey || editableTarget(event.target)) return
+          if (event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+            event.preventDefault()
+            rollCut(event.key === 'ArrowLeft' ? -1 : 1)
+            return
+          }
+          const index = Number(event.key) - 1
+          const angle = definition.angles[index]
+          if (!angle) return
+          event.preventDefault()
+          cutToAngle(angle.id)
+        }
+      : null
+  })
   useEffect(() => {
-    if (!definition || !selectedInstance) return
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (!event.altKey || event.ctrlKey || event.metaKey || editableTarget(event.target)) return
-      if (event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-        event.preventDefault()
-        rollCut(event.key === 'ArrowLeft' ? -1 : 1)
-        return
-      }
-      const index = Number(event.key) - 1
-      const angle = definition.angles[index]
-      if (!angle) return
-      event.preventDefault()
-      cutToAngle(angle.id)
-    }
+    const onKeyDown = (event: KeyboardEvent): void => shortcutHandlerRef.current?.(event)
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  })
+  }, [])
 
   const beginSetup = (): void => {
     const initial = videoAssets.slice(0, 2).map((descriptor) => descriptor.id)
@@ -315,7 +337,7 @@ export default function MulticamControls() {
     }
     const created = createMulticam({
       name: setup.name,
-      startFrame: playheadFrame,
+      startFrame: useTransportStore.getState().playheadFrame,
       videoTrackId: setup.videoTrackId,
       audioTrackId: setup.audioTrackId || null,
       angles,
@@ -611,7 +633,7 @@ export default function MulticamControls() {
               onClick={() => setStatus(editInstance({
                 kind: 'split',
                 instanceId: selectedInstance.id,
-                frame: playheadFrame,
+                frame: useTransportStore.getState().playheadFrame,
               }) ? 'Split multicam at the playhead.' : 'The multicam cannot split there.')}
             >
               Split multicam

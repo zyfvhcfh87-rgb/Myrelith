@@ -44,8 +44,8 @@ import {
   sourceTimeMapForTimelineDuration,
 } from './sourceTimeMap'
 import {
+  createCrossfadePlanResolver,
   resolveCrossfadeGeometry,
-  resolveCrossfadePlan,
   sourceHandleHeadroomFrames,
   type SourceBoundsCatalog,
 } from './crossfadePlan'
@@ -603,10 +603,6 @@ function applyReplace(
   return current
 }
 
-function trackStream(kind: 'video' | 'audio'): 'video' | 'audio' {
-  return kind === 'audio' ? 'audio' : 'video'
-}
-
 function rollPair(
   doc: TimelineDoc,
   leftId: string,
@@ -627,7 +623,7 @@ function rollPair(
   const rightNewDur = right.timelineRange.durationFrames - deltaFrames
   if (leftNewDur < 1 || rightNewDur < 1) return null
 
-  const stream = trackStream(leftLoc.track.kind)
+  const stream = leftLoc.track.kind
   const growing = deltaFrames > 0
     ? sourceHandleHeadroomFrames({
         clip: left,
@@ -730,6 +726,8 @@ function seamTransitionsRemainValid(
   after: TimelineDoc,
   catalog: SourceBoundsCatalog,
 ): boolean {
+  const beforePlans = createCrossfadePlanResolver(before, catalog)
+  const afterPlans = createCrossfadePlanResolver(after, catalog)
   for (const beforeTrack of before.tracks) {
     if (beforeTrack.transitions.length === 0) continue
     const afterTrack = after.tracks.find((track) => track.id === beforeTrack.id)
@@ -741,18 +739,8 @@ function seamTransitionsRemainValid(
       const beforeGeometry = resolveCrossfadeGeometry(beforeTrack, transition)
       const afterGeometry = resolveCrossfadeGeometry(afterTrack, transition)
       if (beforeGeometry && !afterGeometry) return false
-      const beforePlan = resolveCrossfadePlan(
-        before,
-        beforeTrack.id,
-        transition.id,
-        catalog,
-      )
-      const afterPlan = resolveCrossfadePlan(
-        after,
-        afterTrack.id,
-        transition.id,
-        catalog,
-      )
+      const beforePlan = beforePlans(beforeTrack.id, transition.id)
+      const afterPlan = afterPlans(afterTrack.id, transition.id)
       if (beforePlan.status === 'available' && afterPlan.status !== 'available') {
         return false
       }

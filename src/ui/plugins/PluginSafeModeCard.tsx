@@ -4,7 +4,6 @@ import type { PluginActionView, PluginStartupModeView } from './pluginUiTypes'
 
 interface PluginSafeModeCardBaseProps {
   readonly startupReason?: string | null
-  readonly installedPluginCount?: number | null
 }
 
 interface PluginNormalStartupCardProps extends PluginSafeModeCardBaseProps {
@@ -80,18 +79,15 @@ function SafeModeAction({
 }
 
 export default function PluginSafeModeCard(props: PluginSafeModeCardProps) {
-  const { startupMode, startupReason = null, installedPluginCount = null } = props
+  const { startupMode, startupReason = null } = props
   const safeModeActive = startupMode === 'safe-mode'
   const reviewRequired = startupMode === 'review-required'
   const actionDescription = safeModeActive
     ? 'Safe mode is locked for this editor session. Restart the editor or begin a new session without safe mode to leave it.'
     : reviewRequired
       ? 'Third-party plugins remain blocked until you choose reviewed normal startup or safe mode for this session.'
-      : installedPluginCount === null
-        ? "Installed plugins aren't checked here. Safe mode keeps every third-party package inactive."
-        : installedPluginCount === 0
-          ? 'No third-party plugins are installed.'
-          : `${installedPluginCount} installed plugin${installedPluginCount === 1 ? '' : 's'} will stay inactive if you enter safe mode.`
+      // Protected startup has no trusted package count; never fabricate one.
+      : "Installed plugins aren't checked here. Safe mode keeps every third-party package inactive."
   const statusMessage = safeModeActive
     ? 'Safe mode is active and locked for this editor session.'
     : reviewRequired

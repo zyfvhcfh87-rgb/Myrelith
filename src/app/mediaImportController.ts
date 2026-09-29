@@ -7,6 +7,7 @@
  * successful commit; every other terminal path revokes it here.
  */
 
+import { errorMessage } from '../domain/errors'
 import type {
   MediaCompatibilityItem,
   MediaCompatibilityReport,
@@ -37,7 +38,7 @@ import {
   supportsLocalMediaHandles,
   type LocalMediaFileHandle,
 } from './localMediaHandles'
-import { compatibilityItemForAsset } from './mediaCompatibilityController'
+import { checkingCompatibilityItem, compatibilityItemForAsset } from './mediaCompatibilityItems'
 import {
   createMediaImportPrompt,
   requiresMediaImportRateDecision,
@@ -49,6 +50,7 @@ import {
 import { inspectMediaFileCompatibility } from './mediaInspection'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 export type { MediaImportDecision } from './mediaImportDecisions'
 
@@ -173,8 +175,8 @@ let activeImport: ActiveImport | null = null
 let activeBatch: ActiveImportBatch | null = null
 const retainedImports = new Map<string, RetainedImport>()
 
-function errorMessage(fileName: string, cause: unknown): string {
-  const detail = cause instanceof Error ? cause.message : String(cause)
+function importFailureMessage(fileName: string, cause: unknown): string {
+  const detail = errorMessage(cause)
   return `Could not import "${fileName}": ${detail}`
 }
 
@@ -182,7 +184,7 @@ function unexpectedCompatibility(
   fileName: string,
   cause: unknown,
 ): MediaCompatibilityReport {
-  const detail = cause instanceof Error ? cause.message : String(cause)
+  const detail = errorMessage(cause)
   return {
     status: 'error',
     container: null,
@@ -190,23 +192,6 @@ function unexpectedCompatibility(
     tracks: [],
     reason: 'decode-failed',
     detail: `Could not check "${fileName}": ${detail}`,
-  }
-}
-
-function checkingItem(
-  id: string,
-  requestId: string,
-  file: File,
-): MediaCompatibilityItem {
-  return {
-    id,
-    requestId,
-    fileName: file.name,
-    declaredMimeType: file.type,
-    size: file.size,
-    lastModified: file.lastModified,
-    status: 'checking',
-    report: null,
   }
 }
 
@@ -283,7 +268,7 @@ async function importSelectedMedia(
     }
   }
   const requestId = deps.createRequestId()
-  if (!deps.startCompatibility(checkingItem(itemId, requestId, file))) {
+  if (!deps.startCompatibility(checkingCompatibilityItem(itemId, requestId, file))) {
     return {
       status: 'failed',
       message: `Could not start a compatibility check for "${file.name}".`,
@@ -518,7 +503,7 @@ async function importSelectedMedia(
     if (activeImport !== operation || operation.cancelled) {
       return { status: 'cancelled' }
     }
-    const message = errorMessage(file.name, cause)
+    const message = importFailureMessage(file.name, cause)
     if (!probeReturned && deps.hasCompatibility(itemId, requestId)) {
       const report = unexpectedCompatibility(file.name, cause)
       deps.setCompatibility(itemId, requestId, 'error', report)
@@ -745,7 +730,7 @@ export async function chooseMediaForImport(
     return importMediaSelections(selections, deps)
   } catch (cause) {
     if (isLocalMediaPickerCancellation(cause)) return { status: 'cancelled' }
-    const detail = cause instanceof Error ? cause.message : String(cause)
+    const detail = errorMessage(cause)
     const message = `Could not choose media: ${detail}`
     useMediaImportStore.setState({
       phase: 'error',
@@ -820,3 +805,4 @@ export function resetMediaImportController(): void {
   activeBatch = null
   useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
 }
+registerLoadedEditorRuntime('mediaImport', resetMediaImportController)

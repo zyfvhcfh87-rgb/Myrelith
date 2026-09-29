@@ -35,6 +35,7 @@ import {
   type PluginTrustPolicy,
   type Sha256Identity,
 } from './pluginTrustRegistry'
+import { freezePluginParameter } from './pluginControllerShared'
 
 const MAX_PENDING_INSPECTIONS = 4
 const MAX_PENDING_ARCHIVE_BYTES = 64 * 1024 * 1024
@@ -342,16 +343,6 @@ function identityFor(verified: VerifiedPluginPackage): PluginPackageIdentity {
   })
 }
 
-function freezeParameter(parameter: PluginParameter): PluginParameter {
-  if (parameter.kind === 'enum') {
-    return Object.freeze({
-      ...parameter,
-      options: Object.freeze(parameter.options.map((option) => Object.freeze({ ...option }))),
-    })
-  }
-  return Object.freeze({ ...parameter })
-}
-
 function freezeContribution(
   contribution: PluginVideoEffectContribution,
 ): VerifiedPluginContribution {
@@ -365,7 +356,7 @@ function freezeContribution(
     migrations: Object.freeze(
       contribution.migrations.map((migration) => Object.freeze({ ...migration })),
     ),
-    parameters: Object.freeze(contribution.parameters.map(freezeParameter)),
+    parameters: Object.freeze(contribution.parameters.map(freezePluginParameter)),
   })
 }
 
@@ -1262,7 +1253,7 @@ export function createPluginInstallController(
               contributionVersion: contribution.contributionVersion,
               descriptorVersion: contribution.descriptorVersion,
               entrypoint: contribution.entrypoint,
-              parameters: Object.freeze(contribution.parameters.map(freezeParameter)),
+              parameters: Object.freeze(contribution.parameters.map(freezePluginParameter)),
               availability: availabilityForStatus(statusReason),
               detail: boundedManagementDetail(detailForStatus(statusReason)),
             }))

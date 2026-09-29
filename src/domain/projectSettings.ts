@@ -6,6 +6,7 @@
  * freshly generated document id when it creates a real project.
  */
 
+import { isRecord } from './guards'
 import type { FrameRate, TimelineDoc, Track } from './schema'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
@@ -84,13 +85,6 @@ function freezeAspectRatioPreset(
 function freezeFrameRate(num: number, den: number): Readonly<FrameRate> {
   return Object.freeze({ num, den })
 }
-
-export const PROJECT_RESOLUTION_TIERS = Object.freeze([
-  720,
-  1080,
-  1440,
-  2160,
-] as const)
 
 /** Reviewed canvas families and exact creation sizes, in UI display order. */
 export const PROJECT_ASPECT_RATIO_PRESETS = Object.freeze([
@@ -240,10 +234,6 @@ export function formatProjectCanvas(width: number, height: number): string {
   return `${label} · ${width} × ${height}`
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 function hasExactlyKeys(
   value: Record<string, unknown>,
   expected: readonly string[],
@@ -333,17 +323,23 @@ function validateNonEmptyText(
 
 const INITIAL_TRACKS_PER_KIND = 4
 
-function emptyTrack(id: string, kind: Track['kind']): Track {
+/** The one fully populated empty lane every new-track path creates. */
+export function createEmptyTrack(
+  id: string,
+  kind: Track['kind'],
+  name = id,
+  hidden = false,
+): Track {
   return {
     id,
     kind,
-    name: id,
+    name,
     clips: [],
     sequenceInstances: [],
     multicamInstances: [],
     adjustments: [],
     transitions: [],
-    hidden: false,
+    hidden,
     muted: false,
     solo: false,
     locked: false,
@@ -357,7 +353,7 @@ function emptyTrack(id: string, kind: Track['kind']): Track {
 function emptyTracks(prefix: 'V' | 'A', kind: Track['kind']): Track[] {
   return Array.from(
     { length: INITIAL_TRACKS_PER_KIND },
-    (_, index) => emptyTrack(`${prefix}${index + 1}`, kind),
+    (_, index) => createEmptyTrack(`${prefix}${index + 1}`, kind),
   )
 }
 

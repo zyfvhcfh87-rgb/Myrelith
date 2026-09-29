@@ -18,6 +18,7 @@ import {
   Input,
   VideoSampleSink,
 } from 'mediabunny'
+import { runtimeFailureDetail } from '../domain/errors'
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
 import type { InputVideoTrack } from 'mediabunny'
 import {
@@ -28,6 +29,7 @@ import {
   type DecoderCheckTarget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
+import { rejectionReasons, throwIfRejected } from './settledResults'
 
 const MICROSECONDS_PER_SECOND = 1_000_000
 
@@ -134,8 +136,7 @@ export class WorkerVideoSourceOpenError extends Error {
   readonly failure: WorkerVideoSourceOpenFailure
 
   constructor(failure: WorkerVideoSourceOpenFailure, cause: unknown) {
-    const detail = cause instanceof Error ? cause.message : String(cause)
-    super(detail.slice(0, 2_048), { cause })
+    super(runtimeFailureDetail(cause), { cause })
     this.name = 'WorkerVideoSourceOpenError'
     this.failure = failure
   }
@@ -293,12 +294,7 @@ class VideoFrameCursorImpl implements VideoFrameCursor {
 
     const results = await Promise.allSettled(tasks)
     this.onClosed()
-    const errors = results
-      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      .map((result) => result.reason)
-    if (errors.length > 0) {
-      throw new AggregateError(errors, 'Failed to close video cursor')
-    }
+    throwIfRejected(results, 'Failed to close video cursor')
   }
 }
 
@@ -398,12 +394,9 @@ class WorkerVideoSourceImpl implements WorkerVideoSource {
   }
 
   private async finishClose(): Promise<void> {
-    const results = await Promise.allSettled(
+    const errors = rejectionReasons(await Promise.allSettled(
       [...this.cursors].map((cursor) => cursor.close()),
-    )
-    const errors = results
-      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      .map((result) => result.reason)
+    ))
 
     try {
       this.input.dispose()
@@ -419,7 +412,7 @@ class WorkerVideoSourceImpl implements WorkerVideoSource {
 
 /**
  * Open a worker-owned video source. Initialization is intentionally async so
- * configureAsset can acknowledge readiness only after a usable track exists.
+ * openAsset can acknowledge readiness only after a usable track exists.
  */
 export async function openWorkerVideoSource(
   blob: Blob,

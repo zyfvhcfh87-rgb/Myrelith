@@ -1,4 +1,4 @@
-import type { ClipAnimationProperty, ClipAudioSettings, ClipId, TimelineDoc, TextProps } from '../schema';
+import type { Clip, ClipAnimationProperty, ClipAudioSettings, ClipId, TimelineDoc, TextProps } from '../schema';
 import {
   animationPropertyValueError,
   clipAnimation,
@@ -12,7 +12,7 @@ import { clipSourceTimeMap, sourceTicksAtTimelineOffset } from '../sourceTimeMap
 import { textOverlayName, textPropsValidationError } from '../textOverlay';
 import { locateClip, reject, withTrack } from './operationInternals';
 import { replaceClipAnimation } from './animation';
-import { MAX_CLIP_VOLUME } from './tracks';
+import { clampVolume } from './tracks';
 
 export type ClipAudioSettingsPatch = Partial<ClipAudioSettings>
 
@@ -72,7 +72,7 @@ export function updateClipAudio(
   )
   if (audioError) return reject(doc, op, audioError)
   const volume = hasVolume
-    ? Math.min(MAX_CLIP_VOLUME, Math.max(0, patch.volume as number))
+    ? clampVolume(patch.volume as number)
     : loc.clip.volume
   if (volume === loc.clip.volume && sameAudio(audio, currentAudio)) return doc
 
@@ -103,7 +103,7 @@ export function updateClipAudioAtFrame(
   const animatedValues = new Map<ClipAnimationProperty, number>()
   let staticVolume = patch.volume
   if (patch.volume !== undefined && isClipPropertyAnimated(loc.clip, 'volume')) {
-    const volume = Math.min(MAX_CLIP_VOLUME, Math.max(0, patch.volume))
+    const volume = clampVolume(patch.volume)
     const valueError = animationPropertyValueError('volume', volume)
     if (valueError) return reject(doc, op, valueError)
     staticVolume = undefined
@@ -178,9 +178,19 @@ export function updateClipAudioAtFrame(
   return replaceClipAnimation(working, workingLoc, animation)
 }
 
-function staticAudioPatchDiffers(clip: { volume: number }, patch: ClipAudioPatch): boolean {
-  if (patch.volume !== undefined && patch.volume !== clip.volume) return true
-  return patch.audio !== undefined && Object.keys(patch.audio).length > 0
+/**
+ * Tell a rejected static patch apart from one that merely repeats current
+ * values (e.g. Reset Audio on defaults while volume is keyframed): compare the
+ * merged, clamped result like updateClipAudio does, so only a real rejection
+ * blocks the animated half of the edit.
+ */
+function staticAudioPatchDiffers(clip: Clip, patch: ClipAudioPatch): boolean {
+  if (patch.volume !== undefined && clampVolume(patch.volume) !== clip.volume) return true
+  if (patch.audio === undefined) return false
+  const keys = Object.keys(patch.audio) as Array<keyof ClipAudioSettings>
+  if (keys.some((key) => !AUDIO_SETTING_KEYS.has(key))) return true
+  const current = clipAudioSettings(clip)
+  return !sameAudio({ ...current, ...patch.audio }, current)
 }
 
 /** Complete editable surface for one procedural text payload. */

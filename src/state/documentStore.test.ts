@@ -10,7 +10,18 @@ import { createColorAdjustEffect, createMaskEffect } from '../domain/effectStack
 import { createParametricEqEffect } from '../domain/audioEffectStack'
 import { EFFECT_STACK_LIMITS } from '../domain/effectBounds'
 import { sourceTimeRateFromPercent } from '../domain/sourceTimeMap'
+import { CAPTION_INTENT_LIMITS } from '../domain/captionIntent'
+import {
+  addCrossfade,
+  setClipVolume,
+  setCrossfadeDuration,
+  setEffectKeyframe,
+  updateClipAudio,
+  updateClipVisual,
+} from '../domain/operations'
 import { clipWithAnimationKeyframeCount } from '../test/animationBudgetFixtures'
+import { opaqueCaptionBytes } from '../test/captionIntentFixtures'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import {
   documentAtAggregateEffectBudget,
   effectBudgetInsertionClip,
@@ -289,6 +300,107 @@ describe('project-wide sequence history', () => {
   })
 })
 
+describe('result-returning project actions respect history-wide admission', () => {
+  /** Caption intent retained outside history, one descriptor over the 32 MiB cap. */
+  function applyRetentionPressure(): void {
+    const style = opaqueCaptionBytes(CAPTION_INTENT_LIMITS.maxDescriptorBytes)
+    const count = Math.floor(
+      CAPTION_INTENT_LIMITS.maxRetainedIntentBytes / CAPTION_INTENT_LIMITS.maxDescriptorBytes,
+    ) + 1
+    useDocumentStore.setState({
+      retainedCaptionOwners: { pressure: Array.from({ length: count }, () => ({ style })) },
+    })
+  }
+  // The shared beforeEach setDoc would reject under leftover pressure.
+  afterEach(() => useDocumentStore.setState({ retainedCaptionOwners: {} }))
+
+  const multicamCommand = {
+    name: 'Concert',
+    startFrame: 600,
+    videoTrackId: 'V1',
+    audioTrackId: 'A1',
+    angles: [
+      { assetId: 'angle-wide', name: 'Wide', durationFrames: 100, syncFrame: 5 },
+      { assetId: 'angle-close', name: 'Close', durationFrames: 100, syncFrame: 10 },
+    ],
+    audioPolicy: { kind: 'fixed', angleIndex: 0 },
+  } as const
+  const compoundInstance = () => getState().createCompoundFromClips(['clipA'], 'Compound')!.instanceId
+  const multicam = () => getState().createMulticam(multicamCommand)!
+  const disposableSequence = () => {
+    const id = getState().createSequence('Disposable')!
+    getState().switchSequence(getState().project.rootSequenceId)
+    return id
+  }
+
+  const cases: ReadonlyArray<readonly [string, () => () => unknown]> = [
+    ['createCompoundFromClips', () => () => getState().createCompoundFromClips(['clipA'], 'Compound')],
+    ['editSequenceInstance', () => {
+      const instanceId = compoundInstance()
+      return () => getState().editSequenceInstance({ kind: 'move', instanceId, startFrame: 1000 })
+    }],
+    ['createMulticam', () => () => getState().createMulticam(multicamCommand)],
+    ['editMulticamInstance', () => {
+      const { videoInstanceId } = multicam()
+      return () => getState().editMulticamInstance({ kind: 'move', instanceId: videoInstanceId, startFrame: 1000 })
+    }],
+    ['editMulticamDefinition', () => {
+      multicam()
+      const definition = getState().project.multicams![0]
+      return () => getState().editMulticamDefinition({
+        kind: 'cut', definitionId: definition.id, frame: 30, angleId: definition.angles[1].id,
+      })
+    }],
+    ['makeSequenceInstanceIndependent', () => {
+      const instanceId = compoundInstance()
+      return () => getState().makeSequenceInstanceIndependent(instanceId)
+    }],
+    ['createSequence', () => () => getState().createSequence('Scene two')],
+    ['duplicateSequence', () => () => getState().duplicateSequence(getState().activeSequenceId, 'Copy')],
+    ['renameSequence', () => () => getState().renameSequence(getState().activeSequenceId, 'Renamed')],
+    ['deleteSequence', () => {
+      const id = disposableSequence()
+      return () => getState().deleteSequence(id)
+    }],
+    ['chooseRootSequence', () => {
+      const id = disposableSequence()
+      return () => getState().chooseRootSequence(id)
+    }],
+    ['matchProjectFrameRate', () => {
+      getState().setDoc({
+        ...makeDoc(),
+        tracks: makeDoc().tracks.map((track) => ({ ...track, clips: [], transitions: [] })),
+      })
+      return () => getState().matchProjectFrameRate({ num: 60, den: 1 })
+    }],
+  ]
+
+  test.each(cases)('%s reports failure when admission rejects the edit', (_name, arrange) => {
+    const act = arrange()
+    applyRetentionPressure()
+    const before = getState()
+
+    const rejected = act()
+
+    expect(rejected === null || rejected === false).toBe(true)
+    expect(getState()).toBe(before)
+    useDocumentStore.setState({ retainedCaptionOwners: {} })
+    const admitted = act()
+    expect(admitted === null || admitted === false).toBe(false)
+    expect(getState().past).toHaveLength(before.past.length + 1)
+    expect(getState().past.at(-1)).toBe(before.project)
+  })
+
+  test('an unchanged rename stays an accepted no-op under admission pressure', () => {
+    const { activeSequenceId, doc } = getState()
+    applyRetentionPressure()
+    const before = getState()
+
+    expect(getState().renameSequence(activeSequenceId, doc.name)).toBe(true)
+    expect(getState()).toBe(before)
+  })
+})
+
 test('an unsafe retime end is a same-reference no-op with no history entry', () => {
   const base = makeDoc()
   const unsafe = deepFreeze({
@@ -496,7 +608,7 @@ describe('transition action history', () => {
     const initial = getState().doc
     const initialJson = JSON.stringify(initial)
 
-    getState().addCrossfade('A', 'B', 5)
+    commitDocumentEdit(addCrossfade, 'A', 'B', 5)
     const authored = getState().doc
     const authoredJson = JSON.stringify(authored)
     const generatedId = authored.tracks[0].transitions[0].id
@@ -519,7 +631,7 @@ describe('transition action history', () => {
     getState().setDoc(makeTransitionDoc([crossfade('t1', 'A', 'B')]))
     const initial = getState().doc
 
-    getState().setCrossfadeDuration('V1', 't1', 5)
+    commitDocumentEdit(setCrossfadeDuration, 'V1', 't1', 5)
     expect(getState().doc.tracks[0].transitions[0]).toEqual(
       crossfade('t1', 'A', 'B', 5),
     )
@@ -532,10 +644,10 @@ describe('transition action history', () => {
     expect(getState().doc).toBe(updated)
 
     expectRejectedWithoutStateChange(() => {
-      getState().setCrossfadeDuration('V1', 't1', 5)
+      commitDocumentEdit(setCrossfadeDuration, 'V1', 't1', 5)
     })
     expectRejectedWithoutStateChange(() => {
-      getState().setCrossfadeDuration('V1', 't1', 21)
+      commitDocumentEdit(setCrossfadeDuration, 'V1', 't1', 21)
     })
     expect(getState().past).toHaveLength(1)
   })
@@ -621,19 +733,19 @@ describe('transition action history', () => {
     // to preserve, not merely the easy all-empty state.
     getState().setDoc(makeTransitionDoc())
     const initial = getState().doc
-    getState().addCrossfade('A', 'B', 3)
+    commitDocumentEdit(addCrossfade, 'A', 'B', 3)
     const redoTarget = getState().doc
     getState().undo()
     expect(getState().future).toHaveLength(1)
 
     expectRejectedWithoutStateChange(() => {
-      getState().addCrossfade('B', 'gap', 3)
+      commitDocumentEdit(addCrossfade, 'B', 'gap', 3)
     })
     expectRejectedWithoutStateChange(() => {
-      getState().addCrossfade('A', 'missing', 3)
+      commitDocumentEdit(addCrossfade, 'A', 'missing', 3)
     })
     expectRejectedWithoutStateChange(() => {
-      getState().setCrossfadeDuration('V1', 'missing', 5)
+      commitDocumentEdit(setCrossfadeDuration, 'V1', 'missing', 5)
     })
     expectRejectedWithoutStateChange(() => {
       getState().removeTransition('V9', 'missing')
@@ -642,7 +754,7 @@ describe('transition action history', () => {
     expect(getState().doc).toBe(redoTarget)
     getState().undo()
     expect(getState().doc).toBe(initial)
-    getState().addCrossfade('A', 'B', 5)
+    commitDocumentEdit(addCrossfade, 'A', 'B', 5)
     expect(getState().future).toEqual([])
 
     const locked = makeTransitionDoc(
@@ -655,10 +767,10 @@ describe('transition action history', () => {
     getState().undo()
     expect(getState().future).toHaveLength(1)
     expectRejectedWithoutStateChange(() => {
-      getState().addCrossfade('A', 'B', 3)
+      commitDocumentEdit(addCrossfade, 'A', 'B', 3)
     })
     expectRejectedWithoutStateChange(() => {
-      getState().setCrossfadeDuration('V1', 'locked-transition', 3)
+      commitDocumentEdit(setCrossfadeDuration, 'V1', 'locked-transition', 3)
     })
     expectRejectedWithoutStateChange(() => {
       getState().removeTransition('V1', 'locked-transition')
@@ -673,7 +785,7 @@ describe('transition action history', () => {
     ))
 
     const invalid = getState().doc
-    getState().setCrossfadeDuration('V2', sharedId, 5)
+    commitDocumentEdit(setCrossfadeDuration, 'V2', sharedId, 5)
     expect(getState().doc).toBe(invalid)
     expect(getState().doc.tracks[0].transitions[0].durationFrames).toBe(3)
     expect(getState().doc.tracks[1].transitions[0].durationFrames).toBe(3)
@@ -911,7 +1023,7 @@ describe('actions delegate to domain operations', () => {
     getState().setDoc(saturated)
     const before = getState()
 
-    before.setEffectKeyframe('clipA', 'mask-budget', 'x', {
+    commitDocumentEdit(setEffectKeyframe, 'clipA', 'mask-budget', 'x', {
       frame: 5,
       value: 0.25,
       easing: { type: 'linear' },
@@ -1074,7 +1186,7 @@ describe('Phase 4.2 editing actions', () => {
 
   test('Issue #34 visual edits are one undoable entry and idempotent edits push none', () => {
     const before = getState().doc
-    getState().updateClipVisual('clipA', {
+    commitDocumentEdit(updateClipVisual, 'clipA', {
       transform: { x: 48, scaleX: 1.25 },
       opacity: 0.7,
       blendMode: 'screen',
@@ -1091,7 +1203,7 @@ describe('Phase 4.2 editing actions', () => {
     })
     expect(pastDocs()).toEqual([before])
 
-    getState().updateClipVisual('clipA', { opacity: 0.7 })
+    commitDocumentEdit(updateClipVisual, 'clipA', { opacity: 0.7 })
     expect(getState().past).toHaveLength(1)
 
     getState().undo()
@@ -1099,12 +1211,12 @@ describe('Phase 4.2 editing actions', () => {
     getState().redo()
     expect(getState().doc.tracks[0].clips[0].blendMode).toBe('screen')
 
-    getState().updateClipVisual('clipA', { blendMode: 'future-soft-light' })
+    commitDocumentEdit(updateClipVisual, 'clipA', { blendMode: 'future-soft-light' })
     expect(getState().doc.tracks[0].clips[0].blendMode).toBe('future-soft-light')
   })
 
   test('Issue #34 audio edits are one undoable entry and invalid edits preserve redo', () => {
-    getState().updateClipAudio('clipD', {
+    commitDocumentEdit(updateClipAudio, 'clipD', {
       volume: 0.5,
       audio: { enabled: false, balance: -0.25, fadeInFrames: 20, fadeOutFrames: 30 },
     })
@@ -1121,7 +1233,7 @@ describe('Phase 4.2 editing actions', () => {
     const redoTarget = getState().doc
     getState().undo()
     const beforeRejected = getState()
-    getState().updateClipAudio('clipD', { audio: { fadeOutFrames: 301 } })
+    commitDocumentEdit(updateClipAudio, 'clipD', { audio: { fadeOutFrames: 301 } })
     expect(getState().doc).toBe(beforeRejected.doc)
     expect(getState().past).toBe(beforeRejected.past)
     expect(getState().future).toBe(beforeRejected.future)
@@ -1309,15 +1421,15 @@ describe('track actions', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1)
   })
 
-  test('setClipVolume commits one entry; idempotent sets push none', () => {
-    getState().setClipVolume('clipD', 0.4) // clipD is on A1
+  test('clip volume edits commit one entry; idempotent sets push none', () => {
+    commitDocumentEdit(setClipVolume, 'clipD', 0.4) // clipD is on A1
     expect(getState().doc.tracks[2].clips[0].volume).toBe(0.4)
     expect(getState().past).toHaveLength(1)
 
-    getState().setClipVolume('clipD', 0.4) // unchanged
+    commitDocumentEdit(setClipVolume, 'clipD', 0.4) // unchanged
     expect(getState().past).toHaveLength(1)
 
-    getState().setClipVolume('clipD', 99) // domain clamps to 2
+    commitDocumentEdit(setClipVolume, 'clipD', 99) // domain clamps to 2
     expect(getState().doc.tracks[2].clips[0].volume).toBe(2)
     expect(getState().past).toHaveLength(2)
   })

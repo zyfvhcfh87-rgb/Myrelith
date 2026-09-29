@@ -19,14 +19,7 @@ import {
   type PresentationProfile,
   type PresentationViewport,
 } from '../domain/presentationProfile'
-import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
-import type {
-  AssetId,
-  Clip,
-  MediaAsset,
-  TimelineDoc,
-  Track,
-} from '../domain/schema'
+import type { AssetId, MediaAsset, TimelineDoc } from '../domain/schema'
 import type { SourceMonitorSession } from '../domain/sourceMonitor'
 import {
   createVideoCompositionPlanner,
@@ -48,6 +41,9 @@ import {
   type MediaRuntimeGuard,
 } from './mediaCompatibilityController'
 import { mediaResourceAdmission, type MediaResourceLease } from './mediaResourceAdmission'
+import { createMediaBlobFetcher } from './objectUrlBlob'
+import { sourceReviewDocument } from './sourceReviewDocument'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 export interface SourcePreviewBridge {
   setDoc(doc: TimelineDoc): void
@@ -84,16 +80,6 @@ export interface SourcePreviewDeps {
   fetchBlob(url: string): Promise<Blob>
 }
 
-const IDENTITY_TRANSFORM = Object.freeze({
-  x: 0,
-  y: 0,
-  scaleX: 1,
-  scaleY: 1,
-  rotation: 0,
-  anchorX: 0.5,
-  anchorY: 0.5,
-})
-
 const realDeps: SourcePreviewDeps = {
   createBridge: () => new RenderWorkerBridge(createRenderWorker(), null),
   createVisualPlanner: (doc, catalog) => createVideoCompositionPlanner(doc, catalog),
@@ -101,15 +87,7 @@ const realDeps: SourcePreviewDeps = {
   init: (bridge, offscreen) => {
     if (bridge instanceof RenderWorkerBridge) bridge.init(offscreen)
   },
-  fetchBlob: async (url) => {
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(
-        `Could not read source preview media (${response.status} ${response.statusText})`,
-      )
-    }
-    return response.blob()
-  },
+  fetchBlob: createMediaBlobFetcher('source preview media'),
 }
 
 interface ControllerState {
@@ -146,69 +124,6 @@ const state: ControllerState = {
   renderGeneration: 0,
   sourceLoadGeneration: 0,
   suspended: false,
-}
-
-function emptyReviewDoc(session: SourceMonitorSession): TimelineDoc {
-  return {
-    schemaVersion: CURRENT_TIMELINE_SCHEMA_VERSION,
-    id: `source-review:${session.source.assetId}`,
-    name: session.source.fileName,
-    frameRate: session.source.rate,
-    width: 1920,
-    height: 1080,
-    audioSampleRate: 48_000,
-    tracks: [],
-  }
-}
-
-function reviewClip(session: SourceMonitorSession): Clip {
-  const still = session.source.kind === 'image'
-  return {
-    id: 'source-review-clip',
-    assetId: session.source.assetId,
-    name: session.source.fileName,
-    sourceMode: still ? 'still' : 'timed',
-    sourceRange: still
-      ? { startFrame: 0, durationFrames: 1 }
-      : { startFrame: 0, durationFrames: session.source.durationFrames },
-    timelineRange: {
-      startFrame: 0,
-      durationFrames: session.source.durationFrames,
-    },
-    transform: { ...IDENTITY_TRANSFORM },
-    opacity: 1,
-    volume: 1,
-    effects: [],
-  }
-}
-
-function reviewTrack(session: SourceMonitorSession): Track {
-  return {
-    id: 'source-review-V1',
-    kind: 'video',
-    name: 'Source',
-    clips: [reviewClip(session)],
-    transitions: [],
-    hidden: false,
-    muted: false,
-    solo: false,
-    locked: false,
-  }
-}
-
-function buildSourceReviewDocument(
-  session: SourceMonitorSession,
-  asset: MediaAsset | undefined,
-): TimelineDoc {
-  const visual = session.source.kind === 'video' || session.source.kind === 'image'
-  const width = Math.max(1, asset?.width ?? 1920)
-  const height = Math.max(1, asset?.height ?? 1080)
-  return {
-    ...emptyReviewDoc(session),
-    width,
-    height,
-    tracks: visual ? [reviewTrack(session)] : [],
-  }
 }
 
 function catalogFor(asset: MediaAsset | undefined): SourceBoundsCatalog {
@@ -366,7 +281,7 @@ function syncReview(deps: SourcePreviewDeps): void {
     return
   }
   const asset = currentAsset(session)
-  const doc = buildSourceReviewDocument(session, asset)
+  const doc = sourceReviewDocument(session, asset, 'video')
   state.reviewDoc = doc
   state.visualPlanner = deps.createVisualPlanner(doc, catalogFor(asset))
   bridge.setDoc(doc)
@@ -506,11 +421,23 @@ export function initSourcePreview(
           || current.session.shuttleStep !== previous.session.shuttleStep
         )
       ) {
+        // Auto quality scales down only while the Source is playing.
+        if (
+          state.reviewDoc
+          && (current.session.shuttleStep !== 0) !== (previous.session?.shuttleStep !== 0)
+        ) syncPresentationProfile(bridge, state.reviewDoc)
         scheduleRender()
       }
     }),
-    useMediaStore.subscribe(() => {
+    useMediaStore.subscribe((current, previous) => {
       if (state.bridge !== bridge || state.deps !== deps) return
+      // The review document reads only the open session's connected asset;
+      // rebuilding it for unrelated media changes would supersede playback.
+      const assetId = useSourceMonitorStore.getState().session?.source.assetId
+      if (
+        assetId === undefined
+        || current.assets.get(assetId) === previous.assets.get(assetId)
+      ) return
       syncReview(deps)
     }),
   )
@@ -544,3 +471,4 @@ async function disposeSourcePreviewState(): Promise<void> {
 export function disposeSourcePreview(): Promise<void> {
   return disposeSourcePreviewState()
 }
+registerLoadedEditorRuntime('sourcePreview', disposeSourcePreview)

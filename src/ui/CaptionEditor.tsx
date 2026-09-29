@@ -21,7 +21,8 @@ import CaptionStyleTools from './CaptionStyleTools'
 import CaptionImportPanel from './CaptionImportPanel'
 import CaptionExportPanel from './CaptionExportPanel'
 import { CAPTION_STYLE_PRESETS, CAPTION_TRACK_ROLES, createCaptionTrack } from '../domain/captions'
-import type { CaptionItem, CaptionItemId, CaptionTrackId } from '../domain/schema'
+import { errorMessage } from '../domain/errors'
+import type { CaptionItem, CaptionItemId, CaptionTrack, CaptionTrackId } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 
@@ -35,10 +36,6 @@ export interface CaptionEditorProps {
 
 function id(prefix: 'caption_track' | 'caption_item'): string {
   return `${prefix}_${crypto.randomUUID()}`
-}
-
-function errorMessage(value: unknown): string {
-  return value instanceof Error ? value.message : String(value)
 }
 
 function formatCue(item: CaptionItem): string {
@@ -87,11 +84,16 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
 
   useEffect(() => { setAppearance([]) }, [doc, trackId, itemId])
 
+  /** Focus a track's first cue (or nothing) and restart range selection there. */
+  const selectTrackStart = (next: CaptionTrack | null | undefined): void => {
+    const first = next?.items[0] ?? null
+    setTrackId(next?.id ?? null); setItemId(first?.id ?? null)
+    setSelection({ trackId: next?.id ?? null, ids: first ? [first.id] : [] })
+    selectionAnchor.current = first?.id ?? null
+  }
+
   useEffect(() => {
-    const first = useDocumentStore.getState().doc.captionTracks?.[0]
-    setTrackId(first?.id ?? null); setItemId(first?.items[0]?.id ?? null)
-    setSelection({ trackId: first?.id ?? null, ids: first?.items[0] ? [first.items[0].id] : [] })
-    selectionAnchor.current = first?.items[0]?.id ?? null
+    selectTrackStart(useDocumentStore.getState().doc.captionTracks?.[0])
   }, [documentScope])
   useEffect(() => {
     if (wasReviewing.current && !reviewing) returnFocus.current?.focus()
@@ -120,19 +122,13 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
 
   useEffect(() => {
     if (trackId && tracks.some((candidate) => candidate.id === trackId)) return
-    const nextTrack = tracks[0] ?? null
-    setTrackId(nextTrack?.id ?? null)
-    setItemId(nextTrack?.items[0]?.id ?? null)
-    setSelection({ trackId: nextTrack?.id ?? null, ids: nextTrack?.items[0] ? [nextTrack.items[0].id] : [] })
-    selectionAnchor.current = nextTrack?.items[0]?.id ?? null
+    selectTrackStart(tracks[0])
   }, [trackId, tracks])
 
   useEffect(() => {
     if (!track) return
     if (itemId && track.items.some((candidate) => candidate.id === itemId)) return
-    setItemId(track.items[0]?.id ?? null)
-    setSelection({ trackId: track.id, ids: track.items[0] ? [track.items[0].id] : [] })
-    selectionAnchor.current = track.items[0]?.id ?? null
+    selectTrackStart(track)
   }, [itemId, track])
 
   useEffect(() => {
@@ -263,10 +259,7 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
     const next = createCaptionTrack(nextId, `Captions ${tracks.length + 1}`)
     run('Caption track added.', () => {
       useDocumentStore.getState().addCaptionTrack(next)
-      setTrackId(nextId)
-      setItemId(null)
-      setSelection({ trackId: nextId, ids: [] })
-      selectionAnchor.current = null
+      selectTrackStart(next)
     })
   }
 
@@ -341,10 +334,7 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
             Track
             <select value={trackId ?? ''} onChange={(event) => {
               controller.cancel()
-              const next = tracks.find(candidate => candidate.id === event.target.value)
-              setTrackId(next?.id ?? null); setItemId(next?.items[0]?.id ?? null)
-              setSelection({ trackId: next?.id ?? null, ids: next?.items[0] ? [next.items[0].id] : [] })
-              selectionAnchor.current = next?.items[0]?.id ?? null
+              selectTrackStart(tracks.find(candidate => candidate.id === event.target.value))
             }}>
               {tracks.length === 0 && <option value="">No caption tracks</option>}
               {tracks.map((candidate) => (
@@ -537,10 +527,7 @@ export default function CaptionEditor({ onClose }: CaptionEditorProps) {
           onFonts={fonts => importer.chooseFonts(imported.revision, fonts)} onApply={accepted => {
             const result = importer.apply(imported.revision, accepted)
             if (result.error) { setStatus(result.error); return }
-            const next = useDocumentStore.getState().doc.captionTracks?.find(candidate => candidate.id === result.trackId)
-            setTrackId(next?.id ?? null); setItemId(next?.items[0]?.id ?? null)
-            setSelection({ trackId: next?.id ?? null, ids: next?.items[0] ? [next.items[0].id] : [] })
-            selectionAnchor.current = next?.items[0]?.id ?? null
+            selectTrackStart(useDocumentStore.getState().doc.captionTracks?.find(candidate => candidate.id === result.trackId))
             setStatus('Caption import applied. Undo restores the previous captions.')
           }} />}
         {exported.phase !== 'idle' && <CaptionExportPanel key={exported.revision} snapshot={exported} onCancel={cancelExport}

@@ -14,8 +14,3 @@ export function loadEditorShell(): Promise<EditorShellModule> {
   })
   return pendingEditorModule
 }
-
-/** Test/HMR seam; production navigation keeps the loaded module cached. */
-export function resetEditorModuleLoader(): void {
-  pendingEditorModule = null
-}

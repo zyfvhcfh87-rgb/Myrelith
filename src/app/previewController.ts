@@ -44,9 +44,9 @@ import {
 import type { AssetId, FrameRate, MediaAsset, TimelineDoc } from '../domain/schema'
 import {
   replaceProjectSequence,
-  sequenceById,
   type SequenceProject,
 } from '../domain/projectSequences'
+import { projectReachableSequences } from '../domain/selectors'
 import { createProjectVideoCompositionPlanner } from '../domain/projectVideoCompositionPlan'
 import { sequenceInstances } from '../domain/nestedSequences'
 import type { VideoScopeAnalysis } from '../domain/videoScopes'
@@ -55,6 +55,7 @@ import {
   createSourceBoundsCatalog,
   type SourceBoundsCatalog,
 } from '../domain/crossfadePlan'
+import { errorMessage } from '../domain/errors'
 import {
   createVideoCompositionPlanner,
   videoCompositionRequests,
@@ -76,7 +77,7 @@ import {
 } from '../engine/render-bridge'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
-import { useProxyStore } from '../state/proxyStore'
+import { useProxyStore, type ProxyAssetState } from '../state/proxyStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useVideoScopesStore } from '../state/videoScopesStore'
@@ -115,6 +116,8 @@ import {
   reportProxyPreviewFailure,
 } from './proxyController'
 import { mediaResourceAdmission, type MediaResourceLease } from './mediaResourceAdmission'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
+import { fetchObjectUrlBlob } from './objectUrlBlob'
 
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
@@ -287,7 +290,7 @@ const realDeps: PreviewDeps = {
   createProjectVisualPlanner: createProjectVideoCompositionPlanner,
   transferCanvas: (canvas) => canvas.transferControlToOffscreen(),
   init: (bridge, offscreen) => (bridge as RenderWorkerBridge).init(offscreen),
-  fetchBlob: (url) => fetch(url).then((r) => r.blob()),
+  fetchBlob: (url) => fetchObjectUrlBlob(url),
   now: () => performance.now(),
   afterPresentationBoundary: () => new Promise((resolve) => {
     // The worker draw may resolve between browser frames. The first callback
@@ -314,12 +317,11 @@ interface ControllerState {
   pluginCatalogGeneration: number | null
   pluginUnsubscribe: (() => void) | null
   effectStatusIndex: PreviewEffectStatusIndex | null
-  /** Per-asset pipeline status. Absent = not started (or failed: retried
-   * on the next mediaStore change). Removal releases the worker source. */
-  assetStates: Map<AssetId, {
-    sourceKey: string
-    status: 'loading' | 'ready' | 'failed'
-  }>
+  /** Per-asset worker source selection; each entry object identifies one load
+   * attempt. Absent = not started. A failed load keeps its sourceKey, so it is
+   * retried only when the selected original/proxy source changes. Removal
+   * releases the worker source. */
+  assetStates: Map<AssetId, { sourceKey: string }>
   unsubscribes: Array<() => void>
   rafHandle: number | null
   /** Invalidates callbacks queued for a disposed/replaced bridge. */
@@ -500,6 +502,30 @@ export function setPreviewViewport(viewport: PresentationViewport | null): void 
   }
 }
 
+/**
+ * Program reads only each proxy's entry and whether it is ready (source
+ * bounds, representation choice and source key). Generation progress and
+ * status text republish the item without changing either.
+ */
+function proxyPreviewSelectionChanged(
+  current: ReadonlyMap<AssetId, ProxyAssetState>,
+  previous: ReadonlyMap<AssetId, ProxyAssetState>,
+): boolean {
+  if (current === previous) return false
+  const changed = (
+    next: ProxyAssetState | undefined,
+    last: ProxyAssetState | undefined,
+  ) => (next?.entry ?? null) !== (last?.entry ?? null)
+    || (next?.phase === 'ready') !== (last?.phase === 'ready')
+  for (const [assetId, item] of current) {
+    if (changed(item, previous.get(assetId))) return true
+  }
+  for (const [assetId, item] of previous) {
+    if (!current.has(assetId) && changed(undefined, item)) return true
+  }
+  return false
+}
+
 function currentSourceBoundsCatalog(): SourceBoundsCatalog {
   const catalog = new Map(createSourceBoundsCatalog(
     useMediaStore.getState().descriptors.values(),
@@ -586,23 +612,13 @@ function currentPreviewRenderDocument(doc: TimelineDoc): TimelineDoc {
     documentState.activeSequenceId,
     doc,
   )
-  const tracks = [] as TimelineDoc['tracks']
-  const masterVideoEffects = [] as NonNullable<TimelineDoc['masterVideoEffects']>
-  const visited = new Set<string>()
-  const queue = [documentState.activeSequenceId]
-  while (queue.length > 0) {
-    const sequenceId = queue.shift()!
-    if (visited.has(sequenceId)) continue
-    visited.add(sequenceId)
-    const sequence = sequenceById(project, sequenceId)
-    if (!sequence) continue
-    tracks.push(...sequence.tracks)
-    masterVideoEffects.push(...(sequence.masterVideoEffects ?? []))
-    for (const track of sequence.tracks) {
-      for (const instance of sequenceInstances(track)) queue.push(instance.sequenceId)
-    }
+  const sequences = projectReachableSequences(project, documentState.activeSequenceId)
+  if (sequences.length <= 1) return doc
+  return {
+    ...doc,
+    tracks: sequences.flatMap((sequence) => sequence.tracks),
+    masterVideoEffects: sequences.flatMap((sequence) => sequence.masterVideoEffects ?? []),
   }
-  return visited.size === 1 ? doc : { ...doc, tracks, masterVideoEffects }
 }
 
 function publishPreviewEffectStatuses(
@@ -641,10 +657,20 @@ function reservePixelWork(doc: TimelineDoc): void {
   const bytes = work.peakAdditionalBytes
   if (!bytes) return
   state.maxPixelWorkBytes = Math.max(state.maxPixelWorkBytes, bytes)
-  state.resourceLease?.update({ kind: 'program', decoderSlots: state.maxVideoRequests * 2 + 2,
-    surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4 + state.maxPixelWorkBytes,
-    // Reserving pixel work during initialization does not make Program ready.
-    monitorCompatible: state.maxOutputPixels > 0 })
+  // Reserving pixel work during initialization does not make Program ready.
+  updateProgramLease(state.maxOutputPixels > 0)
+}
+
+/** Publish Program's high-water decoder and surface reservation. */
+function updateProgramLease(monitorCompatible: boolean): void {
+  state.resourceLease?.update({
+    kind: 'program', decoderSlots: state.maxVideoRequests * 2 + 2,
+    // Two retained samples, conversion/transfer headroom and the two reusable
+    // lens surfaces per source lane, plus the four compositor surfaces.
+    surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4
+      + state.maxPixelWorkBytes,
+    monitorCompatible,
+  })
 }
 
 function syncPreviewDocument(bridge: BridgeLike, deps: PreviewDeps): void {
@@ -704,14 +730,7 @@ function scheduleRender(deps: PreviewDeps): void {
     }
     const profile = state.presentationProfile
     if (profile) state.maxOutputPixels = Math.max(state.maxOutputPixels, profile.outputWidth * profile.outputHeight)
-    state.resourceLease?.update({
-      kind: 'program', decoderSlots: state.maxVideoRequests * 2 + 2,
-      // Two retained samples, conversion/transfer headroom and the two reusable
-      // lens surfaces per source lane, plus the four compositor surfaces.
-      surfaceBytes: (state.maxOutputPixels * 4 + state.maxSourcePixels * state.maxVideoRequests * 6) * 4
-        + state.maxPixelWorkBytes,
-      monitorCompatible: true,
-    })
+    updateProgramLease(true)
     effectStatuses = projectPlannedPreviewEffectStatuses(
       visualPlan,
       previewStatus.rendererCapabilities,
@@ -721,7 +740,7 @@ function scheduleRender(deps: PreviewDeps): void {
     if (effectStatuses !== previewStatus.effectStatuses) {
       previewStatus.setEffectProjection(previewStatus.rendererCapabilities, effectStatuses)
     }
-    for (const request of videoCompositionRequests(visualPlan)) {
+    for (const request of requests) {
       const id = request.clip.assetId
       if (
         !seen.has(id)
@@ -785,7 +804,7 @@ function scheduleRender(deps: PreviewDeps): void {
       }, (cause) => {
         if (state.renderGeneration !== generation || state.bridge !== bridge
           || state.presentationGeneration !== presentationGeneration) return
-        usePreviewStatusStore.getState().setRenderError(previewRenderFailureMessage(cause instanceof Error ? cause.message : String(cause)))
+        usePreviewStatusStore.getState().setRenderError(previewRenderFailureMessage(errorMessage(cause)))
         console.warn('[previewController] render failed:', cause instanceof Error ? cause.message : cause)
       })
   })
@@ -836,10 +855,7 @@ async function loadOneVideoAsset(
 ): Promise<void> {
   const bridge = state.bridge
   if (!bridge) return
-  const pipelineState = {
-    sourceKey,
-    status: 'loading' as const,
-  }
+  const pipelineState = { sourceKey }
   state.assetStates.set(assetId, pipelineState)
   mediaResourceAdmission.interrupt('program-source-changed')
   let failureReason: MediaRuntimeFailure['reason'] = 'resource-unavailable'
@@ -884,21 +900,10 @@ async function loadOneVideoAsset(
     failureReason = 'decode-failed'
     failureTrackKind = 'video'
     await bridge.openAsset(assetId, blob, rate, budget, runtimeToken)
-    if (state.bridge !== bridge || state.assetStates.get(assetId) !== pipelineState) {
-      return
-    }
-    state.assetStates.set(assetId, {
-      sourceKey,
-      status: 'ready',
-    })
   } catch (e) {
     if (state.bridge !== bridge || state.assetStates.get(assetId) !== pipelineState) {
       return
     }
-    state.assetStates.set(assetId, {
-      sourceKey,
-      status: 'failed',
-    })
     if (e instanceof RenderAssetOpenError) {
       failureReason = e.failure.reason
       failureTrackKind = e.failure.trackKind
@@ -935,8 +940,7 @@ async function loadOneImage(deps: PreviewDeps, asset: MediaAsset): Promise<void>
   if (!bridge) return
   const guard = captureMediaRuntimeGuard(asset.id)
   if (!guard || guard.objectUrl !== asset.objectUrl) return
-  const sourceKey = `original:${asset.objectUrl}`
-  const pipelineState = { sourceKey, status: 'loading' as const }
+  const pipelineState = { sourceKey: `original:${asset.objectUrl}` }
   state.assetStates.set(asset.id, pipelineState)
   let failureReason: MediaRuntimeFailure['reason'] = 'resource-unavailable'
   try {
@@ -944,11 +948,8 @@ async function loadOneImage(deps: PreviewDeps, asset: MediaAsset): Promise<void>
     if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) return
     failureReason = 'decode-failed'
     await bridge.openImage(asset.id, blob, guard)
-    if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) return
-    state.assetStates.set(asset.id, { sourceKey, status: 'ready' })
   } catch (cause) {
     if (state.bridge !== bridge || state.assetStates.get(asset.id) !== pipelineState) return
-    state.assetStates.set(asset.id, { sourceKey, status: 'failed' })
     if (cause instanceof RenderAssetOpenError) failureReason = cause.failure.reason
     reportMediaRuntimeFailure(
       guard,
@@ -973,18 +974,11 @@ function documentAssetIds(doc: TimelineDoc): Set<AssetId> {
 function currentProjectAssetIds(): Set<AssetId> {
   const documentState = useDocumentStore.getState()
   const ids = new Set<AssetId>()
-  const visited = new Set<string>()
-  const queue = [documentState.activeSequenceId]
-  while (queue.length > 0) {
-    const sequenceId = queue.shift()!
-    if (visited.has(sequenceId)) continue
-    visited.add(sequenceId)
-    const sequence = sequenceById(documentState.project, sequenceId)
-    if (!sequence) continue
+  for (const sequence of projectReachableSequences(
+    documentState.project,
+    documentState.activeSequenceId,
+  )) {
     for (const assetId of documentAssetIds(sequence)) ids.add(assetId)
-    for (const track of sequence.tracks) {
-      for (const instance of sequenceInstances(track)) queue.push(instance.sequenceId)
-    }
   }
   return ids
 }
@@ -1169,14 +1163,19 @@ export function initPreview(
         || s.effectDocumentPreview !== prev.effectDocumentPreview
       ) scheduleRender(deps)
     }),
-    useMediaStore.subscribe(() => {
+    useMediaStore.subscribe((current, previous) => {
+      // Visuals, compatibility reports and collections never feed Program.
+      if (
+        current.assets === previous.assets
+        && current.descriptors === previous.descriptors
+      ) return
       const bounds = currentSourceBoundsCatalog()
       state.visualPlanner = createCurrentVisualPlanner(deps, undefined, bounds)
       syncAssets(deps)
       scheduleRender(deps)
     }),
     useProxyStore.subscribe((current, previous) => {
-      if (current.assets === previous.assets) return
+      if (!proxyPreviewSelectionChanged(current.assets, previous.assets)) return
       const bounds = currentSourceBoundsCatalog()
       state.visualPlanner = createCurrentVisualPlanner(deps, undefined, bounds)
       syncAssets(deps)
@@ -1230,3 +1229,4 @@ async function disposePreviewState(clearPluginBinding: boolean): Promise<void> {
 export function disposePreview(): Promise<void> {
   return disposePreviewState(true)
 }
+registerLoadedEditorRuntime('preview', disposePreview)

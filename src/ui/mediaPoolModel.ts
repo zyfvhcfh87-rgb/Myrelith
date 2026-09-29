@@ -94,7 +94,6 @@ export interface MediaPoolItemModel {
 export interface MediaPoolVirtualRow {
   readonly key: string
   readonly itemIds: readonly string[]
-  readonly itemStartIndex: number
   readonly estimatedHeight: number
 }
 
@@ -111,7 +110,6 @@ export interface MediaPoolVirtualWindow {
 }
 
 export const MEDIA_POOL_GRID_GAP_PX = 12
-export const MEDIA_POOL_NORMAL_ROW_ESTIMATE_PX = 112
 export const MEDIA_POOL_EXPANDED_ROW_ESTIMATE_PX = 230
 export const MEDIA_POOL_OVERSCAN_PX = 260
 
@@ -289,26 +287,18 @@ function compareSortField(
 /**
  * Return a new ordered copy after collection/filter selection. Catalog maps and
  * the input array stay untouched. Missing numeric metadata always sorts last.
+ * Ties fall back to catalog order; catalogIndex is unique per catalog, so no
+ * further tie-break can ever decide.
  */
 export function sortMediaPoolItems(
   items: readonly MediaPoolItemModel[],
   field: MediaPoolSortField,
   direction: MediaPoolSortDirection,
 ): readonly MediaPoolItemModel[] {
-  return items
-    .map((item, index) => ({ item, index }))
-    .sort((left, right) => {
-      const primary = compareSortField(left.item, right.item, field, direction)
-      if (primary !== 0) return primary
-      if (left.item.catalogIndex !== right.item.catalogIndex) {
-        return left.item.catalogIndex - right.item.catalogIndex
-      }
-      if (left.item.id !== right.item.id) {
-        return left.item.id < right.item.id ? -1 : 1
-      }
-      return left.index - right.index
-    })
-    .map((entry) => entry.item)
+  return [...items].sort((left, right) => (
+    compareSortField(left, right, field, direction)
+    || left.catalogIndex - right.catalogIndex
+  ))
 }
 
 export function mediaPoolShowsThumbnails(viewMode: MediaPoolViewMode): boolean {
@@ -365,7 +355,6 @@ export function planMediaPoolRows(
     rows.push({
       key: `${layoutKey}:cards:${itemIds.join('|')}`,
       itemIds,
-      itemStartIndex: 0,
       estimatedHeight: estimatedRowHeight(false, layout),
     })
     pending = []
@@ -377,7 +366,6 @@ export function planMediaPoolRows(
       rows.push({
         key: `${layoutKey}:full-width:${item.id}`,
         itemIds: [item.id],
-        itemStartIndex: 0,
         estimatedHeight: estimatedRowHeight(true, layout),
       })
       continue
@@ -386,14 +374,7 @@ export function planMediaPoolRows(
     if (pending.length === columns) flushPending()
   }
   flushPending()
-
-  // flushPending computes its own index so mixed expanded/card rows stay exact.
-  let consumed = 0
-  return rows.map((row) => {
-    const planned = { ...row, itemStartIndex: consumed }
-    consumed += row.itemIds.length
-    return planned
-  })
+  return rows
 }
 
 function firstRowEndingAfter(

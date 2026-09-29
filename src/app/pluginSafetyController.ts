@@ -1,3 +1,5 @@
+import { bytesToHex } from '../domain/bytes'
+
 export const PLUGIN_ACTIVATION_SENTINEL_KEY = 'myrelith.plugin-activation:v1'
 export const PLUGIN_ACTIVATION_LOCK_NAME = 'myrelith.plugin-activation:v1'
 
@@ -167,7 +169,7 @@ export function createPluginActivationOwnerId(): string {
   if (crypto?.getRandomValues) {
     const bytes = new Uint8Array(16)
     crypto.getRandomValues(bytes)
-    return [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('')
+    return bytesToHex(bytes)
   }
   throw new TypeError('Plugin activation owner id could not be created')
 }

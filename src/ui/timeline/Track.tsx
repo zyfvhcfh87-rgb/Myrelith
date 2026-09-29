@@ -19,7 +19,11 @@
 
 import { memo, useMemo, useState } from 'react'
 import type { DragEvent as ReactDragEvent } from 'react'
-import type { Track as TrackData } from '../../domain/schema'
+import type {
+  ClipId,
+  Track as TrackData,
+  Transition,
+} from '../../domain/schema'
 import { rangeEnd } from '../../domain/time'
 import {
   applyMediaPlacementHoverPreview,
@@ -215,6 +219,17 @@ function Track({
     timelineWindowEndFrame,
     track.clips,
   ])
+  // Seam lookup by outgoing clip; the first authored match wins, exactly as
+  // a linear find over track.transitions would.
+  const transitionsByFromClip = useMemo(() => {
+    const byFrom = new Map<ClipId, Transition[]>()
+    for (const transition of track.transitions) {
+      const list = byFrom.get(transition.fromClipId)
+      if (list) list.push(transition)
+      else byFrom.set(transition.fromClipId, [transition])
+    }
+    return byFrom
+  }, [track.transitions])
 
   return (
     <div
@@ -335,8 +350,6 @@ function Track({
         <SequenceInstanceView
           key={instance.id}
           instance={instance}
-          trackId={track.id}
-          trackKind={track.kind}
           timelineOriginFrame={timelineOriginFrame}
           timelineWindowEndFrame={timelineWindowEndFrame}
         />
@@ -345,7 +358,6 @@ function Track({
         <MulticamInstanceView
           key={instance.id}
           instance={instance}
-          trackId={track.id}
           trackKind={track.kind}
           timelineOriginFrame={timelineOriginFrame}
           timelineWindowEndFrame={timelineWindowEndFrame}
@@ -374,24 +386,19 @@ function Track({
       {track.kind === 'video' &&
         track.clips.slice(0, -1).map((from, index) => {
           const to = track.clips[index + 1]
-          if (
-            from.text !== undefined ||
-            to.text !== undefined ||
-            rangeEnd(from.timelineRange) !== to.timelineRange.startFrame
-          ) {
-            return null
-          }
-          const transition = track.transitions.find(
-            (candidate) =>
-              candidate.fromClipId === from.id && candidate.toClipId === to.id,
-          )
           const seamFrame = rangeEnd(from.timelineRange)
           if (
             seamFrame < timelineOriginFrame ||
-            seamFrame > timelineWindowEndFrame
+            seamFrame > timelineWindowEndFrame ||
+            from.text !== undefined ||
+            to.text !== undefined ||
+            seamFrame !== to.timelineRange.startFrame
           ) {
             return null
           }
+          const transition = transitionsByFromClip
+            .get(from.id)
+            ?.find((candidate) => candidate.toClipId === to.id)
           return (
             <TransitionSeam
               key={`${from.id}:${to.id}`}

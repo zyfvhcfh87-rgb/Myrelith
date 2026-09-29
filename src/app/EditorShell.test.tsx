@@ -22,6 +22,20 @@ const previewMocks = vi.hoisted(() => ({
   setPreviewPluginBinding: vi.fn(),
 }))
 
+const multicamAlignmentMocks = vi.hoisted(() => ({
+  release: null as (() => Promise<void>) | null,
+}))
+
+vi.mock('./multicamAlignmentController', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./multicamAlignmentController')>()
+  return {
+    ...actual,
+    initMulticamAlignment: () => multicamAlignmentMocks.release
+      ? Promise.resolve(multicamAlignmentMocks.release)
+      : actual.initMulticamAlignment(),
+  }
+})
+
 vi.mock('../app/previewController', () => ({
   disposePreview: vi.fn(),
   initPreview: vi.fn(),
@@ -100,6 +114,24 @@ describe('EditorShell', () => {
     )
     unmount()
     expect(previewMocks.setPreviewPluginBinding).toHaveBeenLastCalledWith(null)
+  })
+
+  test('logs a failed multicam alignment release instead of leaving it unhandled', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    multicamAlignmentMocks.release = async () => { throw new Error('dispose failed') }
+    try {
+      const { unmount } = render(<EditorShell closing={false} />)
+      await act(async () => { await Promise.resolve() })
+      unmount()
+      await act(async () => { await Promise.resolve() })
+      expect(warn).toHaveBeenCalledWith(
+        '[EditorShell] multicam alignment cleanup failed:',
+        expect.objectContaining({ message: 'dispose failed' }),
+      )
+    } finally {
+      multicamAlignmentMocks.release = null
+      warn.mockRestore()
+    }
   })
 
   test('renders every editor panel area', () => {

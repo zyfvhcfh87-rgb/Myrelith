@@ -5,7 +5,6 @@ import {
   addTimelineMarker,
   deleteTimelineMarker,
   duplicateTimelineMarker,
-  moveTimelineMarker,
   nextTimelineMarker,
   previousTimelineMarker,
   timelineMarkers,
@@ -54,7 +53,7 @@ describe('timeline markers domain', () => {
       color: 'purple',
       note: '  Drop here  ',
     })
-    const moved = moveTimelineMarker(edited, 'one', 240)
+    const moved = updateTimelineMarker(edited, 'one', { frame: 240 })
     const duplicated = duplicateTimelineMarker(moved, 'one', 'copy')
     const deleted = deleteTimelineMarker(duplicated, 'one')
 
@@ -68,7 +67,7 @@ describe('timeline markers domain', () => {
     ])
     expect(deleted.markers?.map(({ id }) => id)).toEqual(['copy'])
     expect(updateTimelineMarker(edited, 'one', { label: 'Chorus' })).toBe(edited)
-    expect(moveTimelineMarker(edited, 'missing', 1)).toBe(edited)
+    expect(updateTimelineMarker(edited, 'missing', { frame: 1 })).toBe(edited)
     expect(addTimelineMarker(edited, marker('bad', -1))).toBe(edited)
   })
 

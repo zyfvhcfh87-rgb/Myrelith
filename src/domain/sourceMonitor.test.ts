@@ -4,14 +4,11 @@ import type { MediaCompatibilityItem } from './mediaCompatibility'
 import {
   advanceSourcePlayhead,
   clearSourceIn,
-  clearSourceMarks,
-  closeSourceMonitor,
   jumpSourceToEnd,
   jumpSourceToIn,
   jumpSourceToOut,
   jumpSourceToStart,
   openSourceMonitor,
-  parkSourcePlayback,
   requestMonitorPlayback,
   resetSourceSession,
   scrubSourcePlayhead,
@@ -20,10 +17,7 @@ import {
   setSourcePlayhead,
   sourceMonitorAudioAudition,
   sourceMonitorClockRate,
-  sourceMonitorDecodeFrame,
   sourceMonitorLastFrame,
-  sourceMonitorPreparedRange,
-  sourceMonitorSelectionRange,
   SOURCE_MONITOR_FALLBACK_RATE,
   stepSourceFrame,
   stepSourceShuttle,
@@ -147,7 +141,6 @@ describe('openSourceMonitor', () => {
       sourceBounds: { video: null, audio: null },
     })
     expect(still.source.durationFrames).toBe(150)
-    expect(sourceMonitorDecodeFrame(still)).toBe(0)
   })
 
   test('rejects offline, incompatible, and empty sources without replacing a live session', () => {
@@ -248,14 +241,6 @@ describe('source marks and playhead', () => {
     const range = setSourceOut(setSourcePlayhead(inMark, 25))
     expect(range.inFrame).toBe(10)
     expect(range.outFrameExclusive).toBe(26)
-    expect(sourceMonitorSelectionRange(range)).toEqual({
-      startFrame: 10,
-      durationFrames: 16,
-    })
-    expect(sourceMonitorPreparedRange(opened())).toEqual({
-      startFrame: 0,
-      durationFrames: 600,
-    })
 
     const invertedOut = setSourceOut(setSourcePlayhead(range, 4))
     expect(invertedOut.inFrame).toBeNull()
@@ -284,13 +269,11 @@ describe('source marks and playhead', () => {
       outFrameExclusive: null,
       shuttleStep: 0,
     })
-    expect(clearSourceMarks(marked).inFrame).toBeNull()
     const clearedIn = clearSourceIn(marked)
     expect(clearSourceIn(clearedIn)).toBe(clearedIn)
-    expect(closeSourceMonitor(marked)).toBeNull()
   })
 
-  test('frame steps clamp and still decode frame 0 for stills', () => {
+  test('frame steps clamp and stills keep a movable playhead', () => {
     const video = opened()
     expect(stepSourceFrame(video, -1)).toBe(video)
     expect(stepSourceFrame(video, 1).playheadFrame).toBe(1)
@@ -307,7 +290,6 @@ describe('source marks and playhead', () => {
       audioChannels: null,
     }), 40)
     expect(still.playheadFrame).toBe(40)
-    expect(sourceMonitorDecodeFrame(still)).toBe(0)
   })
 })
 
@@ -348,7 +330,6 @@ describe('JKL shuttle', () => {
     )
     expect(reverse.playheadFrame).toBe(0)
     expect(reverse.shuttleStep).toBe(0)
-    expect(parkSourcePlayback(opened()).playheadFrame).toBe(599)
     const idle = opened()
     expect(stopSourcePlayback(idle)).toBe(idle)
   })

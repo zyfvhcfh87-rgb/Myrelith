@@ -1,5 +1,5 @@
 /** Pure expanded-title authoring. Every command produces one fully checked project. */
-import type { Clip, TitleAnimationTrack, TimelineDoc } from './schema'
+import type { Clip, TitleAnimationTrack, TimelineDoc, Track } from './schema'
 import type { SequenceProject } from './projectSequences'
 import { replaceProjectSequence, sequenceById } from './projectSequences'
 import { defaultClipTransform, defaultClipVisualSettings } from './clipInspector'
@@ -30,11 +30,18 @@ export type TitleEditCommand =
   | { readonly kind: 'reorder'; readonly ids: readonly string[] }
   | { readonly kind: 'motion'; readonly ids: readonly string[]; readonly direction: 'up' | 'down' | 'left' | 'right'; readonly start: number; readonly end: number; readonly replace: boolean }
 export const TITLE_ANIMATION_CONTEXT = Object.freeze({ titles: Object.freeze({ isTitleClip: isProceduralTitleClip, readElement: readTitleClipElement }) })
-export function titleEditOwner(project: SequenceProject, target: TitleEditTarget) {
+export interface TitleClipOwner { readonly sequence: TimelineDoc; readonly track: Track; readonly clip: Clip }
+/** The sequence, track and clip currently holding the target, if all still exist. */
+export function locateTitleClipOwner(project: SequenceProject, target: TitleEditTarget): TitleClipOwner | null {
   const sequence = sequenceById(project, target.sequenceId)
   const track = sequence?.tracks.find((item) => item.clips.some((clip) => clip.id === target.clipId))
   const clip = track?.clips.find((item) => item.id === target.clipId)
-  if (!sequence || !track || !clip || !clip.title || clip.text || track.kind !== 'video') throw new Error('Choose an expanded title on a video track.')
+  return sequence && track && clip ? { sequence, track, clip } : null
+}
+export function titleEditOwner(project: SequenceProject, target: TitleEditTarget) {
+  const owner = locateTitleClipOwner(project, target)
+  if (!owner || !owner.clip.title || owner.clip.text || owner.track.kind !== 'video') throw new Error('Choose an expanded title on a video track.')
+  const { sequence, track, clip } = owner
   if (track.locked) throw new Error('Unlock the title track before editing.')
   const parsed = readTitleDefinition(clip.title)
   if (parsed.status !== 'supported') throw new Error(parsed.reason)
@@ -83,15 +90,19 @@ function patched(element: TitleElement, patch: TitleElementPatch): TitleElement 
   supported(next)
   return next
 }
-export function replaceTitleClip(project: SequenceProject, target: TitleEditTarget, replacement: Clip): SequenceProject {
-  const { sequence, track, clip } = titleEditOwner(project, target)
+/** Swap one owner clip and admit the whole candidate project; throws the rejection reason. */
+export function replaceOwnedTitleClip(project: SequenceProject, owner: TitleClipOwner, replacement: Clip, limitReason: string): SequenceProject {
+  const { sequence, track, clip } = owner
   const document = { ...sequence, tracks: sequence.tracks.map((item) => item !== track ? item : { ...item, clips: item.clips.map((item) => item === clip ? replacement : item) }) }
   const candidate = { ...project, sequences: project.sequences.map((item) => item === sequence ? document : item) }
   const error = projectTitleOwnershipError(candidate) ?? projectTitleAnimationError(candidate)
   if (error) throw new Error(error)
   const next = replaceProjectSequence(project, sequence.id, document)
-  if (next === project) throw new Error('The title edit exceeds the complete project limits.')
+  if (next === project) throw new Error(limitReason)
   return next
+}
+export function replaceTitleClip(project: SequenceProject, target: TitleEditTarget, replacement: Clip): SequenceProject {
+  return replaceOwnedTitleClip(project, titleEditOwner(project, target), replacement, 'The title edit exceeds the complete project limits.')
 }
 export function planTitleEdit(project: SequenceProject, target: TitleEditTarget, command: TitleEditCommand, factory: () => string): SequenceProject {
   const { sequence, clip, elements } = titleEditOwner(project, target)

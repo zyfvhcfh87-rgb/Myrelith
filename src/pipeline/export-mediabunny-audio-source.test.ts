@@ -1,7 +1,8 @@
 import { describe, expect, test, vi } from 'vitest'
-import { applyStereoBalanceToSample } from '../domain/audioChannelMix'
+import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import { stereoBalanceGains } from '../domain/clipInspector'
 import {
+  applyStereoBalanceToSample,
   expectedParityStereo,
   isolatedParityPlanes,
   MONO_BALANCE_PARITY_CASES,
@@ -300,3 +301,64 @@ describe('multichannel preview/export fold-down parity', () => {
     }
   })
 })
+
+describe('createMediabunnyExportAudioSource resampled multichannel reads', () => {
+  test('match the per-sample fold and interpolation reference bit for bit', async () => {
+    const sourceRate = 44_100
+    const frames = 64
+    let seed = 17
+    const random = (): number => {
+      seed = (seed * 16_807) % 2_147_483_647
+      return seed / 1_073_741_823.5 - 1
+    }
+    const chunkPlanes = [0, 1].map(() =>
+      Array.from({ length: 6 }, () => {
+        const plane = new Float32Array(frames)
+        for (let frame = 0; frame < frames; frame++) plane[frame] = random()
+        return plane
+      }),
+    )
+    const chunkStarts = [0, frames / sourceRate]
+    mb.audioTracks.push(audioTrack(true, 6))
+    mb.audioSinkSampleSequences.push(chunkPlanes.map((planes, index) =>
+      decodedAudioSample(planes, sourceRate, chunkStarts[index]),
+    ))
+    const outputCount = Math.floor((2 * frames * PARITY_SAMPLE_RATE) / sourceRate)
+    const source = createMediabunnyExportAudioSource(
+      async () => resolvedAsset(new Blob(['surround-audio'])),
+    )
+    const reader = await source.openClip({
+      clipId: 'resampled-surround',
+      assetId: 'audio-asset',
+      startSample: 0,
+      endSample: outputCount,
+      sampleRate: PARITY_SAMPLE_RATE,
+      channelCount: 2,
+    })
+    const [left, right] = await reader.read(outputCount)
+    await reader.close()
+    await source.close()
+
+    // The pre-block-fold algorithm: fold both neighbours for every sample.
+    const expectedLeft = new Float32Array(outputCount)
+    const expectedRight = new Float32Array(outputCount)
+    for (let sample = 0; sample < outputCount; sample++) {
+      const time = sample / PARITY_SAMPLE_RATE
+      const chunk = time < chunkStarts[1] - 1e-10 ? 0 : 1
+      const position = Math.max(0, (time - chunkStarts[chunk]) * sourceRate)
+      const lower = Math.min(frames - 1, Math.floor(position))
+      const fraction = Math.max(0, Math.min(1, position - lower))
+      const first = foldDecodedFrameToStereo(chunkPlanes[chunk], lower)
+      const second = lower + 1 < frames
+        ? foldDecodedFrameToStereo(chunkPlanes[chunk], lower + 1)
+        : chunk === 0 && fraction > 1e-10
+          ? foldDecodedFrameToStereo(chunkPlanes[1], 0)
+          : first
+      expectedLeft[sample] = first[0] + (second[0] - first[0]) * fraction
+      expectedRight[sample] = first[1] + (second[1] - first[1]) * fraction
+    }
+    expect(Array.from(left)).toEqual(Array.from(expectedLeft))
+    expect(Array.from(right)).toEqual(Array.from(expectedRight))
+  })
+})
+

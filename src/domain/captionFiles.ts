@@ -2,10 +2,12 @@
 
 import {
   CAPTION_LIMITS,
+  CAPTION_MARKUP,
   captionTrackValidationError,
   compareCaptionItems,
   normalizeCaptionText,
 } from './captions'
+import { ceilDivide } from './numeric'
 import type { CaptionItem, CaptionItemId, CaptionTrack, FrameRate } from './schema'
 import { rangeEnd } from './time'
 
@@ -42,8 +44,6 @@ interface ParsedCue {
   line: number
 }
 
-const MARKUP = /<[^>\n]+>/u
-
 function assertFrameRate(rate: FrameRate): void {
   if (
     !Number.isSafeInteger(rate.num)
@@ -57,10 +57,6 @@ function assertFrameRate(rate: FrameRate): void {
 
 function divideFloor(numerator: bigint, denominator: bigint): bigint {
   return numerator / denominator
-}
-
-function divideCeil(numerator: bigint, denominator: bigint): bigint {
-  return (numerator + denominator - 1n) / denominator
 }
 
 /** Import start timestamps toward negative infinity so the first covered frame survives. */
@@ -81,7 +77,7 @@ export function captionEndMillisecondsToFrame(
   rate: FrameRate,
 ): number {
   assertFrameRate(rate)
-  return Number(divideCeil(
+  return Number(ceilDivide(
     BigInt(milliseconds) * BigInt(rate.num),
     1_000n * BigInt(rate.den),
   ))
@@ -90,7 +86,7 @@ export function captionEndMillisecondsToFrame(
 /** Export starts to the first millisecond that maps back to this exact frame. */
 export function captionStartFrameToMilliseconds(frame: number, rate: FrameRate): number {
   assertFrameRate(rate)
-  return Number(divideCeil(
+  return Number(ceilDivide(
     BigInt(frame) * 1_000n * BigInt(rate.den),
     BigInt(rate.num),
   ))
@@ -105,18 +101,18 @@ export function captionEndFrameToMilliseconds(frame: number, rate: FrameRate): n
   ))
 }
 
+// SRT requires hours and a comma; WebVTT allows omitted hours and uses a dot.
+const TIMESTAMP_PATTERNS: Readonly<Record<CaptionFileFormat, RegExp>> = Object.freeze({
+  srt: /^(\d{2,}):(\d{2}):(\d{2}),(\d{3})$/u,
+  vtt: /^(?:(\d{2,}):)?(\d{2}):(\d{2})\.(\d{3})$/u,
+})
+
 function parseTimestamp(
   value: string,
-  separator: ',' | '.',
-  allowShortHours: boolean,
+  format: CaptionFileFormat,
   line: number,
 ): number {
-  const escaped = separator === '.' ? '\\.' : ','
-  const hoursPattern = allowShortHours ? '(?:(\\d{2,}):)?' : '(\\d{2,}):'
-  const match = new RegExp(
-    `^${hoursPattern}(\\d{2}):(\\d{2})${escaped}(\\d{3})$`,
-    'u',
-  ).exec(value)
+  const match = TIMESTAMP_PATTERNS[format].exec(value)
   if (!match) {
     throw new CaptionFileError('timing', `Invalid timestamp: ${value}`, line)
   }
@@ -146,7 +142,7 @@ function validateCueText(text: string, line: number): string {
       line,
     )
   }
-  if (MARKUP.test(normalized)) {
+  if (CAPTION_MARKUP.test(normalized)) {
     throw new CaptionFileError(
       'unsupported-markup',
       'Caption markup is unsupported; import plain text instead',
@@ -173,10 +169,8 @@ function parseTimingLine(
       line,
     )
   }
-  const separator = format === 'srt' ? ',' : '.'
-  const allowShortHours = format === 'vtt'
-  const startMilliseconds = parseTimestamp(parts[0]!.trim(), separator, allowShortHours, line)
-  const endMilliseconds = parseTimestamp(endParts[0]!, separator, allowShortHours, line)
+  const startMilliseconds = parseTimestamp(parts[0]!.trim(), format, line)
+  const endMilliseconds = parseTimestamp(endParts[0]!, format, line)
   if (endMilliseconds <= startMilliseconds) {
     throw new CaptionFileError('timing', 'Caption end must be after its start', line)
   }
@@ -191,6 +185,30 @@ function normalizeSource(source: string): string[] {
     )
   }
   return source.replace(/^\uFEFF/u, '').replace(/\r\n?/gu, '\n').split('\n')
+}
+
+/** Read, validate, and append one cue body; returns the index after its text. */
+function readCueBody(
+  lines: readonly string[],
+  index: number,
+  cues: ParsedCue[],
+  cue: Pick<ParsedCue, 'sourceId' | 'startMilliseconds' | 'endMilliseconds' | 'line'>,
+): number {
+  const textLine = index + 1
+  const textLines: string[] = []
+  while (index < lines.length && lines[index]!.trim() !== '') {
+    textLines.push(lines[index]!)
+    index += 1
+  }
+  cues.push({ ...cue, text: validateCueText(textLines.join('\n'), textLine) })
+  if (cues.length > CAPTION_LIMITS.maxItemsPerTrack) {
+    throw new CaptionFileError(
+      'resource-limit',
+      `Caption file exceeds ${CAPTION_LIMITS.maxItemsPerTrack} cues`,
+      cue.line,
+    )
+  }
+  return index
 }
 
 function parseSrt(source: string): ParsedCue[] {
@@ -211,26 +229,7 @@ function parseSrt(source: string): ParsedCue[] {
     }
     const timingLine = index + 1
     const timing = parseTimingLine(lines[index]!, 'srt', timingLine)
-    index += 1
-    const textLine = index + 1
-    const textLines: string[] = []
-    while (index < lines.length && lines[index]!.trim() !== '') {
-      textLines.push(lines[index]!)
-      index += 1
-    }
-    cues.push({
-      sourceId: sequence,
-      ...timing,
-      text: validateCueText(textLines.join('\n'), textLine),
-      line: numberLine,
-    })
-    if (cues.length > CAPTION_LIMITS.maxItemsPerTrack) {
-      throw new CaptionFileError(
-        'resource-limit',
-        `Caption file exceeds ${CAPTION_LIMITS.maxItemsPerTrack} cues`,
-        numberLine,
-      )
-    }
+    index = readCueBody(lines, index + 1, cues, { sourceId: sequence, ...timing, line: numberLine })
   }
   if (cues.length === 0) {
     throw new CaptionFileError('malformed-header', 'SRT file contains no caption cues')
@@ -289,26 +288,7 @@ function parseVtt(source: string): ParsedCue[] {
       timingLine = index + 1
     }
     const timing = parseTimingLine(timingValue, 'vtt', timingLine)
-    index += 1
-    const textLine = index + 1
-    const textLines: string[] = []
-    while (index < lines.length && lines[index]!.trim() !== '') {
-      textLines.push(lines[index]!)
-      index += 1
-    }
-    cues.push({
-      sourceId,
-      ...timing,
-      text: validateCueText(textLines.join('\n'), textLine),
-      line: blockLine,
-    })
-    if (cues.length > CAPTION_LIMITS.maxItemsPerTrack) {
-      throw new CaptionFileError(
-        'resource-limit',
-        `Caption file exceeds ${CAPTION_LIMITS.maxItemsPerTrack} cues`,
-        blockLine,
-      )
-    }
+    index = readCueBody(lines, index + 1, cues, { sourceId, ...timing, line: blockLine })
   }
   if (cues.length === 0) {
     throw new CaptionFileError('malformed-header', 'WebVTT file contains no caption cues')

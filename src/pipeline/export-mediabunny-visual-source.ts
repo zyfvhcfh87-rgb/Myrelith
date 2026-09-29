@@ -12,6 +12,7 @@ import {
   refineVideoDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
+import { requireNonNegativeSafeInteger } from '../domain/numeric'
 import type { AssetId, TimelineDoc } from '../domain/schema'
 import type { SequenceProject } from '../domain/projectSequences'
 import { createProjectVideoCompositionPlanner } from '../domain/projectVideoCompositionPlan'
@@ -57,12 +58,6 @@ interface DecodedImageAsset {
 }
 
 type DecodedVisualAsset = DecodedVideoAsset | DecodedImageAsset
-
-function assertFrame(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError(`${label} must be a non-negative safe integer`)
-  }
-}
 
 function closeBitmaps(bitmaps: Set<ImageBitmap>): void {
   let failure: unknown
@@ -339,7 +334,7 @@ export function createMediabunnyExportMediaSource(
   }
 
   const openFrame = async (docFrame: number): Promise<ExportFrameLease> => {
-    assertFrame(docFrame, 'Document frame')
+    requireNonNegativeSafeInteger(docFrame, 'Document frame')
     if (closed) throw new Error('Export media source is closed')
     const requests = await schedulePromise
     if (docFrame < (range?.startFrame ?? 0) || docFrame >= requests.frameCount) {
@@ -365,7 +360,7 @@ export function createMediabunnyExportMediaSource(
         assetId: AssetId,
         sourceFrame: number,
       ): Promise<StaticImageRenderSource | null> => {
-        assertFrame(sourceFrame, 'Source frame')
+        requireNonNegativeSafeInteger(sourceFrame, 'Source frame')
         if (closed || leaseClosed) {
           throw new Error('Export frame lease is closed')
         }

@@ -27,8 +27,8 @@ import {
   type PluginDocumentStoreAdapter,
 } from './pluginDocumentGeneration'
 import { useDocumentStore } from '../state/documentStore'
+import { boundedDetail, throwCleanupFailures } from './pluginControllerShared'
 
-const MAX_PUBLIC_DETAIL_CHARACTERS = 512
 const COHERENT_READ_ATTEMPTS = 3
 const EFFECT_ID_ATTEMPTS = 4
 
@@ -203,12 +203,6 @@ export interface PluginEditorControllerDependencies {
 export type PluginEditorControllerFactory = (
   readPlugins: () => PluginEditorPluginProjection,
 ) => PluginEditorController
-
-function boundedDetail(value: string): string {
-  return value.length <= MAX_PUBLIC_DETAIL_CHARACTERS
-    ? value
-    : `${value.slice(0, MAX_PUBLIC_DETAIL_CHARACTERS - 1)}\u2026`
-}
 
 function freezeAction(source: PluginAppEditorActionView): PluginAppEditorActionView {
   return Object.freeze({
@@ -402,17 +396,25 @@ function parameterFields(
   }))
 }
 
-function packageActions(
+/** The installed package that published this exact declaration, if any. */
+function installedPackageFor(
   plugin: PluginEditorPluginProjection,
   declaration: PluginVideoEffectContributionDeclaration | undefined,
-): PluginAppEffectActionsView {
-  const installed = declaration
+) {
+  return declaration
     ? plugin.installedPackages.find((candidate) => (
         candidate.id === declaration.pluginId
         && candidate.version === declaration.pluginVersion
         && candidate.packageDigest === declaration.packageDigest
       ))
     : undefined
+}
+
+function packageActions(
+  plugin: PluginEditorPluginProjection,
+  declaration: PluginVideoEffectContributionDeclaration | undefined,
+): PluginAppEffectActionsView {
+  const installed = installedPackageFor(plugin, declaration)
   return Object.freeze({
     retry: installed ? freezeAction(installed.actions.retry) : MISSING_ACTION,
     disable: installed ? freezeAction(installed.actions.disable) : MISSING_ACTION,
@@ -435,13 +437,7 @@ function effectView(
   declaration: PluginVideoEffectContributionDeclaration | undefined,
   locked: boolean,
 ): PluginAppEffectView {
-  const installed = declaration
-    ? plugin.installedPackages.find((candidate) => (
-        candidate.id === declaration.pluginId
-        && candidate.version === declaration.pluginVersion
-        && candidate.packageDigest === declaration.packageDigest
-      ))
-    : undefined
+  const installed = installedPackageFor(plugin, declaration)
   const fallbackPluginId = pluginIdFromEffectType(effect.type)
   const actions = packageActions(plugin, declaration)
   return Object.freeze({
@@ -831,10 +827,7 @@ export function createPluginEditorController(
       } catch (error) {
         errors.push(error)
       }
-      if (errors.length === 1) throw errors[0]
-      if (errors.length > 1) {
-        throw new AggregateError(errors, 'Plugin editor cleanup failed')
-      }
+      throwCleanupFailures(errors, 'Plugin editor cleanup failed')
     },
   }
   return Object.freeze(controller)

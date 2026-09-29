@@ -1,4 +1,5 @@
 /** One app-owned microphone session. Native resources never enter Zustand. */
+import { errorMessage } from '../domain/errors'
 import { checkVoiceoverDestination, pinVoiceoverDestination, resolveVoiceoverKeepDestination, type VoiceoverDestinationContext } from '../domain/voiceoverDestination'
 import { beginVoiceoverSession, transitionVoiceoverSession, type VoiceoverFailure, type VoiceoverInterruption, type VoiceoverSession, type VoiceoverSessionEffect, type VoiceoverSessionEvent } from '../domain/voiceoverSession'
 import { VOICEOVER_WAV_LIMITS } from '../pipeline/voiceoverWavDraft'
@@ -16,6 +17,7 @@ import { connectVoiceoverMicrophone, prepareVoiceoverMicrophoneWorklet } from '.
 import { VoiceoverWavBridge } from './voiceoverWavBridge'
 import { voiceoverDraftLockName } from '../domain/voiceoverDrafts'
 import { avCaptureActive } from './avCaptureOwner'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 type Capture = Awaited<ReturnType<typeof connectVoiceoverMicrophone>>
 type Writer = Pick<VoiceoverWavBridge, 'create' | 'stop' | 'release' | 'recover' | 'discard' | 'close' | 'append'>
@@ -124,10 +126,6 @@ export function currentVoiceoverDestinationContext(): VoiceoverDestinationContex
   const current = useDocumentStore.getState()
   return { projectId: current.project.id, projectGeneration: current.projectGeneration,
     editRevision, doc: current.doc }
-}
-
-function errorMessage(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 function permissionFailure(cause: unknown): VoiceoverFailure {
@@ -798,3 +796,4 @@ export function getVoiceoverCaptureOwner(): VoiceoverCaptureOwner {
 export async function teardownVoiceoverForProjectChange(): Promise<void> {
   await owner?.teardownForProjectChange()
 }
+registerLoadedEditorRuntime('voiceoverCapture', teardownVoiceoverForProjectChange)

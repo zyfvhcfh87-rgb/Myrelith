@@ -18,6 +18,13 @@ interface MarqueeSession {
   start: MarqueePoint
 }
 
+/** Latest pointer position; DOM hit-testing waits for the next frame. */
+interface MarqueeSample {
+  session: MarqueeSession
+  clientX: number
+  clientY: number
+}
+
 function pointInSurface(
   surface: HTMLElement,
   clientX: number,
@@ -74,10 +81,21 @@ export function useTimelineMarqueeSelection() {
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const session = useRef<MarqueeSession | null>(null)
   const removeWindowListeners = useRef<() => void>(() => {})
-  const schedulePreview = useScrubScheduler((preview: ReturnType<typeof previewAt>) => {
+  // Surface and window listeners both report each move; only the latest
+  // point is kept, and the clip-rect scan runs once per animation frame.
+  const schedulePreview = useScrubScheduler((sample: MarqueeSample) => {
     const active = session.current
-    if (!active || useDocumentStore.getState().doc !== active.document) return
-    useTransportStore.getState().setSelectionMarquee(preview)
+    const surface = surfaceRef.current
+    if (
+      !surface
+      || active !== sample.session
+      || useDocumentStore.getState().doc !== active.document
+    ) return
+    useTransportStore.getState().setSelectionMarquee(previewAt(
+      surface,
+      active.start,
+      pointInSurface(surface, sample.clientX, sample.clientY),
+    ))
   })
 
   const clear = (): void => {
@@ -139,17 +157,16 @@ export function useTimelineMarqueeSelection() {
 
   const updatePointer = (event: Pick<PointerEvent, 'pointerId' | 'clientX' | 'clientY'>): void => {
     const active = session.current
-    const surface = surfaceRef.current
-    if (!active || !surface || active.pointerId !== event.pointerId) return
+    if (!active || !surfaceRef.current || active.pointerId !== event.pointerId) return
     if (useDocumentStore.getState().doc !== active.document) {
       clear()
       return
     }
-    schedulePreview(previewAt(
-      surface,
-      active.start,
-      pointInSurface(surface, event.clientX, event.clientY),
-    ))
+    schedulePreview({
+      session: active,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    })
   }
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {

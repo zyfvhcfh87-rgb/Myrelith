@@ -11,6 +11,7 @@
  * - a successful result transfers one ImageBitmap OR VideoFrame to the caller.
  */
 
+import { abortError, throwIfAborted } from '../domain/errors'
 import {
   inspectStaticImageBlob,
   STATIC_IMAGE_RESOURCE_LIMITS,
@@ -217,18 +218,10 @@ export function staticImageDecodedByteLength(
   return bytes
 }
 
-function makeAbortError(): Error {
-  const error = new Error('Still image decoding was cancelled')
-  error.name = 'AbortError'
-  return error
-}
+const DECODE_CANCELLED = 'Still image decoding was cancelled'
 
 export function isStaticImageDecodeCancellation(cause: unknown): boolean {
   return cause instanceof Error && cause.name === 'AbortError'
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw makeAbortError()
 }
 
 function awaitWithAbort<T>(
@@ -251,10 +244,10 @@ function awaitWithAbort<T>(
       return pending.then(
         (value) => {
           settleLate(value)
-          throw makeAbortError()
+          throw abortError(DECODE_CANCELLED)
         },
         () => {
-          throw makeAbortError()
+          throw abortError(DECODE_CANCELLED)
         },
       )
     }
@@ -264,7 +257,7 @@ function awaitWithAbort<T>(
       },
       () => {},
     )
-    return Promise.reject(makeAbortError())
+    return Promise.reject(abortError(DECODE_CANCELLED))
   }
   return new Promise<T>((resolve, reject) => {
     let aborted = false
@@ -272,7 +265,7 @@ function awaitWithAbort<T>(
       if (aborted) return
       aborted = true
       signal.removeEventListener('abort', onAbort)
-      if (!waitForLateSettlementOnAbort) reject(makeAbortError())
+      if (!waitForLateSettlementOnAbort) reject(abortError(DECODE_CANCELLED))
     }
     signal.addEventListener('abort', onAbort, { once: true })
     if (signal.aborted) {
@@ -283,7 +276,7 @@ function awaitWithAbort<T>(
       (value) => {
         if (aborted) {
           settleLate(value)
-          if (waitForLateSettlementOnAbort) reject(makeAbortError())
+          if (waitForLateSettlementOnAbort) reject(abortError(DECODE_CANCELLED))
           return
         }
         signal.removeEventListener('abort', onAbort)
@@ -291,7 +284,7 @@ function awaitWithAbort<T>(
       },
       (cause: unknown) => {
         if (aborted) {
-          if (waitForLateSettlementOnAbort) reject(makeAbortError())
+          if (waitForLateSettlementOnAbort) reject(abortError(DECODE_CANCELLED))
           return
         }
         signal.removeEventListener('abort', onAbort)
@@ -735,13 +728,13 @@ export async function decodeStaticImage(
   const requestedLimits = options.limits === undefined
     ? undefined
     : Object.freeze({ ...options.limits })
-  throwIfAborted(signal)
+  throwIfAborted(signal, DECODE_CANCELLED)
   const inspection = await inspectStaticImageBlob(blob, {
     signal,
     limits: requestedLimits,
   })
   const resourceLimits = effectiveDecodeLimits(requestedLimits)
-  throwIfAborted(signal)
+  throwIfAborted(signal, DECODE_CANCELLED)
 
   const environment = options.environment ?? browserDecodeEnvironment()
   const bitmapFactory = environment.createImageBitmap
@@ -798,7 +791,7 @@ export async function decodeStaticImage(
           decoderFactory.isTypeSupported(inspection.mimeType),
           signal,
         )
-        throwIfAborted(signal)
+        throwIfAborted(signal, DECODE_CANCELLED)
         if (supported) {
           decoder = decoderFactory.create(canonicalSource, {
             type: inspection.mimeType,
@@ -812,7 +805,7 @@ export async function decodeStaticImage(
           if (signal?.aborted) closeDecoder()
 
           await awaitWithAbort(decoder.tracks.ready, signal)
-          throwIfAborted(signal)
+          throwIfAborted(signal, DECODE_CANCELLED)
           if (decoder.tracks.length <= 0) {
             throw new Error('ImageDecoder exposed no image tracks')
           }
@@ -824,7 +817,7 @@ export async function decodeStaticImage(
           decoderRepetitionCount = observation.repetitionCount
         }
       } catch (cause) {
-        if (signal?.aborted) throw makeAbortError()
+        throwIfAborted(signal, DECODE_CANCELLED)
         if (isStaticImageDecodeCancellation(cause)) throw cause
         imageDecoderFailure = cause
         closeDecoder()
@@ -836,7 +829,7 @@ export async function decodeStaticImage(
       // Canonical path: the Blob carries the sniffed MIME and asks the browser
       // to apply encoded orientation before premultiplying into sRGB/default.
       try {
-        throwIfAborted(signal)
+        throwIfAborted(signal, DECODE_CANCELLED)
         bitmap = await awaitWithAbort(
           bitmapFactory(
             canonicalSource,
@@ -846,7 +839,7 @@ export async function decodeStaticImage(
           closeBitmap,
           byteReservation !== null,
         )
-        throwIfAborted(signal)
+        throwIfAborted(signal, DECODE_CANCELLED)
         const decodedBytes = validateDecodedBitmap(
           bitmap,
           inspection,
@@ -865,7 +858,7 @@ export async function decodeStaticImage(
         byteReservationTransferred = true
         return result
       } catch (cause) {
-        if (signal?.aborted) throw makeAbortError()
+        throwIfAborted(signal, DECODE_CANCELLED)
         if (
           isStaticImageDecodeCancellation(cause)
           || cause instanceof StaticImageDecodeError
@@ -911,7 +904,7 @@ export async function decodeStaticImage(
         byteReservation !== null,
       )
       frame = decoded.image
-      throwIfAborted(signal)
+      throwIfAborted(signal, DECODE_CANCELLED)
       const dimensions = validateDecodedFrame(
         frame,
         inspection,
@@ -929,7 +922,7 @@ export async function decodeStaticImage(
       byteReservationTransferred = true
       return result
     } catch (cause) {
-      if (signal?.aborted) throw makeAbortError()
+      throwIfAborted(signal, DECODE_CANCELLED)
       if (
         isStaticImageDecodeCancellation(cause)
         || cause instanceof StaticImageDecodeError

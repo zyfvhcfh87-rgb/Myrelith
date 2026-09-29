@@ -1,6 +1,8 @@
 /** Shared portable and live-edit bounds for durable effect descriptors. */
 
-import type { EffectDescriptor, TimelineDoc } from './schema'
+import { isRecord } from './guards'
+import { isFiniteInRange } from './numeric'
+import type { EffectDescriptor, EffectParamValue, TimelineDoc } from './schema'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
@@ -28,6 +30,29 @@ const EFFECT_DESCRIPTOR_KEYS = Object.freeze([
 const EFFECT_DESCRIPTOR_KEY_SET = new Set<string>(EFFECT_DESCRIPTOR_KEYS)
 const UNSAFE_PARAM_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
 
+export type NumericParamLimits = Readonly<Record<string, { readonly min: number; readonly max: number }>>
+
+const NO_OPTIONAL_PARAMS: ReadonlySet<string> = new Set()
+
+/**
+ * First numeric parameter outside its inclusive limit, checked in limit-key
+ * order. Keys in `optional` may be absent.
+ */
+export function numericLimitsError(
+  params: Readonly<Record<string, EffectParamValue>>,
+  limits: NumericParamLimits,
+  optional: ReadonlySet<string> = NO_OPTIONAL_PARAMS,
+): string | null {
+  for (const [key, limit] of Object.entries(limits)) {
+    const value = params[key]
+    if (value === undefined && optional.has(key)) continue
+    if (!isFiniteInRange(value, limit.min, limit.max)) {
+      return `${key} must be between ${limit.min} and ${limit.max}`
+    }
+  }
+  return null
+}
+
 /** Shared guard for strings that must never become durable effect-record keys. */
 export function isUnsafeEffectParamKey(key: string): boolean {
   return UNSAFE_PARAM_KEYS.has(key)
@@ -37,10 +62,6 @@ export interface EffectBudgetUsage {
   readonly effects: number
   readonly params: number
   readonly stringCharacters: number
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function boundedRequiredStringError(
@@ -126,60 +147,64 @@ export function effectDescriptorBudget(effect: EffectDescriptor): EffectBudgetUs
   }
 }
 
-export function documentEffectBudgetUsage(doc: TimelineDoc): EffectBudgetUsage {
+/** Sum descriptor budgets over one owner's walk of its effect stacks. */
+export function effectStacksBudgetUsage(
+  stacks: Iterable<readonly EffectDescriptor[]>,
+): EffectBudgetUsage {
   let effects = 0
   let params = 0
   let stringCharacters = 0
-  for (const stack of [doc.masterVideoEffects ?? [], ...doc.tracks.map((track) => track.videoEffects ?? [])]) {
+  for (const stack of stacks) {
     effects += stack.length
     for (const effect of stack) {
       const descriptor = effectDescriptorBudget(effect)
-      params += descriptor.params; stringCharacters += descriptor.stringCharacters
-    }
-  }
-  for (const track of doc.tracks) {
-    for (const clip of track.clips) {
-      effects += clip.effects.length
-      for (const effect of clip.effects) {
-        const descriptor = effectDescriptorBudget(effect)
-        params += descriptor.params
-        stringCharacters += descriptor.stringCharacters
-      }
-    }
-    for (const adjustment of track.adjustments ?? []) {
-      effects += adjustment.effects.length
-      for (const effect of adjustment.effects) {
-        const descriptor = effectDescriptorBudget(effect)
-        params += descriptor.params
-        stringCharacters += descriptor.stringCharacters
-      }
+      params += descriptor.params
+      stringCharacters += descriptor.stringCharacters
     }
   }
   return { effects, params, stringCharacters }
 }
 
-function effectBudgetUsage(
-  effects: readonly EffectDescriptor[],
-): EffectBudgetUsage {
-  let params = 0
-  let stringCharacters = 0
-  for (const effect of effects) {
-    const descriptor = effectDescriptorBudget(effect)
-    params += descriptor.params
-    stringCharacters += descriptor.stringCharacters
+function* documentVideoEffectStacks(doc: TimelineDoc): Generator<readonly EffectDescriptor[]> {
+  yield doc.masterVideoEffects ?? []
+  for (const track of doc.tracks) {
+    yield track.videoEffects ?? []
+    for (const clip of track.clips) yield clip.effects
+    for (const adjustment of track.adjustments ?? []) yield adjustment.effects
   }
-  return { effects: effects.length, params, stringCharacters }
 }
 
-function aggregateBudgetError(usage: EffectBudgetUsage): string | null {
+export function documentEffectBudgetUsage(doc: TimelineDoc): EffectBudgetUsage {
+  return effectStacksBudgetUsage(documentVideoEffectStacks(doc))
+}
+
+/**
+ * One aggregate budget rule for every effect family. A scope supplies the
+ * document walk it counts and the nouns its messages use.
+ */
+export interface EffectBudgetScope {
+  readonly usage: (doc: TimelineDoc) => EffectBudgetUsage
+  readonly effects: string
+  readonly params: string
+  readonly strings: string
+}
+
+const VIDEO_EFFECT_BUDGET: EffectBudgetScope = Object.freeze({
+  usage: documentEffectBudgetUsage,
+  effects: 'effects',
+  params: 'effect parameters',
+  strings: 'effect-string characters',
+})
+
+function aggregateBudgetError(usage: EffectBudgetUsage, scope: EffectBudgetScope): string | null {
   if (usage.effects > EFFECT_STACK_LIMITS.maxTotalEffects) {
-    return `project exceeds ${EFFECT_STACK_LIMITS.maxTotalEffects} effects in total`
+    return `project exceeds ${EFFECT_STACK_LIMITS.maxTotalEffects} ${scope.effects} in total`
   }
   if (usage.params > EFFECT_STACK_LIMITS.maxTotalEffectParams) {
-    return `project exceeds ${EFFECT_STACK_LIMITS.maxTotalEffectParams} effect parameters in total`
+    return `project exceeds ${EFFECT_STACK_LIMITS.maxTotalEffectParams} ${scope.params} in total`
   }
   if (usage.stringCharacters > EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters) {
-    return `project exceeds ${EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters} effect-string characters in total`
+    return `project exceeds ${EFFECT_STACK_LIMITS.maxTotalEffectStringCharacters} ${scope.strings} in total`
   }
   return null
 }
@@ -188,15 +213,16 @@ function aggregateBudgetError(usage: EffectBudgetUsage): string | null {
 export function effectCollectionAppendBudgetError(
   doc: TimelineDoc,
   effects: readonly EffectDescriptor[],
+  scope: EffectBudgetScope = VIDEO_EFFECT_BUDGET,
 ): string | null {
   if (effects.length === 0) return null
-  const current = documentEffectBudgetUsage(doc)
-  const added = effectBudgetUsage(effects)
+  const current = scope.usage(doc)
+  const added = effectStacksBudgetUsage([effects])
   return aggregateBudgetError({
     effects: current.effects + added.effects,
     params: current.params + added.params,
     stringCharacters: current.stringCharacters + added.stringCharacters,
-  })
+  }, scope)
 }
 
 /** Explain whether appending one already-bounded descriptor would exceed a budget. */
@@ -205,11 +231,12 @@ export function effectAppendBudgetError(
   owner: Readonly<{ effects: readonly EffectDescriptor[] }>,
   effect: EffectDescriptor,
   ownerLabel = 'clip',
+  scope: EffectBudgetScope = VIDEO_EFFECT_BUDGET,
 ): string | null {
   if (owner.effects.length + 1 > EFFECT_STACK_LIMITS.maxEffectsPerClip) {
     return `${ownerLabel} has reached the ${EFFECT_STACK_LIMITS.maxEffectsPerClip}-effect limit`
   }
-  return effectCollectionAppendBudgetError(doc, [effect])
+  return effectCollectionAppendBudgetError(doc, [effect], scope)
 }
 
 /** Explain whether replacing one descriptor would exceed aggregate budgets. */
@@ -217,8 +244,9 @@ export function effectReplacementBudgetError(
   doc: TimelineDoc,
   previous: EffectDescriptor,
   next: EffectDescriptor,
+  scope: EffectBudgetScope = VIDEO_EFFECT_BUDGET,
 ): string | null {
-  const current = documentEffectBudgetUsage(doc)
+  const current = scope.usage(doc)
   const removed = effectDescriptorBudget(previous)
   const added = effectDescriptorBudget(next)
   return aggregateBudgetError({
@@ -226,5 +254,5 @@ export function effectReplacementBudgetError(
     params: current.params - removed.params + added.params,
     stringCharacters:
       current.stringCharacters - removed.stringCharacters + added.stringCharacters,
-  })
+  }, scope)
 }

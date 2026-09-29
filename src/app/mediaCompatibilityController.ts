@@ -6,15 +6,15 @@
  * stale preview/audio/export work is therefore harmless after a relink.
  */
 
+import { runtimeFailureDetail } from '../domain/errors'
 import {
   withMediaRuntimeFailure,
-  type MediaCompatibilityItem,
   type MediaRuntimeFailure,
   type MediaRuntimeSurface,
 } from '../domain/mediaCompatibility'
-import type { MediaAsset } from '../domain/schema'
 import { useMediaStore } from '../state/mediaStore'
 import { invalidateMediaDecoderSource } from '../codecs/mediaCodecFallbacks'
+import { compatibilityItemForAsset } from './mediaCompatibilityItems'
 
 export interface MediaRuntimeGuard {
   assetId: string
@@ -23,46 +23,6 @@ export interface MediaRuntimeGuard {
 }
 
 let runtimeRequestId = 0
-
-function detailFrom(cause: unknown): string {
-  const detail = cause instanceof Error ? cause.message : String(cause)
-  return detail.slice(0, 2_048)
-}
-
-export function checkingCompatibilityItem(
-  id: string,
-  requestId: string,
-  file: Pick<File, 'name' | 'type' | 'size' | 'lastModified'>,
-): MediaCompatibilityItem {
-  return {
-    id,
-    requestId,
-    fileName: file.name,
-    declaredMimeType: file.type,
-    size: file.size,
-    lastModified: file.lastModified,
-    status: 'checking',
-    report: null,
-  }
-}
-
-export function compatibilityItemForAsset(
-  asset: MediaAsset,
-  requestId: string,
-  status: MediaCompatibilityItem['status'],
-  report: MediaCompatibilityItem['report'],
-): MediaCompatibilityItem {
-  return {
-    id: asset.id,
-    requestId,
-    fileName: asset.fileName,
-    declaredMimeType: asset.mimeType,
-    size: asset.size,
-    lastModified: asset.lastModified,
-    status,
-    report,
-  }
-}
 
 export function captureMediaRuntimeGuard(
   assetId: string,
@@ -84,7 +44,7 @@ export function mediaRuntimeFailure(
   cause: unknown,
   reason: MediaRuntimeFailure['reason'] = 'decode-failed',
 ): MediaRuntimeFailure {
-  return { surface, trackKind, reason, detail: detailFrom(cause) }
+  return { surface, trackKind, reason, detail: runtimeFailureDetail(cause) }
 }
 
 /** Atomically expose a confirmed asset failure and leave its descriptor offline. */

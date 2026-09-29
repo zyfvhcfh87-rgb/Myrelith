@@ -11,6 +11,7 @@ import {
 import { getMotionAnalysisController } from '../app/motionAnalysisRuntime'
 import { clipAnimation, evaluateAnimationTrack, resolveClipAnimationAtFrame } from '../domain/clipAnimation'
 import { clipVisualSettings } from '../domain/clipInspector'
+import { errorMessage } from '../domain/errors'
 import type { MotionTrackingDirection, MotionTrackingKind } from '../domain/motionTracking'
 import { findClip } from '../domain/selectors'
 import type { Clip, ClipAnimationTrack, Transform } from '../domain/schema'
@@ -26,10 +27,6 @@ const PREVIEW_OWNER = 'motion-tracking' as const
 
 function clearOwnedPreview(): void {
   useTransportStore.getState().setOwnedClipVisualPreview(PREVIEW_OWNER, null)
-}
-
-function messageFrom(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
 }
 
 function previewTransform(
@@ -240,7 +237,7 @@ export default function MotionTrackingEditor({
     } catch (cause) {
       if (runGeneration !== generation.current) return
       setPhase('error')
-      setMessage(messageFrom(cause))
+      setMessage(errorMessage(cause))
     }
   }
 

@@ -6,6 +6,8 @@ import {
   type AnalysisSourceProvenance,
 } from '../domain/analysisCache'
 import { clipVisualSettings } from '../domain/clipInspector'
+import { errorMessage } from '../domain/errors'
+import { hasExactKeys, isRecord } from '../domain/guards'
 import {
   DEFAULT_MOTION_ANALYSIS_BUDGET,
   MOTION_ANALYSIS_ALGORITHM_VERSION,
@@ -41,6 +43,7 @@ import {
   validateInitialPointTrackingSelection,
   type TrackingBox,
 } from '../domain/motionTrackingResearch'
+import { isFiniteNumber } from '../domain/numeric'
 import type { Clip, ClipId, MediaAsset, TimelineDoc } from '../domain/schema'
 import { findClip, trackOfClip } from '../domain/selectors'
 import { clipSourceTimeMap } from '../domain/sourceTimeMap'
@@ -57,10 +60,16 @@ import {
   type MotionAnalysisResultProcessor,
 } from './motionAnalysisController'
 import { getMotionAnalysisController } from './motionAnalysisRuntime'
-import { sha256Hex } from './sourceFingerprint'
+import {
+  jsonDigest,
+  monotonicNow,
+  releaseBytes,
+  strictUtf8Decoder,
+  textDigest,
+  utf8Encoder,
+  yieldToBrowser,
+} from './analysisRuntime'
 
-const encoder = new TextEncoder()
-const decoder = new TextDecoder('utf-8', { fatal: true })
 export const MAX_MOTION_TRACKING_RESULT_BYTES = Math.floor(MAX_ANALYSIS_RESULT_BYTES / 16)
 const MAX_SERIALIZED_TRACKING_SAMPLE_BYTES = 256
 const RESULT_ENVELOPE_BYTES = 2_048
@@ -89,38 +98,19 @@ export interface MotionTrackingSession {
   readonly projectBindingId: string
 }
 
-function releaseBytes(bytes: Uint8Array<ArrayBuffer>): void {
-  if (bytes.buffer.byteLength > 0) structuredClone(null, { transfer: [bytes.buffer] })
-}
-
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const actual = Object.keys(value).sort()
-  const expected = [...keys].sort()
-  return actual.length === expected.length
-    && actual.every((key, index) => key === expected[index])
-}
-
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function finite(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
-}
-
 function safeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value)
 }
 
 function validConfidence(value: unknown): value is number {
-  return finite(value) && value >= 0 && value <= 1
+  return isFiniteNumber(value) && value >= 0 && value <= 1
 }
 
 function parseFailure(value: unknown): MotionTrackingAnalysisFailure | null | undefined {
   if (value === null) return null
   if (
-    !record(value)
-    || !exactKeys(value, ['localFrame', 'code', 'detail'])
+    !isRecord(value)
+    || !hasExactKeys(value, ['localFrame', 'code', 'detail'])
     || !safeInteger(value.localFrame)
     || value.localFrame < 0
     || !['lost-point', 'lost-box', 'low-confidence'].includes(String(value.code))
@@ -139,13 +129,13 @@ export function parseMotionTrackingAnalysis(
   }
   let value: unknown
   try {
-    value = JSON.parse(decoder.decode(bytes))
+    value = JSON.parse(strictUtf8Decoder.decode(bytes))
   } catch (cause) {
     throw new MotionAnalysisError('storage-corrupt', 'Tracking cache result is not valid UTF-8 JSON', cause)
   }
   if (
-    !record(value)
-    || !exactKeys(value, [
+    !isRecord(value)
+    || !hasExactKeys(value, [
       'version', 'kind', 'direction', 'selectionLocalFrame', 'width', 'height', 'samples', 'failure',
     ])
     || value.version !== MOTION_TRACKING_RESULT_VERSION
@@ -176,23 +166,23 @@ export function parseMotionTrackingAnalysis(
       ? ['timestampUs', 'sourceTimeTicks', 'localFrame', 'x', 'y', 'width', 'height', 'confidence']
       : ['timestampUs', 'sourceTimeTicks', 'localFrame', 'x', 'y', 'confidence']
     if (
-      !record(candidate)
-      || !exactKeys(candidate, expected)
+      !isRecord(candidate)
+      || !hasExactKeys(candidate, expected)
       || !safeInteger(candidate.timestampUs)
       || !safeInteger(candidate.sourceTimeTicks)
       || candidate.sourceTimeTicks < 0
       || !safeInteger(candidate.localFrame)
       || candidate.localFrame < 0
-      || !finite(candidate.x)
-      || !finite(candidate.y)
+      || !isFiniteNumber(candidate.x)
+      || !isFiniteNumber(candidate.y)
       || candidate.x < 0
       || candidate.x >= value.width
       || candidate.y < 0
       || candidate.y >= value.height
       || !validConfidence(candidate.confidence)
       || (box && (
-        !finite(candidate.width)
-        || !finite(candidate.height)
+        !isFiniteNumber(candidate.width)
+        || !isFiniteNumber(candidate.height)
         || (candidate.width as number) <= 0
         || (candidate.height as number) <= 0
         || candidate.x + (candidate.width as number) > value.width
@@ -263,31 +253,6 @@ function selectionBox(selection: Extract<MotionTrackingSelection, { kind: 'box' 
     width: Math.max(1, Math.round(selection.box.width * width)),
     height: Math.max(1, Math.round(selection.box.height * height)),
   }
-}
-
-function yieldToBrowser(): Promise<void> {
-  const scheduler = (globalThis as {
-    scheduler?: { yield?: () => Promise<void> }
-  }).scheduler
-  if (typeof scheduler?.yield === 'function') return scheduler.yield()
-  if (typeof MessageChannel === 'function') {
-    return new Promise((resolve) => {
-      const channel = new MessageChannel()
-      channel.port1.onmessage = () => {
-        channel.port1.close()
-        channel.port2.close()
-        resolve()
-      }
-      channel.port2.postMessage(undefined)
-    })
-  }
-  return new Promise((resolve) => setTimeout(resolve, 0))
-}
-
-function monotonicNow(): number {
-  return typeof globalThis.performance?.now === 'function'
-    ? globalThis.performance.now()
-    : Date.now()
 }
 
 export function createMotionTrackingProcessor(
@@ -449,7 +414,7 @@ export function createMotionTrackingProcessor(
       if (nextIndex !== completion.sampledFrameCount || nextIndex !== sampleLocalFrames.length) {
         throw new MotionAnalysisError('decode-readback', 'Motion-tracking analysis result is incomplete')
       }
-      const bytes = encoder.encode(JSON.stringify({
+      const bytes = utf8Encoder.encode(JSON.stringify({
         version: MOTION_TRACKING_RESULT_VERSION,
         kind: selection.kind,
         direction,
@@ -534,10 +499,6 @@ function currentFailureFor(
     : 'replaced-source'
 }
 
-async function jsonDigest(value: unknown): Promise<string> {
-  return sha256Hex(encoder.encode(JSON.stringify(value)))
-}
-
 export async function analyzeMotionTracking(
   request: MotionTrackingAnalysisRequest,
 ): Promise<MotionTrackingSession> {
@@ -572,11 +533,13 @@ export async function analyzeMotionTracking(
       request.direction,
     )
   } catch (cause) {
-    throw new MotionAnalysisError('unsupported-runtime', cause instanceof Error ? cause.message : String(cause), cause)
+    throw new MotionAnalysisError('unsupported-runtime', errorMessage(cause), cause)
   }
   const snapshot = sourceSnapshot(doc, clip, source, request)
   const sourceMappingDigest = await jsonDigest(clipSourceTimeMap(clip))
-  const projectionDigest = await jsonDigest(JSON.parse(snapshot))
+  // The snapshot is already JSON.stringify output, which re-serializes to
+  // itself, so hashing it directly keeps the durable digest identical.
+  const projectionDigest = await textDigest(snapshot)
   const parametersDigest = await jsonDigest({
     selection: request.selection,
     direction: request.direction,
@@ -776,7 +739,11 @@ export function beginMaskMotionTrackingReview(session: MotionTrackingSession, ta
   if (!proposed.ok) throw new Error(proposed.reason)
   const candidate = replaceProjectSequence(document.project, document.activeSequenceId, proposed.doc)
   if (proposed.changed && candidate === document.project) throw new Error('The mask attachment could not replace its sequence within the complete project limits.')
-  const admissionError = () => !sequenceProjectWithinEditBudget(candidate) ? 'The mask attachment exceeds project limits.'
+  // replaceProjectSequence only returns a replacement that is within the edit
+  // budget; only an unchanged project still needs the check. The candidate is
+  // fixed for this review, so the answer is too.
+  const withinBudget = candidate !== document.project || sequenceProjectWithinEditBudget(candidate)
+  const admissionError = () => !withinBudget ? 'The mask attachment exceeds project limits.'
     : animationRetentionError(useDocumentStore.getState(), candidate) ?? portableProjectEditError(document.project, document.projectGeneration, candidate)
   const error = admissionError()
   if (error) throw new Error(error)
@@ -845,7 +812,16 @@ export function beginMaskMotionTrackingReview(session: MotionTrackingSession, ta
   activeMaskTrackingReview = review
   const check = () => { if (!current()) cancel(); else updatePreview() }
   unsubscribeDocument = useDocumentStore.subscribe(check)
-  unsubscribeTransport = useTransportStore.subscribe(check)
+  // Playhead ticks only move the accepted-range preview. The complete context
+  // check reads documents and media and serializes snapshots, so rerun it only
+  // when the selection or a transport reset could have invalidated the review;
+  // document, media and tracking-selection changes have their own listeners.
+  unsubscribeTransport = useTransportStore.subscribe((next, previous) => {
+    if (reset !== getTransportResetRevision() || next.selectedClipId !== previous.selectedClipId
+      || next.selectedAdjustmentId !== previous.selectedAdjustmentId || next.selectedClipIds !== previous.selectedClipIds) check()
+    else if (activeMaskTrackingReview === review) updatePreview()
+    else cancel()
+  })
   unsubscribeMedia = useMediaStore.subscribe(check)
   unsubscribeSelection = useMotionTrackingSelectionStore.subscribe(check)
   return review

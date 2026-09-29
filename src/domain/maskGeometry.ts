@@ -3,6 +3,7 @@ import { clipVisualSettingsValidationError, transformScaleValidationError } from
 import { MASK_LIMITS } from './effectStack'
 import { assertRenderSurfaceBudget } from './renderSurfaceBudget'
 import type { MaskPoint } from './maskPath'
+import { clamp } from './numeric'
 import type { ClipVisualSettings, Transform } from './schema'
 
 export interface MaskDimensions { readonly width: number; readonly height: number }
@@ -35,10 +36,6 @@ function assertViewport(viewport: MaskMonitorViewport): void {
 function checked(point: MaskPoint): MaskPoint {
   assertPoint(point)
   return point
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
 }
 
 export function monitorPointToProject(point: MaskPoint, viewport: MaskMonitorViewport, project: MaskDimensions): MaskPoint {

@@ -4,8 +4,8 @@ import {
   dismissMediaImportError,
   resolveMediaImportDecision,
 } from '../app/mediaImportController'
-import type { FrameRate } from '../domain/schema'
 import { useMediaImportStore } from '../state/mediaImportStore'
+import { formatFrameRate } from './frameRateLabel'
 
 const FOCUSABLE_SELECTOR = [
   'button:not([disabled])',
@@ -15,12 +15,6 @@ const FOCUSABLE_SELECTOR = [
   '[href]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ')
-
-function formatRate(rate: FrameRate): string {
-  const fps = rate.num / rate.den
-  if (Number.isInteger(fps)) return String(fps)
-  return fps.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
-}
 
 function focusableIn(dialog: HTMLElement): HTMLElement[] {
   return [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter((element) => (
@@ -130,11 +124,11 @@ export default function MediaImportDialog() {
               <dl className="media-import-rates">
                 <div>
                   <dt>Project</dt>
-                  <dd>{formatRate(prompt.projectRate)} fps</dd>
+                  <dd>{formatFrameRate(prompt.projectRate)} fps</dd>
                 </div>
                 <div>
                   <dt>Source</dt>
-                  <dd>{formatRate(prompt.sourceRate)} fps</dd>
+                  <dd>{formatFrameRate(prompt.sourceRate)} fps</dd>
                 </div>
               </dl>
               {prompt.matchUnavailableReason ? (
@@ -164,7 +158,7 @@ export default function MediaImportDialog() {
                 title={prompt.matchUnavailableReason ?? undefined}
                 onClick={() => resolveMediaImportDecision('match-source-rate')}
               >
-                Use {formatRate(prompt.sourceRate)} fps
+                Use {formatFrameRate(prompt.sourceRate)} fps
               </button>
               <button
                 type="button"
@@ -172,7 +166,7 @@ export default function MediaImportDialog() {
                 autoFocus
                 onClick={() => resolveMediaImportDecision('keep-project-rate')}
               >
-                Keep {formatRate(prompt.projectRate)} fps
+                Keep {formatFrameRate(prompt.projectRate)} fps
               </button>
             </div>
           </>

@@ -1,25 +1,21 @@
 import { VOICEOVER_RECORDINGS_DIRECTORY, VoiceoverWavDraft, type VoiceoverDraftInfo, type VoiceoverDraftStorage, type VoiceoverSyncFile } from '../pipeline/voiceoverWavDraft'
 
 import type { VoiceoverWavReply, VoiceoverWavRequest, VoiceoverWavResult } from '../pipeline/voiceoverWavProtocol'
+import {
+  listDraftFiles,
+  opfsDirectory,
+  opfsFileExists as exists,
+  openSyncHandle,
+  probeDraftSize,
+  serveSerializedRequests,
+} from './opfsDraftWorker'
 
 const DIRECTORY = VOICEOVER_RECORDINGS_DIRECTORY
-type SyncFileHandle = FileSystemFileHandle & { createSyncAccessHandle(): Promise<VoiceoverSyncFile> }
 
-async function recordingDirectory(create: boolean): Promise<FileSystemDirectoryHandle> {
-  const root = await navigator.storage.getDirectory()
-  return root.getDirectoryHandle(DIRECTORY, { create })
-}
+const recordingDirectory = (create: boolean) => opfsDirectory(DIRECTORY, create)
 
 function names(id: string) {
   return { audio: `${id}.wav`, journal: `${id}.checkpoint` }
-}
-
-async function exists(directory: FileSystemDirectoryHandle, name: string): Promise<boolean> {
-  try { await directory.getFileHandle(name); return true }
-  catch (cause) {
-    if (cause instanceof DOMException && cause.name === 'NotFoundError') return false
-    throw cause
-  }
 }
 
 async function removeIfPresent(directory: FileSystemDirectoryHandle, name: string): Promise<void> {
@@ -30,61 +26,16 @@ async function removeIfPresent(directory: FileSystemDirectoryHandle, name: strin
 }
 
 /**
- * Metadata-only directory read. Sizes come from sync access handles (no
- * whole-take buffer, no file read). A file still held open by a recording in
- * progress cannot be measured while its handle is open, so it is reported
- * with a `null` size instead of failing the listing.
+ * Metadata-only directory read: sizes come from momentary sync handles (no
+ * whole-take buffer, no file read), and a take still being recorded reports
+ * a `null` size.
  */
-async function listDrafts(): Promise<VoiceoverDraftInfo[]> {
-  let directory: FileSystemDirectoryHandle
-  try {
-    directory = await recordingDirectory(false)
-  } catch (cause) {
-    // No recordings have ever been made in this browser.
-    if (cause instanceof DOMException && cause.name === 'NotFoundError') return []
-    throw cause
-  }
-  const drafts: VoiceoverDraftInfo[] = []
-  for await (const entry of directory.values()) {
-    if (entry.kind !== 'file' || !entry.name.endsWith('.wav')) continue
-    const id = entry.name.slice(0, -'.wav'.length)
-    let sizeBytes: number | null
-    try {
-      const sync = await (entry as SyncFileHandle).createSyncAccessHandle()
-      try {
-        sizeBytes = sync.getSize()
-      } finally {
-        sync.close()
-      }
-    } catch (cause) {
-      // Chromium refuses a second sync access handle while one is open, so a
-      // recording in progress cannot be measured; report its size as unknown
-      // instead of failing the whole listing. Other storage failures must
-      // surface so they cannot make a draft look like an ordinary orphan.
-      if (cause instanceof DOMException && cause.name === 'NoModificationAllowedError') {
-        sizeBytes = null
-      } else {
-        throw cause
-      }
-    }
-    drafts.push({ id, sizeBytes, hasJournal: await exists(directory, `${id}.checkpoint`) })
-  }
-  return drafts.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-}
-
-/**
- * A listing in another worker or tab probes each file with a momentary sync
- * handle; retry that short lock instead of failing a create or recovery.
- * A recording that really owns the file keeps it locked past this window.
- */
-async function openSyncHandle(handle: FileSystemFileHandle): Promise<VoiceoverSyncFile> {
-  for (let attempt = 0; ; attempt++) {
-    try { return await (handle as SyncFileHandle).createSyncAccessHandle() }
-    catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === 'NoModificationAllowedError') || attempt >= 8) throw cause
-      await new Promise((resolve) => setTimeout(resolve, 25))
-    }
-  }
+function listDrafts(): Promise<VoiceoverDraftInfo[]> {
+  return listDraftFiles<VoiceoverDraftInfo>(DIRECTORY, '.wav', async (id, entry, directory) => ({
+    id,
+    sizeBytes: await probeDraftSize(entry),
+    hasJournal: await exists(directory, `${id}.checkpoint`),
+  }))
 }
 
 const storage: VoiceoverDraftStorage<FileSystemFileHandle> = {
@@ -102,8 +53,8 @@ const storage: VoiceoverDraftStorage<FileSystemFileHandle> = {
       audioCreated = create
       const journalFile = await directory.getFileHandle(name.journal, { create })
       journalCreated = create
-      audio = await openSyncHandle(audioFile)
-      const journal = await openSyncHandle(journalFile)
+      audio = await openSyncHandle<VoiceoverSyncFile>(audioFile)
+      const journal = await openSyncHandle<VoiceoverSyncFile>(journalFile)
       return { audio, journal }
     } catch (cause) {
       try { audio?.close() }
@@ -155,29 +106,10 @@ async function run(request: VoiceoverWavRequest): Promise<VoiceoverWavResult> {
   }
 }
 
-// OPFS opens and reads are asynchronous; serialize them with synchronous writes.
-let tail: Promise<void> = Promise.resolve()
-globalThis.onmessage = ({ data }: MessageEvent<VoiceoverWavRequest>) => {
-  tail = tail.then(async () => {
-    let reply: VoiceoverWavReply
-    try { reply = { requestId: data.requestId, result: await run(data) } }
-    catch (cause) {
-      reply = { requestId: data.requestId, error: {
-        name: cause instanceof Error ? cause.name : 'Error',
-        message: cause instanceof Error ? cause.message : String(cause),
-      } }
-    }
-    // A FileSystemFileHandle clones (it never transfers through
-    // postMessage); the File clones the same way, so no transfer list is
-    // needed or accepted.
-    try { globalThis.postMessage(reply) }
-    catch (cause) {
-      // Answer the request anyway so the bridge cannot wait forever.
-      globalThis.postMessage({ requestId: data.requestId, error: {
-        name: 'DataCloneError', message: cause instanceof Error ? cause.message : String(cause),
-      } } satisfies VoiceoverWavReply)
-    }
-  }).catch(() => {
-    // Keep serializing later requests even if a reply could not be posted.
-  })
-}
+// OPFS opens and reads are asynchronous; serialize them with synchronous
+// writes. A FileSystemFileHandle clones (it never transfers through
+// postMessage); the File clones the same way, so no transfer list is needed.
+globalThis.onmessage = serveSerializedRequests<VoiceoverWavRequest, VoiceoverWavResult>(
+  run,
+  (reply: VoiceoverWavReply) => globalThis.postMessage(reply),
+)

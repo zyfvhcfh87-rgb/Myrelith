@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import type { SequenceInstance, TrackId, TrackKind } from '../../domain/schema'
+import type { SequenceInstance } from '../../domain/schema'
 import { rangeEnd } from '../../domain/time'
 import { useDocumentStore } from '../../state/documentStore'
 import { useSequenceInstanceSelectionStore } from '../../state/sequenceInstanceSelectionStore'
@@ -9,16 +9,12 @@ import { frameToTimelineLocalPx } from './timelineViewport'
 
 interface SequenceInstanceViewProps {
   instance: SequenceInstance
-  trackId: TrackId
-  trackKind: TrackKind
   timelineOriginFrame: number
   timelineWindowEndFrame: number
 }
 
 function SequenceInstanceView({
   instance,
-  trackId,
-  trackKind,
   timelineOriginFrame,
   timelineWindowEndFrame,
 }: SequenceInstanceViewProps) {
@@ -36,8 +32,6 @@ function SequenceInstanceView({
       data-testid={`sequence-instance-${instance.id}`}
       data-instance-id={instance.id}
       data-sequence-id={instance.sequenceId}
-      data-track-id={trackId}
-      data-track-kind={trackKind}
       aria-pressed={selected}
       aria-label={`Compound ${instance.name}`}
       title={`${instance.name} · double-click to open`}

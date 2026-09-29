@@ -5,6 +5,105 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
+## Codebase cleanup and optimization (2026-09-29)
+
+Branch `claude/codebase-cleanup-optimize-5b8816`, based on `b3252f8`. Ten
+read-only reviewers covered every source directory; twelve implementation
+packages then ran in isolated worktrees and were merged by one lead. No
+feature or project-format change.
+
+- **Size:** non-test source went from 172,776 to 168,926 lines (+7.6k/−11.7k).
+  Vitest went from 5,600 to 5,700 cases: 81 tests of deleted code were removed,
+  and new regression and parity tests were added.
+- **Launcher bundle:** initial JS went from 1,774 kB raw / 489 kB gzip to 840 /
+  238. That is below #55's 891 / 242.
+  - `app/editorRuntimeLifecycle.ts` lets editor-only owners register their
+    teardown when they load.
+  - Media inspection (Mediabunny) loads on first use.
+  - `architecture.test.ts` fails if the launcher regains either.
+- **Retired:** the runtime-dead chunk-batch decode/render path
+  (`decode.worker.ts`, `DecodeWorkerBridge`, `pipeline/decode.ts`, the
+  render-legacy delegates/protocol, `frame-cache.ts`), about 4k lines.
+- **Shared helpers (one owner each, import them instead of copying):**
+  - `domain/errors.ts`: `errorMessage`, `runtimeFailureDetail`, `abortError`,
+    `throwIfAborted`, `hasErrorName`, `truncateText`.
+  - `domain/guards.ts`: `isRecord`, `isPlainRecord`, `hasExactKeys`,
+    `isBoundedString`, `isSha256Hex`.
+  - `domain/numeric.ts`: `clamp`, safe-integer and finite checks,
+    `ceilDivide`.
+  - `domain/bytes.ts`: `bytesToHex`.
+  - `domain/fileNames.ts`: `windowsSafeFileStem`.
+  - `app/objectUrlBlob.ts`.
+  - App-level shared modules: `playbackAudioShared`, `pluginControllerShared`,
+    `indexedDbAccess`, `keyedSerialQueue`, `fileSystemAccess`,
+    `analysisRuntime`, `asyncLease`, `captionProjectScope`.
+  - Worker-level shared modules: `workers/opfsDraftWorker`, `settledResults`.
+- **Hot paths:**
+  - Every commit no longer re-measures the whole undo history: 2,000 cues × 100
+    history went from ~140–210 ms to ~13 ms per edit.
+  - Crossfade planning is per document: 800 transitions went from ~2 s to
+    under 1 ms.
+  - Transition validation and multi-clip moves are indexed.
+  - Audio folds per block instead of per sample, and WAV export streams.
+  - Color correction runs ~3× faster per frame. Loudness metering runs ~10×
+    faster: one minute of stereo went from 1.6 s to 0.16 s.
+  - Inspector, Multicam, Sequence and Mixer panels no longer re-render every
+    playback frame. `ui/panelRenderIsolation.test.tsx` pins this, extending
+    invariant 6.
+  - Program no longer rebuilds per proxy-progress tick or on unrelated
+    media-store changes.
+- **Bugs fixed (each has a regression test):**
+  - no-op undo entries from clicking a trim, slip or slide handle
+  - instances in hidden or locked lanes captured drags
+  - stale track-target buttons
+  - store actions reported success when history admission rejected the edit
+  - ripple head trim left keyframes on the wrong source frames
+  - Reset Audio did nothing on keyframed volume
+  - zero-delta trim, slip and slide returned a new document
+  - overlapping caption cues were skipped in nested export checks
+  - mixed adjustment edits were partially applied
+  - very slow measured frame rates became 0/1
+  - the Source Monitor kept its playback quality profile after stopping
+  - IndexedDB stayed closed after another tab upgraded it
+  - AV-capture replies could hang when unreadable
+  - unhandled rejections from the multicam lease and the decoder fallback
+  - collect-media missed a vanished file
+- **Behavior notes:**
+  - Program preview media fetches now check `response.ok`, reporting
+    `resource-unavailable` instead of `decode-failed`.
+  - Proxy progress text updates per whole percent.
+  - Provisional files over 1 GiB show GiB.
+- **Honest notes:**
+  - Locally on Node 26, one plugin test fails unless
+    `NODE_OPTIONS=--no-experimental-webstorage` is set: Node's built-in
+    `localStorage` hides jsdom's. CI (Node 24) is unaffected.
+  - 19 Playwright cases already fail on untouched `b3252f8`, for example:
+    title parity needs `.tmp/issue200-baseline`; issue-197 video bus expects
+    schema 21; project-setup-overflow fails 5×.
+  - The first merged run also showed 31 extra failures. All of them passed on a
+    warm rerun; they came from first-launch Vite dependency re-optimization.
+  - The final full run matches the baseline: the same 19 failures, and no new
+    ones.
+  - `issue-209-av-capture-ui` found the app's Mediabunny through resource
+    timing. Mediabunny now loads lazily, after Chromium's default 250-entry
+    buffer is full, so the spec now enlarges that buffer.
+  - The deleted legacy tests pinned raw `VideoDecoder` reset/backpressure
+    behavior. No live path calls `reset()` any more, and the lesson stays below.
+- **Left for the owner:**
+  - `sequenceEditController` roll uses connected `assets`, not `descriptors`,
+    so offline seams are rejected.
+  - Playback holds the lower sample inside a decoded buffer while export
+    interpolates; this matters when source and project sample rates differ.
+  - Lift/extract rejects a locked partner anywhere on the track.
+  - `titleComposition.prepareTitle` re-reads unfrozen titles every frame.
+  - `seamTransitionsRemainValid` is O(T·C).
+  - `openAsset`'s `rate` is unused.
+  - The inline export-block "Review bypass" button drops focus.
+  - `sequenceProjectWithinEditBudget` still re-validates captions on each
+    commit.
+  - The single-key keyframe ops in `domain/operations/animation.ts` are now
+    test-only.
+
 ## Post-MVP issue #209 — local voiceover, camera and screen capture (2026-09-29)
 
 The plan and per-step checkpoints are in [ISSUE_209_PLAN.md](ISSUE_209_PLAN.md);
@@ -1135,9 +1234,9 @@ surface; it is not a second zoom and never enters document history.
   `clipAnimation.ts` (Issue #43's canonical bounded track validation, immutable
   keyframe edits, and deterministic hold/linear/cubic-Bézier evaluation for the
   six supported scalar visual properties),
-  `selectors.ts` (`docDurationFrames`, `activeClipAt`, `clipSourceFrame`,
-  with all ordinary and transition still samples fixed at source frame 0,
-  `resolveCrossfade` (compatibility facade over the canonical planner),
+  `selectors.ts` (`docDurationFrames`, `activeClipAt`; still samples stay at
+  source frame 0 through `sourceTimeMap.sourceFrameAtTimelineFrame`, and
+  crossfade geometry comes from `crossfadePlan.resolveCrossfadeGeometry`;
   `tracksInDisplayOrder`, `audibleTracks` (THE solo/mute mix rule) — all
   derived reads, never stored), `linking.ts` (4.3.8 linked-pair wrappers around
   the base ops — same delta to every `linkGroupId` member, atomic rollback;
@@ -1495,18 +1594,16 @@ surface; it is not a second zoom and never enters document history.
   offline projection),
   and
   `mediaImportStore` (serializable dialog status only; no File/Blob handles).
-- `src/workers/decode-types.ts` — neutral structural types shared by current
-  rendering and the retained decode compatibility path. The deprecated
-  `decode-protocol.ts` keeps the old chunk-worker message contract.
+- `src/workers/decode-types.ts` — neutral structural bitmap type shared by the
+  render worker's source owners (types only).
 - `src/workers/render-protocol.ts` — render-worker message types (types only).
-  The primary path sends each timed-video Blob once through `configureAsset`
+  The primary path sends each timed-video Blob once through `openAsset`
   or each static-image Blob once through `openImage`, then lightweight entries
   discriminated as `video` or `image`. Video entries carry clip lane, asset,
   integer source frame, exact µs timestamp, and playback/seek mode; image
   entries carry literal frame/timestamp zero. `closed` acknowledges completed
-  worker cleanup before bounded-timeout bridge termination. The deprecated
-  chunk-batch messages are defined in `render-legacy-protocol.ts` and remain
-  only for migration tests. `setDoc` must precede renders built from it.
+  worker cleanup before bounded-timeout bridge termination. `setDoc` must
+  precede renders built from it.
 - `src/workers/render.worker.ts` + `src/workers/renderWorker/core.ts` — thin
   worker wiring around the Blob-backed compositing owner: timed video
   keeps one source per asset, sequential clip-keyed playback lanes,
@@ -1524,22 +1621,10 @@ surface; it is not a second zoom and never enters document history.
   Original Slice 7 adds one lazy worker-owned leg/group surface pair, reused
   and cleared for transition frames and resized with the document canvas.
   Superseded presentation never cancels a healthy playback lane.
-- `src/workers/render-legacy.ts` and `src/engine/render-legacy-bridge.ts` —
-  compatibility delegates isolating the obsolete chunk-batch renderer. The
-  current render worker and bridge preserve the old public methods/messages by
-  delegation; current streaming code does not import the retired decode
-  worker, bridge, or chunk-source implementations.
-- `src/workers/decode.worker.ts` — injectable core (`createDecodeWorkerCore`);
-  closes every VideoFrame ASAP, caches ImageBitmap copies (12) instead
-  (raw frames starve the hw decoder pool!), backpressure at queue≥8,
-  latest-wins seeks, catch-all error reporting.
-- `src/engine/frame-cache.ts` — LRU with single-owner close discipline.
-- `src/engine/worker-bridge.ts` — `DecodeWorkerBridge(worker)` +
-  `setSource(rate, provider)` + `renderFrameAt(frame) → RenderResult`
-  ('drawn'|'missed'|'superseded'|'error'; never rejects).
-- `src/pipeline/demux.ts` — Mediabunny loadAsset + decoderConfig (de)serialize;
-  records canonical integer-microsecond duration and conforms playable frames
-  to the active document rate.
+- `src/pipeline/demux.ts` — `serializeDecoderConfig`, the persisted
+  `MediaAsset.decoderConfigB64` format (base64 `description`, no bare
+  `SharedArrayBuffer` reference). Import analysis, canonical duration, and
+  document-rate conformance live in `mediaCompatibilityProbe.ts`.
 - `src/pipeline/visuals.ts` — filmstrip/waveform image generators (4.3.7):
   mediabunny CanvasSink / AudioBufferSink (streamed chunks, peaks fold on
   the fly — full PCM never held); images span the asset's FULL duration
@@ -1552,8 +1637,6 @@ surface; it is not a second zoom and never enters document history.
   and cooperative cancellation. `mediaStore` owns only transferred result
   URLs; removed/replaced/stale generations close Inputs and revoke late URLs
   even when a new project reuses the same durable asset id.
-- `src/pipeline/decode.ts` — keyframe walk in decode order (B-frame safe,
-  `verifyKeyPackets`, bounded overshoot, bytes copied for transfer).
 - `src/engine/render-bridge.ts` — main-thread half of the render worker: keeps
   the posted doc and per-asset source kind/rate, hands each Blob to the worker
   once, then maps canonical visual layers to clip-keyed source-frame/µs
@@ -1561,8 +1644,7 @@ surface; it is not a second zoom and never enters document history.
   frame zero/timestamp zero and never create timed playback lanes. Request ids
   remain latest-wins for presentation; `onAssetReady`/`onWorkerError` are the
   controller hooks. Disposal waits for the worker's cleanup acknowledgment,
-  then uses a bounded timeout fallback with exact-once termination. The old
-  encoded-batch overload is deprecated and not used by preview.
+  then uses a bounded timeout fallback with exact-once termination.
 - `src/app/previewController.ts` — THE COMPOSITION ROOT: only place stores
   meet engine/pipeline; DI seams for tests; idempotent per canvas
   (StrictMode). It keeps connected timed videos warm, but opens an analyzed
@@ -1674,9 +1756,9 @@ surface; it is not a second zoom and never enters document history.
 - **jsdom lies.** Three real bugs shipped past 127 green tests and were
   caught only by driving the actual browser: (1) bare `SharedArrayBuffer`
   reference → ReferenceError on normal pages; (2) `VideoDecoder.reset()`
-  UNCONFIGURES the codec (reconfigure after every reset — see
-  `resetDecoder`); (3) caching raw VideoFrames exhausted the hardware
-  decoder's output pool → one-frame-per-eviction crawl. Always browser-
+  UNCONFIGURES the codec (reconfigure after every reset); (3) caching raw
+  VideoFrames exhausted the hardware decoder's output pool →
+  one-frame-per-eviction crawl. Always browser-
   verify pipeline changes (preview tools + `window.__stores`).
 - **Pointer capture is not gesture truth.** Gate pointermove on your own
   session ref; capture is best-effort enhancement (it silently fails).
@@ -2253,16 +2335,13 @@ surface; it is not a second zoom and never enters document history.
   with RMS 0.0898. Chrome recorded 0 warnings and 0 errors. All 30 GitHub #12
   checklist items now have matching code, test, and browser evidence for the
   normal-merge closeout.
-- `decode.worker.ts` + `DecodeWorkerBridge` are RUNTIME-DEAD since 4.1c
-  (the render worker replaced the single-asset path). Their structural types
-  now live in neutral `decode-types.ts`, while the obsolete chunk-batch render
-  behavior is isolated behind named compatibility delegates. The retired
-  modules and old exports remain because their tests document decoder
-  semantics; deletion is a separate post-MVP cleanup. The Stage 2 isolation
-  gate passed 186 focused tests across 8 files, all 1,672 tests across 88
-  files, build, lint, audit, and diff checks. Real Chromium also passed H.264
-  scrub, recovery/relink, same-asset-ID source replacement, and acknowledged
-  worker shutdown with zero console warnings or errors.
+- The runtime-dead chunk-batch path (`decode.worker.ts`, `DecodeWorkerBridge`,
+  `pipeline/decode.ts`, the render-legacy delegates/protocol, and the bridge's
+  `configureAsset` / mode-less `renderFrame`) was deleted in the post-MVP
+  cleanup. Preview has used only the Blob-backed streaming render worker since
+  4.1c. The retired tests pinned raw `VideoDecoder` reset/backpressure
+  semantics that no live path drives: the render worker decodes through
+  Mediabunny sinks (`workers/video-source.ts`).
 - Inspector number inputs render locale decimal separators (e.g. "1,5")
   — display-only browser behavior; committed doc values are plain floats.
   Revisit only if locale typing ever reports badInput problems.

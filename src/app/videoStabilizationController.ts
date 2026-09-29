@@ -6,6 +6,8 @@ import {
   type AnalysisSourceProvenance,
 } from '../domain/analysisCache'
 import { clipVisualSettings } from '../domain/clipInspector'
+import { errorMessage } from '../domain/errors'
+import { hasExactKeys, isRecord } from '../domain/guards'
 import {
   DEFAULT_MOTION_ANALYSIS_BUDGET,
   estimateGlobalMotion,
@@ -14,6 +16,7 @@ import {
   type GlobalMotionEstimate,
   type GrayFrame,
 } from '../domain/motionAnalysis'
+import { isFiniteNumber, isNonNegativeSafeInteger } from '../domain/numeric'
 import type { Clip, ClipId, MediaAsset, TimelineDoc } from '../domain/schema'
 import { findClip, trackOfClip } from '../domain/selectors'
 import {
@@ -42,10 +45,15 @@ import {
   type MotionAnalysisRunResult,
 } from './motionAnalysisController'
 import { getMotionAnalysisController } from './motionAnalysisRuntime'
-import { sha256Hex } from './sourceFingerprint'
+import {
+  jsonDigest,
+  monotonicNow,
+  releaseBytes,
+  strictUtf8Decoder,
+  utf8Encoder,
+  yieldToBrowser,
+} from './analysisRuntime'
 
-const encoder = new TextEncoder()
-const decoder = new TextDecoder('utf-8', { fatal: true })
 
 /**
  * Stabilization keeps its live result far below the shared cache-entry ceiling
@@ -84,27 +92,8 @@ export interface VideoStabilizationSession {
   readonly projectBindingId: string
 }
 
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const actual = Object.keys(value).sort()
-  const expected = [...keys].sort()
-  return actual.length === expected.length
-    && actual.every((key, index) => key === expected[index])
-}
-
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function finite(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
-}
-
-function nonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-}
-
 function estimate(value: unknown): value is GlobalMotionEstimate {
-  if (!record(value) || !exactKeys(value, [
+  if (!isRecord(value) || !hasExactKeys(value, [
     'transform',
     'matchCount',
     'inlierCount',
@@ -113,21 +102,21 @@ function estimate(value: unknown): value is GlobalMotionEstimate {
     'confidence',
   ])) return false
   const transform = value.transform
-  return record(transform)
-    && exactKeys(transform, ['a', 'b', 'tx', 'ty'])
-    && finite(transform.a)
-    && finite(transform.b)
-    && finite(transform.tx)
-    && finite(transform.ty)
-    && nonNegativeSafeInteger(value.matchCount)
-    && nonNegativeSafeInteger(value.inlierCount)
+  return isRecord(transform)
+    && hasExactKeys(transform, ['a', 'b', 'tx', 'ty'])
+    && isFiniteNumber(transform.a)
+    && isFiniteNumber(transform.b)
+    && isFiniteNumber(transform.tx)
+    && isFiniteNumber(transform.ty)
+    && isNonNegativeSafeInteger(value.matchCount)
+    && isNonNegativeSafeInteger(value.inlierCount)
     && value.inlierCount <= value.matchCount
-    && finite(value.inlierRatio)
+    && isFiniteNumber(value.inlierRatio)
     && value.inlierRatio >= 0
     && value.inlierRatio <= 1
-    && finite(value.meanInlierError)
+    && isFiniteNumber(value.meanInlierError)
     && value.meanInlierError >= 0
-    && finite(value.confidence)
+    && isFiniteNumber(value.confidence)
     && value.confidence >= 0
     && value.confidence <= 1
 }
@@ -143,18 +132,18 @@ export function parseVideoStabilizationAnalysis(
   }
   let value: unknown
   try {
-    value = JSON.parse(decoder.decode(bytes))
+    value = JSON.parse(strictUtf8Decoder.decode(bytes))
   } catch (cause) {
     throw new MotionAnalysisError('storage-corrupt', 'Stabilization cache result is not valid UTF-8 JSON', cause)
   }
   if (
-    !record(value)
-    || !exactKeys(value, ['version', 'width', 'height', 'samples'])
+    !isRecord(value)
+    || !hasExactKeys(value, ['version', 'width', 'height', 'samples'])
     || value.version !== VIDEO_STABILIZATION_RESULT_VERSION
-    || !nonNegativeSafeInteger(value.width)
+    || !isNonNegativeSafeInteger(value.width)
     || value.width <= 0
     || value.width > DEFAULT_MOTION_ANALYSIS_BUDGET.maxWidth
-    || !nonNegativeSafeInteger(value.height)
+    || !isNonNegativeSafeInteger(value.height)
     || value.height <= 0
     || value.height > DEFAULT_MOTION_ANALYSIS_BUDGET.maxHeight
     || !Array.isArray(value.samples)
@@ -165,11 +154,11 @@ export function parseVideoStabilizationAnalysis(
   const samples: VideoStabilizationAnalysisSample[] = []
   for (let index = 0; index < value.samples.length; index++) {
     const sample = value.samples[index]
-    const timestampUs = record(sample) ? sample.timestampUs : null
-    const sourceTimeTicks = record(sample) ? sample.sourceTimeTicks : null
+    const timestampUs = isRecord(sample) ? sample.timestampUs : null
+    const sourceTimeTicks = isRecord(sample) ? sample.sourceTimeTicks : null
     if (
-      !record(sample)
-      || !exactKeys(sample, ['timestampUs', 'sourceTimeTicks', 'estimateFromPrevious'])
+      !isRecord(sample)
+      || !hasExactKeys(sample, ['timestampUs', 'sourceTimeTicks', 'estimateFromPrevious'])
       || typeof timestampUs !== 'number'
       || !Number.isSafeInteger(timestampUs)
       || timestampUs < previousTimestamp
@@ -200,41 +189,12 @@ export function parseVideoStabilizationAnalysis(
   }
 }
 
-function releaseBytes(bytes: Uint8Array<ArrayBuffer>): void {
-  if (bytes.buffer.byteLength > 0) structuredClone(null, { transfer: [bytes.buffer] })
-}
-
 function meanAbsoluteFrameDifference(from: GrayFrame, to: GrayFrame): number {
   let total = 0
   for (let index = 0; index < from.data.length; index++) {
     total += Math.abs(from.data[index]! - to.data[index]!)
   }
   return total / from.data.length
-}
-
-function yieldToBrowser(): Promise<void> {
-  const scheduler = (globalThis as {
-    scheduler?: { yield?: () => Promise<void> }
-  }).scheduler
-  if (typeof scheduler?.yield === 'function') return scheduler.yield()
-  if (typeof MessageChannel === 'function') {
-    return new Promise((resolve) => {
-      const channel = new MessageChannel()
-      channel.port1.onmessage = () => {
-        channel.port1.close()
-        channel.port2.close()
-        resolve()
-      }
-      channel.port2.postMessage(undefined)
-    })
-  }
-  return new Promise((resolve) => setTimeout(resolve, 0))
-}
-
-function monotonicNow(): number {
-  return typeof globalThis.performance?.now === 'function'
-    ? globalThis.performance.now()
-    : Date.now()
 }
 
 export function createVideoStabilizationProcessor(
@@ -395,7 +355,7 @@ export function createVideoStabilizationProcessor(
       ) {
         throw new MotionAnalysisError('decode-readback', 'Stabilization analysis result is incomplete')
       }
-      const bytes = encoder.encode(JSON.stringify({
+      const bytes = utf8Encoder.encode(JSON.stringify({
         version: VIDEO_STABILIZATION_RESULT_VERSION,
         width,
         height,
@@ -440,10 +400,6 @@ function projectionFacts(doc: TimelineDoc, clip: Clip, source: VideoStabilizatio
     transform: clip.transform,
     visual: clipVisualSettings(clip),
   }
-}
-
-async function jsonDigest(value: unknown): Promise<string> {
-  return sha256Hex(encoder.encode(JSON.stringify(value)))
 }
 
 function exactClipSnapshot(doc: TimelineDoc, clip: Clip, source: VideoStabilizationSource): string {
@@ -510,7 +466,7 @@ export async function analyzeVideoStabilization(clipId: ClipId): Promise<VideoSt
   } catch (cause) {
     throw new MotionAnalysisError(
       'unsupported-runtime',
-      cause instanceof Error ? cause.message : String(cause),
+      errorMessage(cause),
       cause,
     )
   }

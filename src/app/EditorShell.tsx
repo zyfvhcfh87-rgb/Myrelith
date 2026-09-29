@@ -46,6 +46,7 @@ import { initClipAttributeClipboard } from './clipAttributeController'
 import { initProxyController } from './proxyController'
 import { initMotionAnalysisRuntime } from './motionAnalysisRuntime'
 import { initMulticamAlignment } from './multicamAlignmentController'
+import { holdAsyncLease } from './asyncLease'
 import { getPluginAppController } from './pluginAppController'
 import { setPreviewPluginBinding } from './previewController'
 import {
@@ -123,60 +124,12 @@ export default function EditorShell({ closing }: EditorShellProps) {
   useEffect(() => colorLutController.init(), [])
   useEffect(() => initSourceMonitorLifecycle(), [])
   useEffect(() => initAudioEffectStatusProjection(), [])
-  useEffect(() => {
-    let unmounted = false
-    let release: (() => Promise<void>) | null = null
-    void initProxyController().then((acquiredRelease) => {
-      if (unmounted) {
-        void acquiredRelease().catch((cause) => {
-          console.warn('[EditorShell] proxy controller cleanup failed:', cause)
-        })
-      } else release = acquiredRelease
-    }, (cause) => {
-      console.warn('[EditorShell] proxy controller initialization failed:', cause)
-    })
-    return () => {
-      unmounted = true
-      if (release) {
-        void release().catch((cause) => {
-          console.warn('[EditorShell] proxy controller cleanup failed:', cause)
-        })
-      }
-    }
-  }, [])
-  useEffect(() => {
-    let unmounted = false
-    let release: (() => Promise<void>) | null = null
-    void initMotionAnalysisRuntime().then((acquiredRelease) => {
-      if (unmounted) {
-        void acquiredRelease().catch((cause) => {
-          console.warn('[EditorShell] motion analysis cleanup failed:', cause)
-        })
-      } else release = acquiredRelease
-    }, (cause) => {
-      console.warn('[EditorShell] motion analysis initialization failed:', cause)
-    })
-    return () => {
-      unmounted = true
-      if (release) {
-        void release().catch((cause) => {
-          console.warn('[EditorShell] motion analysis cleanup failed:', cause)
-        })
-      }
-    }
-  }, [])
+  useEffect(() => holdAsyncLease(initProxyController, '[EditorShell] proxy controller'), [])
+  useEffect(() => holdAsyncLease(initMotionAnalysisRuntime, '[EditorShell] motion analysis'), [])
   useEffect(() => {
     initMediaVisuals()
   }, [])
-  useEffect(() => {
-    let unmounted = false
-    let release: (() => Promise<void>) | null = null
-    void initMulticamAlignment().then((acquired) => {
-      if (unmounted) void acquired()
-      else release = acquired
-    })
-    return () => { unmounted = true; if (release) void release() }
-  }, [])
+  useEffect(() => holdAsyncLease(initMulticamAlignment, '[EditorShell] multicam alignment'), [])
   useEffect(() => {
     const onDragOver = (event: DragEvent): void => {
       if (!isFileDrag(event.dataTransfer)) return

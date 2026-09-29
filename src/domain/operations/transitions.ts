@@ -264,31 +264,6 @@ export function setCrossfadeSettingsWithSourceBounds(
   return setCrossfadeSettings(doc, trackId, transitionId, settings)
 }
 
-/** Handle-aware duration update with same-reference rejection semantics. */
-export function setCrossfadeDurationWithSourceBounds(
-  doc: TimelineDoc,
-  trackId: TrackId,
-  transitionId: TransitionId,
-  durationFrames: number,
-  catalog: SourceBoundsCatalog,
-): TimelineDoc {
-  const locations = locateTrackTransitions(doc, trackId, transitionId)
-  if (locations.length !== 1) {
-    return setCrossfadeDuration(doc, trackId, transitionId, durationFrames)
-  }
-  const location = locations[0]
-  return setCrossfadeSettingsWithSourceBounds(
-    doc,
-    trackId,
-    transitionId,
-    {
-      durationFrames,
-      audio: location.transition.audio,
-    },
-    catalog,
-  )
-}
-
 /**
  * Remove exactly one transition by owning track + id. Endpoint validity is
  * deliberately not required, so malformed/stale serialized transitions

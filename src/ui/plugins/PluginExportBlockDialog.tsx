@@ -1,5 +1,4 @@
 import { useId, useState, type ReactNode } from 'react'
-import PluginDialogFrame from './PluginDialogFrame'
 import { boundedPluginUiText } from './pluginUiCopy'
 import type { PluginEffectIssueView } from './pluginUiTypes'
 
@@ -46,46 +45,25 @@ function BlockingIssueList({ issues }: { readonly issues: readonly PluginEffectI
 }
 
 interface ExportReviewSurfaceProps {
-  readonly inline: boolean
   readonly eyebrow: string
   readonly title: string
   readonly description: string
   readonly busy: boolean
-  readonly dismissDisabled: boolean
-  readonly onDismiss: () => void
   readonly children: ReactNode
   readonly actions: ReactNode
 }
 
+/** Inline region inside the export dialog; it never nests a second modal. */
 function ExportReviewSurface({
-  inline,
   eyebrow,
   title,
   description,
   busy,
-  dismissDisabled,
-  onDismiss,
   children,
   actions,
 }: ExportReviewSurfaceProps) {
   const titleId = useId()
   const descriptionId = useId()
-
-  if (!inline) {
-    return (
-      <PluginDialogFrame
-        eyebrow={eyebrow}
-        title={title}
-        description={description}
-        busy={busy}
-        dismissDisabled={dismissDisabled}
-        onDismiss={onDismiss}
-        actions={actions}
-      >
-        {children}
-      </PluginDialogFrame>
-    )
-  }
 
   return (
     <section
@@ -113,8 +91,7 @@ function PluginExportBlockReview({
   onCancel,
   onRetry,
   onExportBypassed,
-  inline,
-}: PluginExportBlockDialogProps & { readonly inline: boolean }) {
+}: PluginExportBlockDialogProps) {
   const [reviewingBypass, setReviewingBypass] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const bypassRequirementId = useId()
@@ -128,19 +105,15 @@ function PluginExportBlockReview({
     return (
       <ExportReviewSurface
         key="confirm-bypass"
-        inline={inline}
         eyebrow="Second confirmation"
         title="Export without these plugin effects?"
         description="The exported file will visibly differ from the project preview and authored effect stack. Review every exact package and effect instance before continuing."
         busy={busy}
-        dismissDisabled={busy}
-        onDismiss={onCancel}
         actions={(
           <>
             <button
               type="button"
               className="plugin-button-secondary"
-              data-plugin-dialog-initial-focus={!inline || undefined}
               disabled={busy}
               onClick={() => {
                 setConfirmed(false)
@@ -187,19 +160,15 @@ function PluginExportBlockReview({
   return (
     <ExportReviewSurface
       key="blocked"
-      inline={inline}
       eyebrow="Export preflight"
       title="Plugin effects block export"
       description="No decoder, encoder, or media pipeline started. Fix the listed effects, or explicitly review a one-time bypass."
       busy={busy}
-      dismissDisabled={busy}
-      onDismiss={onCancel}
       actions={(
         <>
           <button
             type="button"
             className="plugin-button-primary"
-            data-plugin-dialog-initial-focus={!inline || undefined}
             disabled={busy}
             onClick={onCancel}
           >
@@ -249,10 +218,8 @@ function reviewKey(
   ])
 }
 
-function PluginExportBlockSurface({
-  inline,
-  ...props
-}: PluginExportBlockDialogProps & { readonly inline: boolean }) {
+/** Export-dialog body; any changed review input remounts a fresh review. */
+export function PluginExportBlockBody(props: PluginExportBlockDialogProps) {
   const blockingIssues = props.issues.filter((issue) => issue.blocksExport)
   if (blockingIssues.length === 0) return null
   return (
@@ -260,15 +227,6 @@ function PluginExportBlockSurface({
       key={reviewKey(props, blockingIssues)}
       {...props}
       issues={blockingIssues}
-      inline={inline}
     />
   )
-}
-
-export function PluginExportBlockBody(props: PluginExportBlockDialogProps) {
-  return <PluginExportBlockSurface {...props} inline />
-}
-
-export default function PluginExportBlockDialog(props: PluginExportBlockDialogProps) {
-  return <PluginExportBlockSurface {...props} inline={false} />
 }

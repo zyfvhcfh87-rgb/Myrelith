@@ -6,6 +6,7 @@
  * globals. The real adapter lives in export-mediabunny-capabilities.ts.
  */
 
+import { abortError } from '../domain/errors'
 import {
   exportAudioEncoderSampleRate,
   exportProfileIncludesAudio,
@@ -261,12 +262,11 @@ export async function checkExportProfileSupport(
   return supported(profile)
 }
 
-function throwIfAborted(signal?: AbortSignal): void {
+/** Rethrow an Error abort reason; otherwise throw a fresh AbortError. */
+export function throwIfCapabilityCheckAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return
   if (signal.reason instanceof Error) throw signal.reason
-  const error = new Error('Export capability check was canceled')
-  error.name = 'AbortError'
-  throw error
+  throw abortError('Export capability check was canceled')
 }
 
 /**
@@ -279,17 +279,17 @@ export async function verifyExportProfileSupportFresh(
   probe: ExportCapabilityProbe,
   signal?: AbortSignal,
 ): Promise<Readonly<ExportCapabilityResult>> {
-  throwIfAborted(signal)
+  throwIfCapabilityCheckAborted(signal)
   const inspected = inspectStaticCapability(doc, value, probe)
   if (isCapabilityResult(inspected)) return inspected
   const { profile, includeAudio } = inspected
 
   try {
     await probe.freshEncode(doc, profile, includeAudio, signal)
-    throwIfAborted(signal)
+    throwIfCapabilityCheckAborted(signal)
     return supported(profile)
   } catch (cause) {
-    throwIfAborted(signal)
+    throwIfCapabilityCheckAborted(signal)
     return unsupported(
       profile,
       `${profile.container.toUpperCase()}/${profile.videoCodec.toUpperCase()} ` +

@@ -5,6 +5,7 @@ import type {
   MulticamDefinition,
   MulticamInstance,
   TimeRange,
+  TimelineDoc,
   Track,
 } from './schema'
 import {
@@ -14,9 +15,9 @@ import {
   setMulticamCut,
 } from './multicam'
 import {
+  createProjectIdAllocator,
   sequenceById,
   sequenceProjectWithinEditBudget,
-  type SequenceEntityKind,
   type SequenceIdFactory,
   type SequenceProject,
 } from './projectSequences'
@@ -24,6 +25,7 @@ import {
   MAX_DOCUMENT_ID_CHARACTERS,
   MAX_PROJECT_NAME_CHARACTERS,
 } from './projectLimits'
+import { overlapsAny } from './operations/operationInternals'
 
 export interface CreateMulticamAngleInput {
   readonly assetId: string
@@ -178,85 +180,55 @@ function validId(value: string): boolean {
     && value.length <= MAX_DOCUMENT_ID_CHARACTERS
 }
 
-function itemRanges(track: Track): TimeRange[] {
-  return [
-    ...track.clips.map((item) => item.timelineRange),
-    ...(track.sequenceInstances ?? []).map((item) => item.timelineRange),
-    ...(track.multicamInstances ?? []).map((item) => item.timelineRange),
-    ...(track.adjustments ?? []).map((item) => item.timelineRange),
-  ]
-}
-
-function overlaps(track: Track, range: TimeRange): boolean {
-  const end = range.startFrame + range.durationFrames
-  return itemRanges(track).some((candidate) => (
-    range.startFrame < candidate.startFrame + candidate.durationFrames
-    && candidate.startFrame < end
+/** Lane order: start frame, then id for a deterministic tie-break. */
+function sortedInstances(instances: MulticamInstance[]): MulticamInstance[] {
+  return instances.sort((left, right) => (
+    left.timelineRange.startFrame - right.timelineRange.startFrame
+    || left.id.localeCompare(right.id)
   ))
-}
-
-function usedIds(project: SequenceProject): Map<SequenceEntityKind, Set<string>> {
-  const used = new Map<SequenceEntityKind, Set<string>>()
-  const timelineItemIds = new Set<string>()
-  for (const kind of ['clip', 'sequence-instance', 'multicam-instance', 'adjustment'] as const) {
-    used.set(kind, timelineItemIds)
-  }
-  const add = (kind: SequenceEntityKind, id: string): void => {
-    const values = used.get(kind) ?? new Set<string>()
-    values.add(id)
-    used.set(kind, values)
-  }
-  for (const definition of project.multicams ?? []) {
-    add('multicam-definition', definition.id)
-    for (const angle of definition.angles) add('multicam-angle', angle.id)
-  }
-  for (const sequence of project.sequences) {
-    add('sequence', sequence.id)
-    for (const track of sequence.tracks) {
-      add('track', track.id)
-      for (const clip of track.clips) {
-        add('clip', clip.id)
-        if (clip.linkGroupId) add('link-group', clip.linkGroupId)
-      }
-      for (const item of track.sequenceInstances ?? []) {
-        add('sequence-instance', item.id)
-        if (item.linkGroupId) add('link-group', item.linkGroupId)
-      }
-      for (const item of track.multicamInstances ?? []) {
-        add('multicam-instance', item.id)
-        if (item.linkGroupId) add('link-group', item.linkGroupId)
-      }
-      for (const item of track.adjustments ?? []) add('adjustment', item.id)
-    }
-  }
-  return used
-}
-
-function allocateId(
-  used: Map<SequenceEntityKind, Set<string>>,
-  factory: SequenceIdFactory,
-  kind: SequenceEntityKind,
-  sourceId?: string,
-): string | null {
-  const values = used.get(kind) ?? new Set<string>()
-  used.set(kind, values)
-  for (let attempt = 0; attempt < 32; attempt++) {
-    const candidate = factory(kind, sourceId)
-    if (!validId(candidate) || values.has(candidate)) continue
-    values.add(candidate)
-    return candidate
-  }
-  return null
 }
 
 function withInstance(track: Track, instance: MulticamInstance): Track {
   return {
     ...track,
-    multicamInstances: [...(track.multicamInstances ?? []), instance].sort(
-      (left, right) => left.timelineRange.startFrame - right.timelineRange.startFrame
-        || left.id.localeCompare(right.id),
-    ),
+    multicamInstances: sortedInstances([...(track.multicamInstances ?? []), instance]),
   }
+}
+
+/**
+ * Rebuild only the lanes holding a linked member; every other track keeps
+ * its identity (and its absent optional instance list).
+ */
+function withMemberLanes(
+  sequence: TimelineDoc,
+  members: readonly LocatedMulticamInstance[],
+  update: (instances: readonly MulticamInstance[], trackIndex: number) => MulticamInstance[],
+): TimelineDoc {
+  const memberTracks = new Set(members.map(({ trackIndex }) => trackIndex))
+  return {
+    ...sequence,
+    tracks: sequence.tracks.map((track, trackIndex) => (
+      memberTracks.has(trackIndex)
+        ? { ...track, multicamInstances: update(track.multicamInstances ?? [], trackIndex) }
+        : track
+    )),
+  }
+}
+
+function commitInstanceEdit(
+  project: SequenceProject,
+  sequenceId: string,
+  nextSequence: TimelineDoc,
+): MulticamInstanceEditResult {
+  const candidate = {
+    ...project,
+    sequences: project.sequences.map((item) => (
+      item.id === sequenceId ? nextSequence : item
+    )),
+  }
+  return sequenceProjectWithinEditBudget(candidate)
+    ? { project: candidate, failure: null }
+    : { project, failure: 'project-budget' }
 }
 
 interface LocatedMulticamInstance {
@@ -302,22 +274,17 @@ function linkedGeometryMatches(members: readonly LocatedMulticamInstance[]): boo
   ))
 }
 
+/** Overlap against the lane without the moving multicam members (timeline item ids are project-unique). */
 function overlapsWithout(
   track: Track,
   range: TimeRange,
   excludedIds: ReadonlySet<string>,
 ): boolean {
-  const end = range.startFrame + range.durationFrames
-  return [
-    ...track.clips.map((item) => ({ id: item.id, range: item.timelineRange })),
-    ...(track.sequenceInstances ?? []).map((item) => ({ id: item.id, range: item.timelineRange })),
-    ...(track.multicamInstances ?? []).map((item) => ({ id: item.id, range: item.timelineRange })),
-    ...(track.adjustments ?? []).map((item) => ({ id: item.id, range: item.timelineRange })),
-  ].some((candidate) => (
-    !excludedIds.has(candidate.id)
-    && range.startFrame < candidate.range.startFrame + candidate.range.durationFrames
-    && candidate.range.startFrame < end
-  ))
+  return overlapsAny({
+    ...track,
+    multicamInstances: (track.multicamInstances ?? [])
+      .filter((instance) => !excludedIds.has(instance.id)),
+  }, range)
 }
 
 /** Apply one bounded definition edit without touching browser resources. */
@@ -426,26 +393,13 @@ export function applyMulticamInstanceEdit(
     return { project, failure: 'track-locked' }
   }
   const first = members[0].instance
+  const memberIds = new Set(members.map(({ instance }) => instance.id))
   if (command.kind === 'delete') {
-    const memberIds = new Set(members.map(({ instance }) => instance.id))
-    const nextSequence = {
-      ...sequence,
-      tracks: sequence.tracks.map((track) => ({
-        ...track,
-        multicamInstances: (track.multicamInstances ?? []).filter(
-          (instance) => !memberIds.has(instance.id),
-        ),
-      })),
-    }
-    const candidate = {
-      ...project,
-      sequences: project.sequences.map((item) => (
-        item.id === sequenceId ? nextSequence : item
-      )),
-    }
-    return sequenceProjectWithinEditBudget(candidate)
-      ? { project: candidate, failure: null }
-      : { project, failure: 'project-budget' }
+    return commitInstanceEdit(project, sequenceId, withMemberLanes(
+      sequence,
+      members,
+      (instances) => instances.filter((instance) => !memberIds.has(instance.id)),
+    ))
   }
   if (command.kind === 'duplicate') {
     const range = {
@@ -456,25 +410,20 @@ export function applyMulticamInstanceEdit(
       return { project, failure: 'invalid-range' }
     }
     for (const { trackIndex } of members) {
-      if (overlaps(sequence.tracks[trackIndex], range)) {
+      if (overlapsAny(sequence.tracks[trackIndex], range)) {
         return { project, failure: 'overlap' }
       }
     }
-    const used = usedIds(project)
+    const allocate = createProjectIdAllocator(project, factory)
     const copyLinkGroupId = members.length > 1
-      ? allocateId(used, factory, 'link-group', first.linkGroupId)
+      ? allocate('link-group', first.linkGroupId)
       : null
     if (members.length > 1 && !copyLinkGroupId) {
       return { project, failure: 'id-generation-failed' }
     }
     const copyByTrack = new Map<number, MulticamInstance>()
     for (const member of members) {
-      const copyId = allocateId(
-        used,
-        factory,
-        'multicam-instance',
-        member.instance.id,
-      )
+      const copyId = allocate('multicam-instance', member.instance.id)
       if (!copyId) return { project, failure: 'id-generation-failed' }
       copyByTrack.set(member.trackIndex, {
         ...member.instance,
@@ -483,28 +432,14 @@ export function applyMulticamInstanceEdit(
         ...(copyLinkGroupId ? { linkGroupId: copyLinkGroupId } : {}),
       })
     }
-    const nextSequence = {
-      ...sequence,
-      tracks: sequence.tracks.map((track, trackIndex) => ({
-        ...track,
-        multicamInstances: [
-          ...(track.multicamInstances ?? []),
-          ...(copyByTrack.has(trackIndex) ? [copyByTrack.get(trackIndex)!] : []),
-        ].sort((left, right) => (
-          left.timelineRange.startFrame - right.timelineRange.startFrame
-          || left.id.localeCompare(right.id)
-        )),
-      })),
-    }
-    const candidate = {
-      ...project,
-      sequences: project.sequences.map((item) => (
-        item.id === sequenceId ? nextSequence : item
-      )),
-    }
-    return sequenceProjectWithinEditBudget(candidate)
-      ? { project: candidate, failure: null }
-      : { project, failure: 'project-budget' }
+    return commitInstanceEdit(project, sequenceId, withMemberLanes(
+      sequence,
+      members,
+      (instances, trackIndex) => sortedInstances([
+        ...instances,
+        ...(copyByTrack.has(trackIndex) ? [copyByTrack.get(trackIndex)!] : []),
+      ]),
+    ))
   }
   if (command.kind === 'split') {
     const startFrame = first.timelineRange.startFrame
@@ -514,9 +449,9 @@ export function applyMulticamInstanceEdit(
       || command.frame <= startFrame
       || command.frame >= endFrame
     ) return { project, failure: 'invalid-range' }
-    const used = usedIds(project)
+    const allocate = createProjectIdAllocator(project, factory)
     const rightLinkGroupId = members.length > 1
-      ? allocateId(used, factory, 'link-group', first.linkGroupId)
+      ? allocate('link-group', first.linkGroupId)
       : null
     if (members.length > 1 && !rightLinkGroupId) {
       return { project, failure: 'id-generation-failed' }
@@ -524,12 +459,7 @@ export function applyMulticamInstanceEdit(
     const splitOffset = command.frame - startFrame
     const rightByTrack = new Map<number, MulticamInstance>()
     for (const member of members) {
-      const rightId = allocateId(
-        used,
-        factory,
-        'multicam-instance',
-        member.instance.id,
-      )
+      const rightId = allocate('multicam-instance', member.instance.id)
       if (!rightId) return { project, failure: 'id-generation-failed' }
       rightByTrack.set(member.trackIndex, {
         ...member.instance,
@@ -542,39 +472,24 @@ export function applyMulticamInstanceEdit(
         ...(rightLinkGroupId ? { linkGroupId: rightLinkGroupId } : {}),
       })
     }
-    const memberIds = new Set(members.map(({ instance }) => instance.id))
-    const nextSequence = {
-      ...sequence,
-      tracks: sequence.tracks.map((track, trackIndex) => ({
-        ...track,
-        multicamInstances: [
-          ...(track.multicamInstances ?? []).map((instance) => (
-            memberIds.has(instance.id)
-              ? {
-                  ...instance,
-                  timelineRange: {
-                    ...instance.timelineRange,
-                    durationFrames: splitOffset,
-                  },
-                }
-              : instance
-          )),
-          ...(rightByTrack.has(trackIndex) ? [rightByTrack.get(trackIndex)!] : []),
-        ].sort((left, right) => (
-          left.timelineRange.startFrame - right.timelineRange.startFrame
-          || left.id.localeCompare(right.id)
+    return commitInstanceEdit(project, sequenceId, withMemberLanes(
+      sequence,
+      members,
+      (instances, trackIndex) => sortedInstances([
+        ...instances.map((instance) => (
+          memberIds.has(instance.id)
+            ? {
+                ...instance,
+                timelineRange: {
+                  ...instance.timelineRange,
+                  durationFrames: splitOffset,
+                },
+              }
+            : instance
         )),
-      })),
-    }
-    const candidate = {
-      ...project,
-      sequences: project.sequences.map((item) => (
-        item.id === sequenceId ? nextSequence : item
-      )),
-    }
-    return sequenceProjectWithinEditBudget(candidate)
-      ? { project: candidate, failure: null }
-      : { project, failure: 'project-budget' }
+        ...(rightByTrack.has(trackIndex) ? [rightByTrack.get(trackIndex)!] : []),
+      ]),
+    ))
   }
   const range = command.kind === 'move'
     ? {
@@ -605,40 +520,24 @@ export function applyMulticamInstanceEdit(
     && range.durationFrames === first.timelineRange.durationFrames
     && sourceStartFrame === first.sourceStartFrame
   ) return { project, failure: null }
-  const excludedIds = new Set(members.map(({ instance }) => instance.id))
   for (const { trackIndex } of members) {
-    if (overlapsWithout(sequence.tracks[trackIndex], range, excludedIds)) {
+    if (overlapsWithout(sequence.tracks[trackIndex], range, memberIds)) {
       return { project, failure: 'overlap' }
     }
   }
-  const memberIds = new Set(members.map(({ instance }) => instance.id))
-  const nextSequence = {
-    ...sequence,
-    tracks: sequence.tracks.map((track) => ({
-      ...track,
-      multicamInstances: (track.multicamInstances ?? []).map((instance) => (
-        memberIds.has(instance.id)
-          ? {
-              ...instance,
-              timelineRange: { ...range },
-              sourceStartFrame,
-            }
-          : instance
-      )).sort((left, right) => (
-        left.timelineRange.startFrame - right.timelineRange.startFrame
-        || left.id.localeCompare(right.id)
-      )),
-    })),
-  }
-  const candidate = {
-    ...project,
-    sequences: project.sequences.map((item) => (
-      item.id === sequenceId ? nextSequence : item
-    )),
-  }
-  return sequenceProjectWithinEditBudget(candidate)
-    ? { project: candidate, failure: null }
-    : { project, failure: 'project-budget' }
+  return commitInstanceEdit(project, sequenceId, withMemberLanes(
+    sequence,
+    members,
+    (instances) => sortedInstances(instances.map((instance) => (
+      memberIds.has(instance.id)
+        ? {
+            ...instance,
+            timelineRange: { ...range },
+            sourceStartFrame,
+          }
+        : instance
+    ))),
+  ))
 }
 
 /**
@@ -700,13 +599,13 @@ export function createMulticamFromAssets(
   }
   if (videoTrack.locked || audioTrack?.locked) return rejected(project, 'track-locked')
 
-  const used = usedIds(project)
-  const definitionId = allocateId(used, factory, 'multicam-definition')
+  const allocate = createProjectIdAllocator(project, factory)
+  const definitionId = allocate('multicam-definition')
   if (!definitionId) return rejected(project, 'id-generation-failed')
   const commonSyncFrame = Math.max(...command.angles.map((angle) => angle.syncFrame))
   const angles: MulticamDefinition['angles'] = []
   for (const source of command.angles) {
-    const id = allocateId(used, factory, 'multicam-angle', source.assetId)
+    const id = allocate('multicam-angle', source.assetId)
     if (!id) return rejected(project, 'id-generation-failed')
     angles.push({
       id,
@@ -737,15 +636,15 @@ export function createMulticamFromAssets(
     return rejected(project, 'invalid-angle')
   }
   const timelineRange = { startFrame: command.startFrame, durationFrames }
-  if (overlaps(videoTrack, timelineRange) || (audioTrack && overlaps(audioTrack, timelineRange))) {
+  if (overlapsAny(videoTrack, timelineRange) || (audioTrack && overlapsAny(audioTrack, timelineRange))) {
     return rejected(project, 'overlap')
   }
   const linkGroupId = audioTrack
-    ? allocateId(used, factory, 'link-group', definitionId)
+    ? allocate('link-group', definitionId)
     : null
-  const videoInstanceId = allocateId(used, factory, 'multicam-instance', definitionId)
+  const videoInstanceId = allocate('multicam-instance', definitionId)
   const audioInstanceId = audioTrack
-    ? allocateId(used, factory, 'multicam-instance', definitionId)
+    ? allocate('multicam-instance', definitionId)
     : null
   if (!videoInstanceId || (audioTrack && (!audioInstanceId || !linkGroupId))) {
     return rejected(project, 'id-generation-failed')

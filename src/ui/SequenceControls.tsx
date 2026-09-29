@@ -38,7 +38,6 @@ export default function SequenceControls() {
     (state) => state.makeSequenceInstanceIndependent,
   )
   const selectedClipIds = useTransportStore((state) => state.selectedClipIds)
-  const playheadFrame = useTransportStore((state) => state.playheadFrame)
   const selectedInstanceId = useSequenceInstanceSelectionStore(
     (state) => state.selectedInstanceId,
   )
@@ -54,6 +53,13 @@ export default function SequenceControls() {
   const selectedInstance = active?.tracks.flatMap((track) => (
     track.sequenceInstances ?? []
   )).find((instance) => instance.id === selectedInstanceId) ?? null
+  // Subscribe to one boolean, not the playhead, so this always-mounted bar
+  // re-renders only when Split changes availability; handlers read getState().
+  const splitStart = selectedInstance?.timelineRange.startFrame ?? 0
+  const splitEnd = splitStart + (selectedInstance?.timelineRange.durationFrames ?? 0)
+  const playheadInsideSplitRange = useTransportStore((state) => (
+    state.playheadFrame > splitStart && state.playheadFrame < splitEnd
+  ))
 
   const begin = (kind: SequenceEditorKind): void => {
     if (!active) return
@@ -191,7 +197,7 @@ export default function SequenceControls() {
             onClick={() => {
               const childFrame = openSequenceInstance(
                 selectedInstance.id,
-                playheadFrame,
+                useTransportStore.getState().playheadFrame,
               )
               if (childFrame !== null) {
                 useTransportStore.getState().setPlayheadFrame(childFrame)
@@ -267,16 +273,12 @@ export default function SequenceControls() {
           </button>
           <button
             type="button"
-            disabled={
-              playheadFrame <= selectedInstance.timelineRange.startFrame
-                || playheadFrame >= selectedInstance.timelineRange.startFrame
-                  + selectedInstance.timelineRange.durationFrames
-            }
+            disabled={!playheadInsideSplitRange}
             onClick={() => {
               const ok = editSequenceInstance({
                 kind: 'split',
                 instanceId: selectedInstance.id,
-                frame: playheadFrame,
+                frame: useTransportStore.getState().playheadFrame,
               })
               setStatus(ok ? 'Split compound at the playhead.' : 'Place the playhead inside the compound to split it.')
             }}

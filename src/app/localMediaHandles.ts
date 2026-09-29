@@ -8,9 +8,16 @@
  */
 
 import {
+  createCachedDatabase,
+  requestInTransaction,
+} from './indexedDbAccess'
+import { createKeyedSerialQueue } from './keyedSerialQueue'
+import {
   legacyDocumentIdForBinding,
   legacyLocalProjectBindingId,
 } from './localProjectProvenance'
+import { hasErrorName } from '../domain/errors'
+import { isPositiveSafeInteger } from '../domain/numeric'
 
 export type LocalMediaPermission = 'granted' | 'denied' | 'prompt'
 
@@ -198,25 +205,11 @@ function isFileHandle(value: unknown): value is LocalMediaFileHandle {
 export function createLocalMediaHandleRegistry(
   store: LocalMediaHandleStore,
 ): LocalMediaHandleRegistry {
-  const tails = new Map<string, Promise<void>>()
-
-  function enqueue<T>(key: string, operation: () => Promise<T>): Promise<T> {
-    // IndexedDB requests are individually atomic, but a late put could still
-    // overtake a later forget at the app layer. One non-rejecting tail per
-    // binding+asset pair covers the v2 key, legacy key, and forget tombstone
-    // while allowing unrelated assets to proceed in parallel.
-    const previous = tails.get(key) ?? Promise.resolve()
-    const result = previous.then(operation)
-    const tail = result.then(
-      () => undefined,
-      () => undefined,
-    )
-    tails.set(key, tail)
-    void tail.then(() => {
-      if (tails.get(key) === tail) tails.delete(key)
-    })
-    return result
-  }
+  // IndexedDB requests are individually atomic, but a late put could still
+  // overtake a later forget at the app layer. One non-rejecting tail per
+  // binding+asset pair covers the v2 key, legacy key, and forget tombstone
+  // while allowing unrelated assets to proceed in parallel.
+  const enqueue = createKeyedSerialQueue()
 
   return {
     async list() {
@@ -301,15 +294,23 @@ export function createLocalMediaHandleRegistry(
   }
 }
 
+const openMediaHandleDatabase = createCachedDatabase({
+  name: DATABASE_NAME,
+  version: DATABASE_VERSION,
+  stores: [STORE_NAME],
+  unavailableMessage: 'IndexedDB is unavailable in this browser',
+  openFailedMessage: 'Could not open the local media registry',
+  blockedMessage: 'The local media registry is blocked by another Myrelith tab',
+})
+
 class IndexedDbMediaHandleStore implements LocalMediaHandleStore {
-  private database: Promise<IDBDatabase> | null = null
 
   get(key: string): Promise<unknown> {
     return this.withStore('readonly', (store) => store.get(key))
   }
 
   async entries(): Promise<readonly { key: string; value: unknown }[]> {
-    const database = await this.open()
+    const database = await openMediaHandleDatabase()
     return new Promise((resolve, reject) => {
       const transaction = database.transaction(STORE_NAME, 'readonly')
       const objectStore = transaction.objectStore(STORE_NAME)
@@ -350,59 +351,20 @@ class IndexedDbMediaHandleStore implements LocalMediaHandleStore {
     return this.withTransaction(work)
   }
 
-  private open(): Promise<IDBDatabase> {
-    if (this.database) return this.database
-    this.database = new Promise<IDBDatabase>((resolve, reject) => {
-      if (typeof indexedDB === 'undefined') {
-        reject(new Error('IndexedDB is unavailable in this browser'))
-        return
-      }
-      const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
-      request.onupgradeneeded = () => {
-        if (!request.result.objectStoreNames.contains(STORE_NAME)) {
-          request.result.createObjectStore(STORE_NAME)
-        }
-      }
-      request.onsuccess = () => resolve(request.result)
-      request.onerror = () => reject(
-        request.error ?? new Error('Could not open the local media registry'),
-      )
-      request.onblocked = () => reject(
-        new Error('The local media registry is blocked by another Myrelith tab'),
-      )
-    })
-    void this.database.catch(() => {
-      this.database = null
-    })
-    return this.database
-  }
-
   private async withStore<T>(
     mode: IDBTransactionMode,
     requestFor: (store: IDBObjectStore) => IDBRequest<T>,
   ): Promise<T> {
-    const database = await this.open()
-    return new Promise<T>((resolve, reject) => {
-      const transaction = database.transaction(STORE_NAME, mode)
-      const request = requestFor(transaction.objectStore(STORE_NAME))
-      let result: T
-      request.onsuccess = () => {
-        result = request.result
-      }
-      request.onerror = () => reject(
-        request.error ?? new Error('Could not access remembered media'),
-      )
-      transaction.oncomplete = () => resolve(result)
-      transaction.onabort = () => reject(
-        transaction.error ?? new Error('Remembered media access was aborted'),
-      )
+    return requestInTransaction(await openMediaHandleDatabase(), STORE_NAME, mode, requestFor, {
+      requestFailed: 'Could not access remembered media',
+      aborted: 'Remembered media access was aborted',
     })
   }
 
   private async withTransaction<T>(
     work: (tx: LocalMediaHandleTransaction) => Promise<T> | T,
   ): Promise<T> {
-    const database = await this.open()
+    const database = await openMediaHandleDatabase()
     return new Promise<T>((resolve, reject) => {
       const transaction = database.transaction(STORE_NAME, 'readwrite')
       const objectStore = transaction.objectStore(STORE_NAME)
@@ -497,10 +459,6 @@ export async function pickLocalMediaFiles(
     handle,
     file: await handle.getFile(),
   })))
-}
-
-function isPositiveSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
 }
 
 function resolveFolderLimits(
@@ -699,23 +657,11 @@ export async function pickLocalMediaFolder(
   return enumerateLocalMediaFolder(directory, limitOverrides)
 }
 
-export function queryLocalMediaPermission(
-  handle: LocalMediaFileHandle,
-): Promise<LocalMediaPermission> {
-  return handle.queryPermission?.({ mode: 'read' })
-    ?? Promise.resolve('granted')
-}
-
-export function requestLocalMediaPermission(
-  handle: LocalMediaFileHandle,
-): Promise<LocalMediaPermission> {
-  return handle.requestPermission?.({ mode: 'read' })
-    ?? Promise.resolve('granted')
-}
+export {
+  queryReadPermission as queryLocalMediaPermission,
+  requestReadPermission as requestLocalMediaPermission,
+} from './fileSystemAccess'
 
 export function isLocalMediaPickerCancellation(cause: unknown): boolean {
-  return typeof cause === 'object'
-    && cause !== null
-    && 'name' in cause
-    && cause.name === 'AbortError'
+  return hasErrorName(cause, 'AbortError')
 }

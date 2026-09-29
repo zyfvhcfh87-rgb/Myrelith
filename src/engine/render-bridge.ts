@@ -15,15 +15,13 @@ import type { PortableColorLut } from '../domain/colorLutCatalog'
  *   stays at this boundary, rule 2);
  * - handing each asset Blob to the worker once, then posting lightweight
  *   frame requests with explicit playback/seek intent;
- * - preserving the old transferred-chunk overload through the isolated
- *   render-legacy-bridge compatibility delegate;
  * - request-id bookkeeping with latest-wins supersession, mirroring the
  *   worker's own (a newer renderFrame settles older in-flight ones as
  *   'superseded'; the worker answers every request regardless).
  *
  * Layering: engine/ → domain/ + types-only worker protocols, plus the one
  * pure, versioned plugin-effect protocol validator/ownership contract. Tests
- * inject a fake worker; the deprecated path also injects fake chunk providers.
+ * inject a fake worker.
  */
 
 import type { MediaRuntimeFailure } from '../domain/mediaCompatibility'
@@ -57,12 +55,24 @@ import type {
   StreamingCompositeSourceEntry,
   ToRenderWorker,
 } from '../workers/render-protocol'
-import {
-  buildLegacyRenderRequest,
-  createLegacyRenderAssetSource,
-  type LegacyRenderAssetSource,
-} from './render-legacy-bridge'
-import type { ChunkProvider, WorkerLike } from './worker-types'
+
+/** Structural Worker boundary; tests inject a fake. */
+export interface WorkerLike {
+  postMessage(message: unknown, transfer: Transferable[]): void
+  addEventListener(
+    type: 'message',
+    listener: (event: MessageEvent) => void,
+  ): void
+  addEventListener(
+    type: 'error',
+    listener: (event: ErrorEvent) => void,
+  ): void
+  addEventListener(
+    type: 'messageerror',
+    listener: (event: MessageEvent) => void,
+  ): void
+  terminate?(): void
+}
 
 /** What one renderFrame call came to: exactly one of these, exactly once. */
 export interface RenderFrameResult {
@@ -125,24 +135,19 @@ export class RenderAssetOpenError extends Error {
 }
 
 /** Blob-backed source owned and decoded by the render worker. */
-interface StreamingVideoAssetSource {
-  protocol: 'streaming'
+interface VideoAssetSource {
   kind: 'video'
   rate: FrameRate
   runtimeToken: object
 }
 
 /** A retained frame-zero source decoded and owned by the render worker. */
-interface StreamingImageAssetSource {
-  protocol: 'streaming'
+interface ImageAssetSource {
   kind: 'image'
   runtimeToken: object
 }
 
-type AssetSource =
-  | LegacyRenderAssetSource
-  | StreamingVideoAssetSource
-  | StreamingImageAssetSource
+type AssetSource = VideoAssetSource | ImageAssetSource
 
 interface PendingRender {
   resolve: (result: RenderFrameResult) => void
@@ -219,15 +224,11 @@ export class RenderWorkerBridge {
   private colorLuts: readonly PortableColorLut[] | undefined
   private colorLutGeneration = -1
   private readonly sources = new Map<AssetId, AssetSource>()
-  /** Invalidates legacy chunk reads when any source is replaced or removed. */
-  private sourceRevision = 0
   private nextRequestId = 1
   private nextRenderGeneration = 1
   private nextTelemetryRequestId = 1
-  /** Monotonic identity for one configure/open attempt; prevents asset ABA. */
+  /** Monotonic identity for one open attempt; prevents asset ABA. */
   private nextSetupId = 1
-  /** Id of the newest renderFrame CALL — stale calls detect supersession. */
-  private latestCallId = 0
   private readonly pending = new Map<number, PendingRender>()
   private readonly pendingConfigures = new Map<
     AssetId,
@@ -319,35 +320,9 @@ export class RenderWorkerBridge {
   }
 
   /**
-   * Register an asset's decoder config + chunk source. Resolves when the
-   * worker's decoder is ready (rejects on unsupported codec). Re-configuring
-   * an asset replaces its decoder and cache wholesale.
-   *
-   * @deprecated Use openAsset; retained only until previewController moves.
-   */
-  configureAsset(
-    assetId: AssetId,
-    config: VideoDecoderConfig,
-    rate: FrameRate,
-    chunkProvider: ChunkProvider,
-  ): Promise<void> {
-    if (this.disposed) return Promise.reject(this.rejectionError())
-    if (this.pendingConfigures.has(assetId)) {
-      return Promise.reject(new Error(`asset ${assetId} registration already pending`))
-    }
-    const setupId = this.takeSetupId()
-    return this.commitAssetSetup(
-      assetId,
-      createLegacyRenderAssetSource(rate, chunkProvider),
-      setupId,
-      { type: 'configureAsset', assetId, setupId, config },
-    )
-  }
-
-  /**
    * Give the worker a Blob-backed asset source. The Blob is structured-cloned
-   * once (never transferred), and the bridge retains only its native rate for
-   * exact timestamp conversion. Resolves when the worker can decode it.
+   * once (never transferred); request timestamps derive from the conformed
+   * document rate. Resolves when the worker can decode it.
    */
   openAsset(
     assetId: AssetId,
@@ -363,12 +338,7 @@ export class RenderWorkerBridge {
     const setupId = this.takeSetupId()
     return this.commitAssetSetup(
       assetId,
-      {
-        protocol: 'streaming',
-        kind: 'video',
-        rate,
-        runtimeToken,
-      },
+      { kind: 'video', rate, runtimeToken },
       setupId,
       { type: 'openAsset', assetId, setupId, blob, budget },
     )
@@ -391,21 +361,16 @@ export class RenderWorkerBridge {
     const setupId = this.takeSetupId()
     return this.commitAssetSetup(
       assetId,
-      {
-        protocol: 'streaming',
-        kind: 'image',
-        runtimeToken,
-      },
+      { kind: 'image', runtimeToken },
       setupId,
       { type: 'openImage', assetId, setupId, blob },
     )
   }
 
-  /** Drop an asset's decoder, cache and chunk source. */
+  /** Drop an asset's worker source and every cursor it owns. */
   releaseAsset(assetId: AssetId): void {
     if (this.disposed) return
     this.send({ type: 'releaseAsset', assetId }, [])
-    this.sourceRevision++
     this.sources.delete(assetId)
     this.pendingConfigures.get(assetId)?.reject(new Error('asset released'))
     this.pendingConfigures.delete(assetId)
@@ -446,13 +411,10 @@ export class RenderWorkerBridge {
    * Composite document frame `frame` onto the worker's canvas. Latest-wins:
    * a newer call settles older in-flight ones as 'superseded'. Never
    * rejects — failures come back in the result. Clips whose asset has no
-   * configured source are simply not requested; the worker reports them in
-   * missingClipIds. Supplying mode selects the Blob-backed streaming path;
-   * omitting it temporarily selects the deprecated chunk-batch path.
+   * opened source are simply not requested; the worker reports them in
+   * missingClipIds. Every render carries explicit playback/seek intent.
    */
-  renderFrame(plan: VideoCompositionPlan): Promise<RenderFrameResult>
-  renderFrame(plan: VideoCompositionPlan, mode: RenderMode): Promise<RenderFrameResult>
-  renderFrame(plan: VideoCompositionPlan, mode?: RenderMode): Promise<RenderFrameResult> {
+  renderFrame(plan: VideoCompositionPlan, mode: RenderMode): Promise<RenderFrameResult> {
     const doc = this.doc
     const frame = plan.frame
     if (!doc) {
@@ -461,20 +423,8 @@ export class RenderWorkerBridge {
     if (this.disposed) {
       return Promise.resolve(renderFailure(BRIDGE_RENDER_DISPOSED_MESSAGE))
     }
-    // Omitting mode is the deprecated keyframe-batch path. Once its caller
-    // migrates, every render supplies explicit playback/seek intent.
-    const protocol = mode === undefined ? 'legacy' : 'streaming'
     if (!Number.isSafeInteger(frame) || frame < 0) {
       return Promise.resolve(renderFailure('visual plan frame must be a non-negative integer'))
-    }
-    const requests = videoCompositionRequests(plan)
-    for (const request of requests) {
-      const source = this.sources.get(request.clip.assetId)
-      if (source && source.protocol !== protocol) {
-        return Promise.resolve(renderFailure(
-          `asset ${request.clip.assetId} uses the ${source.protocol} render protocol`,
-        ))
-      }
     }
 
     // Invalid calls above do not become latest: they neither post a worker
@@ -482,72 +432,12 @@ export class RenderWorkerBridge {
     // wait until the replacement request is actually posted.
     const requestId = this.nextRequestId++
     const generation = this.takeRenderGeneration()
-    this.latestCallId = requestId
-    if (mode === undefined) {
-      return this.renderLegacyFrame(doc, plan, frame, requestId, generation)
-    }
-    return this.renderStreamingFrame(doc, plan, frame, requestId, generation, mode)
-  }
-
-  private async renderLegacyFrame(
-    doc: TimelineDoc,
-    plan: VideoCompositionPlan,
-    frame: number,
-    requestId: number,
-    generation: number,
-  ): Promise<RenderFrameResult> {
-    const revision = this.sourceRevision
-    const request = await buildLegacyRenderRequest({
-      doc,
-      plan,
-      frame,
-      requestId,
-      sourceForAsset: (assetId) => {
-        const source = this.sources.get(assetId)
-        return source?.protocol === 'legacy' ? source : undefined
-      },
-      isCurrent: () => (
-        this.latestCallId === requestId
-        && this.doc === doc
-        && this.sourceRevision === revision
-        && !this.disposed
-      ),
-    })
-    if (!request) return SUPERSEDED
-
-    return new Promise((resolve) => {
-      try {
-        this.send(request.message, request.transfer)
-      } catch (error) {
-        resolve(renderFailure(asError(error).message))
-        return
-      }
-      this.abortPluginEffectCalls()
-      this.settlePendingAsSuperseded()
-      this.pending.set(requestId, {
-        resolve,
-        generation,
-        plan,
-        sources: request.sources,
-      })
-    })
-  }
-
-  private renderStreamingFrame(
-    doc: TimelineDoc,
-    plan: VideoCompositionPlan,
-    frame: number,
-    requestId: number,
-    generation: number,
-    mode: RenderMode,
-  ): Promise<RenderFrameResult> {
     const entries: StreamingCompositeSourceEntry[] = []
     const requestSources = new Map<AssetId, AssetSource>()
     for (const request of videoCompositionRequests(plan)) {
       const clip = request.clip
       const source = this.sources.get(clip.assetId)
       if (!source) continue
-      if (source.protocol !== 'streaming') continue // prevalidated above
       requestSources.set(clip.assetId, source)
       if (source.kind === 'image') {
         entries.push({
@@ -568,8 +458,8 @@ export class RenderWorkerBridge {
       }
     }
 
-    // Unlike the legacy batch table, entries stay clip-keyed. Two clips may
-    // show the same asset frame while owning independent playback cursors.
+    // Entries stay clip-keyed. Two clips may show the same asset frame while
+    // owning independent playback cursors.
     return new Promise((resolve) => {
       try {
         this.send({
@@ -600,7 +490,6 @@ export class RenderWorkerBridge {
     })
     this.disposed = true
     this.colorLuts = undefined
-    this.sourceRevision++
     this.abortPluginEffectCalls()
     this.settlePendingAsSuperseded()
     const disposed = new Error(BRIDGE_DISPOSED_MESSAGE)
@@ -667,7 +556,6 @@ export class RenderWorkerBridge {
     message: Extract<ToRenderWorker, { setupId: number }>,
   ): Promise<void> {
     const previous = this.sources.get(assetId)
-    this.sourceRevision++
     this.sources.set(assetId, source)
     return new Promise((resolve, reject) => {
       this.pendingConfigures.set(assetId, { setupId, resolve, reject })
@@ -678,7 +566,6 @@ export class RenderWorkerBridge {
         this.pendingConfigures.delete(assetId)
         if (previous) this.sources.set(assetId, previous)
         else this.sources.delete(assetId)
-        this.sourceRevision++
         reject(asError(error))
       }
     })
@@ -692,7 +579,6 @@ export class RenderWorkerBridge {
     this.failed = true
     this.failedError = error
     this.disposed = true
-    this.sourceRevision++
     this.sources.clear()
     this.abortPluginEffectCalls()
     for (const pending of this.pending.values()) {
@@ -939,7 +825,7 @@ export class RenderWorkerBridge {
         break
       }
       case 'error': {
-        // A configure failure rejects its waiter (unsupported codec, …).
+        // A setup failure rejects its open waiter (unsupported codec, …).
         if (
           msg.requestId === undefined
           && msg.assetId !== undefined
@@ -952,7 +838,6 @@ export class RenderWorkerBridge {
           if (!waiter || waiter.setupId !== msg.setupId) break
           this.pendingConfigures.delete(msg.assetId)
           this.sources.delete(msg.assetId)
-          this.sourceRevision++
           waiter.reject(msg.mediaFailure
             ? new RenderAssetOpenError(msg.message, msg.mediaFailure)
             : new Error(msg.message))
@@ -984,9 +869,7 @@ export class RenderWorkerBridge {
             this.onAssetError?.(
               msg.assetId,
               source.runtimeToken,
-              source.protocol === 'streaming' && source.kind === 'image'
-                ? null
-                : 'video',
+              source.kind === 'image' ? null : 'video',
               msg.message,
             )
           }

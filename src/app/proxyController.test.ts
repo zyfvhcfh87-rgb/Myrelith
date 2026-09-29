@@ -283,6 +283,76 @@ describe('proxy controller lifecycle and cache quiescing', () => {
     await release()
   })
 
+  test('re-probes only videos whose source or cache inputs changed', async () => {
+    const storage = new ControllerStorage()
+    const baseDeps = deps(storage)
+    const probeInputSupport = vi.fn(baseDeps.probeInputSupport)
+    const release = await initProxyController({ ...baseDeps, probeInputSupport })
+    await connectAndWaitAvailable()
+    expect(probeInputSupport).toHaveBeenCalledTimes(1)
+    const firstPhases: string[] = []
+    const unsubscribe = useProxyStore.subscribe((current) => {
+      firstPhases.push(current.assets.get('asset-1')?.phase ?? 'missing')
+    })
+    try {
+      // Importing a second source probes only that source; the first result
+      // never flickers back to "checking".
+      const second = { ...asset(), id: 'asset-2', objectUrl: 'blob:asset-2' }
+      expect(useMediaStore.getState().addAsset(second)).toBe(true)
+      await vi.waitFor(() => {
+        expect(useProxyStore.getState().assets.get('asset-2')?.phase).toBe('available')
+      })
+      expect(probeInputSupport).toHaveBeenCalledTimes(2)
+      expect(new Set(firstPhases)).toEqual(new Set(['available']))
+
+      const media = useMediaStore.getState()
+      expect(media.replaceAssets(
+        [...media.descriptors.values()],
+        [{ ...asset(), objectUrl: 'blob:asset-1-replacement' }, media.assets.get('asset-2')!],
+      )).toBe(true)
+      await vi.waitFor(() => expect(probeInputSupport).toHaveBeenCalledTimes(3))
+      expect(probeInputSupport.mock.calls[2][1]).toBe('asset-1')
+
+      await removeProxy('asset-1')
+      expect(probeInputSupport).toHaveBeenCalledTimes(4)
+      await clearAllProxies()
+      await vi.waitFor(() => expect(probeInputSupport).toHaveBeenCalledTimes(6))
+    } finally {
+      unsubscribe()
+      await release()
+    }
+  })
+
+  test('publishes per-frame generation progress at whole-percent steps', async () => {
+    const storage = new ControllerStorage()
+    const baseDeps = deps(storage)
+    const release = await initProxyController({
+      ...baseDeps,
+      generateProxy: async (request) => {
+        for (let frame = 1; frame <= 1_000; frame++) request.onProgress?.(frame / 1_000)
+        return baseDeps.generateProxy(request)
+      },
+    })
+    await connectAndWaitAvailable()
+    const published: string[] = []
+    const unsubscribe = useProxyStore.subscribe((current) => {
+      const item = current.assets.get('asset-1')
+      if (item?.phase === 'generating') published.push(item.detail)
+    })
+    try {
+      expect(requestProxyGeneration('asset-1')).toBe(true)
+      await waitForProxyIdle()
+      // The initial "verifying" item plus one publish per displayed percent.
+      expect(published).toHaveLength(102)
+      expect(published.slice(1, 3)).toEqual(['Generating proxy… 0%', 'Generating proxy… 1%'])
+      expect(published.at(-1)).toBe('Generating proxy… 100%')
+      expect(useProxyStore.getState().assets.get('asset-1')?.phase).toBe('ready')
+    } finally {
+      unsubscribe()
+      await release()
+    }
+  })
+
   test('keeps an unsupported exact frame rate disabled before output acquisition', async () => {
     const storage = new ControllerStorage()
     const baseDeps = deps(storage, false)

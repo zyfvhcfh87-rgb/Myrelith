@@ -49,7 +49,6 @@ function validate(reservation: MonitorReservation): void {
 export class MediaResourceAdmission {
   private readonly essential = new Map<object, MediaReservation>()
   private monitor: { token: object; reservation: MonitorReservation; retire: (reason: string) => void } | null = null
-  private readonly listeners = new Set<() => void>()
 
   reserve(reservation: MediaReservation): MediaResourceLease {
     validate(reservation)
@@ -58,10 +57,9 @@ export class MediaResourceAdmission {
       validate(next)
       const previous = this.essential.get(token)
       if (previous && Object.keys(next).every((key) => next[key as keyof MediaReservation] === previous[key as keyof MediaReservation])) return
+      // Record the blocker before retirement, preventing reentrant admission.
       this.essential.set(token, Object.freeze({ ...next }))
-      // Publish the blocker before retirement, preventing reentrant admission.
       if (this.monitor && this.unavailableReason(this.monitor.reservation)) this.interrupt(`${next.kind}-priority`)
-      this.publish()
     }
     update(reservation)
     let released = false
@@ -71,7 +69,6 @@ export class MediaResourceAdmission {
         if (released) return
         released = true
         this.essential.delete(token)
-        this.publish()
       },
     }
   }
@@ -83,11 +80,8 @@ export class MediaResourceAdmission {
     if (reason) return { admitted: false, reason }
     const token = {}
     this.monitor = { token, reservation: Object.freeze({ ...reservation }), retire }
-    this.publish()
     return { admitted: true, release: () => {
-      if (this.monitor?.token !== token) return
-      this.monitor = null
-      this.publish()
+      if (this.monitor?.token === token) this.monitor = null
     } }
   }
 
@@ -111,11 +105,6 @@ export class MediaResourceAdmission {
     }
   }
 
-  subscribe(listener: () => void): () => void {
-    this.listeners.add(listener)
-    return () => { this.listeners.delete(listener) }
-  }
-
   private unavailableReason(request: MonitorReservation): string | null {
     const snapshot = this.snapshot()
     if (!snapshot.programReady) return 'Program Monitor is preparing playback.'
@@ -129,12 +118,6 @@ export class MediaResourceAdmission {
       || bytes > LIVE_MONITOR_RESOURCE_LIMITS.aggregateBytes
       || decoders > LIVE_MONITOR_RESOURCE_LIMITS.decoderSlots) return 'This configuration exceeds the live-preview resource limit. Use fresh editing proxies or paused previews.'
     return null
-  }
-
-  private publish(): void {
-    for (const listener of this.listeners) {
-      try { listener() } catch { /* Passive diagnostics never own admission. */ }
-    }
   }
 }
 

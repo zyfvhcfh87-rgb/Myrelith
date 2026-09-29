@@ -4,12 +4,12 @@ import PluginManagerPanel, { type PluginManagerPhase } from './PluginManagerPane
 import PluginPackageReviewDialog, {
   type PluginPackageReviewPhase,
 } from './PluginPackageReviewDialog'
-import { usePluginAppSnapshot, usePluginUi } from './PluginUiHooks'
+import {
+  ignorePluginCommandRejection,
+  usePluginAppSnapshot,
+  usePluginUi,
+} from './PluginUiHooks'
 import type { PluginInstallDecision } from './pluginUiTypes'
-
-function ignored(promise: Promise<unknown>): void {
-  void promise.catch(() => {})
-}
 
 export default function PluginManagerDialog() {
   const { controller, manager } = usePluginUi()
@@ -19,7 +19,7 @@ export default function PluginManagerDialog() {
 
   useEffect(() => {
     if (!manager.open) return
-    ignored(controller.refreshManagement())
+    ignorePluginCommandRejection(controller.refreshManagement())
   }, [controller, manager.open])
 
   if (!manager.open) return null
@@ -45,7 +45,7 @@ export default function PluginManagerDialog() {
       })
     }
     const install = (decision: PluginInstallDecision): void => {
-      ignored(controller.installPlugin(decision))
+      ignorePluginCommandRejection(controller.installPlugin(decision))
     }
     return (
       <PluginPackageReviewDialog
@@ -95,7 +95,7 @@ export default function PluginManagerDialog() {
         onChange={(event) => {
           const file = event.currentTarget.files?.[0]
           event.currentTarget.value = ''
-          if (file) ignored(controller.inspectFile(file))
+          if (file) ignorePluginCommandRejection(controller.inspectFile(file))
         }}
       />
       <PluginManagerPanel
@@ -104,14 +104,14 @@ export default function PluginManagerDialog() {
         selectedPluginId={manager.selectedPluginId}
         error={snapshot.managementDetail || null}
         onInspectPackage={() => fileInputRef.current?.click()}
-        onRetryLoad={() => ignored(controller.refreshManagement())}
-        onRetryPlugin={(pluginId) => ignored(controller.retryPlugin(pluginId))}
+        onRetryLoad={() => ignorePluginCommandRejection(controller.refreshManagement())}
+        onRetryPlugin={(pluginId) => ignorePluginCommandRejection(controller.retryPlugin(pluginId))}
         onEnablePlugin={(pluginId) => {
-          ignored(controller.enablePlugin(pluginId, new AbortController().signal))
+          ignorePluginCommandRejection(controller.enablePlugin(pluginId, new AbortController().signal))
         }}
-        onDisablePlugin={(pluginId) => ignored(controller.disablePlugin(pluginId))}
-        onUninstallPlugin={(pluginId) => ignored(controller.uninstallPlugin(pluginId))}
-        onClearDiagnostics={(pluginId) => ignored(controller.clearDiagnostics(pluginId))}
+        onDisablePlugin={(pluginId) => ignorePluginCommandRejection(controller.disablePlugin(pluginId))}
+        onUninstallPlugin={(pluginId) => ignorePluginCommandRejection(controller.uninstallPlugin(pluginId))}
+        onClearDiagnostics={(pluginId) => ignorePluginCommandRejection(controller.clearDiagnostics(pluginId))}
       />
     </PluginDialogFrame>
   )

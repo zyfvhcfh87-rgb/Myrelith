@@ -6,7 +6,7 @@ import { createProjectFileSnapshot, parseProjectFile, serializeProjectFile } fro
 import { createMaskEffect } from './effectStack'
 import { duplicateProjectSequence, sequenceProjectWithinEditBudget } from './projectSequences'
 import { bindPluginAnimationParameter } from './animationParameterBinding'
-import { resolveVideoEffectStagePlan } from './pluginVideoEffectStagePlan'
+import { createVideoEffectStagePlanner } from './pluginVideoEffectStagePlan'
 import { resolveScalarAnimationProperty, resolveTitleElementAnimation } from './animationPropertyCatalog'
 import { defaultClipTransform, defaultClipVisualSettings } from './clipInspector'
 import { defaultTextProps } from './textOverlay'
@@ -152,13 +152,13 @@ describe('schema22 canonical animation foundation', () => {
     clip.effects = [{ id: 'plugin', type: PLUGIN_ANIMATION_EFFECT_TYPE, version: 1, enabled: true, params: { amount: 0.2 } }]
     clip.animation = { tracks: [], effectTracks: [{ effectId: 'plugin', parameter: 'amount', keyframes: [scalarKey(0, 0), scalarKey(10, 1)] }] }
     const catalog = animationCatalog()
-    expect(resolveVideoEffectStagePlan(clip, 5, catalog)?.stages[0]).toMatchObject({ detail: expect.stringContaining('unverified'), execution: { parameterRecord: { amount: 0.2 } } })
+    expect(createVideoEffectStagePlanner(catalog).planClip(clip, 5)?.stages[0]).toMatchObject({ detail: expect.stringContaining('unverified'), execution: { parameterRecord: { amount: 0.2 } } })
     const result = bindPluginAnimationParameter(project, project.rootSequenceId, clip.id, 'plugin', 'amount', catalog.declarations[0])
     expect(result.ok).toBe(true)
     if (!result.ok) return
     const bound = result.project.sequences[0].tracks[0].clips[0]
-    expect(resolveVideoEffectStagePlan(bound, 5, catalog)?.stages[0]).toMatchObject({ execution: { parameterRecord: { amount: 0.5 } } })
-    expect(resolveVideoEffectStagePlan(bound, 5, animationCatalog(2, '3'))?.stages[0]).toMatchObject({ detail: expect.stringContaining('does not match'), execution: { parameterRecord: { amount: 0.2 } } })
+    expect(createVideoEffectStagePlanner(catalog).planClip(bound, 5)?.stages[0]).toMatchObject({ execution: { parameterRecord: { amount: 0.5 } } })
+    expect(createVideoEffectStagePlanner(animationCatalog(2, '3')).planClip(bound, 5)?.stages[0]).toMatchObject({ detail: expect.stringContaining('does not match'), execution: { parameterRecord: { amount: 0.2 } } })
     expect(clip.animation.effectTracks![0].parameterIdentity).toBeUndefined()
   })
 })

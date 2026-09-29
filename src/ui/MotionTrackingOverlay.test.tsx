@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { useRef } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { clipFromAsset, insertClip } from '../domain/operations'
+import { clipFromAsset, insertClip, updateClipVisual } from '../domain/operations'
 import { DEFAULT_MANUAL_LENS_CORRECTION } from '../domain/lensCorrection'
 import { createTimelineDoc, DEFAULT_PROJECT_SETTINGS } from '../domain/projectSettings'
 import type { MediaAsset } from '../domain/schema'
@@ -9,6 +9,7 @@ import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useMotionTrackingSelectionStore } from '../state/motionTrackingSelectionStore'
 import { INITIAL_TRANSPORT_STATE, useTransportStore } from '../state/transportStore'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import MotionTrackingOverlay from './MotionTrackingOverlay'
 
 function rect(left: number, top: number, width: number, height: number): DOMRect {
@@ -216,7 +217,7 @@ describe('MotionTrackingOverlay', () => {
 
   test('renders the selected box in the source clip rotation instead of its axis-aligned bounds', () => {
     const clipId = useDocumentStore.getState().doc.tracks[0]!.clips[0]!.id
-    useDocumentStore.getState().updateClipVisual(clipId, {
+    commitDocumentEdit(updateClipVisual, clipId, {
       transform: { rotation: 90 },
     })
     useMotionTrackingSelectionStore.getState().setSelection(

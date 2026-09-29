@@ -21,6 +21,8 @@ import {
   type CollectMediaFolder,
   type CollectMediaManifest,
 } from '../domain/collectMedia'
+import { hasErrorName } from '../domain/errors'
+import { withWritableFile, writeFileHandle } from './fileSystemAccess'
 
 export const COLLECT_STREAM_CHUNK_BYTES = 1024 * 1024
 
@@ -100,23 +102,16 @@ function pickerWindow(): CollectPickerWindow {
   return window as CollectPickerWindow
 }
 
-function namedError(cause: unknown, name: string): boolean {
-  return typeof cause === 'object'
-    && cause !== null
-    && 'name' in cause
-    && cause.name === name
-}
-
 export function isCollectMediaAbort(cause: unknown): boolean {
-  return namedError(cause, 'AbortError')
+  return hasErrorName(cause, 'AbortError')
 }
 
 export function isCollectMediaQuotaFailure(cause: unknown): boolean {
-  return namedError(cause, 'QuotaExceededError')
+  return hasErrorName(cause, 'QuotaExceededError')
 }
 
 export function isCollectMediaPermissionFailure(cause: unknown): boolean {
-  return namedError(cause, 'NotAllowedError') || namedError(cause, 'SecurityError')
+  return hasErrorName(cause, 'NotAllowedError', 'SecurityError')
 }
 
 export function collectMediaAbortError(): DOMException {
@@ -195,9 +190,11 @@ export async function readOptionalTextFile(
 ): Promise<string | null> {
   try {
     const handle = await root.getFileHandle(fileName)
-    return handle.getFile().then((file) => file.text())
+    // Await inside the try: a file removed between the handle lookup and the
+    // read rejects here with NotFoundError, which still means "absent".
+    return await (await handle.getFile()).text()
   } catch (cause) {
-    if (namedError(cause, 'NotFoundError')) return null
+    if (hasErrorName(cause, 'NotFoundError')) return null
     throw cause
   }
 }
@@ -208,18 +205,7 @@ export async function writeTextFile(
   text: string,
 ): Promise<void> {
   const handle = await root.getFileHandle(fileName, { create: true })
-  const writable = await handle.createWritable({ keepExistingData: false })
-  try {
-    await writable.write(text)
-    await writable.close()
-  } catch (cause) {
-    try {
-      await writable.abort?.(cause)
-    } catch {
-      // Preserve the original write failure.
-    }
-    throw cause
-  }
+  await writeFileHandle(handle, text)
 }
 
 export async function removeFileIfPresent(
@@ -229,7 +215,7 @@ export async function removeFileIfPresent(
   try {
     await root.removeEntry(fileName)
   } catch (cause) {
-    if (!namedError(cause, 'NotFoundError')) throw cause
+    if (!hasErrorName(cause, 'NotFoundError')) throw cause
   }
 }
 
@@ -332,19 +318,11 @@ export async function writeBlobAtRelativePath(
     create: true,
   })
   const handle = await directory.getFileHandle(fileName, { create: true })
-  const writable = await handle.createWritable({ keepExistingData: false })
-  try {
+  // A failed copy aborts its stream; the incomplete marker stays authoritative.
+  await withWritableFile(handle, async (writable) => {
     await streamCopyBlob(blob, writable, signal, onChunk)
     if (signal.aborted) throw collectMediaAbortError()
-    await writable.close()
-  } catch (cause) {
-    try {
-      await writable.abort?.(cause)
-    } catch {
-      // Preserve the copy failure; the incomplete marker stays authoritative.
-    }
-    throw cause
-  }
+  })
   const written = await handle.getFile()
   if (written.size !== blob.size) {
     throw new CollectMediaError(

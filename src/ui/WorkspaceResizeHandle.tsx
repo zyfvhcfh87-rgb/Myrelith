@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react'
+import { roundAndClampPixels } from './workspaceLayout'
 
 export interface WorkspaceResizeHandleProps {
   className?: string
@@ -28,10 +29,6 @@ interface PointerSession {
   pointerId: number
   startCoordinate: number
   startValue: number
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, Math.round(value)))
 }
 
 export default function WorkspaceResizeHandle({
@@ -72,7 +69,7 @@ export default function WorkspaceResizeHandle({
     const move = (event: globalThis.PointerEvent): void => {
       if (event.pointerId !== session.pointerId) return
       const delta = (coordinate(event) - session.startCoordinate) * direction
-      pendingRef.current = clamp(session.startValue + delta, min, max)
+      pendingRef.current = roundAndClampPixels(session.startValue + delta, min, max)
       if (frameRef.current === null) {
         frameRef.current = requestAnimationFrame(flush)
       }
@@ -150,7 +147,7 @@ export default function WorkspaceResizeHandle({
     else if (event.key === increase) next = currentValue + 16 * direction
     else return
     event.preventDefault()
-    next = clamp(value === 0 ? Math.max(min, next) : next, min, max)
+    next = roundAndClampPixels(value === 0 ? Math.max(min, next) : next, min, max)
     onCommit(next)
     onAnnounce(`${label} set to ${next} pixels.`)
   }

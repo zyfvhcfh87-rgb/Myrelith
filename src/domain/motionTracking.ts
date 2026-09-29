@@ -13,13 +13,14 @@ import {
   clipVisualSettingsValidationError,
   transformScaleValidationError,
 } from './clipInspector'
+import { errorMessage } from './errors'
 import {
   trackingSamplesToAnimationTracks,
   type TrackingAnimationSample,
 } from './motionTrackingResearch'
+import { isPositiveSafeInteger } from './numeric'
 import type {
   Clip,
-  ClipAnimationProperty,
   ClipAnimationTrack,
   FrameRate,
   TimelineDoc,
@@ -114,16 +115,7 @@ export interface MotionTrackingBoxAnalysis extends MotionTrackingAnalysisBase {
 
 export type MotionTrackingAnalysis = MotionTrackingPointAnalysis | MotionTrackingBoxAnalysis
 
-export const POINT_TRACKING_PROPERTIES = [
-  'position-x',
-  'position-y',
-] as const satisfies readonly ClipAnimationProperty[]
-
-export const BOX_TRACKING_PROPERTIES = [
-  ...POINT_TRACKING_PROPERTIES,
-  'scale-x',
-  'scale-y',
-] as const satisfies readonly ClipAnimationProperty[]
+export { BOX_TRACKING_PROPERTIES, POINT_TRACKING_PROPERTIES } from './framingProperties'
 
 export interface MotionTrackingPlan {
   readonly sourceClipId: string
@@ -142,10 +134,6 @@ export interface MotionTrackingPlan {
 export type MotionTrackingPlanResult =
   | { readonly ok: true; readonly plan: MotionTrackingPlan }
   | { readonly ok: false; readonly reason: string }
-
-function positiveSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
-}
 
 function finiteNormalizedPoint(point: NormalizedTrackingPoint): boolean {
   return Number.isFinite(point.x)
@@ -194,13 +182,13 @@ export function motionTrackingAvailabilityReason(
   ) return 'Place the playhead inside the source clip before tracking.'
   if (
     !source
-    || !positiveSafeInteger(source.width)
-    || !positiveSafeInteger(source.height)
+    || !isPositiveSafeInteger(source.width)
+    || !isPositiveSafeInteger(source.height)
     || !Number.isSafeInteger(source.firstTimestampUs)
-    || !positiveSafeInteger(source.frameRate.num)
-    || !positiveSafeInteger(source.frameRate.den)
+    || !isPositiveSafeInteger(source.frameRate.num)
+    || !isPositiveSafeInteger(source.frameRate.den)
   ) return 'Tracking needs a connected video source with exact dimensions and timing.'
-  if (!positiveSafeInteger(doc.width) || !positiveSafeInteger(doc.height)) {
+  if (!isPositiveSafeInteger(doc.width) || !isPositiveSafeInteger(doc.height)) {
     return 'Tracking needs valid positive project dimensions.'
   }
   const visualError = clipVisualSettingsValidationError(clipVisualSettings(clip))
@@ -339,7 +327,7 @@ export function createMotionTrackingPlan(
   if (analysis.kind === 'point' && includeScale) {
     return { ok: false, reason: 'Point tracking can author Position only.' }
   }
-  if (!positiveSafeInteger(targetDimensions.width) || !positiveSafeInteger(targetDimensions.height)) {
+  if (!isPositiveSafeInteger(targetDimensions.width) || !isPositiveSafeInteger(targetDimensions.height)) {
     return { ok: false, reason: 'Tracking target dimensions are unavailable.' }
   }
   const ordered = [...analysis.samples].sort((left, right) => left.localFrame - right.localFrame)
@@ -410,7 +398,7 @@ export function createMotionTrackingPlan(
       })),
     }))
   } catch (cause) {
-    return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) }
+    return { ok: false, reason: errorMessage(cause) }
   }
   const owned = new Set(tracks.map((track) => track.property))
   const replacementRequired = clipAnimation(targetClip).tracks.some((track) => owned.has(track.property))

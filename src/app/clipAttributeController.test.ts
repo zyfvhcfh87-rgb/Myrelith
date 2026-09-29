@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { ATTRIBUTE_ASSET_DESCRIPTOR, attributeProject } from '../test/clipAttributeFixtures'
 import { useMediaStore } from '../state/mediaStore'
 import { useDocumentStore } from '../state/documentStore'
+import { setClipVolume } from '../domain/operations'
+import { commitDocumentEdit } from '../test/documentEditFixtures'
 import { useTransportStore } from '../state/transportStore'
 import { useClipAttributeStore } from '../state/clipAttributeStore'
 import {
@@ -41,14 +43,14 @@ describe('attribute clipboard and history', () => {
     copyClipAttributes('source')
     select('first', 'second')
     const session = openAttributeEdit('paste')
-    useDocumentStore.getState().setClipVolume('first', 0.5)
+    commitDocumentEdit(setClipVolume, 'first', 0.5)
     useDocumentStore.getState().undo()
     const future = useDocumentStore.getState().future
     select('second')
     expect(applyAttributeEdit(session, 'paste', options)).toMatch(/selection changed/)
     expect(useDocumentStore.getState().future).toBe(future)
     const fresh = openAttributeEdit('paste')
-    useDocumentStore.getState().setClipVolume('first', 0.75)
+    commitDocumentEdit(setClipVolume, 'first', 0.75)
     expect(applyAttributeEdit(fresh, 'paste', options)).toMatch(/project or selection changed/)
   })
 
@@ -79,7 +81,7 @@ describe('attribute clipboard and history', () => {
 
   test('idempotent reset preserves populated redo; locked paste is all-or-nothing', () => {
     select('first')
-    useDocumentStore.getState().setClipVolume('second', 0.5)
+    commitDocumentEdit(setClipVolume, 'second', 0.5)
     useDocumentStore.getState().undo()
     const future = useDocumentStore.getState().future
     expect(applyAttributeEdit(openAttributeEdit('reset'), 'reset', { ...options, groups: ['opacity'] })).toBeNull()

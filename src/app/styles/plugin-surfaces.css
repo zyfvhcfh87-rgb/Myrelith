@@ -518,7 +518,6 @@
 }
 
 .plugin-progress,
-.plugin-success,
 .plugin-error,
 .plugin-operation-status {
   min-height: 18px;
@@ -531,14 +530,6 @@
   display: flex;
   align-items: center;
   gap: 9px;
-}
-
-.plugin-success {
-  padding: 10px 11px;
-  color: #bde4c7;
-  background: rgb(57 130 80 / 15%);
-  border: 1px solid rgb(91 171 115 / 36%);
-  border-radius: 7px;
 }
 
 .plugin-error {

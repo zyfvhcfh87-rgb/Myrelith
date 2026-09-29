@@ -18,8 +18,14 @@ import {
   type EffectResolutionStatus,
 } from './effectStack'
 import {
+  PLUGIN_ENTRYPOINT_PATTERN,
+  PLUGIN_ID_PATTERN,
+  PLUGIN_LOCAL_IDENTIFIER_PATTERN,
   PLUGIN_MANIFEST_LIMITS,
+  PLUGIN_SEMANTIC_VERSION_PATTERN,
+  pluginBoundedTextProblem,
   pluginEffectType,
+  pluginNumberParameterRangeProblem,
   type PluginParameter,
 } from './pluginManifest'
 import { utf8ByteLength } from './documentMemory'
@@ -131,27 +137,16 @@ export interface VideoEffectStagePlanner {
   readonly planClip: (clip: Clip, timelineFrame: number) => VideoEffectStagePlan | null
 }
 
-const LOCAL_IDENTIFIER = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/u
-const PLUGIN_ID = /^(?:[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/u
-const ENTRYPOINT = /^[A-Za-z_][A-Za-z0-9_]*$/u
 const SHA256_IDENTITY = /^sha256:[0-9a-f]{64}$/u
-const SEMANTIC_VERSION = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u
 
 function failSnapshot(message: string): never {
   throw new TypeError(`Invalid plugin contribution snapshot: ${message}`)
 }
 
 function boundedText(value: string, name: string, maximum: number): string {
-  if (
-    typeof value !== 'string'
-    || value.length === 0
-    || value.trim().length === 0
-    || value.length > maximum
-    || Array.from(value).some((character) => {
-      const code = character.charCodeAt(0)
-      return code <= 0x1f || code === 0x7f
-    })
-  ) failSnapshot(`${name} is missing or exceeds ${maximum} characters`)
+  if (pluginBoundedTextProblem(value, maximum)) {
+    failSnapshot(`${name} is missing or exceeds ${maximum} characters`)
+  }
   return value
 }
 
@@ -162,7 +157,7 @@ function cloneParameter(parameter: PluginParameter, index: number): PluginParame
     `${path}.key`,
     PLUGIN_MANIFEST_LIMITS.maxIdentifierCharacters,
   )
-  if (!LOCAL_IDENTIFIER.test(key) || isUnsafeEffectParamKey(key)) {
+  if (!PLUGIN_LOCAL_IDENTIFIER_PATTERN.test(key) || isUnsafeEffectParamKey(key)) {
     failSnapshot(`${path}.key is not a safe local identifier`)
   }
   const name = boundedText(
@@ -177,13 +172,12 @@ function cloneParameter(parameter: PluginParameter, index: number): PluginParame
       || Math.abs(value) > EFFECT_STACK_LIMITS.maxFiniteMagnitude
     ))) failSnapshot(`${path} contains an out-of-range number`)
     if (
-      parameter.min >= parameter.max
-      || parameter.default < parameter.min
-      || parameter.default > parameter.max
-      || parameter.step <= 0
-      || parameter.step > parameter.max - parameter.min
-      || !(parameter.min + parameter.step > parameter.min)
-      || !(parameter.max - parameter.step < parameter.max)
+      pluginNumberParameterRangeProblem(
+        parameter.min,
+        parameter.max,
+        parameter.default,
+        parameter.step,
+      )
       || typeof parameter.animatable !== 'boolean'
     ) failSnapshot(`${path} is not a valid number declaration`)
     return Object.freeze({
@@ -216,7 +210,7 @@ function cloneParameter(parameter: PluginParameter, index: number): PluginParame
       `${path}.options[${optionIndex}].value`,
       PLUGIN_MANIFEST_LIMITS.maxIdentifierCharacters,
     )
-    if (!LOCAL_IDENTIFIER.test(value) || values.has(value)) {
+    if (!PLUGIN_LOCAL_IDENTIFIER_PATTERN.test(value) || values.has(value)) {
       failSnapshot(`${path}.options[${optionIndex}].value is invalid or duplicated`)
     }
     values.add(value)
@@ -267,7 +261,7 @@ export function createPluginVideoEffectContributionSnapshot(
       `declarations[${index}].pluginId`,
       PLUGIN_MANIFEST_LIMITS.maxPluginIdCharacters,
     )
-    if (!PLUGIN_ID.test(pluginId)) failSnapshot(`declarations[${index}].pluginId is invalid`)
+    if (!PLUGIN_ID_PATTERN.test(pluginId)) failSnapshot(`declarations[${index}].pluginId is invalid`)
     if (input.kind !== 'video-effect') {
       failSnapshot(`declarations[${index}].kind is not a video effect`)
     }
@@ -281,7 +275,7 @@ export function createPluginVideoEffectContributionSnapshot(
       `declarations[${index}].contributionId`,
       PLUGIN_MANIFEST_LIMITS.maxIdentifierCharacters,
     )
-    if (!LOCAL_IDENTIFIER.test(contributionId)) {
+    if (!PLUGIN_LOCAL_IDENTIFIER_PATTERN.test(contributionId)) {
       failSnapshot(`declarations[${index}].contributionId is invalid`)
     }
     const effectType = pluginEffectType(pluginId, contributionId)
@@ -297,7 +291,7 @@ export function createPluginVideoEffectContributionSnapshot(
       `declarations[${index}].entrypoint`,
       PLUGIN_MANIFEST_LIMITS.maxEntrypointCharacters,
     )
-    if (!ENTRYPOINT.test(entrypoint)) {
+    if (!PLUGIN_ENTRYPOINT_PATTERN.test(entrypoint)) {
       failSnapshot(`declarations[${index}].entrypoint is invalid`)
     }
     if (!([
@@ -357,7 +351,7 @@ export function createPluginVideoEffectContributionSnapshot(
     })
   })
   for (const [index, declaration] of declarations.entries()) {
-    if (!SEMANTIC_VERSION.test(declaration.pluginVersion)) {
+    if (!PLUGIN_SEMANTIC_VERSION_PATTERN.test(declaration.pluginVersion)) {
       failSnapshot(`declarations[${index}].pluginVersion is invalid`)
     }
   }
@@ -370,7 +364,7 @@ export function canonicalPluginVideoEffectParameterJson(
 ): string {
   const fields = Object.keys(record).toSorted().map((key) => {
     const value = record[key]
-    if (!LOCAL_IDENTIFIER.test(key) || isUnsafeEffectParamKey(key)) {
+    if (!PLUGIN_LOCAL_IDENTIFIER_PATTERN.test(key) || isUnsafeEffectParamKey(key)) {
       throw new TypeError('Plugin parameter record contains an invalid key')
     }
     if (
@@ -378,7 +372,7 @@ export function canonicalPluginVideoEffectParameterJson(
       && typeof value !== 'string'
       && (typeof value !== 'number' || !Number.isFinite(value))
     ) throw new TypeError(`Plugin parameter record ${key} is not a finite primitive`)
-    if (typeof value === 'string' && !LOCAL_IDENTIFIER.test(value)) {
+    if (typeof value === 'string' && !PLUGIN_LOCAL_IDENTIFIER_PATTERN.test(value)) {
       throw new TypeError(`Plugin parameter record ${key} is not a local identifier`)
     }
     const encodedValue = JSON.stringify(value)
@@ -400,34 +394,22 @@ function frozenEffect(effect: EffectDescriptor): EffectDescriptor {
 
 function frozenPixelEffect(effect: CanvasPixelEffect | null): CanvasPixelEffect | null {
   if (effect === null) return null
-  if (effect.kind === 'color-adjust') {
-    return Object.freeze({
-      kind: effect.kind,
-      params: Object.freeze({ ...effect.params }),
-    })
-  }
-  if (effect.kind === 'mask') {
-    return Object.freeze({
-      kind: effect.kind,
-      params: Object.freeze({ ...effect.params }),
-    })
-  }
-  if (effect.kind === 'chroma-key') {
-    return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
-  }
-  if (effect.kind === 'cube-lut') return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
-  if (effect.kind === 'rgb-curves') return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
-  if (effect.kind === 'lift-gamma-gain') return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
-  return Object.freeze({ kind: effect.kind, params: Object.freeze({ ...effect.params }) })
+  // Every variant is exactly { kind, params }; the cast restores the
+  // kind/params pairing that one generic rebuild cannot express.
+  return Object.freeze({
+    kind: effect.kind,
+    params: Object.freeze({ ...effect.params }),
+  }) as CanvasPixelEffect
 }
+
+const BUILT_IN_STAGE_CAPABILITIES: ReadonlySet<EffectCapability> = new Set<EffectCapability>([
+  CANVAS_FILTER_EFFECT_CAPABILITY,
+  CANVAS_PIXEL_EFFECT_CAPABILITY,
+])
 
 function builtInStage(effect: EffectDescriptor): BuiltInVideoEffectStage {
   const cloned = cloneEffectDescriptor(effect)
-  const capabilities = new Set<EffectCapability>([
-    CANVAS_FILTER_EFFECT_CAPABILITY,
-    CANVAS_PIXEL_EFFECT_CAPABILITY,
-  ])
-  const resolution = resolveEffectStack([cloned], capabilities)[0]
+  const resolution = resolveEffectStack([cloned], BUILT_IN_STAGE_CAPABILITIES)[0]
   if (!resolution) throw new Error('Built-in effect resolution returned no stage')
   const registration = effectRegistration(cloned.type)
   const pixelEffect = resolution.status === 'ready'
@@ -449,7 +431,7 @@ function pluginTypeIsWellFormed(type: string): boolean {
   if (separator <= 'plugin:'.length || separator === type.length - 1) return false
   const pluginId = type.slice('plugin:'.length, separator)
   const contributionId = type.slice(separator + 1)
-  return PLUGIN_ID.test(pluginId) && LOCAL_IDENTIFIER.test(contributionId)
+  return PLUGIN_ID_PATTERN.test(pluginId) && PLUGIN_LOCAL_IDENTIFIER_PATTERN.test(contributionId)
 }
 
 function unavailablePluginStage(
@@ -468,12 +450,20 @@ function unavailablePluginStage(
   })
 }
 
+/** One snapshot declaration with its parameter keys indexed once per planner. */
+interface IndexedDeclaration {
+  readonly declaration: PluginVideoEffectContributionDeclaration
+  readonly parameterKeys: ReadonlySet<string>
+}
+
 function pluginStage(
   effect: EffectDescriptor,
   clip: Clip,
   timelineFrame: number,
-  declaration: PluginVideoEffectContributionDeclaration | undefined,
+  indexed: IndexedDeclaration | undefined,
+  clipAnimationIsValid: () => boolean,
 ): PluginVideoEffectStage {
+  const declaration = indexed?.declaration
   if (!pluginTypeIsWellFormed(effect.type)) {
     return unavailablePluginStage(
       effect,
@@ -482,7 +472,7 @@ function pluginStage(
       'The plugin effect type is malformed; its data is preserved.',
     )
   }
-  if (!declaration) {
+  if (!indexed || !declaration) {
     return unavailablePluginStage(
       effect,
       effect.type,
@@ -506,11 +496,7 @@ function pluginStage(
       `Descriptor version ${effect.version} does not match installed version ${declaration.descriptorVersion}; its data is preserved.`,
     )
   }
-  const declarationsByKey = new Map(declaration.parameters.map((parameter) => [
-    parameter.key,
-    parameter,
-  ]))
-  const unknownKey = Object.keys(effect.params).find((key) => !declarationsByKey.has(key))
+  const unknownKey = Object.keys(effect.params).find((key) => !indexed.parameterKeys.has(key))
   if (unknownKey) {
     return unavailablePluginStage(
       effect,
@@ -546,7 +532,7 @@ function pluginStage(
   const animation = clipAnimation(clip)
   if (clip.title !== undefined && effectAnimationTracks(animation).some((track) => track.effectId === effect.id)) {
     animationDetail = 'Plugin animation is unavailable on titles; stored keys are preserved and static parameters are used.'
-  } else if (!clipAnimationValidationError(animation)) {
+  } else if (clipAnimationIsValid()) {
     const localFrame = timelineFrame - clip.timelineRange.startFrame
     if (Number.isSafeInteger(localFrame)) {
       for (const parameter of declaration.parameters) {
@@ -613,12 +599,23 @@ function hasPluginPrefix(effect: EffectDescriptor): boolean {
 function resolveWithCatalog(
   clip: Clip,
   timelineFrame: number,
-  declarations: ReadonlyMap<string, PluginVideoEffectContributionDeclaration>,
+  declarations: ReadonlyMap<string, IndexedDeclaration>,
 ): VideoEffectStagePlan | null {
   if (!clip.effects.some(hasPluginPrefix)) return null
+  // Validated at most once per call, however many plugin effects the clip has.
+  let animationValid: boolean | undefined
+  const clipAnimationIsValid = () => (
+    animationValid ??= clipAnimationValidationError(clipAnimation(clip)) === null
+  )
   const stages = clip.effects.map<VideoEffectStage>((effect) => (
     hasPluginPrefix(effect)
-      ? pluginStage(effect, clip, timelineFrame, declarations.get(effect.type))
+      ? pluginStage(
+          effect,
+          clip,
+          timelineFrame,
+          declarations.get(effect.type),
+          clipAnimationIsValid,
+        )
       : builtInStage(effect)
   ))
   return Object.freeze({
@@ -629,25 +626,23 @@ function resolveWithCatalog(
   })
 }
 
-/** Retained planner indexes one immutable snapshot without retaining app state. */
+/**
+ * Retained planner indexes one immutable snapshot without retaining app state.
+ * Snapshot declarations are frozen at creation, so their parameter-key index
+ * stays exact for the planner's lifetime.
+ */
 export function createVideoEffectStagePlanner(
   snapshot?: PluginVideoEffectContributionSnapshot,
 ): VideoEffectStagePlanner {
-  const declarations = new Map(
-    snapshot?.declarations.map((declaration) => [declaration.effectType, declaration]) ?? [],
+  const declarations = new Map<string, IndexedDeclaration>(
+    snapshot?.declarations.map((declaration) => [declaration.effectType, {
+      declaration,
+      parameterKeys: new Set(declaration.parameters.map((parameter) => parameter.key)),
+    }]) ?? [],
   )
   return Object.freeze({
     planClip: (clip: Clip, timelineFrame: number) => (
       resolveWithCatalog(clip, timelineFrame, declarations)
     ),
   })
-}
-
-/** One-shot adapter for callers that do not retain a composition planner. */
-export function resolveVideoEffectStagePlan(
-  clip: Clip,
-  timelineFrame: number,
-  snapshot?: PluginVideoEffectContributionSnapshot,
-): VideoEffectStagePlan | null {
-  return createVideoEffectStagePlanner(snapshot).planClip(clip, timelineFrame)
 }

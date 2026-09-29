@@ -17,14 +17,10 @@ import { compatibilityAllowsTimelineUse } from '../domain/mediaCompatibility'
 import {
   planMediaAssetPlacement,
   resolveTimelineFileDropPolicy,
-  timelineFrameFromPointer as domainTimelineFrameFromPointer,
-  trackKindAcceptsAssetKind as domainTrackKindAcceptsAssetKind,
-  visiblePlacementPreviewRange as domainVisiblePlacementPreviewRange,
   TIMELINE_MULTI_FILE_DROP_MESSAGE,
-  type MediaPlacementPreviewRange,
   type MediaPlacementRejection,
 } from '../domain/mediaPlacement'
-import type { AssetKind, TrackId, TrackKind } from '../domain/schema'
+import type { TrackId, TrackKind } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import {
@@ -89,35 +85,6 @@ export function applyMediaPlacementHoverPreview(
   const current = useTransportStore.getState().mediaPlacementPreview
   if (current?.phase === 'pending') return
   setMediaPlacementPreview(preview)
-}
-
-export function trackKindAcceptsAssetKind(
-  trackKind: TrackKind,
-  assetKind: AssetKind,
-): boolean {
-  return domainTrackKindAcceptsAssetKind(trackKind, assetKind)
-}
-
-export function timelineFrameFromPointer(
-  originFrame: number,
-  localPx: number,
-  zoom: number,
-): number {
-  return domainTimelineFrameFromPointer(originFrame, localPx, zoom)
-}
-
-export function visiblePlacementPreviewRange(
-  startFrame: number,
-  durationFrames: number | null,
-  originFrame: number,
-  windowEndFrame: number,
-): MediaPlacementPreviewRange | null {
-  return domainVisiblePlacementPreviewRange(
-    startFrame,
-    durationFrames,
-    originFrame,
-    windowEndFrame,
-  )
 }
 
 export function previewImportedAssetPlacement(input: {
@@ -450,8 +417,10 @@ export function teardownMediaPlacementUi(): void {
   setStatus('')
 }
 
-export function resetMediaPlacementControllerForTest(): void {
-  teardownMediaPlacementUi()
-}
-
 export { TIMELINE_MULTI_FILE_DROP_MESSAGE }
+// Pure placement math the timeline UI reads through this facade.
+export {
+  timelineFrameFromPointer,
+  trackKindAcceptsAssetKind,
+  visiblePlacementPreviewRange,
+} from '../domain/mediaPlacement'

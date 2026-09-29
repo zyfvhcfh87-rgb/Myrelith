@@ -7,10 +7,13 @@
  * chunks; no decoder code is downloaded from a third party at runtime.
  */
 
+import { bytesToHex } from '../domain/bytes'
+import { abortError, errorMessage, throwIfAborted } from '../domain/errors'
 import type {
   MediaCompatibilityReason,
   MediaDecoderPath,
 } from '../domain/mediaCompatibility'
+import { isPositiveSafeInteger } from '../domain/numeric'
 import type { MediaAsset } from '../domain/schema'
 
 export type LocalDecoderId = 'prores' | 'ac3'
@@ -41,12 +44,6 @@ export interface LocalDecoderBudget {
   framesPerSecond?: number | null
   sampleRate?: number | null
   channels?: number | null
-}
-
-function isPositiveSafeInteger(value: unknown): value is number {
-  return typeof value === 'number'
-    && Number.isSafeInteger(value)
-    && value > 0
 }
 
 function conservativeFileBytes(
@@ -229,15 +226,7 @@ const DEFAULT_LOADERS: MediaCodecFallbackLoaders = {
   },
 }
 
-function makeAbortError(): Error {
-  const error = new Error('Media decoder check was cancelled')
-  error.name = 'AbortError'
-  return error
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw makeAbortError()
-}
+const DECODER_CHECK_CANCELLED = 'Media decoder check was cancelled'
 
 /**
  * Stop awaiting a non-abortable browser/module operation as soon as the caller
@@ -250,14 +239,17 @@ function awaitWithAbort<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   if (!signal) return operation
-  if (signal.aborted) return Promise.reject(makeAbortError())
+  if (signal.aborted) {
+    void operation.catch(() => {})
+    return Promise.reject(abortError(DECODER_CHECK_CANCELLED))
+  }
 
   return new Promise<T>((resolve, reject) => {
     let settled = false
     const abort = (): void => {
       if (settled) return
       settled = true
-      reject(makeAbortError())
+      reject(abortError(DECODER_CHECK_CANCELLED))
     }
     signal.addEventListener('abort', abort, { once: true })
 
@@ -374,11 +366,7 @@ async function decoderCapabilityCacheKey(
 
     const subtle = globalThis.crypto?.subtle
     if (!subtle) return null
-    const digest = new Uint8Array(await subtle.digest('SHA-256', material))
-    const fingerprint = Array.from(
-      digest,
-      (byte) => byte.toString(16).padStart(2, '0'),
-    ).join('')
+    const fingerprint = bytesToHex(await subtle.digest('SHA-256', material))
     return [
       target.boundary,
       target.trackKind,
@@ -501,7 +489,7 @@ export class LocalDecoderLoadError extends Error {
   readonly decoderId: LocalDecoderId
 
   constructor(decoderId: LocalDecoderId, cause: unknown) {
-    const detail = cause instanceof Error ? cause.message : String(cause)
+    const detail = errorMessage(cause)
     super(`Local ${fallbackLabel(decoderId)} decoder failed to load: ${detail}`, {
       cause,
     })
@@ -805,7 +793,7 @@ export function createMediaCodecFallbackRegistry(
       target: DecoderCheckTarget,
       signal?: AbortSignal,
     ): Promise<DecoderCheckResult> {
-      throwIfAborted(signal)
+      throwIfAborted(signal, DECODER_CHECK_CANCELLED)
       const family = decoderFamily(target.codec)
       const keyRevision = capabilityRevision
       const keySourceGeneration = sourceGeneration(target.sourceId)
@@ -813,7 +801,7 @@ export function createMediaCodecFallbackRegistry(
         decoderCapabilityCacheKey(target),
         signal,
       )
-      throwIfAborted(signal)
+      throwIfAborted(signal, DECODER_CHECK_CANCELLED)
 
       if (
         target.policy === 'reuse'
@@ -854,7 +842,7 @@ export function createMediaCodecFallbackRegistry(
             nativeOnlyDecoderSupport(target),
             signal,
           )
-          throwIfAborted(signal)
+          throwIfAborted(signal, DECODER_CHECK_CANCELLED)
           if (nativeSupport === true) {
             return finish({
               decodable: true,
@@ -881,7 +869,7 @@ export function createMediaCodecFallbackRegistry(
             target.canDecode(),
             signal,
           )
-          throwIfAborted(signal)
+          throwIfAborted(signal, DECODER_CHECK_CANCELLED)
           if (effectivelyDecodable) {
             return finish({
               decodable: true,
@@ -905,7 +893,7 @@ export function createMediaCodecFallbackRegistry(
           target.canDecode(),
           signal,
         )
-        throwIfAborted(signal)
+        throwIfAborted(signal, DECODER_CHECK_CANCELLED)
 
         if (initiallyDecodable) {
           return finish({
@@ -941,7 +929,7 @@ export function createMediaCodecFallbackRegistry(
         }
 
         await awaitWithAbort(register(family), signal)
-        throwIfAborted(signal)
+        throwIfAborted(signal, DECODER_CHECK_CANCELLED)
         // Registration is a runtime change and deliberately invalidated the
         // old write token. The post-registration check is fresh evidence.
         writeToken = sourceGenerationIsCurrent(
@@ -955,7 +943,7 @@ export function createMediaCodecFallbackRegistry(
           nativeOnlyDecoderSupport(target),
           signal,
         )
-        throwIfAborted(signal)
+        throwIfAborted(signal, DECODER_CHECK_CANCELLED)
         if (nativeSupport === true) {
           return finish({
             decodable: true,
@@ -966,7 +954,7 @@ export function createMediaCodecFallbackRegistry(
         }
 
         const decodable = await awaitWithAbort(target.canDecode(), signal)
-        throwIfAborted(signal)
+        throwIfAborted(signal, DECODER_CHECK_CANCELLED)
         if (!decodable) {
           return finish({
             decodable: false,

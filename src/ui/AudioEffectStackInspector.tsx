@@ -1,4 +1,4 @@
-import { useId, type KeyboardEvent } from 'react'
+import { useId, useMemo, type KeyboardEvent } from 'react'
 import type { AudioEffectDescriptor, TimelineDoc } from '../domain/schema'
 import type { AudioEffectTarget } from '../domain/operations'
 import {
@@ -38,7 +38,9 @@ import { useDocumentStore } from '../state/documentStore'
 import { AUDIO_EFFECT_PRESETS } from '../state/editorUi'
 import { NumberField } from './inspector/InspectorFields'
 
-function stackForTarget(
+const NO_AUDIO_EFFECTS: readonly AudioEffectDescriptor[] = Object.freeze([])
+
+function findStack(
   doc: TimelineDoc,
   target: AudioEffectTarget,
 ): readonly AudioEffectDescriptor[] {
@@ -52,6 +54,15 @@ function stackForTarget(
     if (clip) return clipAudioEffects(clip)
   }
   return []
+}
+
+/** Empty stacks share one array, so a stack's identity is stable per document. */
+function stackForTarget(
+  doc: TimelineDoc,
+  target: AudioEffectTarget,
+): readonly AudioEffectDescriptor[] {
+  const stack = findStack(doc, target)
+  return stack.length === 0 ? NO_AUDIO_EFFECTS : stack
 }
 
 function toggle(
@@ -265,18 +276,14 @@ export default function AudioEffectStackInspector({
 }) {
   const stack = stackForTarget(doc, target)
   const statuses = useAudioEffectStatusStore((state) => state.statuses)
-  const probes = {
-    eq: createParametricEqEffect('__audio-effect-budget-eq__'),
-    compressor: createCompressorEffect('__audio-effect-budget-compressor__'),
-    limiter: createLimiterEffect('__audio-effect-budget-limiter__'),
-    gate: createNoiseGateEffect('__audio-effect-budget-gate__'),
-  }
-  const limits = {
-    eq: audioEffectAppendBudgetError(doc, stack, probes.eq),
-    compressor: audioEffectAppendBudgetError(doc, stack, probes.compressor),
-    limiter: audioEffectAppendBudgetError(doc, stack, probes.limiter),
-    gate: audioEffectAppendBudgetError(doc, stack, probes.gate),
-  }
+  // Each probe walks every audio effect in the document; the document
+  // snapshot and this stack (stable per snapshot) fully determine the result.
+  const limits = useMemo(() => ({
+    eq: audioEffectAppendBudgetError(doc, stack, createParametricEqEffect('__audio-effect-budget-eq__')),
+    compressor: audioEffectAppendBudgetError(doc, stack, createCompressorEffect('__audio-effect-budget-compressor__')),
+    limiter: audioEffectAppendBudgetError(doc, stack, createLimiterEffect('__audio-effect-budget-limiter__')),
+    gate: audioEffectAppendBudgetError(doc, stack, createNoiseGateEffect('__audio-effect-budget-gate__')),
+  }), [doc, stack])
   const addBudgetReasonBaseId = useId()
   const addBudgetReasons = [...new Set(
     [limits.eq, limits.compressor, limits.limiter, limits.gate]
