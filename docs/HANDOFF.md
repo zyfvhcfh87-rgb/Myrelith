@@ -1522,9 +1522,10 @@ surface; it is not a second zoom and never enters document history.
   Original Slice 7 adds one lazy worker-owned leg/group surface pair, reused
   and cleared for transition frames and resized with the document canvas.
   Superseded presentation never cancels a healthy playback lane.
-- `src/pipeline/demux.ts` — Mediabunny loadAsset + decoderConfig (de)serialize;
-  records canonical integer-microsecond duration and conforms playable frames
-  to the active document rate.
+- `src/pipeline/demux.ts` — `serializeDecoderConfig`, the persisted
+  `MediaAsset.decoderConfigB64` format (base64 `description`, no bare
+  `SharedArrayBuffer` reference). Import analysis, canonical duration, and
+  document-rate conformance live in `mediaCompatibilityProbe.ts`.
 - `src/pipeline/visuals.ts` — filmstrip/waveform image generators (4.3.7):
   mediabunny CanvasSink / AudioBufferSink (streamed chunks, peaks fold on
   the fly — full PCM never held); images span the asset's FULL duration
