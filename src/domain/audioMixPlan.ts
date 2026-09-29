@@ -13,7 +13,8 @@ import type {
   TransitionId,
 } from './schema'
 import {
-  resolveCrossfadePlan,
+  createCrossfadePlanResolver,
+  markOverlappingCandidates,
   type CrossfadeLegRole,
   type SourceBoundsCatalog,
 } from './crossfadePlan'
@@ -395,13 +396,6 @@ function finishRampedContributor(
   return plan
 }
 
-function windowsOverlap(
-  left: { startFrame: number; endFrame: number },
-  right: { startFrame: number; endFrame: number },
-): boolean {
-  return left.startFrame < right.endFrame && right.startFrame < left.endFrame
-}
-
 /**
  * Canonical gain at one absolute crossfade phase. Callers derive `progress`
  * from the complete transition window, never from a local decode/mix block.
@@ -510,15 +504,11 @@ export function createTimelineAudioMixPlan(
   }
 
   const candidates: PlannedCrossfadeAudio[] = []
+  const resolvePlan = createCrossfadePlanResolver(doc, catalog)
   for (const track of doc.tracks) {
     if (track.kind !== 'video') continue
     for (const transition of track.transitions) {
-      const resolution = resolveCrossfadePlan(
-        doc,
-        track.id,
-        transition.id,
-        catalog,
-      )
+      const resolution = resolvePlan(track.id, transition.id)
       if (
         resolution.status !== 'available'
         || resolution.plan.audio.status !== 'available'
@@ -547,15 +537,7 @@ export function createTimelineAudioMixPlan(
     }
   }
   for (const entries of byClip.values()) {
-    for (let leftIndex = 0; leftIndex < entries.length; leftIndex++) {
-      for (let rightIndex = leftIndex + 1; rightIndex < entries.length; rightIndex++) {
-        const left = entries[leftIndex]
-        const right = entries[rightIndex]
-        if (left === right || !windowsOverlap(left, right)) continue
-        conflicting.add(left)
-        conflicting.add(right)
-      }
-    }
+    markOverlappingCandidates(entries, (candidate) => candidate, conflicting)
   }
 
   for (const candidate of candidates) {

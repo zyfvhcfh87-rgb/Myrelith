@@ -408,6 +408,39 @@ describe('timeline audio mix plan', () => {
     expect(JSON.stringify(input.doc)).toBe(before)
   })
 
+  test('fails cross-track crossfades closed only where they share an audio clip window', () => {
+    const plan = (durationFrames: number) => {
+      const input = fixture()
+      const preTransition: Transition = {
+        id: 'pre-crossfade',
+        type: 'crossfade',
+        fromClipId: 'video-pre',
+        toClipId: 'video-from-2',
+        durationFrames,
+        audio: { enabled: true, curve: 'linear' },
+      }
+      input.doc.tracks.push(
+        track('V2', 'video', [
+          clip('video-pre', 'video-from-asset', 0, 10, 100, 'pre-link'),
+          clip('video-from-2', 'video-from-asset', 10, 10, 30, 'from-link'),
+        ], [preTransition]),
+        track('A-pre', 'audio', [clip('audio-pre', 'audio-from-asset', 0, 10, 100, 'pre-link')]),
+      )
+      const clips = createTimelineAudioMixPlan(input.doc, input.catalog).clips
+      return Object.fromEntries(clips.map((entry) => [
+        entry.clipId,
+        entry.envelopes.map((envelope) => `${envelope.transitionId}:${envelope.startFrame}-${envelope.endFrame}`),
+      ]))
+    }
+
+    expect(plan(5)).toEqual({
+      'audio-pre': ['pre-crossfade:8-13'],
+      'audio-from': ['pre-crossfade:8-13', 'crossfade:18-23'],
+      'audio-to': ['crossfade:18-23'],
+    })
+    expect(plan(19)).toEqual({ 'audio-pre': [], 'audio-from': [], 'audio-to': [] })
+  })
+
   test('retains the ordinary hard cut when linked audio is unavailable', () => {
     const input = fixture()
     const incompleteCatalog = new Map(input.catalog)

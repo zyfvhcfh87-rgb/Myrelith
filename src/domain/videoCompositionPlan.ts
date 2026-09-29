@@ -19,8 +19,8 @@ import {
 } from './captions'
 import { resolveCaptionPaint } from './captionPaint'
 import {
+  createCrossfadePlanResolver,
   crossfadeFrameGroupAt,
-  resolveCrossfadePlan,
   type CrossfadePlan,
   type CrossfadeFrameGroup,
   type CrossfadeFrameRequest,
@@ -272,16 +272,12 @@ export function createVideoCompositionPlanner(
     readonly transitions: FrameIndex<CrossfadePlan>
   }> = []
 
+  const resolvePlan = createCrossfadePlanResolver(doc, catalog)
   for (const track of doc.tracks) {
     if (track.kind !== 'video' || track.hidden) continue
     const trackPlans: CrossfadePlan[] = []
     for (const transition of track.transitions) {
-      const resolution = resolveCrossfadePlan(
-        doc,
-        track.id,
-        transition.id,
-        catalog,
-      )
+      const resolution = resolvePlan(track.id, transition.id)
       if (resolution.status !== 'available') continue
       trackPlans.push(resolution.plan)
     }
