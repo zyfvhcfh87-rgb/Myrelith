@@ -409,7 +409,7 @@ async function cleanupExport(
   ) throw cleanupFailure
 }
 
-function isQuotaExceededCause(cause: unknown): boolean {
+export function isQuotaExceededCause(cause: unknown): boolean {
   return typeof cause === 'object'
     && cause !== null
     && 'name' in cause

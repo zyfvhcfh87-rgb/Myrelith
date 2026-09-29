@@ -4,12 +4,10 @@
  * report partial completion instead of inventing a finished archive.
  */
 
-import { hasVideoBusEffects, videoBusRenderBudgetError } from '../domain/videoBusStage'
 import type { ExportRange } from '../domain/exportRange'
 import { validateExportRange } from '../domain/exportRange'
 import type { TimelineDoc } from '../domain/schema'
 import type { SequenceProject } from '../domain/projectSequences'
-import { projectReachableSequences } from '../domain/selectors'
 import {
   imageSequenceFileName,
   imageSequencePadWidth,
@@ -19,17 +17,11 @@ import {
 import {
   createAlternativeBufferedExportResult,
   createDirectoryExportResult,
+  isQuotaExceededCause,
   type ExportResult,
   type ExportVideoSink,
 } from './export'
-import type { Composite2D, TransitionSurfaces } from './render'
-import {
-  createDocumentLensRemapProvider,
-  documentHasSupportedLensCorrection,
-  documentHasUnsupportedLensCorrection,
-  WebGl2LensRemapBackend,
-} from './lensRemapWebgl'
-import { LensRemapUnavailableError } from './lensRemap'
+import { createExportRenderSurfaces } from './export-render-surfaces'
 import { zipStore, type ZipStoreEntry } from './zipStore'
 
 export interface ImageSequenceDirectoryTarget {
@@ -46,13 +38,6 @@ export interface ImageSequenceSinkOptions {
     project: SequenceProject
     sequenceId: string
   }>
-}
-
-function isQuotaError(cause: unknown): boolean {
-  return typeof cause === 'object'
-    && cause !== null
-    && 'name' in cause
-    && (cause.name === 'QuotaExceededError' || cause.name === 'NS_ERROR_DOM_QUOTA_REACHED')
 }
 
 async function defaultConvertPng(canvas: OffscreenCanvas): Promise<Uint8Array> {
@@ -81,63 +66,12 @@ export async function createImageSequenceSink(
   if (validated.destination === 'download' && directory) {
     throw new TypeError('Download image-sequence export cannot use a directory target')
   }
-  if (typeof OffscreenCanvas === 'undefined') {
-    throw new Error('OffscreenCanvas is not supported in this browser')
-  }
-
-  const lensDocument = options.projectTarget
-    ? {
-        ...doc,
-        masterVideoEffects: projectReachableSequences(options.projectTarget.project, options.projectTarget.sequenceId).flatMap((sequence) => sequence.masterVideoEffects ?? []),
-        tracks: projectReachableSequences(
-          options.projectTarget.project,
-          options.projectTarget.sequenceId,
-        ).flatMap((sequence) => sequence.tracks),
-      }
-    : doc
-  if (hasVideoBusEffects(lensDocument)) {
-    const error = videoBusRenderBudgetError(doc.width, doc.height)
-    if (error) throw new RangeError(error)
-  }
-  if (documentHasUnsupportedLensCorrection(lensDocument)) {
-    throw new LensRemapUnavailableError(
-      'Export is blocked because this project contains a preserved future lens-correction version.',
-    )
-  }
-  let lensBackend: WebGl2LensRemapBackend | null = null
-  try {
-    if (documentHasSupportedLensCorrection(lensDocument)) {
-      lensBackend = new WebGl2LensRemapBackend()
-    }
-  } catch (cause) {
-    throw new LensRemapUnavailableError(
-      `Export lens correction is unavailable: ${cause instanceof Error ? cause.message : String(cause)}`,
-      true,
-      cause,
-    )
-  }
-  let lensRemapProvider
-  try {
-    lensRemapProvider = createDocumentLensRemapProvider(
-      lensDocument,
-      lensBackend,
-      doc.width,
-      doc.height,
-      true,
-    )
-  } catch (cause) {
-    lensBackend?.dispose()
-    throw cause
-  }
-
-  const canvas = new OffscreenCanvas(doc.width, doc.height)
-  const context = canvas.getContext('2d', { colorSpace: 'srgb', alpha: true })
-  if (!context) {
-    lensBackend?.dispose()
-    canvas.width = 1
-    canvas.height = 1
-    throw new Error('Could not create the image-sequence 2D context')
-  }
+  const surfaces = createExportRenderSurfaces(doc, {
+    alpha: true,
+    label: 'image-sequence',
+    projectTarget: options.projectTarget,
+  })
+  const { canvas } = surfaces
 
   const padWidth = imageSequencePadWidth(window.endFrame)
   const convertPng = options.convertPng ?? defaultConvertPng
@@ -146,26 +80,7 @@ export async function createImageSequenceSink(
   const expectedFrames = window.endFrame - window.startFrame
   let nextOutputFrame = window.startFrame
   let state: 'open' | 'finalized' | 'canceled' = 'open'
-  let transitionSurfaces: TransitionSurfaces | null = null
   let quotaFailure: unknown
-  let renderSurfacesReleased = false
-
-  const releaseRenderSurfaces = (): void => {
-    if (renderSurfacesReleased) return
-    renderSurfacesReleased = true
-    lensBackend?.dispose()
-    lensBackend = null
-    if (transitionSurfaces) {
-      for (const surface of [transitionSurfaces.leg.canvas, transitionSurfaces.group.canvas]) {
-        const owned = surface as OffscreenCanvas
-        owned.width = 1
-        owned.height = 1
-      }
-      transitionSurfaces = null
-    }
-    canvas.width = 1
-    canvas.height = 1
-  }
 
   const appendSidecar = (): void => {
     if (!options.sidecarName || !options.sidecarBytes) return
@@ -213,14 +128,14 @@ export async function createImageSequenceSink(
     if (state === 'finalized' || state === 'canceled') return undefined
     if (writtenNames.filter((name) => name.endsWith('.png')).length === 0) {
       state = 'canceled'
-      releaseRenderSurfaces()
+      surfaces.release()
       return undefined
     }
     state = 'finalized'
     try {
       return await resultFor('partial')
     } finally {
-      releaseRenderSurfaces()
+      surfaces.release()
     }
   }
 
@@ -228,29 +143,9 @@ export async function createImageSequenceSink(
     compositeBackground: 'transparent',
     preservePartialOnFailure: true,
     commitPartial,
-    ctx: context as Composite2D,
-    lensRemapProvider,
-    transitionSurfaceProvider: {
-      get: () => {
-        if (transitionSurfaces) return transitionSurfaces
-        const legCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const legContext = legCanvas.getContext('2d', { colorSpace: 'srgb', alpha: true, willReadFrequently: true })
-        const groupCanvas = new OffscreenCanvas(doc.width, doc.height)
-        const groupContext = groupCanvas.getContext('2d', { colorSpace: 'srgb', alpha: true, willReadFrequently: true })
-        if (!legContext || !groupContext) {
-          legCanvas.width = 1
-          legCanvas.height = 1
-          groupCanvas.width = 1
-          groupCanvas.height = 1
-          throw new Error('Could not create image-sequence transition 2D contexts')
-        }
-        transitionSurfaces = {
-          leg: { canvas: legCanvas, ctx: legContext as Composite2D },
-          group: { canvas: groupCanvas, ctx: groupContext as Composite2D },
-        }
-        return transitionSurfaces
-      },
-    },
+    ctx: surfaces.ctx,
+    lensRemapProvider: surfaces.lensRemapProvider,
+    transitionSurfaceProvider: surfaces.transitionSurfaceProvider,
     addFrame: async () => {
       if (state !== 'open') throw new Error('Image-sequence sink is closed')
       if (nextOutputFrame >= window.endFrame) {
@@ -270,7 +165,7 @@ export async function createImageSequenceSink(
         writtenNames.push(name)
         nextOutputFrame++
       } catch (cause) {
-        quotaFailure = isQuotaError(cause) ? cause : quotaFailure
+        quotaFailure = isQuotaExceededCause(cause) ? cause : quotaFailure
         if (quotaFailure) {
           const quota = new Error(
             `Storage exhausted after ${writtenNames.filter((file) => file.endsWith('.png')).length} of ${expectedFrames} PNG frames. Written files were kept.`,
@@ -292,13 +187,13 @@ export async function createImageSequenceSink(
       try {
         return await resultFor('complete')
       } finally {
-        releaseRenderSurfaces()
+        surfaces.release()
       }
     },
     cancel: async () => {
       if (state === 'finalized' || state === 'canceled') return
       state = 'canceled'
-      releaseRenderSurfaces()
+      surfaces.release()
     },
   }
 }
