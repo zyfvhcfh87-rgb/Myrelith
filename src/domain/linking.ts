@@ -61,7 +61,7 @@ import {
   timelineFramesWithinSourceMap,
 } from './sourceTimeMap'
 import { rangeEnd, rangeOverlap } from './time'
-import { shiftLaterAdjustments } from './operations/operationInternals'
+import { shiftLaterAdjustments, withoutLinkGroupId } from './operations/operationInternals'
 
 /** Rejection path: warn and hand back the SAME doc reference. */
 function reject(doc: TimelineDoc, op: string, why: string): TimelineDoc {
@@ -216,14 +216,46 @@ export function linkedPartners(doc: TimelineDoc, clipId: ClipId): Clip[] {
 }
 
 /**
+ * One pass over a doc for link expansion: the first clip per id (findClip
+ * order) and every group's members in doc order (linkedPartners order).
+ * Built per call and never retained, because documents are not frozen.
+ */
+interface LinkGroupIndex {
+  readonly clips: ReadonlyMap<ClipId, Clip>
+  readonly groups: ReadonlyMap<string, readonly Clip[]>
+}
+
+function createLinkGroupIndex(doc: TimelineDoc): LinkGroupIndex {
+  const clips = new Map<ClipId, Clip>()
+  const groups = new Map<string, Clip[]>()
+  for (const track of doc.tracks) {
+    for (const clip of track.clips) {
+      if (!clips.has(clip.id)) clips.set(clip.id, clip)
+      if (!clip.linkGroupId) continue
+      const members = groups.get(clip.linkGroupId)
+      if (members) members.push(clip)
+      else groups.set(clip.linkGroupId, [clip])
+    }
+  }
+  return { clips, groups }
+}
+
+/**
  * clipId's own clip first, then its partners — the "who does this edit
  * touch" set shared by the linked wrappers below. Empty when clipId is not
  * found in the doc.
  */
-function groupMembers(doc: TimelineDoc, clipId: ClipId): Clip[] {
-  const clip = findClip(doc, clipId)
+function indexedGroupMembers(index: LinkGroupIndex, clipId: ClipId): Clip[] {
+  const clip = index.clips.get(clipId)
   if (!clip) return []
-  return [clip, ...linkedPartners(doc, clipId)]
+  if (!clip.linkGroupId) return [clip]
+  const partners = (index.groups.get(clip.linkGroupId) ?? [])
+    .filter((member) => member.id !== clipId)
+  return [clip, ...partners]
+}
+
+function groupMembers(doc: TimelineDoc, clipId: ClipId): Clip[] {
+  return indexedGroupMembers(createLinkGroupIndex(doc), clipId)
 }
 
 function durationAfterConstantRetime(
@@ -268,12 +300,13 @@ function makeRoomForTimelineRange(
 
   const movingIds: ClipId[] = []
   const seen = new Set<ClipId>()
+  const links = createLinkGroupIndex(doc)
   for (const candidate of track.clips) {
     if (candidate.id === clipId) continue
     if (candidate.timelineRange.startFrame < firstBlockerFrame) {
       continue
     }
-    for (const member of groupMembers(doc, candidate.id)) {
+    for (const member of indexedGroupMembers(links, candidate.id)) {
       if (seen.has(member.id)) continue
       seen.add(member.id)
       movingIds.push(member.id)
@@ -340,18 +373,6 @@ function applyConstantRetimeWithRoom(
 /* ------------------------------------------------------------------ */
 /* Internal helpers                                                     */
 /* ------------------------------------------------------------------ */
-
-/**
- * Rebuild `clip` with its linkGroupId property removed (absent, not set to
- * undefined — an `undefined`-valued key does not survive JSON.stringify
- * anyway, and schema.ts requires lossless round-trips). No-op reference
- * return when the clip has no linkGroupId to begin with.
- */
-function withoutLinkGroupId(clip: Clip): Clip {
-  if (!clip.linkGroupId) return clip
-  const { linkGroupId: _linkGroupId, ...rest } = clip
-  return rest
-}
 
 /**
  * Rebuild only the tracks that hold one of `ids`, setting `linkGroupId` on
@@ -554,8 +575,9 @@ export function linkedMoveClips(
 
   const memberIds: ClipId[] = []
   const seen = new Set<ClipId>()
+  const links = createLinkGroupIndex(doc)
   for (const clipId of clipIds) {
-    const members = groupMembers(doc, clipId)
+    const members = indexedGroupMembers(links, clipId)
     if (members.length === 0) return reject(doc, op, `clip ${clipId} not found`)
     for (const member of members) {
       if (seen.has(member.id)) continue
@@ -628,8 +650,9 @@ export function linkedRetimeClips(
 
   const memberIds: ClipId[] = []
   const seen = new Set<ClipId>()
+  const links = createLinkGroupIndex(doc)
   for (const clipId of clipIds) {
-    const members = groupMembers(doc, clipId)
+    const members = indexedGroupMembers(links, clipId)
     if (members.length === 0) return reject(doc, op, `clip ${clipId} not found`)
     if (
       members.some(
@@ -646,7 +669,7 @@ export function linkedRetimeClips(
 
   const members: Clip[] = []
   for (const memberId of memberIds) {
-    const member = findClip(doc, memberId)
+    const member = links.clips.get(memberId)
     if (!member) return reject(doc, op, 'partner could not follow')
     members.push(member)
   }

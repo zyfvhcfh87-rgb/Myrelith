@@ -495,14 +495,23 @@ export function moveClipsByDelta(
   }
   if (clipIds.length === 0 || deltaFrames === 0) return doc
 
+  // One index instead of a doc scan per id (a select-all nudge moves
+  // thousands); first occurrence wins, exactly like locateClip.
+  const locations = new Map<ClipId, { trackIndex: number; clip: Clip }>()
+  doc.tracks.forEach((track, trackIndex) => {
+    for (const clip of track.clips) {
+      if (!locations.has(clip.id)) locations.set(clip.id, { trackIndex, clip })
+    }
+  })
   const movingIds = new Set<ClipId>()
   const affectedTrackIndexes = new Set<number>()
   for (const clipId of clipIds) {
     if (movingIds.has(clipId)) continue
-    const loc = locateClip(doc, clipId)
+    const loc = locations.get(clipId)
     if (!loc) return reject(doc, op, `clip ${clipId} not found`)
-    if (loc.track.locked) {
-      return reject(doc, op, `track ${loc.track.id} is locked`)
+    const track = doc.tracks[loc.trackIndex]
+    if (track.locked) {
+      return reject(doc, op, `track ${track.id} is locked`)
     }
     const startFrame = loc.clip.timelineRange.startFrame + deltaFrames
     const endFrame = startFrame + loc.clip.timelineRange.durationFrames
