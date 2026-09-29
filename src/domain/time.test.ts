@@ -210,10 +210,24 @@ describe('addFrames and duration safety', () => {
     expect(snapToStandardRate(240)).toEqual({ num: 240, den: 1 })
   })
 
+  test('snapToStandardRate keeps sub-millifps rates valid as a whole-second frame period', () => {
+    // One still-image packet over a 40-minute audio file measures ~0.000417
+    // fps, which rounds to zero at millifps precision.
+    const still = snapToStandardRate(1 / 2400)
+    expect(still).toEqual({ num: 1, den: 2400 })
+    expect(microsecondsDurationToFrames(2_400_000_000, still)).toBe(1)
+    expect(snapToStandardRate(0.0004)).toEqual({ num: 1, den: 2500 })
+    // The millifps path is unchanged down to its own rounding boundary.
+    expect(snapToStandardRate(0.0005)).toEqual({ num: 1, den: 1000 })
+  })
+
   test('snapToStandardRate rejects nonsense input', () => {
     expect(() => snapToStandardRate(0)).toThrow(TypeError)
     expect(() => snapToStandardRate(-24)).toThrow(TypeError)
     expect(() => snapToStandardRate(Number.NaN)).toThrow(TypeError)
+    // No safe-integer rational can carry these, so fail at the boundary.
+    expect(() => snapToStandardRate(Number.MIN_VALUE)).toThrow(TypeError)
+    expect(() => snapToStandardRate(1e13)).toThrow(TypeError)
   })
 
   test('formatTimecode renders non-drop HH:MM:SS:FF', () => {

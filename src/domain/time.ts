@@ -126,6 +126,19 @@ export function snapToStandardRate(fps: number, toleranceFps = 0.05): FrameRate 
 
   // Unusual rate: preserve it exactly at millifps precision, reduced.
   const num = Math.round(fps * 1000)
+  if (num === 0) {
+    // Below 0.0005 fps (one frame longer than ~33 minutes, e.g. a single
+    // still-image packet over a long audio file) millifps collapses to 0/1,
+    // which every later rate check rejects. Keep the whole-second period.
+    const period = Math.round(1 / fps)
+    if (!Number.isSafeInteger(period)) {
+      throw new TypeError(`snapToStandardRate: fps ${fps} has no safe rational form`)
+    }
+    return { num: 1, den: period }
+  }
+  if (!Number.isSafeInteger(num)) {
+    throw new TypeError(`snapToStandardRate: fps ${fps} has no safe rational form`)
+  }
   const g = gcd(num, 1000)
   return { num: num / g, den: 1000 / g }
 }
