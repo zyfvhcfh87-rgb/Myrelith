@@ -3,7 +3,7 @@ import type { PortableColorLut } from '../domain/colorLutCatalog'
  * workers/render-protocol.ts — The canonical message contract between the
  * main-thread render bridge (engine/, Phase 4.1c) and workers/
  * render.worker.ts. Types only — zero runtime code, safe for both sides to
- * import (same rule as decode-protocol.ts).
+ * import.
  *
  * Division of labor: the MAIN side is the single computer of timestamps.
  * It sends one explicit domain VideoCompositionPlan plus exact
@@ -11,15 +11,12 @@ import type { PortableColorLut } from '../domain/colorLutCatalog'
  * sources and advances clip-keyed playback lanes. It never re-derives µs
  * targets, so the two sides cannot disagree about rounding.
  *
- * `openAsset` / `renderFrame` are the current contract. The deprecated
- * `configureAsset` / `composite` chunk messages are imported from the named
- * render-legacy-protocol compatibility boundary. Do not combine the two
- * shapes: a Blob is
- * structured-cloned once, while encoded chunk buffers belong only to the
- * legacy path.
+ * `openAsset` / `openImage` hand the worker each asset Blob once
+ * (structured-cloned, never transferred); `renderFrame` then carries only
+ * lightweight clip-keyed source requests.
  *
- * Ordering contract: `setDoc` must be posted BEFORE any `renderFrame` (or
- * legacy `composite`) whose source table was computed from that doc.
+ * Ordering contract: `setDoc` must be posted BEFORE any `renderFrame` whose
+ * source table was computed from that doc.
  * A newer render supersedes the older PRESENTATION, which answers
  * `compositeDone` with status 'superseded' and never blits. Normal playback
  * supersession must not cancel the clip's sequential decode lane. A lane ends
@@ -35,19 +32,9 @@ import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PresentationProfile } from '../domain/presentationProfile'
 import type { VideoScopeAnalysis } from '../domain/videoScopes'
 import type {
-  LegacyCompositeMessage,
-  LegacyConfigureAssetMessage,
-} from './render-legacy-protocol'
-import type {
   PluginEffectBridgeHostMessage,
   PluginEffectBridgeWorkerMessage,
 } from './plugin-effect-bridge-protocol'
-
-export type {
-  CompositeSourceEntry,
-  LegacyCompositeMessage,
-  LegacyConfigureAssetMessage,
-} from './render-legacy-protocol'
 
 /**
  * `playback` reuses a clip's sequential lane across render request IDs.
@@ -233,15 +220,13 @@ export type ToRenderWorker =
     }
   | OpenAssetMessage
   | OpenImageMessage
-  | LegacyConfigureAssetMessage
   | {
-      /** Drop an asset's source, child cursors, decoder state, and frame cache. */
+      /** Drop an asset's source and every child cursor it owns. */
       type: 'releaseAsset'
       assetId: AssetId
     }
   | RenderFrameMessage
   | PluginEffectBridgeHostMessage
-  | LegacyCompositeMessage
   | {
       /** Enable/reset or disable the otherwise-dormant local counters. */
       type: 'setRuntimeTelemetry'
@@ -259,7 +244,7 @@ export type ToRenderWorker =
       requestId: number
     }
   | {
-      /** Tear down all sources, child cursors, decoders, and caches. */
+      /** Tear down all sources, child cursors, and retained frames. */
       type: 'close'
     }
 
@@ -275,7 +260,7 @@ export type FromRenderWorker =
       /** The asset's worker source/decoder is ready; renders may reference it. */
       type: 'assetConfigured'
       assetId: AssetId
-      /** Exact identity from configureAsset/openAsset/openImage. */
+      /** Exact identity from openAsset/openImage. */
       setupId: number
     }
   | {
@@ -291,7 +276,7 @@ export type FromRenderWorker =
       analysis: VideoScopeAnalysis
     }
   | {
-      /** A render finished (exactly one per renderFrame/legacy composite). */
+      /** A render finished (exactly one per renderFrame). */
       type: 'compositeDone'
       requestId: number
       /**

@@ -6,7 +6,6 @@
 import { invalidateMediaDecoderRuntime, invalidateMediaDecoderSource } from '../codecs/mediaCodecFallbacks';
 import { WebGl2LensRemapBackend } from '../pipeline/lensRemapWebgl';
 import { decodeStaticImage } from '../pipeline/static-image';
-import type { VideoDecoderLike } from './decode-types';
 import type { FromRenderWorker, ToRenderWorker } from './render-protocol';
 import { openWorkerVideoSource } from './video-source';
 import { createRenderWorkerCore } from './renderWorker/core';
@@ -26,21 +25,6 @@ if (typeof WorkerGlobalScope !== 'undefined' && typeof window === 'undefined') {
   const videoScopeAnalyzer = createVideoScopeAnalyzer()
   const core = createRenderWorkerCore({
     post: (msg, transfer = []) => renderWorkerGlobal.postMessage(msg, transfer),
-    createDecoder: (init) =>
-      new VideoDecoder({
-        output: (frame) => init.output(frame),
-        error: (e) => init.error(e),
-      }) as unknown as VideoDecoderLike,
-    isConfigSupported: (config) => VideoDecoder.isConfigSupported(config),
-    createChunk: (p) =>
-      new EncodedVideoChunk({
-        type: p.type,
-        timestamp: p.timestampUs,
-        duration: p.durationUs,
-        data: p.data,
-      }),
-    createBitmap: (frame) =>
-      createImageBitmap(frame as unknown as ImageBitmapSource),
     openVideoSource: (blob, sourceId, budget) => openWorkerVideoSource(
       blob,
       { sourceId, budget },

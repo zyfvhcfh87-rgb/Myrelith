@@ -419,7 +419,7 @@ class WorkerVideoSourceImpl implements WorkerVideoSource {
 
 /**
  * Open a worker-owned video source. Initialization is intentionally async so
- * configureAsset can acknowledge readiness only after a usable track exists.
+ * openAsset can acknowledge readiness only after a usable track exists.
  */
 export async function openWorkerVideoSource(
   blob: Blob,
