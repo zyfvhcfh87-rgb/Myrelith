@@ -13,6 +13,7 @@ import { createMulticamMonitorSession, type MonitorContext } from './multicamMon
 import { subscribePreviewRenderCompletions } from './previewController'
 import { getProxyPreviewSource } from './proxyController'
 import { getAudioPlaybackDiagnostics, getPlaybackClockContext } from './transportController'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 /** One mounted monitor's context reader; it owns the source-identity memo below. */
 function createContextReader(instanceId: string): () => MonitorContext | null {
@@ -132,6 +133,7 @@ export function disposeMulticamMonitor(): void {
   const owner = mounted; mounted = null; owner?.dispose()
   useMulticamMonitorStore.setState({ ...INITIAL_MULTICAM_MONITOR })
 }
+registerLoadedEditorRuntime('multicamMonitor', disposeMulticamMonitor)
 export function setMulticamMonitorEnabled(enabled: boolean): void {
   if (enabled) mounted?.session.enable()
   else mounted?.session.disable()

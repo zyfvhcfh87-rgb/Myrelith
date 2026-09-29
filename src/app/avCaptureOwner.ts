@@ -24,6 +24,7 @@ import { calibrateVideoClock, mediaStreamTrackProcessor, type AvVideoClockCalibr
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
 import { localMediaHandleRegistry } from './localMediaHandles'
 import { cancelMediaImport, importMediaFromHandle, type MediaImportResult } from './mediaImportController'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 type Bridge = Pick<AvCaptureBridge, 'start' | 'stop' | 'abort' | 'file' | 'discardId' | 'recover' | 'close'>
   & { onProgress: AvCaptureBridge['onProgress']; onSelfStop: AvCaptureBridge['onSelfStop']
@@ -575,3 +576,4 @@ export function getAvCaptureOwner(): AvCaptureOwner {
 export async function teardownAvCaptureForProjectChange(): Promise<void> {
   await owner?.teardownForProjectChange()
 }
+registerLoadedEditorRuntime('avCapture', teardownAvCaptureForProjectChange)

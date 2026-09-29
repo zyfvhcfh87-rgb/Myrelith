@@ -43,6 +43,7 @@ import {
 import { mediaResourceAdmission, type MediaResourceLease } from './mediaResourceAdmission'
 import { createMediaBlobFetcher } from './playbackAudioShared'
 import { sourceReviewDocument } from './sourceReviewDocument'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 export interface SourcePreviewBridge {
   setDoc(doc: TimelineDoc): void
@@ -470,3 +471,4 @@ async function disposeSourcePreviewState(): Promise<void> {
 export function disposeSourcePreview(): Promise<void> {
   return disposeSourcePreviewState()
 }
+registerLoadedEditorRuntime('sourcePreview', disposeSourcePreview)

@@ -115,6 +115,7 @@ import {
   reportProxyPreviewFailure,
 } from './proxyController'
 import { mediaResourceAdmission, type MediaResourceLease } from './mediaResourceAdmission'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 /** The bridge surface the controller drives (real or test fake). */
 export interface BridgeLike {
@@ -1226,3 +1227,4 @@ async function disposePreviewState(clearPluginBinding: boolean): Promise<void> {
 export function disposePreview(): Promise<void> {
   return disposePreviewState(true)
 }
+registerLoadedEditorRuntime('preview', disposePreview)

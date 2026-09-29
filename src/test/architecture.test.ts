@@ -432,6 +432,36 @@ describe('architecture guard', () => {
     expect(launcherClosure).not.toContain('app/EditorShell.tsx')
     expect(launcherClosure).not.toContain('ui/Toolbar.tsx')
     expect(launcherClosure).not.toContain('ui/Inspector.tsx')
+    // Editor runtimes register project teardown via app/editorRuntimeLifecycle
+    // and media inspection loads on first use, so the launcher never
+    // evaluates them or Mediabunny.
+    for (const editorRuntime of [
+      'app/previewController.ts',
+      'app/transportController.ts',
+      'app/sourceMonitorController.ts',
+      'app/sourceMonitorPlaybackController.ts',
+      'app/sourceMonitorPreviewController.ts',
+      'app/multicamMonitorController.ts',
+      'app/voiceoverCaptureOwner.ts',
+      'app/avCaptureOwner.ts',
+      'app/mediaVisualsController.ts',
+      'app/mediaImportController.ts',
+      'app/mediaInspection.ts',
+      'app/mediaCompatibilityController.ts',
+      'app/proxyController.ts',
+      'engine/render-bridge.ts',
+      'pipeline/playback-audio.ts',
+      'pipeline/render.ts',
+      'pipeline/export.ts',
+      'pipeline/mediaCompatibilityProbe.ts',
+      'codecs/mediaCodecFallbacks.ts',
+    ]) expect(launcherClosure).not.toContain(editorRuntime)
+    expect(edges.filter((edge) => (
+      !edge.typeOnly
+      && !edge.dynamic
+      && /^(?:mediabunny|@mediabunny\/)/.test(edge.specifier)
+      && launcherClosure.has(moduleName(edge.from))
+    )).map(edgeLabel)).toEqual([])
 
     const editorClosure = eagerRuntimeClosure(['app/EditorShell.tsx'], edges)
     expect(editorClosure).not.toContain('ui/ExportDialog.tsx')

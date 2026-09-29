@@ -16,6 +16,7 @@ import { connectVoiceoverMicrophone, prepareVoiceoverMicrophoneWorklet } from '.
 import { VoiceoverWavBridge } from './voiceoverWavBridge'
 import { voiceoverDraftLockName } from '../domain/voiceoverDrafts'
 import { avCaptureActive } from './avCaptureOwner'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 type Capture = Awaited<ReturnType<typeof connectVoiceoverMicrophone>>
 type Writer = Pick<VoiceoverWavBridge, 'create' | 'stop' | 'release' | 'recover' | 'discard' | 'close' | 'append'>
@@ -798,3 +799,4 @@ export function getVoiceoverCaptureOwner(): VoiceoverCaptureOwner {
 export async function teardownVoiceoverForProjectChange(): Promise<void> {
   await owner?.teardownForProjectChange()
 }
+registerLoadedEditorRuntime('voiceoverCapture', teardownVoiceoverForProjectChange)

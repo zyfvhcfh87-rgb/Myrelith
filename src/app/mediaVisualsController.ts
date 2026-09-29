@@ -44,6 +44,7 @@ import {
   mediaRuntimeFailure,
   reportMediaRuntimeFailure,
 } from './mediaCompatibilityController'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 export interface VisualsDeps {
   fetchBlob: (url: string, signal: AbortSignal) => Promise<Blob>
@@ -510,3 +511,4 @@ export function disposeMediaVisuals(): void {
   state.viewport = null
   state.poolVisibleAssetIds = EMPTY_VISIBLE_ASSETS
 }
+registerLoadedEditorRuntime('mediaVisuals', disposeMediaVisuals)

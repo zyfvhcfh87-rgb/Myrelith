@@ -7,7 +7,7 @@ import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { FrameRate, MediaAsset } from '../domain/schema'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 import type { LocalMediaFileHandle } from './localMediaHandles'
-import { compatibilityItemForAsset } from './mediaCompatibilityController'
+import { compatibilityItemForAsset } from './mediaCompatibilityItems'
 import {
   compatibilityReportMatchesDescriptor,
   inspectionCandidateForDescriptor,

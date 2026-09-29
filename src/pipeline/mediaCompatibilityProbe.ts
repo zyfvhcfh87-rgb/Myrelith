@@ -124,10 +124,6 @@ function makeAbortError(): Error {
   return error
 }
 
-export function isMediaProbeCancellation(cause: unknown): boolean {
-  return cause instanceof Error && cause.name === 'AbortError'
-}
-
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw makeAbortError()
 }

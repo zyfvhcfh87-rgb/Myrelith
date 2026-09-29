@@ -1561,6 +1561,37 @@ describe('portable project resume', () => {
     expect(deps.requestMediaPermission).not.toHaveBeenCalled()
   })
 
+  test('keeps the remembered source and project truth when inspection cannot load', async () => {
+    const descriptor = descriptorFrom(makeAsset({ id: 'session-id' }))
+    const serialized = serializeProjectFile(makeProject([descriptor]))
+    const source = new File(['12345678'], 'source.mp4', { type: 'video/mp4' })
+    const deps = makeDeps({
+      readText: vi.fn(async () => serialized),
+      loadMediaHandle: vi.fn(async () => makeHandle(source)),
+      queryMediaPermission: vi.fn(async () => 'granted' as const),
+      // Launcher inspection loads lazily; a missing chunk rejects like this.
+      inspectMedia: vi.fn(async () => {
+        throw new TypeError('Failed to fetch dynamically imported module')
+      }),
+    })
+    const document = useDocumentStore.getState().project
+
+    await expect(
+      openProjectFile(new File([serialized], 'remembered.myrelith'), deps),
+    ).resolves.toEqual({ status: 'ready' })
+
+    expect(deps.inspectMedia).toHaveBeenCalledOnce()
+    expect(deps.forgetMediaHandle).not.toHaveBeenCalled()
+    expect(useProjectSessionStore.getState()).toMatchObject({
+      screen: 'resume',
+      phase: 'error',
+      error: expect.stringContaining('Could not reopen "source.mp4"'),
+      candidate: { assets: [expect.objectContaining({ status: 'missing' })] },
+    })
+    expect(useDocumentStore.getState().project).toBe(document)
+    expect(useMediaStore.getState().assets.size).toBe(0)
+  })
+
   test('bounds remembered-handle lookups and preserves descriptor order', async () => {
     const descriptors = Array.from({ length: 40 }, (_, index) => (
       descriptorFrom(makeAsset(), { id: `asset-${String(index).padStart(2, '0')}` })

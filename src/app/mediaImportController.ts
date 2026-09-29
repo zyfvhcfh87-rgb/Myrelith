@@ -37,7 +37,7 @@ import {
   supportsLocalMediaHandles,
   type LocalMediaFileHandle,
 } from './localMediaHandles'
-import { checkingCompatibilityItem, compatibilityItemForAsset } from './mediaCompatibilityController'
+import { checkingCompatibilityItem, compatibilityItemForAsset } from './mediaCompatibilityItems'
 import {
   createMediaImportPrompt,
   requiresMediaImportRateDecision,
@@ -49,6 +49,7 @@ import {
 import { inspectMediaFileCompatibility } from './mediaInspection'
 import type { MediaProbeResult } from '../pipeline/mediaCompatibilityProbe'
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 export type { MediaImportDecision } from './mediaImportDecisions'
 
@@ -803,3 +804,4 @@ export function resetMediaImportController(): void {
   activeBatch = null
   useMediaImportStore.setState({ ...INITIAL_MEDIA_IMPORT_STATE })
 }
+registerLoadedEditorRuntime('mediaImport', resetMediaImportController)

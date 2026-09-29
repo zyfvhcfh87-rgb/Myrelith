@@ -61,6 +61,7 @@ import {
   stopPlaybackAudioSession,
 } from './playbackAudioShared'
 import { sourceReviewDocument } from './sourceReviewDocument'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 export interface SourcePlaybackDeps {
   scheduleTick(cb: () => void): number
@@ -473,6 +474,7 @@ export async function disposeSourcePlayback(): Promise<void> {
   state.unsubscribeReset = null
   state.deps = realDeps
 }
+registerLoadedEditorRuntime('sourcePlayback', disposeSourcePlayback)
 
 /** Dev/browser verification hook; null while silent or still priming. */
 export function getSourceAudioPlaybackDiagnostics():

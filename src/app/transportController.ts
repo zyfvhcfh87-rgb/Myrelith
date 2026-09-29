@@ -78,6 +78,7 @@ import {
   startPlaybackAudio,
   stopPlaybackAudioSession,
 } from './playbackAudioShared'
+import { registerLoadedEditorRuntime } from './editorRuntimeLifecycle'
 
 /** The slice of AudioContext we use (fake-able in tests). */
 export interface ClockContext extends PlaybackClock {
@@ -1001,6 +1002,7 @@ export async function disposeTransport(): Promise<void> {
     }
   }
 }
+registerLoadedEditorRuntime('transport', disposeTransport)
 
 /** Dev/browser verification hook; null while silent or still priming. */
 export function getAudioPlaybackDiagnostics():
