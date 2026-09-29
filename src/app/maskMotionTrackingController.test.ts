@@ -109,6 +109,23 @@ test('backward preview clears on both sides of the accepted range and restores o
   review.cancel(); expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
 })
 
+test('playhead ticks move the preview without rerunning the complete review context check', async () => {
+  const analyzed = await session('backward', 10), review = reviewed(analyzed)
+  expect(review.preview(true)).toBeNull()
+  const selectionReads = vi.spyOn(useMotionTrackingSelectionStore, 'getState')
+  try {
+    for (const frame of [9, 8, 7]) useTransportStore.getState().setPlayheadFrame(frame)
+    expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+    useTransportStore.getState().setPlayheadFrame(9)
+    expect(useTransportStore.getState().effectDocumentPreview?.owner).toBe('mask-tracking')
+    expect(selectionReads).not.toHaveBeenCalled()
+  } finally {
+    selectionReads.mockRestore()
+  }
+  useTransportStore.getState().setSelectedClip('target')
+  expect(useTransportStore.getState().effectDocumentPreview).toBeNull()
+})
+
 test.each(['project', 'generation', 'sequence', 'selection', 'secondary-selection', 'tracking-pick', 'tracking-selection', 'reset', 'source-offline', 'target-offline', 'target-replaced', 'target-locked', 'effect-changed', 'source-geometry'] as const)('%s cancels the complete review synchronously without touching history or redo', async (change) => {
   const analyzed = await session(), onEnd = vi.fn(), review = reviewed(analyzed, target, onEnd)
   review.preview(true)
