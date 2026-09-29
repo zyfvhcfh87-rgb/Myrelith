@@ -220,8 +220,10 @@ export class AvCaptureOwner {
       if (options.screenAudio === 'microphone') {
         for (const extra of stream.getAudioTracks()) extra.stop()
         try {
-          const microphone = await active.microphoneRequest!
-          active.microphoneRequest = null
+          const pending = active.microphoneRequest
+          if (!pending) { stopStreams(active.streams); return } // cleanup already discarded it
+          const microphone = await pending
+          if (active.microphoneRequest === pending) active.microphoneRequest = null
           if (!this.live(active, 'requesting', 0)) { stopStreams([...active.streams, microphone]); return }
           active.streams.push(microphone)
           audio = microphone.getAudioTracks()[0] ?? null
@@ -328,6 +330,9 @@ export class AvCaptureOwner {
   }
 
   private async close(active: Active, effect: AvCaptureEffect): Promise<void> {
+    // Cancel, project exit or a freeze while the screen chooser is open must
+    // not leave the microphone requested in the same click running.
+    this.discardMicrophone(active)
     try {
       await active.preparing?.catch(() => {})
       let bridge = active.bridge

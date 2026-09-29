@@ -274,4 +274,21 @@ describe('camera/screen capture owner', () => {
     expect(h.owner.status.session).toMatchObject({ phase: 'failed', failure: 'permission-dismissed' })
     expect(mic.readyState).toBe('ended')
   })
+
+  test('cancel while the screen chooser is open stops the microphone requested with it', async () => {
+    const chooser = deferred<MediaStream>()
+    const mic = new FakeTrack('audio', 'USB mic')
+    const h = harness({ media: chooser.promise })
+    h.deps.requestMicrophone = () => Promise.resolve(stream(mic))
+    h.owner.start({ mode: 'screen', screenAudio: 'microphone' })
+    await Promise.resolve()
+    await h.owner.cancel()
+    await Promise.resolve(); await Promise.resolve()
+    // The chooser is still open, yet the microphone is already off.
+    expect(mic.readyState).toBe('ended')
+    expect(h.owner.status.session?.phase).toBe('cancelled')
+    chooser.resolve(stream(h.video))
+    await h.owner.whenIdle()
+    expect(h.video.readyState).toBe('ended')
+  })
 })

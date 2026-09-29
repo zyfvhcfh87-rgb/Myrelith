@@ -119,7 +119,7 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
       for (let frame = this.startFrame; frame < padTo; frame++) {
         if (!this.push(frame, 0)) return false
       }
-      this.port.postMessage({ type: 'gap', atFrame: this.startFrame, frames: padTo - this.startFrame })
+      if (padTo > this.startFrame) this.port.postMessage({ type: 'gap', atFrame: this.startFrame, frames: padTo - this.startFrame })
       if (this.stopFrame <= blockStart) {
         this.lastRenderEnd = blockEnd
         this.finish()
