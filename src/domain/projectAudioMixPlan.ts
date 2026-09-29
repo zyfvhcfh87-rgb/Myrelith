@@ -177,6 +177,26 @@ export function createProjectTimelineAudioMixPlan(
     definition.id,
     createMulticamPlanner(definition),
   ]))
+  // One local plan and mixer per sequence for this call: the project snapshot
+  // cannot change while it runs, and every instance of a reused child maps
+  // the same read-only plan into its own scoped copies.
+  const sequencePlans = new Map<TimelineDoc, {
+    readonly localPlan: TimelineAudioMixPlan
+    readonly mixer: ReturnType<typeof timelineAudioMixerGraph>
+    readonly audibleTrackIds: ReadonlySet<TrackId>
+  }>()
+  const sequencePlan = (sequence: TimelineDoc) => {
+    let plan = sequencePlans.get(sequence)
+    if (!plan) {
+      plan = {
+        localPlan: createTimelineAudioMixPlan(sequence, catalog),
+        mixer: timelineAudioMixerGraph(sequence),
+        audibleTrackIds: new Set(audibleTracks(sequence).map((track) => track.id)),
+      }
+      sequencePlans.set(sequence, plan)
+    }
+    return plan
+  }
 
   const append = (
     sequence: TimelineDoc,
@@ -186,8 +206,7 @@ export function createProjectTimelineAudioMixPlan(
     path: readonly SequenceInstanceId[],
     parentTrackId: TrackId | null,
   ): void => {
-    const localPlan = createTimelineAudioMixPlan(sequence, catalog)
-    const mixer = timelineAudioMixerGraph(sequence)
+    const { localPlan, mixer, audibleTrackIds } = sequencePlan(sequence)
     const depth = path.length * 2
     const masterTrackId = scopedId('master', path, sequence.id)
     const trackIds = new Map<TrackId, TrackId>()
@@ -240,7 +259,6 @@ export function createProjectTimelineAudioMixPlan(
       })
     }
 
-    const audibleTrackIds = new Set(audibleTracks(sequence).map((track) => track.id))
     for (const track of sequence.tracks) {
       if (track.kind !== 'audio' || !audibleTrackIds.has(track.id)) continue
       const scopedTrackId = trackIds.get(track.id)
@@ -323,7 +341,7 @@ export function createProjectTimelineAudioMixPlan(
 
   append(root, 0, docDurationFrames(root), 0, [], null)
   assertLeafLimit(clips)
-  const rootMixer = timelineAudioMixerGraph(root)
+  const rootMixer = sequencePlan(root).mixer
   return Object.freeze({
     clips: Object.freeze(clips.toSorted((left, right) => (
       left.timelineStartFrame - right.timelineStartFrame
