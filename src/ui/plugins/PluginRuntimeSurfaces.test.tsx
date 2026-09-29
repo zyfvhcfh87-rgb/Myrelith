@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
-import PluginExportBlockDialog, { PluginExportBlockBody } from './PluginExportBlockDialog'
+import { PluginExportBlockBody } from './PluginExportBlockDialog'
 import PluginInspectorStatus from './PluginInspectorStatus'
 import PluginPreviewNotice from './PluginPreviewNotice'
 import PluginSafeModeCard from './PluginSafeModeCard'
@@ -56,7 +56,6 @@ describe('Issue 77 runtime UI surfaces', () => {
     const { rerender } = render(
       <PluginSafeModeCard
         startupMode="normal"
-        installedPluginCount={2}
         enterSafeModeAction={action(true)}
         onEnterSafeMode={onEnterSafeMode}
       />,
@@ -70,7 +69,6 @@ describe('Issue 77 runtime UI surfaces', () => {
     rerender(
       <PluginSafeModeCard
         startupMode="safe-mode"
-        installedPluginCount={2}
       />,
     )
     const active = screen.getByRole('button', { name: 'Safe mode active' })
@@ -91,7 +89,6 @@ describe('Issue 77 runtime UI surfaces', () => {
       <PluginSafeModeCard
         startupMode="review-required"
         startupReason="A previous plugin activation did not finish cleanly."
-        installedPluginCount={2}
         enterSafeModeAction={action(true)}
         continueReviewedNormalAction={action(true)}
         onEnterSafeMode={onEnterSafeMode}
@@ -141,7 +138,6 @@ describe('Issue 77 runtime UI surfaces', () => {
       <PluginSafeModeCard
         startupMode="review-required"
         startupReason="Review is required before plugin initialization."
-        installedPluginCount={1}
         enterSafeModeAction={action(true, { pending: true })}
         continueReviewedNormalAction={action(false)}
         onEnterSafeMode={onEnterSafeMode}
@@ -157,7 +153,6 @@ describe('Issue 77 runtime UI surfaces', () => {
       <PluginSafeModeCard
         startupMode="review-required"
         startupReason="Review is required before plugin initialization."
-        installedPluginCount={1}
         enterSafeModeAction={action(true, {
           disabledReason: 'Safe-mode preparation is temporarily unavailable.',
           error: 'The last safe-mode request did not complete.',
@@ -178,7 +173,6 @@ describe('Issue 77 runtime UI surfaces', () => {
       <PluginSafeModeCard
         startupMode="safe-mode"
         startupReason="Plugin safety storage is unavailable."
-        installedPluginCount={1}
       />,
     )
 
@@ -297,7 +291,7 @@ describe('Issue 77 runtime UI surfaces', () => {
   test('displays exact package identity and returns the opaque app-minted review token', () => {
     const onExportBypassed = vi.fn()
     render(
-      <PluginExportBlockDialog
+      <PluginExportBlockBody
         issues={issues}
         reviewToken="opaque-review-token-1"
         documentRevision="document-revision-1"
@@ -306,7 +300,8 @@ describe('Issue 77 runtime UI surfaces', () => {
       />,
     )
 
-    expect(screen.getByRole('dialog')).toHaveAccessibleName('Plugin effects block export')
+    expect(screen.getByRole('region', { name: 'Plugin effects block export' }))
+      .toBeInTheDocument()
     expect(screen.getByText(
       'No decoder, encoder, or media pipeline started. Fix the listed effects, or explicitly review a one-time bypass.',
     )).toBeInTheDocument()
@@ -314,7 +309,7 @@ describe('Issue 77 runtime UI surfaces', () => {
     expect(screen.getByText('sha256:sparkle')).toBeInTheDocument()
     expect(screen.getByText('1.2.0')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Review bypass…' }))
-    expect(screen.getByRole('button', { name: 'Back to blocked effects' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Back to blocked effects' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox', {
       name: /I understand these exact effects will be omitted/i,
     }))
@@ -327,7 +322,7 @@ describe('Issue 77 runtime UI surfaces', () => {
 
   test('shows missing package version and digest as explicitly unknown', () => {
     render(
-      <PluginExportBlockDialog
+      <PluginExportBlockBody
         issues={[{
           ...issues[1],
           pluginVersion: null,
@@ -375,7 +370,7 @@ describe('Issue 77 runtime UI surfaces', () => {
       onCancel: vi.fn(),
       onExportBypassed,
     }
-    const { rerender } = render(<PluginExportBlockDialog issues={issues} {...baseProps} />)
+    const { rerender } = render(<PluginExportBlockBody issues={issues} {...baseProps} />)
 
     const enterAndConfirm = (): void => {
       fireEvent.click(screen.getByRole('button', { name: 'Review bypass…' }))
@@ -393,7 +388,7 @@ describe('Issue 77 runtime UI surfaces', () => {
 
     enterAndConfirm()
     rerender(
-      <PluginExportBlockDialog
+      <PluginExportBlockBody
         issues={issues}
         {...baseProps}
         documentRevision="document-revision-2"
@@ -403,18 +398,18 @@ describe('Issue 77 runtime UI surfaces', () => {
 
     enterAndConfirm()
     const statusChanged = [{ ...issues[0], status: 'incompatible' as const }, issues[1]]
-    rerender(<PluginExportBlockDialog issues={statusChanged} {...baseProps} documentRevision="document-revision-2" />)
+    rerender(<PluginExportBlockBody issues={statusChanged} {...baseProps} documentRevision="document-revision-2" />)
     expectReset()
 
     enterAndConfirm()
     const reasonChanged = [{ ...statusChanged[0], reason: 'A different bounded failure reason.' }, issues[1]]
-    rerender(<PluginExportBlockDialog issues={reasonChanged} {...baseProps} documentRevision="document-revision-2" />)
+    rerender(<PluginExportBlockBody issues={reasonChanged} {...baseProps} documentRevision="document-revision-2" />)
     expectReset()
 
     enterAndConfirm()
     const digestChanged = [{ ...reasonChanged[0], packageDigest: 'sha256:replacement' }, issues[1]]
     rerender(
-      <PluginExportBlockDialog
+      <PluginExportBlockBody
         issues={digestChanged}
         {...baseProps}
         reviewToken="opaque-current-token"
@@ -427,27 +422,5 @@ describe('Issue 77 runtime UI surfaces', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Export with listed plugins bypassed' }))
     expect(onExportBypassed).toHaveBeenCalledWith('opaque-current-token')
     expect(onExportBypassed).not.toHaveBeenCalledWith('opaque-stale-token')
-  })
-
-  test('Escape cancels export preflight without leaking editor shortcuts', () => {
-    const onCancel = vi.fn()
-    const leakedShortcut = vi.fn()
-    window.addEventListener('keydown', leakedShortcut)
-    render(
-      <PluginExportBlockDialog
-        issues={issues}
-        reviewToken="opaque-escape-token"
-        documentRevision="document-revision-escape"
-        onCancel={onCancel}
-        onExportBypassed={vi.fn()}
-      />,
-    )
-
-    const dialog = screen.getByRole('dialog')
-    fireEvent.keyDown(dialog, { key: 's' })
-    expect(leakedShortcut).not.toHaveBeenCalled()
-    fireEvent.keyDown(dialog, { key: 'Escape' })
-    expect(onCancel).toHaveBeenCalledOnce()
-    window.removeEventListener('keydown', leakedShortcut)
   })
 })

@@ -28,13 +28,11 @@ export default function PluginStartupSurface({
     <PluginSafeModeCard
       startupMode="safe-mode"
       startupReason={snapshot.startup.recommendationReason}
-      installedPluginCount={null}
     />
   ) : snapshot.startup.mode === 'review-required' ? (
     <PluginSafeModeCard
       startupMode="review-required"
       startupReason={snapshot.startup.recommendationReason}
-      installedPluginCount={null}
       enterSafeModeAction={snapshot.startupActions.enterSafeMode}
       continueReviewedNormalAction={snapshot.startupActions.continueReviewedNormal}
       onEnterSafeMode={() => { void controller.enterSafeMode() }}
@@ -46,7 +44,6 @@ export default function PluginStartupSurface({
     <PluginSafeModeCard
       startupMode="normal"
       startupReason={snapshot.startup.recommendationReason}
-      installedPluginCount={null}
       enterSafeModeAction={snapshot.startupActions.enterSafeMode}
       onEnterSafeMode={() => { void controller.enterSafeMode() }}
     />

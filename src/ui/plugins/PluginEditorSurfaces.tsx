@@ -4,12 +4,14 @@ import PluginContributionPicker from './PluginContributionPicker'
 import PluginInspectorStatus from './PluginInspectorStatus'
 import PluginParameterFields from './PluginParameterFields'
 import PluginPreviewNotice from './PluginPreviewNotice'
-import { useOptionalPluginEditorSnapshot, useOptionalPluginUi, usePluginAppSnapshot, usePluginUi } from './PluginUiHooks'
+import {
+  ignorePluginCommandRejection,
+  useOptionalPluginEditorSnapshot,
+  useOptionalPluginUi,
+  usePluginAppSnapshot,
+  usePluginUi,
+} from './PluginUiHooks'
 import type { PluginEffectIssueView, PluginPreviewIssueView } from './pluginUiTypes'
-
-function ignored(promise: Promise<unknown>): void {
-  void promise.catch(() => {})
-}
 
 function issueView<T extends {
   readonly effectInstanceId: string
@@ -84,8 +86,8 @@ function PluginInspectorContent() {
           <PluginInspectorStatus
             effect={issueView(effect)}
             actions={effect.actions}
-            onRetryPlugin={(pluginId) => ignored(controller.retryPlugin(pluginId))}
-            onDisablePlugin={(pluginId) => ignored(controller.disablePlugin(pluginId))}
+            onRetryPlugin={(pluginId) => ignorePluginCommandRejection(controller.retryPlugin(pluginId))}
+            onDisablePlugin={(pluginId) => ignorePluginCommandRejection(controller.disablePlugin(pluginId))}
             onManagePlugin={(pluginId) => manager.openManager(pluginId)}
             migrationAction={effect.status === 'version-mismatch' ? {
               available: true,
@@ -127,8 +129,8 @@ function PluginPreviewContent() {
         actions: issue.actions,
       }))}
       manageAction={editor.manageAction}
-      onRetryPlugin={(pluginId) => ignored(controller.retryPlugin(pluginId))}
-      onDisablePlugin={(pluginId) => ignored(controller.disablePlugin(pluginId))}
+      onRetryPlugin={(pluginId) => ignorePluginCommandRejection(controller.retryPlugin(pluginId))}
+      onDisablePlugin={(pluginId) => ignorePluginCommandRejection(controller.disablePlugin(pluginId))}
       onManagePlugins={() => manager.openManager()}
     />
   )

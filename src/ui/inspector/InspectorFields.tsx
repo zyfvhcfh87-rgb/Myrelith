@@ -78,12 +78,8 @@ export function NumberField({
   )
 }
 
-interface RangeNumberFieldProps extends Omit<NumberFieldProps, 'onCommit'> {
-  onCommit: (value: number) => void
-}
-
 /** Slider commits immediately; its paired number field keeps one typed commit. */
-export function RangeNumberField(props: RangeNumberFieldProps) {
+export function RangeNumberField(props: NumberFieldProps) {
   const { label, value, min, max, step, testId, disabled = false, onCommit } = props
   const commitKey = (key: string): boolean => {
     const minimum = min ?? 0

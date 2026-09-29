@@ -14,7 +14,6 @@ export type PluginPackageReviewPhase =
   | 'review'
   | 'installing'
   | 'cancelling'
-  | 'complete'
   | 'error'
 
 export interface PluginPackageReviewDialogProps {
@@ -348,7 +347,7 @@ export default function PluginPackageReviewDialog({
   onRetry,
   onInstall,
 }: PluginPackageReviewDialogProps) {
-  if (packageView && phase !== 'complete') {
+  if (packageView) {
     return (
       <PackageDecisionForm
         key={`${packageView.id}:${packageView.packageDigest}:${packageView.reviewToken}`}
@@ -362,18 +361,15 @@ export default function PluginPackageReviewDialog({
   }
 
   const inspecting = phase === 'inspecting' || phase === 'cancelling'
-  const complete = phase === 'complete'
   const title = inspecting
     ? phase === 'cancelling' ? 'Cancelling package inspection…' : 'Inspecting plugin package…'
-    : complete ? 'Plugin installed' : 'Could not inspect plugin'
+    : 'Could not inspect plugin'
 
   return (
     <PluginDialogFrame
       eyebrow="Local plugin package"
       title={title}
-      description={complete
-        ? 'The inspected package and your local decisions were committed together.'
-        : 'Package inspection runs before installation, trust, permissions, or plugin execution.'}
+      description="Package inspection runs before installation, trust, permissions, or plugin execution."
       busy={inspecting}
       dismissDisabled={phase === 'cancelling'}
       onDismiss={onCancel}
@@ -409,9 +405,6 @@ export default function PluginPackageReviewDialog({
             ? 'Finishing bounded package cleanup.'
             : 'Checking archive limits, canonical metadata, integrity, signature, and compatibility.'}
         </p>
-      ) : null}
-      {complete ? (
-        <p className="plugin-success" role="status">The plugin remains disabled until an effect needs it.</p>
       ) : null}
       {phase === 'error' ? (
         <p className="plugin-error" role="alert">
