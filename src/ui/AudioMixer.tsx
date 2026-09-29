@@ -12,7 +12,7 @@ import {
   trackBalance,
   trackVolume,
 } from '../state/editorUi'
-import type { AudioMeterReadout } from '../domain/audioMeter'
+import type { TrackId } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import {
   SILENT_AUDIO_METER_READOUT,
@@ -154,13 +154,22 @@ function MixerRange({
   )
 }
 
+/**
+ * Each strip subscribes to its own reading (null = master), so a meter
+ * publish repaints meters only — never faders, toggles, or the whole mixer.
+ */
 function MixerMeters({
   name,
-  readout,
+  trackId,
 }: {
   name: string
-  readout: AudioMeterReadout
+  trackId: TrackId | null
 }) {
+  const readout = useAudioMeterStore((state) => (
+    trackId === null
+      ? state.readout
+      : state.trackReadouts[trackId] ?? SILENT_AUDIO_METER_READOUT
+  ))
   return (
     <div className="mixer-meters" aria-hidden={false}>
       <MixerMeterLane
@@ -183,13 +192,10 @@ export default function AudioMixer() {
   const doc = useDocumentStore((state) => state.doc)
   const tracks = mixerAudioTracks(doc)
   const master = masterAudioSettings(doc)
-  const trackReadouts = useAudioMeterStore((state) => state.trackReadouts)
-  const masterReadout = useAudioMeterStore((state) => state.readout)
 
   return (
     <section className="audio-mixer" aria-label="Audio mixer">
       {tracks.map((track) => {
-        const readout = trackReadouts[track.id] ?? SILENT_AUDIO_METER_READOUT
         const locked = track.locked
         return (
           <article
@@ -212,7 +218,7 @@ export default function AudioMixer() {
                   useDocumentStore.getState().setTrackMixer(track.id, { volume })
                 }
               />
-              <MixerMeters name={track.name} readout={readout} />
+              <MixerMeters name={track.name} trackId={track.id} />
             </div>
             <MixerRange
               label={`${track.name} balance`}
@@ -276,7 +282,7 @@ export default function AudioMixer() {
               useDocumentStore.getState().setMasterAudio({ volume })
             }
           />
-          <MixerMeters name="Master" readout={masterReadout} />
+          <MixerMeters name="Master" trackId={null} />
         </div>
         <MixerRange
           label="Master balance"

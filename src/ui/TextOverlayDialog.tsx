@@ -15,17 +15,19 @@ function integerDraft(value: string): number | null {
 }
 
 export default function TextOverlayDialog({ onClose }: TextOverlayDialogProps) {
-  const initialDoc = useDocumentStore((state) => state.doc)
-  const initialPlayhead = useTransportStore((state) => state.playheadFrame)
-  const videoTracks = initialDoc.tracks.filter((track) => track.kind === 'video')
+  // The track list stays live (lock state); the playhead only seeds Start.
+  const doc = useDocumentStore((state) => state.doc)
+  const videoTracks = doc.tracks.filter((track) => track.kind === 'video')
   const [trackId, setTrackId] = useState(
     videoTracks.find((track) => !track.locked)?.id ?? videoTracks[0]?.id ?? '',
   )
   const [content, setContent] = useState('Your text')
-  const [startFrame, setStartFrame] = useState(String(initialPlayhead))
-  const [durationFrames, setDurationFrames] = useState(String(Math.max(
+  const [startFrame, setStartFrame] = useState(
+    () => String(useTransportStore.getState().playheadFrame),
+  )
+  const [durationFrames, setDurationFrames] = useState(() => String(Math.max(
     1,
-    Math.round((initialDoc.frameRate.num / initialDoc.frameRate.den) * 5),
+    Math.round((doc.frameRate.num / doc.frameRate.den) * 5),
   )))
   const [error, setError] = useState<string | null>(null)
   const dialogRef = useRef<HTMLDialogElement | null>(null)

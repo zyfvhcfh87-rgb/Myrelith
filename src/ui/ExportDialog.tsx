@@ -11,6 +11,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -418,22 +419,13 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
           snapshot,
         })
         try {
-          const checkSettings = controller.checkCurrentExportSettings
-          if (typeof checkSettings !== 'function') {
-            setAlphaVp9Supported(false)
-            setAlphaAv1Supported(false)
-            setAlphaReason(
-              'Alpha video is offered only after a local encode/decode proof.',
-            )
-            return
-          }
           const [vp9, av1] = await Promise.all([
-            checkSettings({
+            controller.checkCurrentExportSettings({
               ...DEFAULT_ALPHA_VIDEO_PROFILE,
               videoCodec: 'vp9',
               chapters: { mode: 'off' },
             }),
-            checkSettings({
+            controller.checkCurrentExportSettings({
               ...DEFAULT_ALPHA_VIDEO_PROFILE,
               videoCodec: 'av1',
               chapters: { mode: 'off' },
@@ -586,7 +578,11 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     activeProfile = null
   }
 
-  const builtDelivery = deliverySettings(deliveryKind, {
+  // Progress re-renders this dialog every animation frame while exporting.
+  // The derivations below depend only on settings/project snapshots (and
+  // displayProfile is always a stable preset, snapshot, or state reference),
+  // so memoize them instead of re-validating and re-walking the project.
+  const builtDelivery = useMemo(() => deliverySettings(deliveryKind, {
     pngPrefix,
     pngOverwrite,
     pngDestination,
@@ -594,7 +590,16 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     alphaCodec,
     chapterMode,
     videoAudio: displayProfile,
-  })
+  }), [
+    alphaCodec,
+    audioContainer,
+    chapterMode,
+    deliveryKind,
+    displayProfile,
+    pngDestination,
+    pngOverwrite,
+    pngPrefix,
+  ])
   const exportSettings: Readonly<ExportSettingsUnion> | null = deliveryKind === 'video'
     ? activeProfile
     : builtDelivery
@@ -616,7 +621,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     }
   }
 
-  const presetAvailability: readonly Readonly<ExportPresetAvailability>[] = [
+  const presetAvailability = useMemo((): readonly Readonly<ExportPresetAvailability>[] => [
     {
       selectionId: 'auto',
       supported: capabilitySnapshot
@@ -637,23 +642,36 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
         reason: result?.reason ?? capabilityError,
       }
     }),
-  ]
+  ], [capabilityError, capabilitySnapshot])
 
-  const offline = [...projectOutputMediaAssetIds(
-    project,
+  const outputIncludesAudio = exportSettings
+    ? exportSettingsIncludesAudio(doc, exportSettings)
+    : displayProfile.audioChannelLayout !== 'off'
+  const outputIncludesVisual = exportSettings
+    ? exportSettingsIncludesVisual(exportSettings)
+    : true
+  const offlineExportMessage = useMemo(() => {
+    const offline = [...projectOutputMediaAssetIds(
+      project,
+      activeSequenceId,
+      outputIncludesAudio,
+      outputIncludesVisual,
+    )].filter((assetId) => !mediaAssets.has(assetId))
+    return offline.length === 0
+      ? null
+      : `Reconnect ${offline.length} offline source${
+          offline.length === 1 ? '' : 's'
+        } before exporting: ${offline.map(
+          (assetId) => mediaDescriptors.get(assetId)?.fileName ?? assetId,
+        ).join(', ')}.`
+  }, [
     activeSequenceId,
-    exportSettings
-      ? exportSettingsIncludesAudio(doc, exportSettings)
-      : displayProfile.audioChannelLayout !== 'off',
-    exportSettings ? exportSettingsIncludesVisual(exportSettings) : true,
-  )].filter((assetId) => !mediaAssets.has(assetId))
-  const offlineExportMessage = offline.length === 0
-    ? null
-    : `Reconnect ${offline.length} offline source${
-        offline.length === 1 ? '' : 's'
-      } before exporting: ${offline.map(
-        (assetId) => mediaDescriptors.get(assetId)?.fileName ?? assetId,
-      ).join(', ')}.`
+    mediaAssets,
+    mediaDescriptors,
+    outputIncludesAudio,
+    outputIncludesVisual,
+    project,
+  ])
 
   const canStart = !preparingPluginExport
     && hasContent
@@ -661,12 +679,14 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
     && selectedSupported === true
     && exportSettings !== null
     && (deliveryKind !== 'video' || advancedDraftsValid)
-  const requiresPreparedExport = deliveryKind !== 'audio-only' && projectHasOutputPluginEffects(
-    project,
-    activeSequenceId,
+  const hasOutputPluginEffects = useMemo(
+    () => projectHasOutputPluginEffects(project, activeSequenceId),
+    [activeSequenceId, project],
   )
-  const estimatedSize = formatEstimatedFileSize(
-    estimateExportBytes(doc, displayProfile),
+  const requiresPreparedExport = deliveryKind !== 'audio-only' && hasOutputPluginEffects
+  const estimatedSize = useMemo(
+    () => formatEstimatedFileSize(estimateExportBytes(doc, displayProfile)),
+    [displayProfile, doc],
   )
 
   const resetToConfigure = (): void => {
@@ -1022,30 +1042,7 @@ export default function ExportDialog({ onClose }: ExportDialogProps) {
       videoAudio: profileForSelectionFallback(selectionId, customProfile),
     })
     void loadExportCapabilities()
-      .then(async (controller) => {
-        let check: ExportCapabilitiesModule['checkCurrentExportSettings'] | undefined
-        try {
-          check = controller.checkCurrentExportSettings
-        } catch {
-          check = undefined
-        }
-        if (typeof check !== 'function') {
-          if (deliveryKind === 'alpha-video') {
-            return {
-              supported: false,
-              reason: 'Alpha video is offered only after a local encode/decode proof.',
-            }
-          }
-          if (deliveryKind === 'audio-only' && audioContainer !== 'wav') {
-            return {
-              supported: false,
-              reason: 'Compressed audio-only requires a local encoder proof. No codec was substituted.',
-            }
-          }
-          return { supported: true, reason: null as string | null }
-        }
-        return check(settings)
-      })
+      .then((controller) => controller.checkCurrentExportSettings(settings))
       .then((result) => {
         if (!cancelled) {
           setDeliveryCapability({

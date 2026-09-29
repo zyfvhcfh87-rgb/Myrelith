@@ -10,7 +10,6 @@ import {
   validateExportProfile,
   type ExportPresetId,
   type ExportProfile,
-  type ExportSelectionId,
 } from '../domain/exportProfile'
 import {
   isAlphaVideoProfile,
@@ -44,13 +43,6 @@ export interface ExportPresetCapability extends ExportCapabilityResult {
 export interface ExportCapabilitySnapshot {
   readonly presets: readonly Readonly<ExportPresetCapability>[]
   readonly autoPresetId: ExportPresetId | null
-}
-
-export interface ResolvedExportSelection {
-  readonly selectionId: ExportSelectionId
-  readonly presetId: ExportPresetId | null
-  readonly profile: Readonly<ExportProfile> | null
-  readonly reason: string | null
 }
 
 export interface ExportSettingsCapabilityResult {
@@ -202,38 +194,6 @@ export function checkCurrentExportProfile(
 ): Promise<Readonly<ExportCapabilityResult>> {
   const validated = validateExportProfile(profile)
   return deps.checkProfile(deps.getDocument(), validated)
-}
-
-/**
- * Resolve Auto visibly, or preserve one explicit selection exactly. An
- * unsupported explicit selection never falls through to another preset.
- */
-export function resolveExportSelection(
-  selectionId: ExportSelectionId,
-  snapshot: ExportCapabilitySnapshot,
-): Readonly<ResolvedExportSelection> {
-  const presetId = selectionId === 'auto'
-    ? snapshot.autoPresetId
-    : selectionId
-  if (presetId === null) {
-    return Object.freeze({
-      selectionId,
-      presetId: null,
-      profile: null,
-      reason: 'No export profile supports this project in this browser.',
-    })
-  }
-
-  const result = snapshot.presets.find((candidate) => candidate.presetId === presetId)
-  if (!result) {
-    throw new Error(`Capability snapshot is missing export preset ${presetId}`)
-  }
-  return Object.freeze({
-    selectionId,
-    presetId,
-    profile: result.supported ? result.profile : null,
-    reason: result.supported ? null : result.reason,
-  })
 }
 
 export async function checkCurrentExportSettings(

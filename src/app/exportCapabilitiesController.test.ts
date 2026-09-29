@@ -12,7 +12,6 @@ import {
   checkCurrentExportSettings,
   getExportPresetCapabilities,
   preflightExportProfile,
-  resolveExportSelection,
   type ExportCapabilitiesControllerDeps,
 } from './exportCapabilitiesController'
 
@@ -85,45 +84,6 @@ describe('getExportPresetCapabilities', () => {
   test('reports no Auto result when every documented profile is unavailable', async () => {
     const snapshot = await getExportPresetCapabilities(makeDeps([]))
     expect(snapshot.autoPresetId).toBeNull()
-    expect(resolveExportSelection('auto', snapshot)).toEqual({
-      selectionId: 'auto',
-      presetId: null,
-      profile: null,
-      reason: 'No export profile supports this project in this browser.',
-    })
-  })
-})
-
-describe('resolveExportSelection', () => {
-  test('shows the concrete Auto choice', async () => {
-    const snapshot = await getExportPresetCapabilities(
-      makeDeps(['compatibility', 'web', 'modern']),
-    )
-
-    expect(resolveExportSelection('auto', snapshot)).toMatchObject({
-      selectionId: 'auto',
-      presetId: 'modern',
-      profile: { container: 'webm', videoCodec: 'av1' },
-      reason: null,
-    })
-  })
-
-  test('never falls back from an unavailable explicit selection', async () => {
-    const snapshot = await getExportPresetCapabilities(makeDeps(['compatibility']))
-
-    expect(resolveExportSelection('web', snapshot)).toEqual({
-      selectionId: 'web',
-      presetId: 'web',
-      profile: null,
-      reason: 'web unavailable',
-    })
-  })
-
-  test('rejects a malformed capability snapshot instead of inventing a profile', () => {
-    expect(() => resolveExportSelection('web', {
-      presets: [],
-      autoPresetId: null,
-    })).toThrow(/missing export preset web/)
   })
 })
 

@@ -4,7 +4,7 @@ import ColorGradingAnimation from './ColorGradingAnimation'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { effectRegistration } from '../domain/effectStack'
 import { isColorGradingType } from '../state/editorUi'
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { StackSimple } from '@phosphor-icons/react'
 import type { AdjustmentItem, EffectDescriptor, TimelineDoc } from '../domain/schema'
 import {
@@ -18,70 +18,12 @@ import {
   resolveAdjustmentAtFrame,
 } from '../state/editorUi'
 import { useDocumentStore } from '../state/documentStore'
+import { useTransportStore } from '../state/transportStore'
+import { NumericField } from './EffectStackInspector'
 
 interface AdjustmentInspectorProps {
   adjustment: AdjustmentItem
   doc: TimelineDoc
-  playheadFrame: number
-}
-
-function NumericDraft({
-  label,
-  value,
-  min,
-  max,
-  step,
-  disabled,
-  testId,
-  onCommit,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  step: number
-  disabled: boolean
-  testId: string
-  onCommit(value: number): void
-}) {
-  const [draft, setDraft] = useState(String(value))
-  useEffect(() => setDraft(String(value)), [value])
-  const commit = (): void => {
-    const parsed = Number(draft)
-    if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
-      setDraft(String(value))
-      return
-    }
-    onCommit(parsed)
-  }
-  const keyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      commit()
-      event.currentTarget.blur()
-    } else if (event.key === 'Escape') {
-      event.preventDefault()
-      setDraft(String(value))
-      event.currentTarget.blur()
-    }
-  }
-  return (
-    <label className="inspector-field">
-      <span className="inspector-field-label">{label}</span>
-      <input
-        type="number"
-        value={draft}
-        min={min}
-        max={max}
-        step={step}
-        disabled={disabled}
-        data-testid={testId}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={keyDown}
-      />
-    </label>
-  )
 }
 
 function ColorEffectFields({
@@ -111,7 +53,7 @@ function ColorEffectFields({
           ))
           return (
             <div key={parameter} className="inspector-effect-parameter">
-              <NumericDraft
+              <NumericField
                 label={spec.label}
                 value={Number.isFinite(value) ? value : 0}
                 min={spec.min}
@@ -240,7 +182,7 @@ function AdjustmentEffectCard({
         />
       )}
       <ColorGradingFields target={{ kind: 'adjustment', sequenceId, adjustmentId: adjustment.id }} effect={effect} disabled={locked}
-        animation={(parameter, value) => <ColorGradingAnimation target={{ kind: 'adjustment', sequenceId, adjustmentId: adjustment.id }} effect={effect} parameter={parameter} value={value} disabled={locked} />} />
+        animation={(parameter) => <ColorGradingAnimation target={{ kind: 'adjustment', sequenceId, adjustmentId: adjustment.id }} effect={effect} parameter={parameter} />} />
       {effect.type !== COLOR_ADJUST_EFFECT_TYPE && !isColorGradingType(effect.type) && (
         <span className="inspector-note">
           Its complete descriptor stays in the project for a compatible renderer.
@@ -253,8 +195,8 @@ function AdjustmentEffectCard({
 export default function AdjustmentInspector({
   adjustment,
   doc,
-  playheadFrame,
 }: AdjustmentInspectorProps) {
+  const playheadFrame = useTransportStore((state) => state.playheadFrame)
   const location = locateAdjustment(doc, adjustment.id)
   const track = location?.track ?? null
   const locked = track?.locked ?? true
@@ -333,7 +275,7 @@ export default function AdjustmentInspector({
             ))}
           </select>
         </label>
-        <NumericDraft
+        <NumericField
           label="Start frame"
           value={adjustment.timelineRange.startFrame}
           min={0}
@@ -347,7 +289,7 @@ export default function AdjustmentInspector({
             Math.round(value),
           )}
         />
-        <NumericDraft
+        <NumericField
           label="Duration (frames)"
           value={adjustment.timelineRange.durationFrames}
           min={1}
@@ -361,7 +303,7 @@ export default function AdjustmentInspector({
             Math.round(value) - adjustment.timelineRange.durationFrames,
           )}
         />
-        <NumericDraft
+        <NumericField
           label="Opacity (%)"
           value={Math.round(resolved.opacity * 1000) / 10}
           min={0}

@@ -13,7 +13,7 @@ import {
   linkedPartners,
   trackOfClip,
 } from '../state/editorUi'
-import type { Clip } from '../domain/schema'
+import type { Clip, TimelineDoc } from '../domain/schema'
 import { useDocumentStore } from '../state/documentStore'
 import { useTransportStore } from '../state/transportStore'
 import LazySurfaceBoundary from './LazySurfaceBoundary'
@@ -37,11 +37,53 @@ export default function Inspector() {
   return <><VideoBusInspector /><ClipInspector /></>
 }
 
+/**
+ * Playhead-bound video sections. Only these subtrees (plus the timing/audio
+ * sections that subscribe themselves) follow playback, so the Inspector
+ * shell — tabs, effect stacks, loudness — never re-renders per frame.
+ */
+function PlayheadVideoInspectorSections({
+  doc,
+  clip,
+  locked,
+  activeTab,
+}: {
+  doc: TimelineDoc
+  clip: Clip
+  locked: boolean
+  activeTab: 'transform' | 'crop' | 'effects' | 'animation'
+}) {
+  const playheadFrame = useTransportStore((s) => s.playheadFrame)
+  const visualPreview = useTransportStore((s) => s.clipVisualPreview)
+  const resolved = resolveClipAnimationAtFrame(clip, playheadFrame)
+  const displayed = visualPreview?.clipId === resolved.id
+    ? { ...resolved, transform: visualPreview.transform, visual: visualPreview.visual }
+    : resolved
+  return (
+    <VideoInspectorSections
+      doc={doc}
+      clip={displayed}
+      locked={locked}
+      playheadFrame={playheadFrame}
+      activeTab={activeTab}
+    />
+  )
+}
+
+/** Stabilization and tracking previews read the playhead; Dynamic Zoom does not. */
+function PlayheadAnimationEditors({ clip, locked }: { clip: Clip; locked: boolean }) {
+  const playheadFrame = useTransportStore((s) => s.playheadFrame)
+  return (
+    <>
+      <StabilizationEditor clip={clip} locked={locked} playheadFrame={playheadFrame} />
+      <MotionTrackingEditor clip={clip} locked={locked} playheadFrame={playheadFrame} />
+    </>
+  )
+}
+
 function ClipInspector() {
   const selectedClipId = useTransportStore((s) => s.selectedClipId)
   const selectedAdjustmentId = useTransportStore((s) => s.selectedAdjustmentId)
-  const visualPreview = useTransportStore((s) => s.clipVisualPreview)
-  const playheadFrame = useTransportStore((s) => s.playheadFrame)
   const timelineDoc = useDocumentStore((s) => s.doc)
   const clip = selectedClipId ? findClip(timelineDoc, selectedClipId) : null
   const adjustment = selectedAdjustmentId
@@ -79,7 +121,6 @@ function ClipInspector() {
       <AdjustmentInspector
         adjustment={adjustment}
         doc={timelineDoc}
-        playheadFrame={playheadFrame}
       />
     )
   }
@@ -122,16 +163,6 @@ function ClipInspector() {
     ? trackOfClip(timelineDoc, audioEffectClip.id) ?? null
     : null
   const audioEffectLocked = audioEffectClip === audioClip ? audioLocked : videoLocked
-  const resolvedVideoClip = videoClip
-    ? resolveClipAnimationAtFrame(videoClip, playheadFrame)
-    : null
-  const displayedVideoClip = resolvedVideoClip && visualPreview?.clipId === resolvedVideoClip.id
-    ? {
-        ...resolvedVideoClip,
-        transform: visualPreview.transform,
-        visual: visualPreview.visual,
-      }
-    : resolvedVideoClip
 
   return (
     <div className="inspector-panel" data-testid="inspector-panel">
@@ -178,12 +209,11 @@ function ClipInspector() {
         />
       )}
       {videoClip && (videoClip.text || videoClip.title) && <TitleInspector key={`title:${videoClip.id}`} clip={videoClip} locked={videoLocked} />}
-      {displayedVideoClip && (
-        <VideoInspectorSections
+      {videoClip && (
+        <PlayheadVideoInspectorSections
           doc={timelineDoc}
-          clip={displayedVideoClip}
+          clip={videoClip}
           locked={videoLocked}
-          playheadFrame={playheadFrame}
           activeTab={activeVideoTab}
         />
       )}
@@ -205,16 +235,7 @@ function ClipInspector() {
                     clip={videoClip}
                     locked={videoLocked}
                   />
-                  <StabilizationEditor
-                    clip={videoClip}
-                    locked={videoLocked}
-                    playheadFrame={playheadFrame}
-                  />
-                  <MotionTrackingEditor
-                    clip={videoClip}
-                    locked={videoLocked}
-                    playheadFrame={playheadFrame}
-                  />
+                  <PlayheadAnimationEditors clip={videoClip} locked={videoLocked} />
 
                 </LazySurfaceBoundary>
               )}

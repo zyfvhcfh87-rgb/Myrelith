@@ -518,6 +518,30 @@ describe('Export dialog configuration', () => {
     expect(startMock).not.toHaveBeenCalled()
   })
 
+  test('keeps Auto unavailable instead of inventing a profile when nothing is supported', async () => {
+    presetCapabilitiesMock.mockResolvedValue(capabilitySnapshot({
+      autoPresetId: null,
+      unsupported: {
+        compatibility: 'AVC unavailable.',
+        web: 'VP9 unavailable.',
+        modern: 'AV1 unavailable.',
+        hevc: 'HEVC unavailable.',
+      },
+    }))
+    usePreferencesStore.setState({
+      exportSelection: { selectionId: 'auto', profile: null },
+    })
+    render(<Toolbar />)
+    await openDialog()
+
+    await screen.findByText(
+      'No export profile supports this project in this browser. No codec will be substituted.',
+    )
+    expect(profileRadio('Auto')).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Profile unavailable' })).toBeDisabled()
+    expect(startMock).not.toHaveBeenCalled()
+  })
+
   test('visibly resolves Auto and passes that exact profile to export', async () => {
     const modernProfile = exportPresetById('modern').profile
     render(<Toolbar />)

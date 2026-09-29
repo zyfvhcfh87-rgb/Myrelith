@@ -1,16 +1,15 @@
 import type { EffectDescriptor } from '../domain/schema'
 import type { ColorGradingTarget } from '../app/colorGradingController'
 import { useDocumentStore } from '../state/documentStore'
-import { effectAnimationParameterSpec } from '../state/editorUi'
+import { effectAnimationParameterSpec, findAdjustment, findClip } from '../state/editorUi'
 import AnimationEntry from './animation/AnimationEntry'
 
 /** Registered grading properties enter the same workspace as every scalar lane. */
-export default function ColorGradingAnimation({ target, effect, parameter }: { target: ColorGradingTarget; effect: EffectDescriptor; parameter: string; value: number; disabled: boolean }) {
+export default function ColorGradingAnimation({ target, effect, parameter }: { target: ColorGradingTarget; effect: EffectDescriptor; parameter: string }) {
   const doc = useDocumentStore((state) => state.doc)
   if (target.kind !== 'clip' && target.kind !== 'adjustment') return null
   const owner = target.kind === 'clip' ? { kind: 'clip' as const, id: target.clipId } : { kind: 'adjustment' as const, id: target.adjustmentId }
-  const item = target.kind === 'clip' ? doc.tracks.flatMap((track) => track.clips).find((clip) => clip.id === target.clipId)
-    : doc.tracks.flatMap((track) => track.adjustments ?? []).find((item) => item.id === target.adjustmentId)
+  const item = target.kind === 'clip' ? findClip(doc, target.clipId) : findAdjustment(doc, target.adjustmentId)
   const spec = effectAnimationParameterSpec(effect, parameter)
   if (!item || !spec) return null
   const keys = item.animation?.effectTracks?.find((track) => track.effectId === effect.id && track.parameter === parameter)
