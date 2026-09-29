@@ -55,7 +55,7 @@ import type {
 } from './render-protocol'
 import type { RenderCanvasLike, RenderWorkerEnv } from './render.worker'
 import {
-  createOrientedStreamingBitmap,
+  createOrientedBitmapNormalizer,
   createRenderWorkerCore,
   createVideoScopeAnalyzer,
 } from './render.worker'
@@ -121,6 +121,8 @@ interface FakeOptions {
   decodeImage?: RenderWorkerEnv['decodeImage']
   /** Replaces the WebGL2 owner for lens capability and loss regressions. */
   createLensRemapBackend?: RenderWorkerEnv['createLensRemapBackend']
+  /** Observes the normalizer surface release during worker close. */
+  releaseStreamingBitmapSurface?: RenderWorkerEnv['releaseStreamingBitmapSurface']
 }
 
 class FakeStreamCursor implements VideoFrameCursor {
@@ -262,6 +264,67 @@ interface FakeSurface {
   canvas: RenderCanvasLike
   raw: { width: number; height: number }
   resizePixelCounts: number[]
+}
+
+interface StubOrientationCanvas {
+  readonly canvas: { width: number; height: number }
+  readonly ops: Array<{ name: string; args: unknown[] }>
+}
+
+/** Stub OffscreenCanvas for the real normalizer; closed frames throw on draw. */
+function stubOrientationCanvases(): StubOrientationCanvas[] {
+  const canvases: StubOrientationCanvas[] = []
+  vi.stubGlobal('OffscreenCanvas', class {
+    width: number
+    height: number
+    private readonly ops: Array<{ name: string; args: unknown[] }> = []
+
+    constructor(width: number, height: number) {
+      this.width = width
+      this.height = height
+      canvases.push({ canvas: this, ops: this.ops })
+    }
+
+    getContext() {
+      return {
+        save: () => this.ops.push({ name: 'save', args: [] }),
+        restore: () => this.ops.push({ name: 'restore', args: [] }),
+        translate: (...args: unknown[]) => this.ops.push({ name: 'translate', args }),
+        rotate: (...args: unknown[]) => this.ops.push({ name: 'rotate', args }),
+        drawImage: (...args: unknown[]) => {
+          if ((args[0] as TrackedStreamingFrame).closeCount > 0) {
+            throw new DOMException('closed frame', 'InvalidStateError')
+          }
+          this.ops.push({ name: 'drawImage', args })
+        },
+      }
+    }
+
+    transferToImageBitmap() {
+      this.ops.push({ name: 'transfer', args: [] })
+      return { width: this.width, height: this.height, close: () => undefined }
+    }
+  })
+  return canvases
+}
+
+function trackedRawFrame(): TrackedStreamingFrame {
+  const raw: TrackedStreamingFrame = {
+    closeCount: 0,
+    close() {
+      raw.closeCount++
+    },
+  }
+  return raw
+}
+
+function rotatedFrame(
+  frame: TrackedStreamingFrame,
+  rotation: DecodedVideoFrame['rotation'],
+  displayWidth: number,
+  displayHeight: number,
+): DecodedVideoFrame {
+  return { timestampUs: 0, durationUs: FRAME_US, rotation, displayWidth, displayHeight, frame }
 }
 
 /** A canvas whose 2D ctx logs ops; drawing a closed bitmap THROWS (real). */
@@ -522,6 +585,7 @@ function makeHarness(opts: FakeOptions = {}): Harness {
     analyzeVideoScopes: opts.analyzeVideoScopes,
     releaseVideoScopes: opts.releaseVideoScopes,
     createLensRemapBackend: opts.createLensRemapBackend,
+    releaseStreamingBitmapSurface: opts.releaseStreamingBitmapSurface,
   }
 
   return {
@@ -2780,76 +2844,83 @@ describe('streaming frame ownership', () => {
   })
 
   test('the real normalizer bakes clockwise 90 and 270 degree rotation', async () => {
-    const canvases: Array<{
-      width: number
-      height: number
-      ops: Array<{ name: string; args: unknown[] }>
-    }> = []
-    vi.stubGlobal('OffscreenCanvas', class {
-      width: number
-      height: number
-      private readonly ops: Array<{ name: string; args: unknown[] }> = []
-
-      constructor(width: number, height: number) {
-        this.width = width
-        this.height = height
-        canvases.push({ width, height, ops: this.ops })
-      }
-
-      getContext() {
-        return {
-          save: () => this.ops.push({ name: 'save', args: [] }),
-          restore: () => this.ops.push({ name: 'restore', args: [] }),
-          translate: (...args: unknown[]) => this.ops.push({ name: 'translate', args }),
-          rotate: (...args: unknown[]) => this.ops.push({ name: 'rotate', args }),
-          drawImage: (...args: unknown[]) => this.ops.push({ name: 'drawImage', args }),
-        }
-      }
-
-      transferToImageBitmap() {
-        return { width: this.width, height: this.height, close: () => undefined }
-      }
-    })
-
+    const canvases = stubOrientationCanvases()
     try {
+      const normalizer = createOrientedBitmapNormalizer()
       const rawFrames: TrackedStreamingFrame[] = []
       for (const rotation of [90, 270] as const) {
-        const raw: TrackedStreamingFrame = {
-          closeCount: 0,
-          close() {
-            raw.closeCount++
-          },
-        }
+        const raw = trackedRawFrame()
         rawFrames.push(raw)
-        const bitmap = await createOrientedStreamingBitmap({
-          timestampUs: 0,
-          durationUs: FRAME_US,
-          rotation,
-          displayWidth: 180,
-          displayHeight: 320,
-          frame: raw,
-        })
+        const bitmap = await normalizer.normalize(rotatedFrame(raw, rotation, 180, 320))
         expect(bitmap).toMatchObject({ width: 180, height: 320 })
       }
 
+      // Same-size rotated frames reuse one worker-owned surface.
+      expect(canvases).toHaveLength(1)
       expect(canvases[0].ops).toEqual([
         { name: 'save', args: [] },
         { name: 'translate', args: [180, 0] },
         { name: 'rotate', args: [Math.PI / 2] },
         { name: 'drawImage', args: [rawFrames[0], 0, 0, 320, 180] },
         { name: 'restore', args: [] },
-      ])
-      expect(canvases[1].ops).toEqual([
+        { name: 'transfer', args: [] },
         { name: 'save', args: [] },
         { name: 'translate', args: [0, 320] },
         { name: 'rotate', args: [-Math.PI / 2] },
         { name: 'drawImage', args: [rawFrames[1], 0, 0, 320, 180] },
         { name: 'restore', args: [] },
+        { name: 'transfer', args: [] },
       ])
       expect(rawFrames.map((frame) => frame.closeCount)).toEqual([0, 0])
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  test('the orientation surface is replaced on resize, discarded on failure, and released', async () => {
+    const canvases = stubOrientationCanvases()
+    try {
+      const normalizer = createOrientedBitmapNormalizer()
+      await normalizer.normalize(rotatedFrame(trackedRawFrame(), 90, 180, 320))
+      await normalizer.normalize(rotatedFrame(trackedRawFrame(), 180, 320, 180))
+      expect(canvases.map(({ canvas }) => [canvas.width, canvas.height])).toEqual([
+        [180, 320],
+        [320, 180],
+      ])
+
+      const poisoned = trackedRawFrame()
+      poisoned.close()
+      await expect(normalizer.normalize(rotatedFrame(poisoned, 180, 320, 180)))
+        .rejects.toThrow('closed frame')
+      // A failed draw may leave partial pixels: that surface is never reused.
+      expect(canvases[1].canvas).toMatchObject({ width: 1, height: 1 })
+      await normalizer.normalize(rotatedFrame(trackedRawFrame(), 180, 320, 180))
+      expect(canvases).toHaveLength(3)
+
+      normalizer.release()
+      expect(canvases[2].canvas).toMatchObject({ width: 1, height: 1 })
+      normalizer.release()
+      await normalizer.normalize(rotatedFrame(trackedRawFrame(), 270, 180, 320))
+      expect(canvases).toHaveLength(4)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('worker close releases the orientation surface after sources close', async () => {
+    const source = new FakeVideoSource()
+    const sourceClosesAtRelease: number[] = []
+    const h = makeHarness({
+      releaseStreamingBitmapSurface: () => {
+        sourceClosesAtRelease.push(source.closeCount)
+      },
+    })
+    await setupStreaming(h, makeDoc([]), [['A', source]])
+
+    await h.core.handleMessage({ type: 'close' })
+
+    expect(sourceClosesAtRelease).toEqual([1])
+    expect(h.posts.at(-1)).toEqual({ type: 'closed' })
   })
 
   test('rotation metadata reaches normalization and raw frames close when copying fails', async () => {

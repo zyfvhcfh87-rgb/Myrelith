@@ -55,6 +55,8 @@ export interface RenderWorkerEnv {
   invalidateDecoderRuntime(): void
   /** Normalize orientation and copy a streamed frame. Does not close it. */
   createStreamingBitmap(frame: DecodedVideoFrame): Promise<BitmapLike>
+  /** Drop the normalizer's reusable surface after every copy has settled. */
+  releaseStreamingBitmapSurface?(): void
   /** Create the scratch compositing surface (new OffscreenCanvas). */
   createCanvas(width: number, height: number): RenderCanvasLike
   /** Create this worker owner's one reusable manual lens-remap backend. */

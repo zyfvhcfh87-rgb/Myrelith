@@ -1990,6 +1990,7 @@ export function createRenderWorkerCore(env: RenderWorkerEnv): {
         )
         clearTextLayoutCaches([visibleCtx, scratchCtx, transitionLegCtx, transitionGroupCtx])
         gradingRuntime?.dispose(); gradingRuntime = null; colorLuts = []
+        env.releaseStreamingBitmapSurface?.()
         throwIfRejected(results, 'Failed to close render worker')
         break
       }
