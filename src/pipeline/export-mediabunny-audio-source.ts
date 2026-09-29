@@ -13,7 +13,7 @@ import {
 } from '../codecs/mediaCodecFallbacks'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import type { AssetId } from '../domain/schema'
-import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
+import { foldPlanarBlockToStereo } from '../domain/audioChannelMix'
 import {
   EXPORT_AUDIO_CHANNELS,
   type ExportAudioClipReader,
@@ -39,11 +39,16 @@ interface DecodedAudioAsset {
   sink: AudioSampleSink
 }
 
+/**
+ * Decoded PCM already folded to stereo once per chunk. Float64 keeps each
+ * multichannel fold sum exact until interpolation, as a per-sample fold did.
+ */
 interface DecodedPcmChunk {
   timestampSec: number
   sampleRate: number
   frameCount: number
-  channels: readonly Float32Array[]
+  left: Float64Array
+  right: Float64Array
 }
 
 function throwIfRequestAborted(signal: AbortSignal | undefined): void {
@@ -124,11 +129,15 @@ function copyDecodedSample(sample: AudioSample): DecodedPcmChunk {
       })
       channels.push(data)
     }
+    const left = new Float64Array(sample.numberOfFrames)
+    const right = new Float64Array(sample.numberOfFrames)
+    foldPlanarBlockToStereo(channels, 0, sample.numberOfFrames, left, right)
     return {
       timestampSec: sample.timestamp,
       sampleRate: sample.sampleRate,
       frameCount: sample.numberOfFrames,
-      channels,
+      left,
+      right,
     }
   } finally {
     sample.close()
@@ -239,15 +248,6 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
     return this.lookahead
   }
 
-  private sampleAt(
-    chunk: DecodedPcmChunk,
-    outputChannel: number,
-    frame: number,
-  ): number {
-    const folded = foldDecodedFrameToStereo(chunk.channels, frame)
-    return outputChannel === 1 ? folded[1] : folded[0]
-  }
-
   async read(sampleCount: number): Promise<readonly Float32Array[]> {
     throwIfRequestAborted(this.request.signal)
     if (this.closePromise) throw new Error('Audio clip reader is closed')
@@ -341,31 +341,30 @@ class MediabunnyAudioClipReader implements ExportAudioClipReader {
         }
       }
 
-      for (let channel = 0; channel < EXPORT_AUDIO_CHANNELS; channel++) {
-        const first = this.sampleAt(chunk, channel, lower)
-        let second = first
-        if (lower + 1 < chunk.frameCount) {
-          second = this.sampleAt(chunk, channel, lower + 1)
-        } else if (nextChunk) {
-          const gap = Math.abs(nextChunk.timestampSec - pcmChunkEnd(chunk))
-          if (
-            this.request.requireComplete
-            && gap > 1.5 / chunk.sampleRate
-          ) {
-            throw this.incompleteSource(
-              sourceSample,
-              'decoded PCM has a discontinuity',
-            )
-          }
-          second =
-            gap <= 1.5 / chunk.sampleRate
-              ? this.sampleAt(nextChunk, channel, 0)
-              : 0
+      const firstLeft = chunk.left[lower]!
+      const firstRight = chunk.right[lower]!
+      let secondLeft = firstLeft
+      let secondRight = firstRight
+      if (lower + 1 < chunk.frameCount) {
+        secondLeft = chunk.left[lower + 1]!
+        secondRight = chunk.right[lower + 1]!
+      } else if (nextChunk) {
+        const gap = Math.abs(nextChunk.timestampSec - pcmChunkEnd(chunk))
+        if (
+          this.request.requireComplete
+          && gap > 1.5 / chunk.sampleRate
+        ) {
+          throw this.incompleteSource(
+            sourceSample,
+            'decoded PCM has a discontinuity',
+          )
         }
-        const value = first + (second - first) * fraction
-        if (channel === 0) left[outputIndex] = value
-        else right[outputIndex] = value
+        const contiguous = gap <= 1.5 / chunk.sampleRate
+        secondLeft = contiguous ? nextChunk.left[0]! : 0
+        secondRight = contiguous ? nextChunk.right[0]! : 0
       }
+      left[outputIndex] = firstLeft + (secondLeft - firstLeft) * fraction
+      right[outputIndex] = firstRight + (secondRight - firstRight) * fraction
       this.heardDecodedPcm = true
     }
 

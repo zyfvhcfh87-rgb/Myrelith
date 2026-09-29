@@ -69,7 +69,7 @@ import {
   AUDIO_METER_FFT_SIZE,
   measureAudioMeterSample,
 } from '../domain/audioMeter'
-import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
+import { foldPlanarBlockToStereo } from '../domain/audioChannelMix'
 import { sourceTicksToSeconds } from '../domain/sourceTimeMap'
 import {
   AUDIO_STRETCH_MAX_SESSIONS,
@@ -148,6 +148,14 @@ export interface PlaybackAudioMediaSource {
   close(): Promise<void>
 }
 
+function audioBufferPlanes(buffer: AudioBuffer): Float32Array[] {
+  const planes: Float32Array[] = []
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    planes.push(buffer.getChannelData(channel))
+  }
+  return planes
+}
+
 /**
  * Convert decoded PCM to the same project-rate grid used by export before any
  * time stretch or clip DSP. Same-rate and structural test buffers pass through.
@@ -161,6 +169,12 @@ function projectRatePlaybackCursor(
   let nextOutputSample: number | null = null
   let closed = false
   const epsilon = 1e-10
+  // Grow-only stereo fold of the current decoded buffer. Float64 keeps each
+  // multichannel fold sum exact until the interpolation below.
+  let foldedLeft = new Float64Array(0)
+  let foldedRight = new Float64Array(0)
+  const nextLeft = new Float64Array(1)
+  const nextRight = new Float64Array(1)
 
   const pull = async (): Promise<IteratorResult<PlaybackAudioBuffer, void>> => {
     if (lookahead) {
@@ -208,14 +222,23 @@ function projectRatePlaybackCursor(
         if (outputLength <= 0) continue
         nextOutputSample = endSample
 
-        const channels = Array.from(
-          { length: buffer.numberOfChannels },
-          (_value, channel) => buffer.getChannelData(channel),
+        if (foldedLeft.length < buffer.length) {
+          foldedLeft = new Float64Array(buffer.length)
+          foldedRight = new Float64Array(buffer.length)
+        }
+        foldPlanarBlockToStereo(
+          audioBufferPlanes(buffer),
+          0,
+          buffer.length,
+          foldedLeft,
+          foldedRight,
         )
         const output = context.createBuffer(2, outputLength, targetSampleRate)
         const left = output.getChannelData(0)
         const right = output.getChannelData(1)
         let nextBuffer: PlaybackAudioBuffer | null | undefined
+        // Folded first frame of a contiguous next buffer, resolved once.
+        let hasNextFolded = false
 
         for (let outputIndex = 0; outputIndex < outputLength; outputIndex++) {
           const outputSample = outputStart + outputIndex
@@ -225,35 +248,40 @@ function projectRatePlaybackCursor(
           )
           const lower = Math.min(buffer.length - 1, Math.floor(sourcePosition))
           const fraction = Math.max(0, Math.min(1, sourcePosition - lower))
-          let nextPlanes: readonly Float32Array[] | null = null
-          let nextFrame = lower + 1
-          if (nextFrame >= buffer.length && fraction > epsilon) {
+          const firstLeft = foldedLeft[lower]!
+          const firstRight = foldedRight[lower]!
+          let secondLeft = firstLeft
+          let secondRight = firstRight
+          if (lower + 1 >= buffer.length && fraction > epsilon) {
             if (nextBuffer === undefined) {
               lookahead = await inner.next()
               nextBuffer = lookahead.done ? null : lookahead.value
-            }
-            if (nextBuffer) {
-              const gap = Math.abs(nextBuffer.timestamp - sourceEndTime)
-              if (
-                gap <= 1.5 / sourceRate
-                && nextBuffer.buffer.numberOfChannels >= 1
-                && nextBuffer.buffer.numberOfChannels <= 32
-                && nextBuffer.buffer.length >= 1
-              ) {
-                nextPlanes = Array.from(
-                  { length: nextBuffer.buffer.numberOfChannels },
-                  (_value, channel) => nextBuffer!.buffer.getChannelData(channel),
-                )
-                nextFrame = 0
+              if (nextBuffer) {
+                const gap = Math.abs(nextBuffer.timestamp - sourceEndTime)
+                if (
+                  gap <= 1.5 / sourceRate
+                  && nextBuffer.buffer.numberOfChannels >= 1
+                  && nextBuffer.buffer.numberOfChannels <= 32
+                  && nextBuffer.buffer.length >= 1
+                ) {
+                  foldPlanarBlockToStereo(
+                    audioBufferPlanes(nextBuffer.buffer),
+                    0,
+                    1,
+                    nextLeft,
+                    nextRight,
+                  )
+                  hasNextFolded = true
+                }
               }
             }
+            if (hasNextFolded) {
+              secondLeft = nextLeft[0]!
+              secondRight = nextRight[0]!
+            }
           }
-          const first = foldDecodedFrameToStereo(channels, lower)
-          const second = nextPlanes
-            ? foldDecodedFrameToStereo(nextPlanes, nextFrame)
-            : first
-          left[outputIndex] = first[0] + (second[0] - first[0]) * fraction
-          right[outputIndex] = first[1] + (second[1] - first[1]) * fraction
+          left[outputIndex] = firstLeft + (secondLeft - firstLeft) * fraction
+          right[outputIndex] = firstRight + (secondRight - firstRight) * fraction
         }
 
         return {
@@ -1146,18 +1174,14 @@ function foldPlaybackBufferToStereo(
   if (channelCount < 1 || channelCount > 32) {
     throw new RangeError('Playback audio buffer has an invalid channel count')
   }
-  const planes: Float32Array[] = []
-  for (let index = 0; index < channelCount; index++) {
-    planes.push(buffer.getChannelData(index))
-  }
   const stereo = context.createBuffer(2, buffer.length, buffer.sampleRate)
-  const left = stereo.getChannelData(0)
-  const right = stereo.getChannelData(1)
-  for (let frame = 0; frame < buffer.length; frame++) {
-    const folded = foldDecodedFrameToStereo(planes, frame)
-    left[frame] = folded[0]
-    right[frame] = folded[1]
-  }
+  foldPlanarBlockToStereo(
+    audioBufferPlanes(buffer),
+    0,
+    buffer.length,
+    stereo.getChannelData(0),
+    stereo.getChannelData(1),
+  )
   return stereo
 }
 
@@ -1389,6 +1413,9 @@ export function createWebAudioPlaybackOutput(
 
   const nodes = new Set<ActiveOutputNode>()
   const clipChains = new Map<ClipId, AudioEffectChain>()
+  // Fade/envelope splits schedule one decoded buffer several times. Decoded
+  // buffers are never written after decode, so fold each one once per output.
+  const foldedBuffers = new WeakMap<AudioBuffer, AudioBuffer>()
   let stopped = false
   let graphDisconnected = false
   let armed = false
@@ -1418,7 +1445,13 @@ export function createWebAudioPlaybackOutput(
     if (stopped) return
     const source = context.createBufferSource()
     const gain = context.createGain()
-    const playbackBuffer = foldPlaybackBufferToStereo(context, request.buffer)
+    let playbackBuffer = foldedBuffers.get(request.buffer)
+    if (!playbackBuffer) {
+      playbackBuffer = foldPlaybackBufferToStereo(context, request.buffer)
+      if (playbackBuffer !== request.buffer) {
+        foldedBuffers.set(request.buffer, playbackBuffer)
+      }
+    }
     let scheduledBuffer = playbackBuffer
     let scheduledOffset = request.offset
     let scheduledDuration = request.duration
@@ -1891,15 +1924,14 @@ export async function startTimelineAudioPlayback(
         buffer.length - sourceFrame,
         AUDIO_STRETCH_RECHUNK_FRAMES - written,
       )
-      const planes = Array.from(
-        { length: buffer.numberOfChannels },
-        (_value, channel) => buffer.getChannelData(channel),
+      foldPlanarBlockToStereo(
+        audioBufferPlanes(buffer),
+        sourceFrame,
+        copied,
+        left,
+        right,
+        written,
       )
-      for (let index = 0; index < copied; index++) {
-        const folded = foldDecodedFrameToStereo(planes, sourceFrame + index)
-        left[written + index] = folded[0]
-        right[written + index] = folded[1]
-      }
       written += copied
       state.pendingFrameOffset = sourceFrame + copied
       state.stretchSourceTime =

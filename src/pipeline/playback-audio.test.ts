@@ -17,6 +17,7 @@ import type {
   Transition,
 } from '../domain/schema'
 import { createLimiterEffect } from '../domain/audioEffectStack'
+import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { MediaAssetRuntimeError } from '../domain/mediaCompatibility'
 import {
@@ -823,6 +824,64 @@ describe('startTimelineAudioPlayback scheduling', () => {
       2_205 / 4_409,
       6,
     )
+    await session.stop()
+  })
+
+  test('folds multichannel media onto the project grid exactly like the per-sample fold', async () => {
+    const clip = makeClip('project-rate-surround', 0, 1)
+    const doc = makeDoc([makeTrack('A1', 'audio', [clip])], 1)
+    const h = makePlaybackHarness({ lookaheadSeconds: 0.2 })
+    let seed = 29
+    const random = (): number => {
+      seed = (seed * 16_807) % 2_147_483_647
+      return seed / 1_073_741_823.5 - 1
+    }
+    const planes = [0, 1].map(() => Array.from({ length: 6 }, () =>
+      Float32Array.from({ length: 2_205 }, () => random()),
+    ))
+    h.media.enqueue(
+      clip.assetId,
+      makeCursor(planes.map((buffer, index) => ({
+        buffer: makePlanarAudioBuffer(buffer, 44_100),
+        timestamp: index * 0.05,
+        duration: 0.05,
+      }))).cursor,
+    )
+
+    const session = await startTimelineAudioPlayback(
+      h.context,
+      doc,
+      0,
+      h.resolveAsset,
+      {},
+      h.deps,
+    )
+
+    expect(h.output.scheduled).toHaveLength(2)
+    for (const [index, event] of h.output.scheduled.entries()) {
+      // Reference: the former per-sample fold of the lower frame, which only
+      // interpolates toward a contiguous next buffer at the tail.
+      const expectedLeft = new Float32Array(2_400)
+      const expectedRight = new Float32Array(2_400)
+      for (let sample = 0; sample < 2_400; sample++) {
+        const position = Math.max(
+          0,
+          ((index * 2_400 + sample) / 48_000 - index * 0.05) * 44_100,
+        )
+        const lower = Math.min(2_204, Math.floor(position))
+        const fraction = Math.max(0, Math.min(1, position - lower))
+        const first = foldDecodedFrameToStereo(planes[index]!, lower)
+        const second = index === 0 && lower === 2_204 && fraction > 1e-10
+          ? foldDecodedFrameToStereo(planes[1]!, 0)
+          : first
+        expectedLeft[sample] = first[0] + (second[0] - first[0]) * fraction
+        expectedRight[sample] = first[1] + (second[1] - first[1]) * fraction
+      }
+      expect(Array.from(event.buffer.getChannelData(0)))
+        .toEqual(Array.from(expectedLeft))
+      expect(Array.from(event.buffer.getChannelData(1)))
+        .toEqual(Array.from(expectedRight))
+    }
     await session.stop()
   })
 

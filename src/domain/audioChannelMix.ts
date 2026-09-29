@@ -7,7 +7,6 @@
  */
 
 export const MAX_DECODED_AUDIO_CHANNELS = 32
-export const STEREO_OUTPUT_CHANNELS = 2
 
 /** Center and first-ring surrounds fold at -3 dB. */
 export const AUDIO_FOLD_CENTER_GAIN = Math.SQRT1_2
@@ -90,12 +89,50 @@ export function foldDecodedFrameToStereo(
   )
 }
 
-/** Apply already-resolved stereo balance gains after fold-down. */
-export function applyStereoBalanceToSample(
-  left: number,
-  right: number,
-  leftGain: number,
-  rightGain: number,
-): readonly [number, number] {
-  return [left * leftGain, right * rightGain]
+/** Any indexable sample output: typed arrays or plain number arrays. */
+export type WritableSampleArray = { [index: number]: number }
+
+/**
+ * Fold `count` planar frames from `start` into `left`/`right` from
+ * `outOffset`, without per-frame allocation. Frame for frame this is exactly
+ * foldDecodedFrameToStereo (same policy and addition order; samples past a
+ * plane's end read as 0), which stays the per-frame reference.
+ */
+export function foldPlanarBlockToStereo(
+  planes: readonly ArrayLike<number>[],
+  start: number,
+  count: number,
+  left: WritableSampleArray,
+  right: WritableSampleArray,
+  outOffset = 0,
+): void {
+  const channelCount = planes.length
+  assertDecodedChannelCount(channelCount)
+  if (channelCount === 1) {
+    const mono = planes[0]!
+    for (let index = 0; index < count; index++) {
+      const value = mono[start + index] ?? 0
+      left[outOffset + index] = value
+      right[outOffset + index] = value
+    }
+    return
+  }
+  if (channelCount === 2) {
+    const sourceLeft = planes[0]!
+    const sourceRight = planes[1]!
+    for (let index = 0; index < count; index++) {
+      left[outOffset + index] = sourceLeft[start + index] ?? 0
+      right[outOffset + index] = sourceRight[start + index] ?? 0
+    }
+    return
+  }
+  // One reader per block (not per frame) keeps the single fold policy above.
+  let frame = start
+  const sampleAt = (channelIndex: number): number =>
+    planes[channelIndex]?.[frame] ?? 0
+  for (let index = 0; index < count; index++) {
+    frame = start + index
+    left[outOffset + index] = foldOneStereoSide(sampleAt, channelCount, 0)
+    right[outOffset + index] = foldOneStereoSide(sampleAt, channelCount, 1)
+  }
 }

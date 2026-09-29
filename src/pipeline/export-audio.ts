@@ -23,7 +23,7 @@ import {
 import { createAudioEffectChain } from '../domain/audioEffectStack'
 import type { AudioEffectChain } from '../domain/audioDsp'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
-import { foldDecodedFrameToStereo } from '../domain/audioChannelMix'
+import { foldPlanarBlockToStereo } from '../domain/audioChannelMix'
 import { docDurationFrames } from '../domain/selectors'
 import { audioSampleBoundary } from '../domain/time'
 import { audioSampleFromSourceTicks } from '../domain/sourceTimeMap'
@@ -426,11 +426,13 @@ function createStretchedExportReader(
       left.set(channels[0])
       right.set(channels[1])
     } else {
-      for (let frame = 0; frame < AUDIO_STRETCH_RECHUNK_FRAMES; frame++) {
-        const folded = foldDecodedFrameToStereo(channels, frame)
-        left[frame] = folded[0]
-        right[frame] = folded[1]
-      }
+      foldPlanarBlockToStereo(
+        channels,
+        0,
+        AUDIO_STRETCH_RECHUNK_FRAMES,
+        left,
+        right,
+      )
     }
     chunk = { left, right }
     chunkOffset = 0
