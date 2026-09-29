@@ -2359,6 +2359,54 @@ describe('streaming playback lanes', () => {
     expect(sourceA.playbackOptions).toHaveLength(1)
   })
 
+  test('setDoc closes only lanes whose clip identity or document rate changed', async () => {
+    const h = makeHarness()
+    const sourceA = new FakeVideoSource()
+    const sourceB = new FakeVideoSource()
+    const firstTrimmed = new FakeStreamCursor([streamDecoded(h, 0)])
+    const secondTrimmed = new FakeStreamCursor([streamDecoded(h, 5 * FRAME_US)])
+    const kept = new FakeStreamCursor([streamDecoded(h, 0)])
+    sourceA.queuePlayback(firstTrimmed)
+    sourceA.queuePlayback(secondTrimmed)
+    sourceB.queuePlayback(kept)
+    const docWithTrim = (sourceStart: number) => makeDoc([
+      makeTrack('V1', [makeClip('trimmed', 'A', 0, 20, sourceStart)]),
+      makeTrack('V2', [makeClip('kept', 'B', 0, 20)]),
+    ])
+    await setupStreaming(h, docWithTrim(0), [['A', sourceA], ['B', sourceB]])
+    await h.core.handleMessage(renderMsg(1, 0, 'playback', [
+      streamEntry('trimmed', 'A', 0),
+      streamEntry('kept', 'B', 0),
+    ]))
+    expect(doneFor(h, 1)).toMatchObject({ drawnClipIds: ['trimmed', 'kept'] })
+
+    // A source trim changes one clip's decode identity; the other lane stays.
+    await h.core.handleMessage(docMsg(docWithTrim(5)))
+    expect(firstTrimmed.closeCount).toBe(1)
+    expect(kept.closeCount).toBe(0)
+
+    await h.core.handleMessage(renderMsg(2, 0, 'playback', [
+      streamEntry('trimmed', 'A', 5),
+      streamEntry('kept', 'B', 0),
+    ]))
+    expect(doneFor(h, 2)).toMatchObject({ drawnClipIds: ['trimmed', 'kept'] })
+    expect(sourceA.playbackCursors).toEqual([firstTrimmed, secondTrimmed])
+
+    // An equal replacement snapshot compares against the installed one.
+    await h.core.handleMessage(docMsg(docWithTrim(5)))
+    expect(secondTrimmed.closeCount).toBe(0)
+    expect(kept.closeCount).toBe(0)
+
+    // A document-rate change invalidates every lane, never the sources.
+    await h.core.handleMessage(docMsg({
+      ...docWithTrim(5),
+      frameRate: { num: 30, den: 1 },
+    }))
+    expect(secondTrimmed.closeCount).toBe(1)
+    expect(kept.closeCount).toBe(1)
+    expect([sourceA.closeCount, sourceB.closeCount]).toEqual([0, 0])
+  })
+
   test('document updates preserve compatible lanes and prune removed clips', async () => {
     const h = makeHarness()
     const source = new FakeVideoSource()

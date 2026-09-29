@@ -28,6 +28,7 @@ import {
   type DecoderCheckTarget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
+import { rejectionReasons, throwIfRejected } from './settledResults'
 
 const MICROSECONDS_PER_SECOND = 1_000_000
 
@@ -293,12 +294,7 @@ class VideoFrameCursorImpl implements VideoFrameCursor {
 
     const results = await Promise.allSettled(tasks)
     this.onClosed()
-    const errors = results
-      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      .map((result) => result.reason)
-    if (errors.length > 0) {
-      throw new AggregateError(errors, 'Failed to close video cursor')
-    }
+    throwIfRejected(results, 'Failed to close video cursor')
   }
 }
 
@@ -398,12 +394,9 @@ class WorkerVideoSourceImpl implements WorkerVideoSource {
   }
 
   private async finishClose(): Promise<void> {
-    const results = await Promise.allSettled(
+    const errors = rejectionReasons(await Promise.allSettled(
       [...this.cursors].map((cursor) => cursor.close()),
-    )
-    const errors = results
-      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      .map((result) => result.reason)
+    ))
 
     try {
       this.input.dispose()
