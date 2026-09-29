@@ -18,6 +18,8 @@ export interface VoiceoverMicrophoneOptions {
   onStarted?: (atFrame: number) => void
   onBatch?: (batch: { sequence: number; startFrame: number; frames: number; peak: number }) => void
   onOverrun?: (atFrame: number) => void
+  /** The render clock skipped (frames > 0, padded with silence) or repeated (frames < 0) samples. */
+  onGap?: (gap: { atFrame: number; frames: number }) => void
   onTerminal?: (reason: 'stopped' | 'overrun', endFrame: number) => void
   /** The capture owner retains writer cleanup after a graph failure. */
   closeWriterOnFailure?: boolean
@@ -175,6 +177,15 @@ export async function connectVoiceoverMicrophone(options: VoiceoverMicrophoneOpt
           maybeFinish()
         }, fail)
       } catch (cause) { fail(cause) }
+      return
+    }
+    if (message.type === 'gap') {
+      if (!started || terminal || !validFrame(message.atFrame) || message.atFrame < startFrame ||
+        !Number.isSafeInteger(message.frames) || message.frames === 0 || Math.abs(message.frames) > 24_000) {
+        fail(new Error('Recording worklet reported an invalid render gap'))
+        return
+      }
+      try { options.onGap?.({ atFrame: message.atFrame, frames: message.frames }) } catch (cause) { fail(cause) }
       return
     }
     if (message.type === 'error') {

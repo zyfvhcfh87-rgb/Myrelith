@@ -23,6 +23,8 @@ export interface VoiceoverCaptureStatus {
   inputPeak: number
   /** Timeline playback was deliberately left silent for this take. */
   playbackMuted: boolean
+  /** Samples the audio thread skipped (padded with silence) or repeated (not rewritten). */
+  renderGapSamples: number
   diagnostic: string | null
   timing: VoiceoverCaptureTiming | null
 }
@@ -33,6 +35,7 @@ export const useVoiceoverCaptureStore = create<VoiceoverCaptureStatus>(() => ({
   capturedSamples: 0,
   inputPeak: 0,
   playbackMuted: false,
+  renderGapSamples: 0,
   diagnostic: null,
   timing: null,
 }))

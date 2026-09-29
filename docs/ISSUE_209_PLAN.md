@@ -1,7 +1,11 @@
 # Issue #209 — local voiceover, camera, and screen capture
 
-Status: scope approved in principle on 2026-09-21; Steps 0–11 complete, plus a
-review-hardening pass over Steps 5–10 (2026-09-29). Step 12 is next.
+Status: Steps 0–21 complete on `codex/issue209` (2026-09-29). Voiceover,
+camera and screen recording are implemented. Two items are qualified, not
+claimed: physical camera lip sync (no usable camera on the test host), and
+whole-screen/window capture (OS screen permission not granted to the test
+browser). Publication, PR review, merge and issue closure remain separate
+decisions.
 Prepared 2026-09-21 on `codex/209`; isolated onto `codex/issue209` from
 `master` at `29d4071`. Issue: https://github.com/zyfvhcfh87-rgb/Myrelith/issues/209
 
@@ -368,6 +372,41 @@ transport for matching pre-roll. At narrow widths the toolbar's action row now
 scrolls instead of clipping (Export and later actions were previously cut off
 at 720 px). [Step 11 evidence](evidence/issue209/STEP_11_VOICEOVER_CONTROLS.md)
 records the checks. Step 12 is the real-device acceptance matrix.
+
+**Step 12 checkpoint (2026-09-29):** Real QuadCast takes reopen with exact
+length on frame boundaries. A 3-minute take keeps the retained heap flat
+(51.2–52.0 MiB). Revocation and a real background tab interrupt and recover
+whole checkpoints. Real output load exposed render-clock skips *and* repeats;
+the worklet now pads/skips ≤ 0.5 s while keeping every sample on its context
+frame, and reports it. The acoustic round trip was not resolvable in this
+room, so the default offset stays 0 ms, uncalibrated, with manual ±500 ms.
+[Step 12 evidence](evidence/issue209/STEP_12_VOICEOVER_ACCEPTANCE.md).
+
+**Steps 13–15 checkpoint (2026-09-29):**
+- Chromium 151 stamps video on the tick clock and audio on page time. It
+  cannot transfer tracks to workers, and Mediabunny's live sources anchor on
+  arrival time.
+- The product therefore transfers processor streams, and measures an exact
+  stamp→page-time bridge from `requestVideoFrameCallback` capture times (0.1 ms
+  agreement).
+- Audio is timed by sample count with drift measured, padded, and reported.
+- Camera (fake device) and tab capture pass with ≤ 0.11 ms audio drift. Crash
+  recovery keeps complete fragments. A real tab flash/beep take shows a steady
+  66 ms (±3.9 ms) Chromium tab-audio latency, preserved and reported.
+- Camera: GO, qualified. Screen: GO for tabs. Display audio + microphone
+  mixing: no-go.
+
+[Steps 13–15 evidence](evidence/issue209/STEP_13_15_AV_FEASIBILITY.md).
+
+**Steps 16–21 checkpoint (2026-09-29):**
+- A shared worker writer, a camera/screen capture owner, and ordinary
+  Media Pool import.
+- Recovery for `.mp4` drafts.
+- A Record panel with Voiceover/Camera/Screen tabs and a live preview.
+- Real Chromium UI flows pass for camera keep + playback + decode, a screen
+  source ending, and reload recovery.
+
+[Steps 16–21 evidence](evidence/issue209/STEP_16_21_CAMERA_SCREEN.md).
 
 ### Voiceover implementation
 

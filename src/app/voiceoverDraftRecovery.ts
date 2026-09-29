@@ -36,6 +36,8 @@ import { localMediaHandleRegistry } from './localMediaHandles'
 import { getActiveLocalProjectBindingId } from './localProjectProvenance'
 import { importMediaFromHandle, type MediaImportResult } from './mediaImportController'
 import { VOICEOVER_RECORDINGS_DIRECTORY } from '../pipeline/voiceoverWavDraft'
+import { AV_CAPTURE_DIRECTORY } from '../pipeline/avCaptureProtocol'
+import { AvCaptureBridge } from './avCaptureBridge'
 
 /**
  * The directory/draft operations the recovery feature needs from one worker
@@ -51,6 +53,8 @@ export type RecoveryWriter = Pick<
 export interface VoiceoverDraftRecoveryDeps {
   /** One dedicated worker per recovery instance; never the capture bridge. */
   createWriter(): RecoveryWriter
+  /** Camera/screen captures (`.mp4`), a separate worker and directory. */
+  createCaptureStore?(): RecoveryWriter
   projectBindingId(): string | null
   projectGeneration(): number
   /** Immutable Zustand snapshot identity; changes on edits and history moves. */
@@ -64,7 +68,8 @@ export interface VoiceoverDraftRecoveryDeps {
   /** Asset ids retained by the current project, its undo stack, or redo stack. */
   retainedAssetIds(): readonly string[]
   /** Prove the registry handle names the OPFS entry, not a same-named local file. */
-  isRecordingOriginal(draftId: string, handle: LocalMediaFileHandle): Promise<boolean>
+  /** `fileName` is the stored draft's own name (`.wav` or `.mp4`). */
+  isRecordingOriginal(fileName: string, handle: LocalMediaFileHandle): Promise<boolean>
   importMedia(file: File, handle: LocalMediaFileHandle): Promise<MediaImportResult>
   /** The capture session's state; its id is the draft id while it owns one. */
   liveSession(): VoiceoverSession | null
@@ -82,7 +87,7 @@ export interface VoiceoverDraftRecoveryDeps {
 }
 
 export interface VoiceoverDraftSurvey {
-  /** Every `.wav` entry in the recordings directory, classified. */
+  /** Every stored voiceover (`.wav`) and camera/screen (`.mp4`) draft, classified. */
   readonly drafts: readonly VoiceoverDraftClassification[]
 }
 
@@ -95,6 +100,7 @@ function failureMessage(cause: unknown): string {
 export class VoiceoverDraftRecovery {
   private readonly deps: VoiceoverDraftRecoveryDeps
   private bridge: RecoveryWriter | null = null
+  private captureBridge: RecoveryWriter | null = null
   private lifecycle = 0
   /** Every public operation runs alone: one shared worker, no interleaved classify/delete. */
   private queue: Promise<unknown> = Promise.resolve()
@@ -106,6 +112,8 @@ export class VoiceoverDraftRecovery {
   /** Terminate the dedicated worker; drafts on disk are never touched. */
   dispose(): void {
     this.lifecycle++
+    this.captureBridge?.close()
+    this.captureBridge = null
     if (this.bridge) {
       this.bridge.close()
       this.bridge = null
@@ -128,7 +136,7 @@ export class VoiceoverDraftRecovery {
 
   private async surveyNow(): Promise<VoiceoverDraftSurvey> {
     const [drafts, references, locked] = await Promise.all([
-      this.writer().list(),
+      this.listAll(),
       this.references(),
       this.deps.heldDraftLockIds?.() ?? Promise.resolve([]),
     ])
@@ -144,6 +152,34 @@ export class VoiceoverDraftRecovery {
   private writer(): RecoveryWriter {
     if (!this.bridge || this.bridge.isClosed) this.bridge = this.deps.createWriter()
     return this.bridge
+  }
+
+  private captures(): RecoveryWriter | null {
+    if (!this.deps.createCaptureStore) return null
+    if (!this.captureBridge || this.captureBridge.isClosed) this.captureBridge = this.deps.createCaptureStore()
+    return this.captureBridge
+  }
+
+  /** The worker that owns a stored draft, by its file name. */
+  private storeFor(fileName: string): RecoveryWriter {
+    if (fileName.endsWith('.mp4')) {
+      const store = this.captures()
+      if (!store) throw new Error('Camera and screen captures are unavailable in this browser')
+      return store
+    }
+    return this.writer()
+  }
+
+  private forget(store: RecoveryWriter): void {
+    store.close()
+    if (store === this.bridge) this.bridge = null
+    if (store === this.captureBridge) this.captureBridge = null
+  }
+
+  private async listAll() {
+    const store = this.captures()
+    const [voiceover, captures] = await Promise.all([this.writer().list(), store ? store.list() : Promise.resolve([])])
+    return [...voiceover, ...captures]
   }
 
   private liveSessionIds(): string[] {
@@ -212,7 +248,7 @@ export class VoiceoverDraftRecovery {
       return { status: 'rejected', reason: 'The draft has no recoverable checkpoint' }
     }
     try {
-      const bridge = this.writer()
+      const bridge = this.storeFor(classification.fileName)
       try {
         await bridge.recover(draftId)
         if (
@@ -241,8 +277,7 @@ export class VoiceoverDraftRecovery {
         return { status: 'recovered', assetId: imported.assetId, sizeBytes: classification.sizeBytes,
           ...(note ? { note } : {}) }
       } finally {
-        bridge.close()
-        this.bridge = null
+        this.forget(bridge)
       }
     } catch (cause) {
       return { status: 'failed', message: failureMessage(cause) }
@@ -269,11 +304,11 @@ export class VoiceoverDraftRecovery {
       return { status: 'rejected', reason: 'The draft belongs to the active recording session' }
     }
     // A grant that failed to persist must not expose an imported file to deletion.
-    if (this.deps.projectAssetFileNames?.().includes(`${draftId}.wav`)) {
+    if (this.deps.projectAssetFileNames?.().includes(classification.fileName)) {
       return { status: 'rejected', reason: 'A media item in this project uses this recording' }
     }
     try {
-      await this.writer().discardId(draftId)
+      await this.storeFor(classification.fileName).discardId(draftId)
       return { status: 'discarded', sizeBytes: classification.sizeBytes }
     } catch (cause) {
       return { status: 'failed', message: failureMessage(cause) }
@@ -324,7 +359,7 @@ export class VoiceoverDraftRecovery {
       lifecycle !== this.lifecycle
       || !this.projectIsCurrent(binding, projectGeneration, documentSnapshot)
     ) return { status: 'cancelled' }
-    const classification = survey.drafts.find((draft) => `${draft.id}.wav` === handle.name)
+    const classification = survey.drafts.find((draft) => draft.fileName === handle.name)
     if (!classification) {
       // The remembered file is not visibly in the recordings directory. It may
       // have been moved, deleted, or never a recording original at all; the
@@ -346,7 +381,7 @@ export class VoiceoverDraftRecovery {
     }
     let isOriginal: boolean
     try {
-      isOriginal = await this.deps.isRecordingOriginal(classification.id, handle)
+      isOriginal = await this.deps.isRecordingOriginal(classification.fileName, handle)
     } catch (cause) {
       return { status: 'failed', message: `Could not verify the recording original: ${failureMessage(cause)}` }
     }
@@ -364,7 +399,7 @@ export class VoiceoverDraftRecovery {
       || !keptOriginalRemovalEligible(classification.assetIds, this.deps.retainedAssetIds())
     ) return { status: 'cancelled' }
     try {
-      await this.writer().discardId(classification.id)
+      await this.storeFor(classification.fileName).discardId(classification.id)
     } catch (cause) {
       return { status: 'failed', message: `The original file could not be deleted: ${failureMessage(cause)}` }
     }
@@ -398,6 +433,7 @@ export function getVoiceoverDraftRecovery(): VoiceoverDraftRecovery {
   if (recovery) return recovery
   recovery = new VoiceoverDraftRecovery({
     createWriter: () => new VoiceoverWavBridge(),
+    createCaptureStore: () => new AvCaptureBridge(),
     projectBindingId: getActiveLocalProjectBindingId,
     projectGeneration: () => useDocumentStore.getState().projectGeneration,
     documentSnapshot: () => useDocumentStore.getState(),
@@ -413,11 +449,12 @@ export function getVoiceoverDraftRecovery(): VoiceoverDraftRecovery {
       }
       return [...ids]
     },
-    isRecordingOriginal: async (draftId, handle) => {
+    isRecordingOriginal: async (fileName, handle) => {
       if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) return false
       const root = await navigator.storage.getDirectory()
-      const recordings = await root.getDirectoryHandle(VOICEOVER_RECORDINGS_DIRECTORY)
-      const original = await recordings.getFileHandle(`${draftId}.wav`)
+      const directory = await root.getDirectoryHandle(fileName.endsWith('.mp4')
+        ? AV_CAPTURE_DIRECTORY : VOICEOVER_RECORDINGS_DIRECTORY)
+      const original = await directory.getFileHandle(fileName)
       return handle.isSameEntry(original)
     },
     importMedia: (file, handle) => importMediaFromHandle(file, handle),

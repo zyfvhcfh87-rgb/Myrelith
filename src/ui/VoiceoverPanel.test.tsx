@@ -8,8 +8,9 @@ import {
   useVoiceoverDraftStore,
   useVoiceoverSetupStore,
 } from '../state/voiceoverCaptureStore'
-import VoiceoverPanel from './VoiceoverPanel'
+import RecordPanel from './RecordPanel'
 import VoiceoverIndicator from './VoiceoverIndicator'
+import { useAvCaptureSetupStore, useAvCaptureStore } from '../state/avCaptureStore'
 
 const controller = vi.hoisted(() => ({
   startVoiceover: vi.fn(() => ({ status: 'started' as const, sessionId: 'voiceover_1' })),
@@ -47,6 +48,7 @@ function setCapture(phase: VoiceoverSession['phase'] | null, extra: Record<strin
       capturedSamples: (extra.capturedSamples as number) ?? 0,
       inputPeak: (extra.inputPeak as number) ?? 0,
       sourceLabel: 'USB mic', diagnostic: null, timing: null, playbackMuted: false,
+      renderGapSamples: (extra.renderGapSamples as number) ?? 0,
     })
   })
 }
@@ -57,13 +59,16 @@ beforeEach(() => {
   useVoiceoverSetupStore.setState({ trackId: null, countInSeconds: 1, compensationMs: 0,
     mutePlayback: false, deviceId: null, panelOpen: true })
   useVoiceoverDraftStore.setState({ drafts: [], busy: false, error: null, lastAction: null })
+  useAvCaptureSetupStore.setState({ mode: 'voiceover' })
+  useAvCaptureStore.setState({ session: null, progress: null })
   setCapture(null)
 })
 
-describe('VoiceoverPanel', () => {
+describe('RecordPanel voiceover tab', () => {
   test('records at the playhead with the chosen lane, count-in, offset, and mute', async () => {
-    render(<VoiceoverPanel onClose={() => {}} />)
-    expect(screen.getByRole('dialog', { name: /voiceover/i })).toBeTruthy()
+    render(<RecordPanel onClose={() => {}} />)
+    expect(screen.getByRole('dialog', { name: /record/i })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Voiceover', selected: true })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Count-in'), { target: { value: '3' } })
     fireEvent.change(screen.getByLabelText('Latency offset (ms)'), { target: { value: '-40' } })
     fireEvent.click(screen.getByLabelText('Mute timeline audio while recording'))
@@ -76,7 +81,7 @@ describe('VoiceoverPanel', () => {
 
   test('explains a rejected start and an invalid offset without starting', () => {
     controller.startVoiceover.mockReturnValueOnce({ status: 'rejected', reason: 'Pause playback first.' } as never)
-    render(<VoiceoverPanel onClose={() => {}} />)
+    render(<RecordPanel onClose={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /record at playhead/i }))
     expect(screen.getByRole('alert').textContent).toBe('Pause playback first.')
     fireEvent.change(screen.getByLabelText('Latency offset (ms)'), { target: { value: '900' } })
@@ -89,7 +94,7 @@ describe('VoiceoverPanel', () => {
     const doc = createTimelineDoc('Locked', DEFAULT_PROJECT_SETTINGS, 'seq')
     resetDocumentStoreForTest({ ...doc, tracks: doc.tracks.map((track) =>
       track.kind === 'audio' ? { ...track, locked: true } : track) })
-    render(<VoiceoverPanel onClose={() => {}} />)
+    render(<RecordPanel onClose={() => {}} />)
     expect((screen.getByRole('button', { name: /record at playhead/i }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText('Unlock an audio track to record onto.')).toBeTruthy()
   })
@@ -97,7 +102,7 @@ describe('VoiceoverPanel', () => {
   test('recording shows elapsed time, level, and Stop/Cancel; Escape does not close', () => {
     const onClose = vi.fn()
     setCapture('recording', { capturedSamples: 48_000 * 12 + 24_000, inputPeak: 0.5 })
-    render(<VoiceoverPanel onClose={onClose} />)
+    render(<RecordPanel onClose={onClose} />)
     expect(screen.getByRole('status').textContent).toContain('0:12.5')
     expect(screen.getByRole('meter', { name: 'Microphone input level' }).getAttribute('aria-valuenow')).toBe('50')
     expect(screen.queryByRole('button', { name: /record at playhead/i })).toBeNull()
@@ -107,15 +112,21 @@ describe('VoiceoverPanel', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  test('explains silence inserted for an audio-thread stall', () => {
+    setCapture('review', { renderGapSamples: 4_800 })
+    render(<RecordPanel onClose={() => {}} />)
+    expect(screen.getByText(/audio briefly stalled \(100 ms/)).toBeTruthy()
+  })
+
   test('warns when the microphone delivers silence', () => {
     setCapture('recording', { capturedSamples: 48_000 * 3, inputPeak: 0 })
-    render(<VoiceoverPanel onClose={() => {}} />)
+    render(<RecordPanel onClose={() => {}} />)
     expect(screen.getByText(/No microphone signal yet/)).toBeTruthy()
   })
 
   test('review offers keep choices; an interrupted take can only go to the Media Pool', () => {
     setCapture('review', { session: { interruption: 'transport-changed' } })
-    render(<VoiceoverPanel onClose={() => {}} />)
+    render(<RecordPanel onClose={() => {}} />)
     expect(screen.getByText(/Playback was moved or paused/)).toBeTruthy()
     const onTimeline = screen.getByRole('button', { name: 'Keep on timeline' }) as HTMLButtonElement
     expect(onTimeline.disabled).toBe(true)
@@ -127,7 +138,7 @@ describe('VoiceoverPanel', () => {
 
   test('permission denial is explained and recording can be retried', () => {
     setCapture('failed', { session: { failure: 'permission-denied' } })
-    render(<VoiceoverPanel onClose={() => {}} />)
+    render(<RecordPanel onClose={() => {}} />)
     expect(screen.getByText(/Microphone access was blocked/)).toBeTruthy()
     expect(screen.getByRole('button', { name: /record at playhead/i })).toBeTruthy()
   })
@@ -135,11 +146,11 @@ describe('VoiceoverPanel', () => {
   test('lists unsaved drafts for explicit recovery, never live ones', () => {
     act(() => {
       useVoiceoverDraftStore.setState({ drafts: [
-        { id: 'voiceover_crash', sizeBytes: 44 + 96_000, hasJournal: true, state: 'orphaned', assetIds: [], references: [] },
-        { id: 'voiceover_live', sizeBytes: null, hasJournal: true, state: 'live', assetIds: [], references: [] },
+        { id: 'voiceover_crash', fileName: 'voiceover_crash.wav', sizeBytes: 44 + 96_000, hasJournal: true, state: 'orphaned', assetIds: [], references: [] },
+        { id: 'voiceover_live', fileName: 'voiceover_live.wav', sizeBytes: null, hasJournal: true, state: 'live', assetIds: [], references: [] },
       ] })
     })
-    render(<VoiceoverPanel onClose={() => {}} />)
+    render(<RecordPanel onClose={() => {}} />)
     expect(screen.getByText('1 to recover')).toBeTruthy()
     expect(screen.getAllByText('Unsaved draft')).toHaveLength(1)
     expect(screen.getByText(/0:01\.0/)).toBeTruthy()
@@ -149,7 +160,7 @@ describe('VoiceoverPanel', () => {
 
   test('Escape closes the idle panel', () => {
     const onClose = vi.fn()
-    render(<VoiceoverPanel onClose={onClose} />)
+    render(<RecordPanel onClose={onClose} />)
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
     expect(onClose).toHaveBeenCalledOnce()
   })
@@ -159,7 +170,7 @@ describe('VoiceoverIndicator', () => {
   test('shows an idle entry, then a recording badge with Stop while the mic is live', () => {
     const onOpen = vi.fn()
     render(<VoiceoverIndicator open={false} disabled={false} onOpen={onOpen} />)
-    fireEvent.click(screen.getByRole('button', { name: /voiceover/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Record' }))
     expect(onOpen).toHaveBeenCalledOnce()
     expect(screen.queryByRole('button', { name: 'Stop recording' })).toBeNull()
     setCapture('recording', { capturedSamples: 48_000 * 65 })
@@ -172,10 +183,10 @@ describe('VoiceoverIndicator', () => {
   test('badges drafts waiting for recovery', () => {
     act(() => {
       useVoiceoverDraftStore.setState({ drafts: [
-        { id: 'voiceover_crash', sizeBytes: 100, hasJournal: true, state: 'orphaned', assetIds: [], references: [] },
+        { id: 'voiceover_crash', fileName: 'voiceover_crash.wav', sizeBytes: 100, hasJournal: true, state: 'orphaned', assetIds: [], references: [] },
       ] })
     })
     render(<VoiceoverIndicator open={false} disabled={false} onOpen={() => {}} />)
-    expect(screen.getByRole('button', { name: 'Voiceover, 1 recording drafts to recover' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Record, 1 recording drafts to recover' })).toBeTruthy()
   })
 })

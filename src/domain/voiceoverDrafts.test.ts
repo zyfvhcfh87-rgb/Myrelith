@@ -56,9 +56,18 @@ describe('voiceover draft classification', () => {
       [],
     )
     expect(classified[0]).toEqual({
-      id: 'voiceover_a', sizeBytes: 42, hasJournal: false,
+      id: 'voiceover_a', fileName: 'voiceover_a.wav', sizeBytes: 42, hasJournal: false,
       state: 'orphaned', assetIds: [], references: [],
     })
+  })
+
+  it('matches camera/screen captures by their own file name', () => {
+    const classified = classifyVoiceoverDrafts(
+      [{ id: 'capture_a', sizeBytes: 10, hasJournal: true, fileName: 'capture_a.mp4' }],
+      [],
+      [{ fileName: 'capture_a.mp4', projectBindingId: 'p', assetId: 'asset' }],
+    )
+    expect(classified[0]).toMatchObject({ fileName: 'capture_a.mp4', state: 'kept', assetIds: ['asset'] })
   })
 
   it('allows discard only for orphaned drafts', () => {

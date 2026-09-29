@@ -53,6 +53,8 @@ export interface VoiceoverDraftInfo {
   readonly sizeBytes: number | null
   /** A `.checkpoint` journal exists; it may hold recoverable audio. */
   readonly hasJournal: boolean
+  /** Stored file name; defaults to `${id}.wav` (camera/screen captures use `.mp4`). */
+  readonly fileName?: string
 }
 
 export type VoiceoverDraftState = 'live' | 'kept' | 'orphaned'
@@ -68,6 +70,7 @@ export interface VoiceoverDraftReference {
 
 export interface VoiceoverDraftClassification {
   readonly id: string
+  readonly fileName: string
   readonly sizeBytes: number | null
   readonly hasJournal: boolean
   readonly state: VoiceoverDraftState
@@ -96,7 +99,7 @@ export function classifyVoiceoverDrafts(
     else referencesByName.set(reference.fileName, [reference])
   }
   return drafts.map((draft) => {
-    const draftReferences = referencesByName.get(`${draft.id}.wav`) ?? []
+    const draftReferences = referencesByName.get(draft.fileName ?? `${draft.id}.wav`) ?? []
     const state: VoiceoverDraftState = draftReferences.length > 0
       ? 'kept'
       : live.has(draft.id) || draft.sizeBytes === null
@@ -104,6 +107,7 @@ export function classifyVoiceoverDrafts(
         : 'orphaned'
     return {
       id: draft.id,
+      fileName: draft.fileName ?? `${draft.id}.wav`,
       sizeBytes: draft.sizeBytes,
       hasJournal: draft.hasJournal,
       state,

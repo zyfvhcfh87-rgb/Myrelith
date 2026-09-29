@@ -1,6 +1,11 @@
 // Capture-only mono PCM16 processor. Audio output stays digitally silent.
 const BATCH_FRAMES = 8192
 const MAX_OUTSTANDING = 4
+// A loaded audio thread can skip or repeat render quanta. Up to half a second
+// either way keeps every sample on its exact context frame: skipped frames are
+// padded with silence, repeated frames are not written twice. Larger jumps end
+// the take as a fault.
+const MAX_RENDER_GAP_FRAMES = 24_000
 
 class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -65,6 +70,31 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
     this.port.postMessage({ type: 'stopped', endFrame: this.nextCaptureFrame ?? this.startFrame })
   }
 
+  /** Append one PCM16 sample at `frame`; false once the take has ended. */
+  push(frame, pcm) {
+    if (this.nextCaptureFrame !== null && frame !== this.nextCaptureFrame) {
+      this.fail('Microphone sample frame discontinuity', frame)
+      return false
+    }
+    if (!this.batch) {
+      if (this.outstanding.size >= MAX_OUTSTANDING) {
+        this.terminal = true
+        this.port.postMessage({ type: 'overrun', endFrame: frame })
+        return false
+      }
+      this.batch = new ArrayBuffer(BATCH_FRAMES * 2)
+      this.batchView = new DataView(this.batch)
+      this.batchStartFrame = frame
+    }
+    this.batchView.setInt16(this.batchFrames * 2, pcm, true)
+    const magnitude = pcm < 0 ? -pcm : pcm
+    if (magnitude > this.batchPeak) this.batchPeak = magnitude
+    this.batchFrames++
+    this.nextCaptureFrame = frame + 1
+    if (this.batchFrames === BATCH_FRAMES) this.emitBatch()
+    return true
+  }
+
   process(inputs, outputs) {
     for (const channel of outputs[0] ?? []) channel.fill(0)
     // Once terminal, let the processor be collected instead of rendering
@@ -81,14 +111,36 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
     }
     if (this.nextCaptureFrame !== null &&
       this.lastRenderEnd !== null && blockStart !== this.lastRenderEnd) {
-      this.fail('Audio render frame discontinuity', blockStart)
-      return false
+      const gap = blockStart - this.lastRenderEnd
+      if (gap > MAX_RENDER_GAP_FRAMES || gap < -MAX_RENDER_GAP_FRAMES) {
+        this.fail(`Audio render frame discontinuity of ${gap} frames`, blockStart)
+        return false
+      }
+      if (gap > 0) {
+        // Skipped quanta delivered no microphone input: pad them with silence
+        // so the take stays on the timeline's sample grid, and report it.
+        const padTo = Math.min(blockStart, this.stopFrame)
+        const padFrom = this.nextCaptureFrame
+        for (let frame = padFrom; frame < padTo; frame++) {
+          if (!this.push(frame, 0)) return false
+        }
+        if (padTo > padFrom) this.port.postMessage({ type: 'gap', atFrame: padFrom, frames: padTo - padFrom })
+        if (this.stopFrame <= blockStart) {
+          this.lastRenderEnd = blockEnd
+          this.finish()
+          return false
+        }
+      } else {
+        // A repeated quantum: frames already written keep their samples; only
+        // frames past the last written one are captured below.
+        this.port.postMessage({ type: 'gap', atFrame: blockStart, frames: gap })
+      }
     }
-    this.lastRenderEnd = blockEnd
+    this.lastRenderEnd = Math.max(this.lastRenderEnd ?? blockEnd, blockEnd)
     // An inactive worklet can skip render quanta before the anchor. Only the
     // captured interval requires continuous callbacks and sample numbering.
     if (blockEnd <= this.startFrame) return true
-    const from = Math.max(0, this.startFrame - blockStart)
+    const from = Math.max(0, (this.nextCaptureFrame ?? this.startFrame) - blockStart)
     const to = Math.min(length, this.stopFrame - blockStart)
     if (to > from) {
       if (!input || input.length < to) {
@@ -100,32 +152,12 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
         if (this.nextCaptureFrame === null) {
           this.port.postMessage({ type: 'started', atFrame: frame })
         }
-        if (this.nextCaptureFrame !== null && frame !== this.nextCaptureFrame) {
-          this.fail('Microphone sample frame discontinuity', frame)
-          return false
-        }
-        if (!this.batch) {
-          if (this.outstanding.size >= MAX_OUTSTANDING) {
-            this.terminal = true
-            this.port.postMessage({ type: 'overrun', endFrame: frame })
-            return false
-          }
-          this.batch = new ArrayBuffer(BATCH_FRAMES * 2)
-          this.batchView = new DataView(this.batch)
-          this.batchStartFrame = frame
-        }
         if (!Number.isFinite(input[index])) {
           this.fail('Microphone input contained a non-finite sample', frame)
           return false
         }
         const sample = Math.max(-1, Math.min(1, input[index]))
-        const pcm = Math.round(sample < 0 ? sample * 32768 : sample * 32767)
-        this.batchView.setInt16(this.batchFrames * 2, pcm, true)
-        const magnitude = pcm < 0 ? -pcm : pcm
-        if (magnitude > this.batchPeak) this.batchPeak = magnitude
-        this.batchFrames++
-        this.nextCaptureFrame = frame + 1
-        if (this.batchFrames === BATCH_FRAMES) this.emitBatch()
+        if (!this.push(frame, Math.round(sample < 0 ? sample * 32768 : sample * 32767))) return false
       }
     }
     if (this.stopFrame <= blockEnd) this.finish()

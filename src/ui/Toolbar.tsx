@@ -25,7 +25,7 @@ const ExportDialog = lazy(() => import('./ExportDialog'))
 const CollectMediaDialog = lazy(() => import('./CollectMediaDialog'))
 const CaptionEditor = lazy(() => import('./CaptionEditor'))
 const OtioInterchangeDialog = lazy(() => import('./OtioInterchangeDialog'))
-const VoiceoverPanel = lazy(() => import('./VoiceoverPanel'))
+const RecordPanel = lazy(() => import('./RecordPanel'))
 
 function saveStatus(
   phase: 'idle' | 'saving' | 'error',
@@ -330,11 +330,11 @@ export default function Toolbar() {
       )}
       {voiceoverOpen && !closing && (
         <LazySurfaceBoundary
-          loadingLabel="Loading voiceover controls…"
-          failureTitle="Voiceover controls could not load"
+          loadingLabel="Loading recording controls…"
+          failureTitle="Recording controls could not load"
           onClose={closeVoiceover}
         >
-          <VoiceoverPanel onClose={closeVoiceover} />
+          <RecordPanel onClose={closeVoiceover} />
         </LazySurfaceBoundary>
       )}
       {exportOpen && (

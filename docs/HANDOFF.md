@@ -5,31 +5,54 @@ records the completed MVP roadmap and gates; [../ARCHITECTURE.md](../ARCHITECTUR
 holds the binding rules. Post-MVP work comes from explicitly selected issues
 and the open list below.
 
-## Post-MVP issue #209 — local voiceover capture (in progress, 2026-09-29)
+## Post-MVP issue #209 — local voiceover, camera and screen capture (2026-09-29)
 
-Plan and per-step checkpoints: [ISSUE_209_PLAN.md](ISSUE_209_PLAN.md); evidence
-under [evidence/issue209](evidence/issue209). Work lives on `codex/issue209`
-(`.worktrees/issue209`), not the older `codex/209` branch. Voiceover Steps 0–11
-are done; Step 12 (real-device acceptance) is next, and camera/screen (13–21)
-stay disabled until it passes.
+The plan and per-step checkpoints are in [ISSUE_209_PLAN.md](ISSUE_209_PLAN.md);
+evidence is under [evidence/issue209](evidence/issue209). Work lives on
+`codex/issue209` (`.worktrees/issue209`), not the older `codex/209` branch.
+All 21 steps are done. Two items are qualified: physical camera lip sync and
+whole-screen/window capture.
 
-- UI: `ui/VoiceoverIndicator.tsx` (toolbar entry / REC badge / draft badge),
-  lazy `ui/VoiceoverPanel.tsx`, `app/styles/voiceover.css`. Both call only
-  `app/voiceoverController.ts` and read `state/voiceoverCaptureStore.ts`.
-- Capture: `app/voiceoverCaptureOwner.ts` (one session, Web Lock per draft,
-  latency-shifted capture window, pre-scheduled 60-minute stop) →
-  `app/voiceoverMicrophoneBridge.ts` → `worklets/voiceover-capture.worklet.js`
-  → `app/voiceoverWavBridge.ts` → `workers/voiceover-wav.worker.ts` →
-  `pipeline/voiceoverWavDraft.ts` (OPFS `myrelith-recordings-v1`).
-- Clock/rules: `domain/voiceoverClock.ts`, `voiceoverSession.ts`,
-  `voiceoverDestination.ts`, `voiceoverDrafts.ts`. Transport join is
-  `armVoiceoverTransport` in `app/transportController.ts`; its Play/Pause
-  toggle ends a take normally.
-- Recovery: `app/voiceoverDraftRecovery.ts` (serialized; never imports or
-  deletes without an explicit action).
-- Browser gates: `npx playwright test tests/browser/issue-209-*.spec.ts`
-  (the UI spec uses Chromium's fake capture device; output stays muted).
-- There is no Space shortcut for Play/Pause in this app; do not assume one.
+- **UI:**
+  - `ui/VoiceoverIndicator.tsx` is the toolbar **Record** entry: REC badge,
+    Stop, and draft badge.
+  - The lazy `ui/RecordPanel.tsx` has tabs for Voiceover
+    (`ui/VoiceoverPanel.tsx` `VoiceoverControls` + `DraftSection`) and for
+    Camera/Screen (`ui/AvCaptureControls.tsx`).
+  - Styles are in `app/styles/voiceover.css`.
+  - The UI calls only `app/voiceoverController.ts` and
+    `app/avCaptureController.ts`.
+- **Voiceover chain:**
+  - `app/voiceoverCaptureOwner.ts`
+  - → `app/voiceoverMicrophoneBridge.ts`
+  - → `worklets/voiceover-capture.worklet.js`, which pads/skips render-clock
+    jumps ≤ 0.5 s
+  - → `app/voiceoverWavBridge.ts`
+  - → `workers/voiceover-wav.worker.ts`
+  - → `pipeline/voiceoverWavDraft.ts` (OPFS `myrelith-recordings-v1`)
+- **Camera/screen chain:**
+  - `app/avCaptureOwner.ts` (+ `app/avClockCalibration.ts`)
+  - → the page's MediaStreamTrackProcessor streams, transferred
+  - → `workers/av-capture.worker.ts`
+  - → `pipeline/avCaptureRecorder.ts`: a fragmented MP4 in OPFS
+    `myrelith-captures-v1`, recovered by `pipeline/fragmentedMp4Recovery.ts`
+- **Rules:** `domain/voiceoverClock|Session|Destination|Drafts.ts` and
+  `domain/avCaptureClock|avClockBridge|avCaptureSession.ts`.
+- **Recovery:** `app/voiceoverDraftRecovery.ts` covers both kinds, is
+  serialized, and never imports or deletes without an explicit action.
+- **Hard-won lessons:**
+  - Chromium 151 stamps video on the tick clock and audio on page time.
+  - It cannot transfer MediaStreamTracks to workers.
+  - Headless Chromium mirrors no tab audio.
+  - Playwright pages always report `visible`: use raw CDP
+    (`scripts/issue209/acceptance/run-lifecycle.mjs`) for real hidden tabs.
+  - There is no Space shortcut for Play/Pause; the transport Pause button ends
+    a take normally.
+- **Gates:**
+  - `npx playwright test tests/browser/issue-209-*.spec.ts` uses fake devices
+    and stays muted.
+  - Real-device acceptance, with consent, runs separately via
+    `scripts/issue209/acceptance/playwright.config.ts`.
 
 ## Milestone 9 integration (2026-09-09)
 

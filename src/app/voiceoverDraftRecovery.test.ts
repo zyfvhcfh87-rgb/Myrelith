@@ -127,12 +127,18 @@ interface HarnessOptions {
   /** File names of current-project media descriptors. */
   assetFileNames?: string[]
   rememberFailure?: boolean
+  /** Camera/screen `.mp4` drafts in the separate captures directory. */
+  captures?: VoiceoverDraftInfo[]
 }
 
 function harness(options: HarnessOptions) {
   const directory: FakeDirectory = {
     entries: new Map(options.drafts.map((draft) => [draft.id, draft])),
   }
+  const captureDirectory: FakeDirectory = {
+    entries: new Map((options.captures ?? []).map((draft) => [draft.id, draft])),
+  }
+  const captureWriters: Array<RecoveryWriter & { calls: string[] }> = []
   const registry = new FakeRegistry()
   registry.failLoadFor = options.failLoadFor ?? null
   for (const remembered of options.remembered ?? []) {
@@ -161,8 +167,8 @@ function harness(options: HarnessOptions) {
     forgetHandle: (binding, assetId) => registry.forget(binding, assetId),
     allRememberedHandles: () => registry.list(),
     retainedAssetIds: () => options.clipReferenced ?? [],
-    isRecordingOriginal: async (draftId, rememberedHandle) => (
-      options.sameEntry ?? rememberedHandle.name === `${draftId}.wav`
+    isRecordingOriginal: async (fileName, rememberedHandle) => (
+      options.sameEntry ?? rememberedHandle.name === fileName
     ),
     importMedia: (file, importedHandle) =>
       options.importResult
@@ -180,6 +186,13 @@ function harness(options: HarnessOptions) {
         } as VoiceoverSession,
     disconnectAsset: vi.fn(),
     heldDraftLockIds: async () => options.lockedIds ?? [],
+    createCaptureStore: () => {
+      const writer = createFakeWriter(captureDirectory)
+      // A capture's file keeps its `.mp4` name.
+      writer.finalize = async () => ({ file: new File([], 'capture_a.mp4'), handle: handle('capture_a.mp4'), pcmBytes: 1 })
+      captureWriters.push(writer)
+      return writer
+    },
     projectAssetFileNames: () => options.assetFileNames ?? [],
     rememberHandle: vi.fn(async (bindingId: string, assetId: string, rememberedHandle: LocalMediaFileHandle) => {
       if (options.rememberFailure) throw new Error('IndexedDB unavailable')
@@ -198,6 +211,8 @@ function harness(options: HarnessOptions) {
     setBinding(value: string | null) { binding = value },
     setDocumentSnapshot(value: object) { documentSnapshot = value },
     newestWriter: () => writers[0] as RecoveryWriter & { calls: string[] },
+    captureDirectory,
+    captureWriters,
   }
 }
 
@@ -246,14 +261,14 @@ describe('voiceover draft recovery', () => {
     const survey = await recovery.survey()
     expect(survey.drafts).toEqual([
       {
-        id: 'voiceover_a', sizeBytes: 48, hasJournal: true,
+        id: 'voiceover_a', fileName: 'voiceover_a.wav', sizeBytes: 48, hasJournal: true,
         state: 'kept', assetIds: ['asset_kept'],
         references: [{
           fileName: 'voiceover_a.wav', projectBindingId: BINDING, assetId: 'asset_kept',
         }],
       },
-      { id: 'voiceover_live', sizeBytes: 48, hasJournal: true, state: 'live', assetIds: [], references: [] },
-      { id: 'voiceover_orphan', sizeBytes: 48, hasJournal: false, state: 'orphaned', assetIds: [], references: [] },
+      { id: 'voiceover_live', fileName: 'voiceover_live.wav', sizeBytes: 48, hasJournal: true, state: 'live', assetIds: [], references: [] },
+      { id: 'voiceover_orphan', fileName: 'voiceover_orphan.wav', sizeBytes: 48, hasJournal: false, state: 'orphaned', assetIds: [], references: [] },
     ])
     // Survey is a read: the worker only listed, never imported or deleted.
     expect(writers[0].calls).toEqual(['list'])
@@ -663,5 +678,24 @@ describe('voiceover draft recovery', () => {
     expect(await discarding).toMatchObject({ status: 'discarded' })
     const survey = await surveying
     expect(survey.drafts.map((entry) => [entry.id, entry.state])).toEqual([['voiceover_a', 'kept']])
+  })
+
+  it('lists, recovers, and discards camera/screen captures through the capture worker only', async () => {
+    const capture = (id: string) => ({ id, sizeBytes: 4096, hasJournal: true, fileName: `${id}.mp4` })
+    const h = harness({ drafts: [draft('voiceover_a')], captures: [capture('capture_a'), capture('capture_b')],
+      sessionPhase: null, importResult: async (_file, importedHandle) => {
+        await h.registry.remember(BINDING, 'capture-asset', importedHandle)
+        return { status: 'imported', assetId: 'capture-asset' }
+      } })
+    const survey = await h.recovery.survey()
+    expect(survey.drafts.map((entry) => [entry.fileName, entry.state])).toEqual([
+      ['voiceover_a.wav', 'orphaned'], ['capture_a.mp4', 'orphaned'], ['capture_b.mp4', 'orphaned']])
+    expect(await h.recovery.recoverDraft('capture_a')).toMatchObject({ status: 'recovered', assetId: 'capture-asset' })
+    expect(h.captureWriters.some((writer) => writer.calls.includes('recover:capture_a'))).toBe(true)
+    expect(await h.recovery.discardDraft('capture_b')).toMatchObject({ status: 'discarded' })
+    expect(h.captureDirectory.entries.has('capture_b')).toBe(false)
+    expect(h.directory.entries.has('voiceover_a')).toBe(true)
+    const after = await h.recovery.survey()
+    expect(after.drafts.find((entry) => entry.id === 'capture_a')?.state).toBe('kept')
   })
 })

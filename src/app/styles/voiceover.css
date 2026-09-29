@@ -1,4 +1,4 @@
-/* Issue #209 voiceover: toolbar indicator and non-modal recording panel. */
+/* Issue #209 local recording: toolbar Record entry and the non-modal Record panel. */
 .voiceover-indicator {
   position: relative;
   display: inline-flex;
@@ -118,6 +118,70 @@
 
 .voiceover-close:hover {
   background: #2a2e35;
+}
+
+.record-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  background: #101216;
+  border: 1px solid #2c3139;
+  border-radius: 7px;
+}
+
+.record-tab {
+  min-height: 28px;
+  color: #aeb7c3;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.record-tab:hover {
+  color: #e8edf5;
+}
+
+.record-tab[aria-selected='true'] {
+  color: #f4f6f9;
+  background: #2b3038;
+}
+
+.record-tab:focus-visible {
+  outline: 2px solid #78a9e8;
+  outline-offset: 1px;
+}
+
+.record-mode-body {
+  display: grid;
+  gap: 10px;
+}
+
+.av-preview {
+  width: 100%;
+  max-height: 180px;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #000;
+  border: 1px solid #2c3139;
+  border-radius: 6px;
+}
+
+.av-audio-choice {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #2c3139;
+  border-radius: 6px;
+}
+
+.av-audio-choice legend {
+  padding: 0 4px;
+  color: #b7c0cc;
 }
 
 .voiceover-status {

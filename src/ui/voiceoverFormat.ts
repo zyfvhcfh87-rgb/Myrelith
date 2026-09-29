@@ -20,3 +20,9 @@ const ACTIVE_PHASES: ReadonlySet<VoiceoverSession['phase']> = new Set([
 export function voiceoverSessionActive(session: VoiceoverSession | null): boolean {
   return session !== null && ACTIVE_PHASES.has(session.phase)
 }
+
+/** m:ss.t from integer microseconds (camera/screen takes). */
+export function avElapsedLabel(durationUs: number): string {
+  const tenths = Math.floor(Math.max(0, durationUs) / 100_000)
+  return `${Math.floor(tenths / 600)}:${String(Math.floor(tenths / 10) % 60).padStart(2, '0')}.${tenths % 10}`
+}

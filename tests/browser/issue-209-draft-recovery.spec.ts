@@ -36,10 +36,10 @@ test('Chromium protects cross-project recordings and verifies an OPFS original b
         forgetHandle: (owner: string, assetId: string) => localMediaHandleRegistry.forget(owner, assetId),
         allRememberedHandles: () => localMediaHandleRegistry.list(),
         retainedAssetIds: () => [],
-        isRecordingOriginal: async (id: string, handle: FileSystemFileHandle) => {
+        isRecordingOriginal: async (fileName: string, handle: FileSystemFileHandle) => {
           const root = await navigator.storage.getDirectory()
           const recordings = await root.getDirectoryHandle('myrelith-recordings-v1')
-          return handle.isSameEntry(await recordings.getFileHandle(`${id}.wav`))
+          return handle.isSameEntry(await recordings.getFileHandle(fileName))
         },
         importMedia: async () => ({ status: 'failed' as const, message: 'not used' }),
         liveSession: () => null,

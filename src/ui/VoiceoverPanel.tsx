@@ -1,13 +1,14 @@
 /**
- * ui/VoiceoverPanel.tsx — non-modal microphone voiceover controls.
+ * ui/VoiceoverPanel.tsx — microphone voiceover controls and the shared list of
+ * recordings in browser storage, shown inside the Record panel.
  *
  * Reads serializable capture/draft/setup state only. Every action goes through
  * app/voiceoverController; streams, worklets, and files never reach React.
  * The panel never subscribes to the playhead (render-isolation invariant):
  * the take starts at the playhead read inside the Record click.
  */
-import { useEffect, useId, useRef, useState } from 'react'
-import { Microphone, Stop, X } from '@phosphor-icons/react'
+import { useEffect, useId, useState } from 'react'
+import { Stop } from '@phosphor-icons/react'
 import { formatTimecode } from '../domain/time'
 import { voiceoverLaneOptions } from '../domain/voiceoverDestination'
 import type { VoiceoverDraftClassification } from '../domain/voiceoverDrafts'
@@ -145,7 +146,7 @@ function DraftRow({ draft, busy }: { draft: VoiceoverDraftClassification; busy: 
   )
 }
 
-function DraftSection() {
+export function DraftSection() {
   const drafts = useVoiceoverDraftStore((s) => s.drafts)
   const busy = useVoiceoverDraftStore((s) => s.busy)
   const error = useVoiceoverDraftStore((s) => s.error)
@@ -178,13 +179,12 @@ function DraftSection() {
   )
 }
 
-export default function VoiceoverPanel({ onClose }: { onClose(): void }) {
-  const titleId = useId()
+/** Voiceover setup, recording, and review controls (inside the Record panel). */
+export function VoiceoverControls() {
   const laneId = useId()
   const deviceId = useId()
   const countInId = useId()
   const offsetId = useId()
-  const headingRef = useRef<HTMLHeadingElement | null>(null)
   const doc = useDocumentStore((s) => s.doc)
   const session = useVoiceoverCaptureStore((s) => s.session)
   const capturedSamples = useVoiceoverCaptureStore((s) => s.capturedSamples)
@@ -192,6 +192,7 @@ export default function VoiceoverPanel({ onClose }: { onClose(): void }) {
   const sourceLabel = useVoiceoverCaptureStore((s) => s.sourceLabel)
   const diagnostic = useVoiceoverCaptureStore((s) => s.diagnostic)
   const timing = useVoiceoverCaptureStore((s) => s.timing)
+  const renderGapSamples = useVoiceoverCaptureStore((s) => s.renderGapSamples)
   const setup = useVoiceoverSetupStore()
   const [devices, setDevices] = useState<readonly VoiceoverInputDevice[]>([])
   const [rejection, setRejection] = useState<string | null>(null)
@@ -206,7 +207,6 @@ export default function VoiceoverPanel({ onClose }: { onClose(): void }) {
   const reviewing = phase === 'review'
   const busySession = active || phase === 'keeping'
 
-  useEffect(() => { headingRef.current?.focus() }, [])
   useEffect(() => { void refreshVoiceoverDrafts() }, [])
   useEffect(() => {
     let cancelled = false
@@ -242,28 +242,7 @@ export default function VoiceoverPanel({ onClose }: { onClose(): void }) {
   const noSignal = phase === 'recording' && capturedSamples >= SAMPLE_RATE * 2 && inputPeak === 0
 
   return (
-    <section
-      className="voiceover-panel"
-      role="dialog"
-      aria-modal="false"
-      aria-labelledby={titleId}
-      data-phase={phase ?? 'idle'}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && !busySession) {
-          event.stopPropagation()
-          onClose()
-        }
-      }}
-    >
-      <header className="voiceover-header">
-        <h2 id={titleId} ref={headingRef} tabIndex={-1}>
-          <Microphone aria-hidden="true" size={16} weight="fill" /> Voiceover
-        </h2>
-        <button type="button" className="voiceover-close" aria-label="Close voiceover panel" onClick={onClose}>
-          <X aria-hidden="true" size={14} weight="bold" />
-        </button>
-      </header>
-
+    <div className="record-mode-body" data-phase={phase ?? 'idle'}>
       <div className="voiceover-status" role="status" aria-live="polite" aria-atomic="true">
         <strong>{phaseText(session)}</strong>
         {(active || reviewing || phase === 'keeping') && (
@@ -273,6 +252,12 @@ export default function VoiceoverPanel({ onClose }: { onClose(): void }) {
       {statusDetail && <p className="voiceover-notice" data-tone={failure ? 'error' : 'warning'}>{statusDetail}</p>}
       {diagnostic && <p className="voiceover-diagnostic">{diagnostic}</p>}
       {rejection && <p className="voiceover-notice" data-tone="error" role="alert">{rejection}</p>}
+      {renderGapSamples > 0 && (active || reviewing) && (
+        <p className="voiceover-notice" data-tone="warning">
+          The computer&rsquo;s audio briefly stalled ({Math.max(1, Math.round(renderGapSamples / (SAMPLE_RATE / 1000)))} ms
+          in total). The take was kept in sync by filling or skipping those moments.
+        </p>
+      )}
       {noSignal && (
         <p className="voiceover-notice" data-tone="warning" role="alert">
           No microphone signal yet. Check the input device and its mute switch.
@@ -387,7 +372,6 @@ export default function VoiceoverPanel({ onClose }: { onClose(): void }) {
         </form>
       )}
 
-      <DraftSection />
-    </section>
+    </div>
   )
 }

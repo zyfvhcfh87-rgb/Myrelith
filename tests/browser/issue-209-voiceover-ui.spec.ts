@@ -43,11 +43,11 @@ test('records, keeps on the timeline, stops with Pause, and discards through the
   collectProblems(page, problems)
   await createProject(page)
 
-  const entry = page.getByRole('button', { name: /^Voiceover$/ })
+  const entry = page.getByRole('button', { name: 'Record', exact: true })
   await entry.click()
-  const panel = page.getByRole('dialog', { name: 'Voiceover' })
+  const panel = page.getByRole('dialog', { name: 'Record' })
   await expect(panel).toBeVisible()
-  await expect(panel.getByRole('heading', { name: 'Voiceover' })).toBeFocused()
+  await expect(panel.getByRole('heading', { name: 'Record' })).toBeFocused()
   await panel.getByLabel('Count-in').selectOption('0')
   await panel.getByRole('button', { name: 'Record at playhead' }).click()
 
@@ -107,7 +107,7 @@ test('records, keeps on the timeline, stops with Pause, and discards through the
   expect(afterDiscard.filter((name) => name.endsWith('.wav'))).toEqual([kept.fileName])
 
   // Escape closes the idle panel and returns focus to its toolbar entry.
-  await panel.getByRole('heading', { name: 'Voiceover' }).focus()
+  await panel.getByRole('heading', { name: 'Record' }).focus()
   await page.keyboard.press('Escape')
   await expect(panel).toHaveCount(0)
   await expect(entry).toBeFocused()
@@ -118,8 +118,8 @@ test('records, keeps on the timeline, stops with Pause, and discards through the
 test('the voiceover panel and toolbar fit a 720px-wide editor', async ({ page }) => {
   await page.setViewportSize({ width: 720, height: 800 })
   await createProject(page)
-  await page.getByRole('button', { name: /Voiceover|Record a voiceover/ }).first().click()
-  const panel = page.getByRole('dialog', { name: 'Voiceover' })
+  await page.getByRole('button', { name: 'Record', exact: true }).click()
+  const panel = page.getByRole('dialog', { name: 'Record' })
   await expect(panel).toBeVisible()
   const layout = await page.evaluate(() => {
     const box = document.querySelector('.voiceover-panel')!.getBoundingClientRect()
@@ -139,8 +139,8 @@ test('a take cut off by a reload is offered for explicit recovery, never importe
   const problems: string[] = []
   collectProblems(page, problems)
   await createProject(page)
-  await page.getByRole('button', { name: /^Voiceover$/ }).click()
-  const panel = page.getByRole('dialog', { name: 'Voiceover' })
+  await page.getByRole('button', { name: 'Record', exact: true }).click()
+  const panel = page.getByRole('dialog', { name: 'Record' })
   await panel.getByLabel('Count-in').selectOption('0')
   await panel.getByRole('button', { name: 'Record at playhead' }).click()
   // Past the first 256 KiB checkpoint (about 2.7 s at 48 kHz mono PCM16).
@@ -153,7 +153,7 @@ test('a take cut off by a reload is offered for explicit recovery, never importe
   await page.getByRole('button', { name: 'Start a new project' }).click()
   await page.getByRole('textbox', { name: 'Project name' }).fill('Recovery QA')
   await page.getByRole('button', { name: 'Create project', exact: true }).click()
-  const entry = page.getByRole('button', { name: 'Voiceover, 1 recording drafts to recover' })
+  const entry = page.getByRole('button', { name: 'Record, 1 recording drafts to recover' })
   await expect(entry).toBeVisible({ timeout: 10_000 })
   const mediaBefore = await page.evaluate(() =>
     (window as unknown as { __stores: { media: { getState(): { assets: Map<string, unknown> } } } })
@@ -161,7 +161,7 @@ test('a take cut off by a reload is offered for explicit recovery, never importe
   expect(mediaBefore).toBe(0)
 
   await entry.click()
-  const recoveryPanel = page.getByRole('dialog', { name: 'Voiceover' })
+  const recoveryPanel = page.getByRole('dialog', { name: 'Record' })
   await expect(recoveryPanel.getByText('Unsaved draft', { exact: true })).toBeVisible()
   await recoveryPanel.getByRole('button', { name: 'Recover' }).click()
   await expect(recoveryPanel.getByText('Draft recovered into the Media Pool.')).toBeVisible({ timeout: 15_000 })

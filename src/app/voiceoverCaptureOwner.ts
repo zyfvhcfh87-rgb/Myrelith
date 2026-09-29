@@ -15,6 +15,7 @@ import { armVoiceoverTransport, getPlaybackClockContext, type VoiceoverTransport
 import { connectVoiceoverMicrophone, prepareVoiceoverMicrophoneWorklet } from './voiceoverMicrophoneBridge'
 import { VoiceoverWavBridge } from './voiceoverWavBridge'
 import { voiceoverDraftLockName } from '../domain/voiceoverDrafts'
+import { avCaptureActive } from './avCaptureOwner'
 
 type Capture = Awaited<ReturnType<typeof connectVoiceoverMicrophone>>
 type Writer = Pick<VoiceoverWavBridge, 'create' | 'stop' | 'release' | 'recover' | 'discard' | 'close' | 'append'>
@@ -92,6 +93,7 @@ interface Active {
   compensationSamples: number
   mutePlayback: boolean
   inputPeak: number
+  renderGapSamples: number
   /** A writer was asked to create this draft; a discard must remove its files. */
   draftMayExist: boolean
   releaseLock: (() => void) | null
@@ -163,7 +165,8 @@ export class VoiceoverCaptureOwner {
     const active = this.active
     return { session: active?.state ?? null, sourceLabel: active?.sourceLabel ?? null,
       capturedSamples: active?.capturedSamples ?? 0, inputPeak: active?.inputPeak ?? 0,
-      playbackMuted: active?.mutePlayback ?? false, diagnostic: active?.diagnostic ?? null,
+      playbackMuted: active?.mutePlayback ?? false, renderGapSamples: active?.renderGapSamples ?? 0,
+      diagnostic: active?.diagnostic ?? null,
       timing: active?.timing ?? null }
   }
 
@@ -211,7 +214,7 @@ export class VoiceoverCaptureOwner {
       capture: null, preparing: null, cleanup: Promise.resolve(), pendingStarted: false,
       trackListeners: [], sourceLabel: null, capturedSamples: 0, diagnostic: null,
       countInFrames: countIn, compensationSamples: compensation, mutePlayback: options.mutePlayback ?? false,
-      inputPeak: 0, draftMayExist: false, releaseLock: null, context: null, limit: null,
+      inputPeak: 0, renderGapSamples: 0, draftMayExist: false, releaseLock: null, context: null, limit: null,
       transport: null, timing: null, requestedStopSample: null,
       keepTask: null, keepImportPending: false, keepCancelled: false }
     this.active = active
@@ -545,6 +548,11 @@ export class VoiceoverCaptureOwner {
             this.publish()
           }
         },
+        onGap: ({ frames }) => {
+          if (this.active !== active) return
+          active.renderGapSamples += Math.abs(frames)
+          this.publish()
+        },
         onOverrun: () => {
           if (this.active === active) void this.dispatch(active,
             { sessionId: active.state.sessionId, kind: 'interrupted', reason: 'overrun' })
@@ -767,7 +775,8 @@ export function getVoiceoverCaptureOwner(): VoiceoverCaptureOwner {
       typeof Worker === 'undefined' || typeof AudioWorkletNode === 'undefined'
       ? 'Microphone recording requires browser media, AudioWorklet, Worker and OPFS support.' : null,
     startConflict: () => useTransportStore.getState().isPlaying || useTransportStore.getState().isScrubbing
-      ? 'Pause playback and scrubbing before recording.' : null,
+      ? 'Pause playback and scrubbing before recording.'
+      : avCaptureActive() ? 'Finish the camera or screen recording first.' : null,
     planStartFrame: (context) => Math.ceil(context.currentTime * VOICEOVER_WAV_LIMITS.sampleRate) + 4800,
     publish: (status) => useVoiceoverCaptureStore.setState(status),
     subscribeDocument: (onChange) => useDocumentStore.subscribe(onChange),

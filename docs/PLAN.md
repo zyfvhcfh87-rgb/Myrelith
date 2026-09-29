@@ -11,11 +11,12 @@ record; new post-MVP work needs a new user-approved plan. Companion context:
 The user accepted the voiceover-first scope and requested small, resumable
 steps before implementation. The [Issue #209 plan](ISSUE_209_PLAN.md) lists
 those steps and their separate clock, storage, and A/V feasibility gates.
-Implementation now reaches Step 11: bounded writing, browser capture, keep and
-placement, cross-project draft recovery and original-removal safeguards, and the
-toolbar/panel voiceover controls, after a review-hardening pass over Steps 5–10.
-Step 12 owns integrated and physical-device acceptance before any camera or
-screen work.
+All 21 steps are complete. Voiceover passed real-device acceptance. Camera and
+screen recording use a measured A/V clock bridge, a bounded fragmented-MP4
+worker writer, crash recovery, and ordinary Media Pool import, all from one
+Record panel. Physical camera lip sync and whole-screen/window capture are
+qualified pending suitable hardware and OS permission. Publication is a
+separate decision.
 
 ## Post-MVP issue #204 — image-sequence, audio-only, alpha, and chapter delivery
 
