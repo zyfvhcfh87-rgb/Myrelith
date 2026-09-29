@@ -108,6 +108,27 @@ export function frameAtTimelineClientX(
 }
 
 /**
+ * Frame under the pointer inside one rendered clip. Its element starts at the
+ * clip's origin-clamped visible start, and the result stays within the clip.
+ */
+export function frameAtTimelineRangeClientX(
+  clientX: number,
+  elementLeftPx: number,
+  range: { readonly startFrame: number; readonly durationFrames: number },
+  timelineOriginFrame: number,
+  zoom: number,
+): number {
+  return frameAtTimelineClientX(
+    clientX,
+    elementLeftPx,
+    Math.max(range.startFrame, timelineOriginFrame),
+    zoom,
+    range.startFrame,
+    range.startFrame + range.durationFrames,
+  )
+}
+
+/**
  * Plan a viewport whose requested frame lands at `anchorScreenPx` in the
  * lane. Products are formed only from frame differences bounded by the
  * physical surface, so very large global frame numbers stay precise.

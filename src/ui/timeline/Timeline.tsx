@@ -15,11 +15,11 @@
  * order, tracks[0] = bottom), then audio tracks below. Both columns map
  * the same ordered array, so header row i always faces lane row i.
  *
- * Subscribes to the doc, active tool, authoritative zoom, and the rare
- * bounded-surface origin. It never subscribes to playhead movement (Phase 3
- * gate) or drag previews; those stay inside their narrow consumers until
- * commit. memo'd TrackHeader/Track rows plus structural sharing mean an edit
- * re-renders just the affected row pair.
+ * Subscribes to the doc, active tool, authoritative zoom, the rare
+ * bounded-surface origin, and session track targets. It never subscribes to
+ * playhead movement (Phase 3 gate) or drag previews; those stay inside their
+ * narrow consumers until commit. memo'd TrackHeader/Track rows plus
+ * structural sharing mean an edit re-renders just the affected row pair.
  */
 
 import { useLayoutEffect, useRef } from 'react'
@@ -30,16 +30,17 @@ import {
   getTransportResetRevision,
   useTransportStore,
 } from '../../state/transportStore'
+import { tracksInDisplayOrder } from '../../domain/selectors'
 import {
-  timelineDisplayDurationFrames,
-  tracksInDisplayOrder,
-} from '../../domain/selectors'
+  defaultTrackTargets,
+  reconcileTrackTargets,
+} from '../../domain/threePointEdit'
 import Ruler from './Ruler'
 import Track from './Track'
 import TrackHeader from './TrackHeader'
 import Playhead from './Playhead'
 import AlignmentGuide from './AlignmentGuide'
-import { timelineRunwayFrames } from './timelineZoom'
+import { timelineDocumentRunwayFrames } from './timelineZoom'
 import {
   calculateTimelineViewport,
   measureTimelineLaneWidth,
@@ -62,12 +63,12 @@ export default function Timeline() {
   const setTimelineOriginFrame = useTransportStore(
     (s) => s.setTimelineOriginFrame,
   )
+  const trackTargetsTouched = useTransportStore((s) => s.trackTargetsTouched)
+  const videoTargetTrackId = useTransportStore((s) => s.videoTargetTrackId)
+  const audioTargetTrackId = useTransportStore((s) => s.audioTargetTrackId)
   const { surfaceRef, marqueePointerHandlers } = useTimelineMarqueeSelection()
 
-  const totalFrames = timelineRunwayFrames(
-    timelineDisplayDurationFrames(doc),
-    doc.frameRate,
-  )
+  const totalFrames = timelineDocumentRunwayFrames(doc)
   const viewport = calculateTimelineViewport(
     totalFrames,
     zoom,
@@ -102,13 +103,8 @@ export default function Timeline() {
     }
     const onScroll = () => {
       const transport = useTransportStore.getState()
-      const liveDoc = useDocumentStore.getState().doc
-      const liveTotalFrames = timelineRunwayFrames(
-        timelineDisplayDurationFrames(liveDoc),
-        liveDoc.frameRate,
-      )
       const liveViewport = calculateTimelineViewport(
-        liveTotalFrames,
+        timelineDocumentRunwayFrames(useDocumentStore.getState().doc),
         transport.zoom,
         transport.timelineOriginFrame,
       )
@@ -158,6 +154,14 @@ export default function Timeline() {
   // the container derives it and hands each lane a boolean; the actual
   // mix rule lives in domain selectors.audibleTracks.
   const anyAudioSolo = doc.tracks.some((t) => t.kind === 'audio' && t.solo)
+  // Same resolution as sequenceEditController.resolvedTrackTargets, from the
+  // subscribed values: a lock/delete on one track can retarget another row.
+  const targets = reconcileTrackTargets(
+    doc,
+    trackTargetsTouched
+      ? { videoTrackId: videoTargetTrackId, audioTrackId: audioTargetTrackId }
+      : defaultTrackTargets(doc),
+  )
   const addTrack = (kind: 'video' | 'audio') =>
     useDocumentStore.getState().addTrack(kind)
 
@@ -179,7 +183,15 @@ export default function Timeline() {
         {/* Corner spacer: same height as the ruler so header/lane rows align. */}
         <div className="timeline-headers-corner" />
         {ordered.map((track) => (
-          <TrackHeader key={track.id} track={track} />
+          <TrackHeader
+            key={track.id}
+            track={track}
+            targeted={
+              track.id === (track.kind === 'video'
+                ? targets.videoTrackId
+                : targets.audioTrackId)
+            }
+          />
         ))}
         <div className="track-add-row">
           <button

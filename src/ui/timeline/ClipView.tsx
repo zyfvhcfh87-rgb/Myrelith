@@ -25,9 +25,8 @@
  * in clipVisualPlan; ClipVisualLayer owns the decorative generated-media JSX.
  */
 
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import type { Clip, TrackId, TrackKind } from '../../domain/schema'
-import { microsecondsDurationToFrames } from '../../domain/time'
 import { findClip } from '../../domain/selectors'
 import { useDocumentStore } from '../../state/documentStore'
 import { useMediaStore } from '../../state/mediaStore'
@@ -41,8 +40,9 @@ import {
 } from './clipAutomationPlan'
 import { planClipPresentation } from './clipVisualPlan'
 import ClipVisualLayer from './ClipVisualLayer'
+import { timelineAssetDurationFrames } from './gestureBounds'
 import { useClipGestureSession } from './useClipGestureSession'
-import { frameAtTimelineClientX } from './timelineViewport'
+import { frameAtTimelineRangeClientX } from './timelineViewport'
 import {
   editorContextMenuIdentity,
 } from '../../app/editorContextMenuCommands'
@@ -127,17 +127,9 @@ function ClipView({
   // stretching one sample across a potentially huge time span.
   // Stable narrow slices change only when THIS asset's visuals/metadata land.
   const visuals = useMediaStore((s) => s.visuals.get(clip.assetId))
-  const assetDurationFrames = useMediaStore((s) => {
-    const connected = s.assets.get(clip.assetId)
-    if (connected) return connected.durationFrames
-    const descriptor = s.descriptors.get(clip.assetId)
-    return descriptor
-      ? microsecondsDurationToFrames(
-          descriptor.durationMicroseconds,
-          documentRate,
-        )
-      : 0
-  })
+  const assetDurationFrames = useMediaStore((s) =>
+    timelineAssetDurationFrames(s, clip.assetId, documentRate),
+  )
   const isOffline = useMediaStore(
     (s) => s.descriptors.has(clip.assetId) && !s.assets.has(clip.assetId),
   )
@@ -160,6 +152,10 @@ function ClipView({
     zoom,
     timelineOriginFrame,
   })
+
+  // Clip-local key frames change only with this clip object (structural
+  // sharing), not with every preview/selection render.
+  const clipMarkers = useMemo(() => clipAutomationMarkers(clip), [clip])
 
   /* ---------------- geometry (committed + live preview) ------------- */
 
@@ -190,7 +186,7 @@ function ClipView({
     interactionTitle,
   } = presentation
   const hasSpeedLane = trackKind === 'video' && clipHasSpeedLane(clip)
-  const allMarkers = clipAutomationMarkers(clip)
+  const allMarkers = clipMarkers
     .map((marker) => ({
       ...marker,
       frame: presentation.automationMarkerStartFrame + marker.frame,
@@ -255,13 +251,12 @@ function ClipView({
                 transport.playheadFrame,
               ),
             )
-          : frameAtTimelineClientX(
+          : frameAtTimelineRangeClientX(
               event.clientX,
               rect.left,
-              Math.max(currentClip.timelineRange.startFrame, timelineOriginFrame),
+              currentClip.timelineRange,
+              timelineOriginFrame,
               transport.zoom,
-              currentClip.timelineRange.startFrame,
-              clipEnd,
             )
         if (openEditorContextMenuFromEvent(contextMenu, event, {
           target: {

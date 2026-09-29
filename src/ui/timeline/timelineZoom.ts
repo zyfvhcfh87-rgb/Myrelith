@@ -3,7 +3,8 @@
  * these helpers only derive the three preset scales and slider mapping.
  */
 
-import type { FrameRate } from '../../domain/schema'
+import type { FrameRate, TimelineDoc } from '../../domain/schema'
+import { timelineDisplayDurationFrames } from '../../domain/selectors'
 import { secondsToFrames } from '../../domain/time'
 
 export const MIN_VISIBLE_SECONDS = 9 * 3600 + 10 * 60
@@ -88,6 +89,11 @@ export function timelineRunwayFrames(
     frameRate,
   )
   return Math.max(durationFrames, nominalRunwayFrames)
+}
+
+/** Logical runway for one document's displayed content. */
+export function timelineDocumentRunwayFrames(doc: TimelineDoc): number {
+  return timelineRunwayFrames(timelineDisplayDurationFrames(doc), doc.frameRate)
 }
 
 /** Exponential range mapping: the midpoint is the geometric mean. */

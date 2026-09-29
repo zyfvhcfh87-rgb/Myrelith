@@ -1428,3 +1428,34 @@ describe('slide tool', () => {
     expect(doc().past).toHaveLength(1)
   })
 })
+
+describe('click without drag', () => {
+  test('trim, ripple, slip, slide, and multi-clip move clicks push no history', () => {
+    renderTrack()
+    const before = doc().doc
+    const click = (element: HTMLElement, pointerId: number, clientX: number): void => {
+      fireEvent.pointerDown(element, { pointerId, clientX })
+      fireEvent.pointerUp(element, { pointerId, clientX })
+    }
+
+    click(screen.getByTestId('clip-clipA-edge-start'), 1, 100)
+    click(screen.getByTestId('clip-clipA-edge-end'), 2, 150)
+    act(() => transport().setTool('trim'))
+    click(screen.getByTestId('clip-clipA-edge-start'), 3, 100)
+    click(screen.getByTestId('clip-clipA-edge-end'), 4, 150)
+    act(() => transport().setTool('slip'))
+    click(screen.getByTestId('clip-clipA'), 5, 120)
+    act(() => transport().setTool('slide'))
+    click(screen.getByTestId('clip-clipB'), 6, 200)
+    act(() => {
+      transport().setTool('select')
+      transport().setClipSelection(['clipA', 'clipC'], 'clipA')
+    })
+    click(screen.getByTestId('clip-clipA'), 7, 120)
+
+    expect(doc().doc).toBe(before)
+    expect(doc().past).toHaveLength(0)
+    expect(transport().editPreview).toBeNull()
+    expect(transport().dragPreview).toBeNull()
+  })
+})

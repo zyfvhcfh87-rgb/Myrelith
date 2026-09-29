@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import type { MulticamInstance, TrackId, TrackKind } from '../../domain/schema'
+import type { MulticamInstance, TrackKind } from '../../domain/schema'
 import { multicamInstanceVisibleRange } from '../../state/multicamPresentation'
 import { useMulticamSelectionStore } from '../../state/multicamSelectionStore'
 import { useSequenceInstanceSelectionStore } from '../../state/sequenceInstanceSelectionStore'
@@ -8,7 +8,6 @@ import { frameToTimelineLocalPx } from './timelineViewport'
 
 interface MulticamInstanceViewProps {
   readonly instance: MulticamInstance
-  readonly trackId: TrackId
   readonly trackKind: TrackKind
   readonly timelineOriginFrame: number
   readonly timelineWindowEndFrame: number
@@ -16,7 +15,6 @@ interface MulticamInstanceViewProps {
 
 function MulticamInstanceView({
   instance,
-  trackId,
   trackKind,
   timelineOriginFrame,
   timelineWindowEndFrame,
@@ -38,8 +36,6 @@ function MulticamInstanceView({
       data-testid={`multicam-instance-${instance.id}`}
       data-instance-id={instance.id}
       data-multicam-id={instance.multicamId}
-      data-track-id={trackId}
-      data-track-kind={trackKind}
       aria-pressed={selected}
       aria-label={`Multicam ${instance.name} on ${trackKind} track`}
       title={`${instance.name} · manual-sync multicam`}

@@ -575,6 +575,56 @@ describe('drag: same-kind track targeting', () => {
     expect(trackById('A2').clips.find((clip) => clip.id === 'audioA')?.timelineRange.startFrame).toBe(70)
     expect(doc().past).toHaveLength(1)
   })
+
+  test('a compound instance inside a hidden lane never becomes the drop lane', async () => {
+    const root: TimelineDoc = {
+      ...makeDoc(),
+      tracks: [
+        makeTrack('V1', [makeClip('clipA', 100, 50)]),
+        {
+          ...makeTrack('V2', []),
+          hidden: true,
+          sequenceInstances: [{
+            kind: 'sequence',
+            id: 'hidden-scene',
+            name: 'Hidden scene',
+            sequenceId: 'child',
+            sourceStartFrame: 0,
+            timelineRange: { startFrame: 0, durationFrames: 1_000 },
+          }],
+        },
+      ],
+    }
+    doc().setProject({
+      id: 'project',
+      name: 'Project',
+      rootSequenceId: root.id,
+      sequences: [root, { ...makeDoc(), id: 'child', name: 'child', tracks: [] }],
+    })
+    render(
+      <>
+        <Track track={trackById('V2')} />
+        <Track track={trackById('V1')} />
+      </>,
+    )
+    mockLaneRect('V2', 0)
+    mockLaneRect('V1', 56)
+    // The instance box fills most of the hidden lane, as it does in a browser.
+    vi.spyOn(screen.getByTestId('sequence-instance-hidden-scene'), 'getBoundingClientRect')
+      .mockReturnValue(laneRect(6))
+
+    const clip = screen.getByTestId('clip-clipA')
+    fireEvent.pointerDown(clip, { pointerId: 9, clientX: 500, clientY: 84 })
+    fireEvent.pointerMove(clip, { pointerId: 9, clientX: 530, clientY: 28 })
+    await waitFor(() => expect(transport().dragPreview?.deltaFrames).toBe(30))
+    expect(transport().dragPreview?.targetTrackId).toBeUndefined()
+    fireEvent.pointerUp(clip, { pointerId: 9, clientX: 530, clientY: 28 })
+
+    expect(trackById('V1').clips.find((candidate) => candidate.id === 'clipA')
+      ?.timelineRange.startFrame).toBe(130)
+    expect(trackById('V2').clips).toHaveLength(0)
+    expect(doc().past).toHaveLength(1)
+  })
 })
 
 describe('drag isolation', () => {

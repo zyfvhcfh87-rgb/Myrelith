@@ -109,7 +109,11 @@ function AdjustmentView({
       maxDelta: bounds.max,
       lastDelta: 0,
     }
-    rootRef.current?.setPointerCapture(event.pointerId)
+    try {
+      rootRef.current?.setPointerCapture(event.pointerId)
+    } catch {
+      /* synthetic/inactive pointer - move events can still drive the edit */
+    }
     transport.setAdjustmentEditPreview({
       adjustmentId: adjustment.id,
       kind,
@@ -210,6 +214,13 @@ function AdjustmentView({
       }}
       onPointerUp={(event) => endGesture(event, true)}
       onPointerCancel={(event) => endGesture(event, false)}
+      onPointerLeave={(event) => {
+        // Capture is best-effort; if it failed, leaving cancels the edit
+        // instead of wedging a live preview.
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+          endGesture(event, false)
+        }
+      }}
       onLostPointerCapture={(event) => endGesture(event, false)}
       onKeyDown={onKeyDown}
     >

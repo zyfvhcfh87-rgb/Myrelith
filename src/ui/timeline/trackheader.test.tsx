@@ -140,6 +140,26 @@ describe('toggle wiring', () => {
     expect(getState().past).toHaveLength(0)
   })
 
+  test('locking or deleting the default target moves the pressed state to the next lane', () => {
+    render(<Timeline />)
+    const target = (trackId: string) => screen.getByLabelText(`target track ${trackId}`)
+    expect(target('V1')).toHaveAttribute('aria-pressed', 'true')
+    expect(target('V2')).toHaveAttribute('aria-pressed', 'false')
+
+    // V2's own track object is untouched by these edits, yet its header must
+    // still reflect the newly resolved default destination.
+    fireEvent.click(screen.getByLabelText('lock track V1'))
+    expect(target('V1')).toHaveAttribute('aria-pressed', 'false')
+    expect(target('V2')).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByLabelText('lock track V1'))
+    expect(target('V1')).toHaveAttribute('aria-pressed', 'true')
+    expect(target('V2')).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByLabelText('delete track V1'))
+    expect(target('V2')).toHaveAttribute('aria-pressed', 'true')
+  })
+
   test('hide toggles doc.hidden; each real change is ONE undo entry', () => {
     render(<Timeline />)
     const hide = screen.getByLabelText('hide track V1')
