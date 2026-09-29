@@ -3,7 +3,6 @@ import { validateExportRange, exportSampleBoundary, type ExportRange } from '../
 import { hasVideoBusEffects, videoBusRenderBudgetError } from '../domain/videoBusStage'
 
 import {
-  AudioSample,
   AudioSampleSource,
   BufferTarget,
   CanvasSource,
@@ -35,10 +34,12 @@ import {
   resampleMixedAudioBlock,
   scaleExportSampleIndex,
   type ExportAudioResampleCarry,
-  type MixedAudioBlock,
 } from './export-audio'
 import {
   AacInputAssembler,
+  addInterleavedAudioChunk,
+  interleaveAudioBlock,
+  trimAacPaddingPacket,
   type AacInputChunk,
 } from './export-aac-input'
 import { createMediabunnyExportAudioSource } from './export-mediabunny-audio-source'
@@ -115,42 +116,6 @@ async function cancelSetup(
   }
   if (integrityFailure !== undefined) throw integrityFailure
   throw primary
-}
-
-function interleaveAudioBlock(
-  block: MixedAudioBlock,
-  channelCount: 1 | 2,
-): Float32Array {
-  const data = new Float32Array(block.sampleCount * channelCount)
-  for (let frame = 0; frame < block.sampleCount; frame++) {
-    if (channelCount === 1) {
-      // The internal mix bus stays stereo. An arithmetic mean preserves a
-      // duplicated mono source's level and cannot clip two bounded channels.
-      data[frame] = (block.channels[0][frame] + block.channels[1][frame]) / 2
-    } else {
-      data[frame * channelCount] = block.channels[0][frame]
-      data[frame * channelCount + 1] = block.channels[1][frame]
-    }
-  }
-  return data
-}
-
-function trimAacPaddingPacket(
-  packet: EncodedPacket,
-  targetSamples: number,
-  sampleRate: number,
-): void {
-  const packetStart = Math.round(packet.timestamp * sampleRate)
-  const packetSamples = Math.round(packet.duration * sampleRate)
-  const remaining = Math.max(0, targetSamples - packetStart)
-  if (packetSamples <= remaining) return
-
-  // Mediabunny 1.50.9 invokes onEncodedPacket synchronously immediately
-  // before handing this same object to the muxer. AAC encodes whole 1024-
-  // sample packets; narrowing the final packet's container duration removes
-  // codec padding without changing the exact PCM samples submitted.
-  ;(packet as unknown as { duration: number }).duration =
-    remaining / sampleRate
 }
 
 /** Creates and starts the selected buffered or direct-file Mediabunny sink. */
@@ -442,18 +407,12 @@ export async function createMediabunnyExportSink(
     if (!audioSource || outputAudioChannels === null) {
       throw new Error('Export audio source is unavailable')
     }
-    const sample = new AudioSample({
-      data: chunk.data,
-      format: 'f32',
-      numberOfChannels: outputAudioChannels,
-      sampleRate: encoderSampleRate,
-      timestamp: chunk.startSample / encoderSampleRate,
-    })
-    try {
-      await audioSource.add(sample)
-    } finally {
-      sample.close()
-    }
+    await addInterleavedAudioChunk(
+      audioSource,
+      chunk,
+      outputAudioChannels,
+      encoderSampleRate,
+    )
   }
 
   const addFrame = async (

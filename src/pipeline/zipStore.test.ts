@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { crc32, unzipStore, zipStore } from './zipStore'
+import { unzipStore } from '../test/zipStoreReader'
+import { crc32, zipStore } from './zipStore'
 
 describe('ZIP STORE', () => {
   test('round-trips named payloads with matching CRC and deterministic bytes', () => {
@@ -12,6 +13,8 @@ describe('ZIP STORE', () => {
       { name: 'notes.chapters.json', data: new TextEncoder().encode('{"ok":true}') },
     ])
     expect(first).toEqual(second)
+    expect(first.byteOffset).toBe(0)
+    expect(first.byteLength).toBe(first.buffer.byteLength)
     const entries = unzipStore(first)
     expect(entries.map((entry) => entry.name)).toEqual([
       'frame_00000.png',

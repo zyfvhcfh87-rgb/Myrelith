@@ -1,38 +1,4 @@
-import {
-  DEFAULT_BLEND_MODE,
-  type BlendModeName,
-  type BlendModeResolution,
-} from '../domain/blendModes'
-
-export type BlendCompositeBackend = 'canvas2d' | 'webgl' | 'compatibility'
-
-export interface BlendModeBackendCapabilities {
-  supportsCanvas2D(mode: BlendModeName): boolean
-  /** Optional seam for a parity-verified WebGL implementation. */
-  supportsWebGL?(mode: BlendModeName): boolean
-}
-
-export interface BlendModeBackendSelection {
-  backend: BlendCompositeBackend
-  effective: BlendModeName
-}
-
-/** Prefer Canvas2D, then an explicitly registered WebGL parity path, then normal. */
-export function selectBlendModeBackend(
-  resolution: BlendModeResolution,
-  capabilities: BlendModeBackendCapabilities,
-): BlendModeBackendSelection {
-  if (resolution.status === 'compatibility-fallback') {
-    return { backend: 'compatibility', effective: DEFAULT_BLEND_MODE }
-  }
-  if (capabilities.supportsCanvas2D(resolution.effective)) {
-    return { backend: 'canvas2d', effective: resolution.effective }
-  }
-  if (capabilities.supportsWebGL?.(resolution.effective)) {
-    return { backend: 'webgl', effective: resolution.effective }
-  }
-  return { backend: 'compatibility', effective: DEFAULT_BLEND_MODE }
-}
+import type { BlendModeName } from '../domain/blendModes'
 
 export interface CanvasBlendProbeContext {
   globalCompositeOperation: GlobalCompositeOperation

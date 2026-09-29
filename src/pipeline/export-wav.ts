@@ -1,46 +1,37 @@
 /**
  * First-party PCM WAV writer. Sample rate and channel count stay on the
  * document contract; this path never downsamples or invents a video stream.
+ * The file is allocated once and filled block by block, so a WAV export
+ * never holds whole-program float planes beside the encoded bytes.
  */
 
-export type WavChannelLayout = 'mono' | 'stereo'
+const WAV_HEADER_BYTES = 44
 
 function clampS16(sample: number): number {
   const scaled = Math.round(Math.max(-1, Math.min(1, sample)) * 32767)
   return Math.max(-32768, Math.min(32767, scaled))
 }
 
-export function wavPcmByteLength(
+/**
+ * Allocate a complete mono/stereo 16-bit PCM WAV file for `sampleCount`
+ * frames and write its header. Fill the data with writePcmS16WavFrames.
+ */
+export function createPcmS16WavBuffer(
   sampleCount: number,
-  layout: WavChannelLayout,
-): number {
-  if (!Number.isSafeInteger(sampleCount) || sampleCount < 0) {
-    throw new RangeError('WAV sample count must be a non-negative safe integer')
-  }
-  const channels = layout === 'mono' ? 1 : 2
-  return 44 + sampleCount * channels * 2
-}
-
-export function encodePcmS16Wav(
-  channels: readonly Float32Array[],
+  channelCount: number,
   sampleRate: number,
 ): ArrayBuffer {
   if (!Number.isSafeInteger(sampleRate) || sampleRate <= 0) {
     throw new RangeError('WAV sample rate must be a positive safe integer')
   }
-  if (channels.length !== 1 && channels.length !== 2) {
+  if (channelCount !== 1 && channelCount !== 2) {
     throw new TypeError('WAV PCM requires mono or stereo float planes')
   }
-  const sampleCount = channels[0]?.length ?? 0
   if (!Number.isSafeInteger(sampleCount) || sampleCount < 0) {
     throw new RangeError('WAV sample count must be a non-negative safe integer')
   }
-  for (const plane of channels) {
-    if (plane.length !== sampleCount) throw new RangeError('WAV channel planes must match in length')
-  }
-  const channelCount = channels.length
   const dataBytes = sampleCount * channelCount * 2
-  const buffer = new ArrayBuffer(44 + dataBytes)
+  const buffer = new ArrayBuffer(WAV_HEADER_BYTES + dataBytes)
   const view = new DataView(buffer)
   const text = (offset: number, value: string): void => {
     for (let index = 0; index < value.length; index++) {
@@ -60,16 +51,35 @@ export function encodePcmS16Wav(
   view.setUint16(34, 16, true)
   text(36, 'data')
   view.setUint32(40, dataBytes, true)
-  let offset = 44
-  for (let sample = 0; sample < sampleCount; sample++) {
-    for (const plane of channels) {
+  return buffer
+}
+
+/**
+ * Write `count` frames of clamped, interleaved s16 samples from one float
+ * plane per WAV channel, starting at output frame `frameOffset`.
+ */
+export function writePcmS16WavFrames(
+  view: DataView,
+  planes: readonly ArrayLike<number>[],
+  frameOffset: number,
+  count: number,
+): void {
+  const channelCount = view.getUint16(22, true)
+  if (planes.length !== channelCount) {
+    throw new TypeError('WAV block planes must match the file channel count')
+  }
+  let offset = WAV_HEADER_BYTES + frameOffset * channelCount * 2
+  if (
+    !Number.isSafeInteger(frameOffset)
+    || frameOffset < 0
+    || offset + count * channelCount * 2 > view.byteLength
+  ) {
+    throw new RangeError('WAV block is outside the allocated sample range')
+  }
+  for (let sample = 0; sample < count; sample++) {
+    for (const plane of planes) {
       view.setInt16(offset, clampS16(plane[sample]!), true)
       offset += 2
     }
   }
-  return buffer
-}
-
-export function wavChannelCount(layout: WavChannelLayout): 1 | 2 {
-  return layout === 'mono' ? 1 : 2
 }

@@ -195,13 +195,10 @@ export async function createImageSequenceSink(
       })
     }
     if (completion === 'complete') appendSidecar()
-    const bytes = zipStore(zipEntries)
-    const copy = new Uint8Array(bytes.byteLength)
-    copy.set(bytes)
     return createAlternativeBufferedExportResult({
       destination: 'download',
       kind: 'image-sequence',
-      buffer: copy.buffer,
+      buffer: zipStore(zipEntries).buffer,
       mimeType: 'application/zip',
       fileExtension: 'zip',
       label: completion === 'complete' ? 'PNG image sequence' : 'Partial PNG image sequence',

@@ -5,7 +5,6 @@
  */
 
 import {
-  AudioSample,
   AudioSampleSource,
   BufferTarget,
   Mp4OutputFormat,
@@ -35,14 +34,19 @@ import {
   resampleMixedAudioBlock,
   type ExportAudioMediaSource,
   type ExportAudioResampleCarry,
-  type MixedAudioBlock,
 } from './export-audio'
-import { AacInputAssembler, type AacInputChunk } from './export-aac-input'
+import {
+  AacInputAssembler,
+  addInterleavedAudioChunk,
+  interleaveAudioBlock,
+  trimAacPaddingPacket,
+  type AacInputChunk,
+} from './export-aac-input'
 import {
   DirectFileAbortError,
   type PreparedExportFileCapability,
 } from './export-file-target'
-import { encodePcmS16Wav } from './export-wav'
+import { createPcmS16WavBuffer, writePcmS16WavFrames } from './export-wav'
 import { zipStore } from './zipStore'
 
 export interface AudioOnlyExportDeps {
@@ -52,31 +56,6 @@ export interface AudioOnlyExportDeps {
   readonly fileDestination?: PreparedExportFileCapability
   readonly sidecarName?: string
   readonly sidecarBytes?: Uint8Array
-}
-
-function interleaveAudioBlock(block: MixedAudioBlock, channelCount: 1 | 2): Float32Array {
-  const data = new Float32Array(block.sampleCount * channelCount)
-  for (let frame = 0; frame < block.sampleCount; frame++) {
-    if (channelCount === 1) {
-      data[frame] = (block.channels[0][frame]! + block.channels[1][frame]!) / 2
-    } else {
-      data[frame * channelCount] = block.channels[0][frame]!
-      data[frame * channelCount + 1] = block.channels[1][frame]!
-    }
-  }
-  return data
-}
-
-function trimAacPaddingPacket(
-  packet: EncodedPacket,
-  targetSamples: number,
-  sampleRate: number,
-): void {
-  const packetStart = Math.round(packet.timestamp * sampleRate)
-  const packetSamples = Math.round(packet.duration * sampleRate)
-  const remaining = Math.max(0, targetSamples - packetStart)
-  if (packetSamples <= remaining) return
-  ;(packet as unknown as { duration: number }).duration = remaining / sampleRate
 }
 
 function finishBuffer(
@@ -91,10 +70,8 @@ function finishBuffer(
       { name: mediaName, data: new Uint8Array(buffer) },
       { name: sidecarName, data: sidecarBytes },
     ])
-    const copy = new Uint8Array(zip.byteLength)
-    copy.set(zip)
     return {
-      buffer: copy.buffer,
+      buffer: zip.buffer,
       mimeType: 'application/zip',
       fileExtension: 'zip',
       label: `${deliveryProductLabel(profile)} with chapter sidecar`,
@@ -217,20 +194,27 @@ export async function* exportAudioOnly(
     if (validated.codec === 'pcm-s16') {
       const startSample = exportSampleBoundary(window.startFrame, doc, doc.audioSampleRate)
       const sampleCount = exportSampleBoundary(window.endFrame, doc, doc.audioSampleRate) - startSample
-      const left = new Float32Array(sampleCount)
-      const right = channelCount === 2 ? new Float32Array(sampleCount) : null
+      // Encode each mixer block straight into the one WAV allocation instead
+      // of holding whole-program float planes beside the encoded bytes.
+      const buffer = createPcmS16WavBuffer(sampleCount, channelCount, doc.audioSampleRate)
+      const wav = new DataView(buffer)
+      // Mono keeps the float32 rounding of the mean that the former
+      // whole-program float plane applied before s16 quantization.
+      let mono = new Float32Array(0)
       let cursor = 0
       for (let frame = window.startFrame; frame < window.endFrame; frame++) {
         await mixer.writeFrame(frame, async (block) => {
-          for (let sample = 0; sample < block.sampleCount; sample++) {
-            if (channelCount === 1) {
-              left[cursor] = (block.channels[0][sample]! + block.channels[1][sample]!) / 2
-            } else {
-              left[cursor] = block.channels[0][sample]!
-              right![cursor] = block.channels[1][sample]!
+          const writable = Math.max(0, Math.min(block.sampleCount, sampleCount - cursor))
+          if (channelCount === 1) {
+            if (mono.length < writable) mono = new Float32Array(writable)
+            for (let sample = 0; sample < writable; sample++) {
+              mono[sample] = (block.channels[0][sample]! + block.channels[1][sample]!) / 2
             }
-            cursor++
+            writePcmS16WavFrames(wav, [mono], cursor, writable)
+          } else {
+            writePcmS16WavFrames(wav, block.channels, cursor, writable)
           }
+          cursor += block.sampleCount
         })
         nextFrame++
         yield (frame + 1) / (window.endFrame + 1)
@@ -239,8 +223,6 @@ export async function* exportAudioOnly(
       if (cursor !== sampleCount) {
         throw new Error(`WAV export expected ${sampleCount} samples, mixed ${cursor}`)
       }
-      const planes = right ? [left, right] : [left]
-      const buffer = encodePcmS16Wav(planes, doc.audioSampleRate)
       finalized = true
       return await publish(
         finishBuffer(buffer, validated, deps.sidecarName, deps.sidecarBytes),
@@ -269,20 +251,8 @@ export async function* exportAudioOnly(
     output.addAudioTrack(audioSource)
     await output.start()
     const aacAssembler = validated.codec === 'aac' ? new AacInputAssembler(channelCount) : null
-    const writeEncoded = async (chunk: AacInputChunk): Promise<void> => {
-      const sample = new AudioSample({
-        data: chunk.data,
-        format: 'f32',
-        numberOfChannels: channelCount,
-        sampleRate: encoderSampleRate,
-        timestamp: chunk.startSample / encoderSampleRate,
-      })
-      try {
-        await audioSource.add(sample)
-      } finally {
-        sample.close()
-      }
-    }
+    const writeEncoded = (chunk: AacInputChunk): Promise<void> =>
+      addInterleavedAudioChunk(audioSource, chunk, channelCount, encoderSampleRate)
     for (let frame = window.startFrame; frame < window.endFrame; frame++) {
       await mixer.writeFrame(frame, async (block) => {
         const resampled = resampleMixedAudioBlock(

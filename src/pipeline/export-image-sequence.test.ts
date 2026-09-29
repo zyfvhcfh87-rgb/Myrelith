@@ -2,7 +2,7 @@ import { CURRENT_TIMELINE_SCHEMA_VERSION } from '../domain/projectFile'
 import { describe, expect, test, vi } from 'vitest'
 import { DEFAULT_IMAGE_SEQUENCE_PROFILE } from '../domain/deliveryProduct'
 import type { TimelineDoc } from '../domain/schema'
-import { unzipStore } from './zipStore'
+import { unzipStore } from '../test/zipStoreReader'
 import { createImageSequenceSink } from './export-image-sequence'
 
 class FakeCanvas {

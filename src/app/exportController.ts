@@ -446,7 +446,7 @@ function wrapDownloadWithSidecar(
   return createAlternativeBufferedExportResult({
     destination: 'download',
     kind: 'kind' in result ? result.kind : 'av-media',
-    buffer: (zip.buffer as ArrayBuffer).slice(zip.byteOffset, zip.byteOffset + zip.byteLength),
+    buffer: zip.buffer,
     mimeType: 'application/zip',
     fileExtension: 'zip',
     label,
