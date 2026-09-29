@@ -17,6 +17,7 @@ import {
   legacyLocalProjectBindingId,
 } from './localProjectProvenance'
 import { hasErrorName } from '../domain/errors'
+import { isPositiveSafeInteger } from '../domain/numeric'
 
 export type LocalMediaPermission = 'granted' | 'denied' | 'prompt'
 
@@ -458,10 +459,6 @@ export async function pickLocalMediaFiles(
     handle,
     file: await handle.getFile(),
   })))
-}
-
-function isPositiveSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
 }
 
 function resolveFolderLimits(

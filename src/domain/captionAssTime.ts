@@ -1,6 +1,7 @@
 /** Pure ASS centisecond boundaries. Export proposals make grid loss explicit. */
 import { CaptionFileError } from './captionFiles'
 import { CAPTION_LIMITS } from './captions'
+import { ceilDivide } from './numeric'
 import type { FrameRate, TimeRange } from './schema'
 
 const TIMESTAMP = /^([0-9]{1,23}):([0-5][0-9]):([0-5][0-9])\.([0-9]{2})$/u
@@ -12,10 +13,6 @@ function rateParts(rate: FrameRate): { numerator: bigint; denominator: bigint } 
     throw new CaptionFileError('timing', 'ASS requires a positive integer rational frame rate')
   }
   return { numerator: BigInt(rate.num), denominator: 100n * BigInt(rate.den) }
-}
-
-function ceilDivide(value: bigint, divisor: bigint): bigint {
-  return (value + divisor - 1n) / divisor
 }
 
 function parseTimestamp(value: string): bigint {

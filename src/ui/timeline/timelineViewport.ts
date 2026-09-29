@@ -6,6 +6,8 @@
  * surface; ordinary scrolling stays exactly 1 logical pixel per CSS pixel.
  */
 
+import { clamp } from '../../domain/numeric'
+
 /** Safely below Chromium's ~33.55Mpx and Firefox's smaller layout ceiling. */
 export const MAX_TIMELINE_SURFACE_PX = 16_000_000
 const MAX_REBASE_EDGE_PX = 2_000_000
@@ -32,10 +34,6 @@ function finitePositive(value: number, fallback: number): number {
 function safeWholeFrames(value: number, minimum: number): number {
   if (!Number.isFinite(value)) return minimum
   return Math.max(minimum, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(value)))
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value))
 }
 
 /** Build one bounded physical window over an arbitrarily long frame range. */

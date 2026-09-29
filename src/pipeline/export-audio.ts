@@ -24,6 +24,7 @@ import { createAudioEffectChain } from '../domain/audioEffectStack'
 import type { AudioEffectChain } from '../domain/audioDsp'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
 import { foldPlanarBlockToStereo } from '../domain/audioChannelMix'
+import { requirePositiveSafeInteger } from '../domain/numeric'
 import { docDurationFrames } from '../domain/selectors'
 import { audioSampleBoundary } from '../domain/time'
 import { audioSampleFromSourceTicks } from '../domain/sourceTimeMap'
@@ -78,12 +79,6 @@ export type MixedAudioBlockWriter = (
   block: MixedAudioBlock,
 ) => Promise<void>
 
-function assertPositiveSafeInteger(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${label} must be a positive safe integer`)
-  }
-}
-
 function throwIfAudioAborted(signal: AbortSignal | undefined): void {
   if (!signal?.aborted) return
   if (typeof signal.throwIfAborted === 'function') signal.throwIfAborted()
@@ -100,8 +95,8 @@ export function scaleExportSampleIndex(
   if (!Number.isSafeInteger(sample) || sample < 0) {
     throw new RangeError('Sample index must be a non-negative safe integer')
   }
-  assertPositiveSafeInteger(fromRate, 'Source sample rate')
-  assertPositiveSafeInteger(toRate, 'Encoder sample rate')
+  requirePositiveSafeInteger(fromRate, 'Source sample rate')
+  requirePositiveSafeInteger(toRate, 'Encoder sample rate')
   const scaled = (BigInt(sample) * BigInt(toRate)) / BigInt(fromRate)
   if (scaled > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new RangeError('Scaled sample index exceeds the safe integer range')
@@ -313,9 +308,9 @@ function audioSamplePhaseOffset(
       'Audio timeline frame must be a non-negative safe integer',
     )
   }
-  assertPositiveSafeInteger(doc.frameRate.num, 'Frame-rate numerator')
-  assertPositiveSafeInteger(doc.frameRate.den, 'Frame-rate denominator')
-  assertPositiveSafeInteger(doc.audioSampleRate, 'Audio sample rate')
+  requirePositiveSafeInteger(doc.frameRate.num, 'Frame-rate numerator')
+  requirePositiveSafeInteger(doc.frameRate.den, 'Frame-rate denominator')
+  requirePositiveSafeInteger(doc.audioSampleRate, 'Audio sample rate')
 
   const divisor = BigInt(doc.frameRate.num)
   const numerator =

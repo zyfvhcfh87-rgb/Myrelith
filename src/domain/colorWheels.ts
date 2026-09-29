@@ -1,6 +1,6 @@
 /** Display-referred lift/gamma/gain math and the canonical wheel/numeric mapping. */
 import { materializeChannels, type ChannelTables, type Rgb } from './colorChannels'
-import { finiteInRange } from './effectBounds'
+import { isFiniteInRange } from './numeric'
 import type { EffectParamValue } from './schema'
 
 export const COLOR_WHEELS_TYPE = 'builtin.lift-gamma-gain'
@@ -30,10 +30,10 @@ export function colorWheelsParamsError(params: Readonly<Record<string, EffectPar
     const limit = COLOR_WHEEL_LIMITS[group]
     for (const channel of COLOR_RGB) {
       const key = `${group}${channel}`
-      if (params[key] !== undefined && !finiteInRange(params[key], limit.min, limit.max)) return `${key} must be between ${limit.min} and ${limit.max}.`
+      if (params[key] !== undefined && !isFiniteInRange(params[key], limit.min, limit.max)) return `${key} must be between ${limit.min} and ${limit.max}.`
     }
   }
-  return params.strength === undefined || finiteInRange(params.strength, 0, 1) ? null : 'Wheel strength must be between 0 and 1.'
+  return params.strength === undefined || isFiniteInRange(params.strength, 0, 1) ? null : 'Wheel strength must be between 0 and 1.'
 }
 
 export function colorWheelsAreIdentity(params: ColorWheelParams): boolean {
@@ -53,7 +53,7 @@ export function materializeWheelChannels(params: ColorWheelParams): ChannelTable
 
 function checkedWheel(values: Rgb, group: ColorWheelGroup): void {
   const { min, max } = COLOR_WHEEL_LIMITS[group]
-  if (!values.every((v) => finiteInRange(v, min, max))) throw new RangeError('Wheel channels exceed their bounds.')
+  if (!values.every((v) => isFiniteInRange(v, min, max))) throw new RangeError('Wheel channels exceed their bounds.')
 }
 export function colorWheelPosition(values: Rgb, group: ColorWheelGroup): { x: number; y: number; mean: number } {
   checkedWheel(values, group)

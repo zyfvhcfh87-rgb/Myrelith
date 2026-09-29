@@ -16,6 +16,7 @@ import {
   type GlobalMotionEstimate,
   type GrayFrame,
 } from '../domain/motionAnalysis'
+import { isFiniteNumber, isNonNegativeSafeInteger } from '../domain/numeric'
 import type { Clip, ClipId, MediaAsset, TimelineDoc } from '../domain/schema'
 import { findClip, trackOfClip } from '../domain/selectors'
 import {
@@ -45,7 +46,6 @@ import {
 } from './motionAnalysisController'
 import { getMotionAnalysisController } from './motionAnalysisRuntime'
 import {
-  finite,
   jsonDigest,
   monotonicNow,
   releaseBytes,
@@ -92,10 +92,6 @@ export interface VideoStabilizationSession {
   readonly projectBindingId: string
 }
 
-function nonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-}
-
 function estimate(value: unknown): value is GlobalMotionEstimate {
   if (!isRecord(value) || !hasExactKeys(value, [
     'transform',
@@ -108,19 +104,19 @@ function estimate(value: unknown): value is GlobalMotionEstimate {
   const transform = value.transform
   return isRecord(transform)
     && hasExactKeys(transform, ['a', 'b', 'tx', 'ty'])
-    && finite(transform.a)
-    && finite(transform.b)
-    && finite(transform.tx)
-    && finite(transform.ty)
-    && nonNegativeSafeInteger(value.matchCount)
-    && nonNegativeSafeInteger(value.inlierCount)
+    && isFiniteNumber(transform.a)
+    && isFiniteNumber(transform.b)
+    && isFiniteNumber(transform.tx)
+    && isFiniteNumber(transform.ty)
+    && isNonNegativeSafeInteger(value.matchCount)
+    && isNonNegativeSafeInteger(value.inlierCount)
     && value.inlierCount <= value.matchCount
-    && finite(value.inlierRatio)
+    && isFiniteNumber(value.inlierRatio)
     && value.inlierRatio >= 0
     && value.inlierRatio <= 1
-    && finite(value.meanInlierError)
+    && isFiniteNumber(value.meanInlierError)
     && value.meanInlierError >= 0
-    && finite(value.confidence)
+    && isFiniteNumber(value.confidence)
     && value.confidence >= 0
     && value.confidence <= 1
 }
@@ -144,10 +140,10 @@ export function parseVideoStabilizationAnalysis(
     !isRecord(value)
     || !hasExactKeys(value, ['version', 'width', 'height', 'samples'])
     || value.version !== VIDEO_STABILIZATION_RESULT_VERSION
-    || !nonNegativeSafeInteger(value.width)
+    || !isNonNegativeSafeInteger(value.width)
     || value.width <= 0
     || value.width > DEFAULT_MOTION_ANALYSIS_BUDGET.maxWidth
-    || !nonNegativeSafeInteger(value.height)
+    || !isNonNegativeSafeInteger(value.height)
     || value.height <= 0
     || value.height > DEFAULT_MOTION_ANALYSIS_BUDGET.maxHeight
     || !Array.isArray(value.samples)

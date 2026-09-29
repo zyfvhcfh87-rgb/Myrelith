@@ -1,5 +1,6 @@
 /** Pure contracts and validation for procedural text-overlay clips. */
 
+import { clamp, isFiniteInRange } from './numeric'
 import type { ClipId, TextFontFamily, TextProps } from './schema'
 
 export const TEXT_FONT_FAMILIES = Object.freeze([
@@ -63,17 +64,6 @@ export function isSupportedTextColor(value: unknown): value is string {
   return typeof value === 'string' && HEX_COLOR.test(value)
 }
 
-function finiteInRange(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-): value is number {
-  return typeof value === 'number'
-    && Number.isFinite(value)
-    && value >= minimum
-    && value <= maximum
-}
-
 /** Return one user-facing reason instead of silently repairing an edit. */
 export function textPropsValidationError(value: TextProps): string | null {
   if (typeof value.content !== 'string') return 'Text content must be a string.'
@@ -83,7 +73,7 @@ export function textPropsValidationError(value: TextProps): string | null {
   if (!isSupportedTextFontFamily(value.fontFamily)) {
     return `Unsupported font family "${String(value.fontFamily)}".`
   }
-  if (!finiteInRange(
+  if (!isFiniteInRange(
     value.fontSizePx,
     TEXT_OVERLAY_LIMITS.minFontSizePx,
     TEXT_OVERLAY_LIMITS.maxFontSizePx,
@@ -96,21 +86,21 @@ export function textPropsValidationError(value: TextProps): string | null {
   }
   if (typeof value.bold !== 'boolean') return 'Bold must be enabled or disabled.'
   if (typeof value.italic !== 'boolean') return 'Italic must be enabled or disabled.'
-  if (!finiteInRange(
+  if (!isFiniteInRange(
     value.boxWidthPx,
     TEXT_OVERLAY_LIMITS.minBoxSizePx,
     TEXT_OVERLAY_LIMITS.maxBoxSizePx,
   )) {
     return `Text-box width must be from ${TEXT_OVERLAY_LIMITS.minBoxSizePx} to ${TEXT_OVERLAY_LIMITS.maxBoxSizePx} pixels.`
   }
-  if (!finiteInRange(
+  if (!isFiniteInRange(
     value.boxHeightPx,
     TEXT_OVERLAY_LIMITS.minBoxSizePx,
     TEXT_OVERLAY_LIMITS.maxBoxSizePx,
   )) {
     return `Text-box height must be from ${TEXT_OVERLAY_LIMITS.minBoxSizePx} to ${TEXT_OVERLAY_LIMITS.maxBoxSizePx} pixels.`
   }
-  if (!finiteInRange(value.paddingPx, 0, TEXT_OVERLAY_LIMITS.maxPaddingPx)) {
+  if (!isFiniteInRange(value.paddingPx, 0, TEXT_OVERLAY_LIMITS.maxPaddingPx)) {
     return `Text-box padding must be from 0 to ${TEXT_OVERLAY_LIMITS.maxPaddingPx} pixels.`
   }
   if (value.paddingPx * 2 >= value.boxWidthPx || value.paddingPx * 2 >= value.boxHeightPx) {
@@ -128,7 +118,7 @@ export function textPropsValidationError(value: TextProps): string | null {
   if (!isSupportedTextColor(value.outlineColor)) {
     return 'Text outline color must be a hexadecimal CSS color.'
   }
-  if (!finiteInRange(value.outlineWidthPx, 0, TEXT_OVERLAY_LIMITS.maxOutlineWidthPx)) {
+  if (!isFiniteInRange(value.outlineWidthPx, 0, TEXT_OVERLAY_LIMITS.maxOutlineWidthPx)) {
     return `Text outline width must be from 0 to ${TEXT_OVERLAY_LIMITS.maxOutlineWidthPx} pixels.`
   }
   if (typeof value.shadowEnabled !== 'boolean') {
@@ -137,17 +127,17 @@ export function textPropsValidationError(value: TextProps): string | null {
   if (!isSupportedTextColor(value.shadowColor)) {
     return 'Text shadow color must be a hexadecimal CSS color.'
   }
-  if (!finiteInRange(value.shadowBlurPx, 0, TEXT_OVERLAY_LIMITS.maxShadowBlurPx)) {
+  if (!isFiniteInRange(value.shadowBlurPx, 0, TEXT_OVERLAY_LIMITS.maxShadowBlurPx)) {
     return `Text shadow blur must be from 0 to ${TEXT_OVERLAY_LIMITS.maxShadowBlurPx} pixels.`
   }
-  if (!finiteInRange(
+  if (!isFiniteInRange(
     value.shadowOffsetXPx,
     -TEXT_OVERLAY_LIMITS.maxShadowOffsetPx,
     TEXT_OVERLAY_LIMITS.maxShadowOffsetPx,
   )) {
     return `Horizontal shadow offset must be within ±${TEXT_OVERLAY_LIMITS.maxShadowOffsetPx} pixels.`
   }
-  if (!finiteInRange(
+  if (!isFiniteInRange(
     value.shadowOffsetYPx,
     -TEXT_OVERLAY_LIMITS.maxShadowOffsetPx,
     TEXT_OVERLAY_LIMITS.maxShadowOffsetPx,
@@ -157,27 +147,23 @@ export function textPropsValidationError(value: TextProps): string | null {
   return null
 }
 
-function bounded(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value))
-}
-
 /** Stable, canvas-relative defaults for a newly authored overlay. */
 export function defaultTextProps(
   canvasWidth: number,
   canvasHeight: number,
   content = 'Your text',
 ): TextProps {
-  const fontSizePx = bounded(
+  const fontSizePx = clamp(
     Math.round(canvasHeight * 0.067),
     24,
     256,
   )
-  const boxWidthPx = bounded(
+  const boxWidthPx = clamp(
     Math.round(canvasWidth * 0.65),
     320,
     TEXT_OVERLAY_LIMITS.maxBoxSizePx,
   )
-  const boxHeightPx = bounded(
+  const boxHeightPx = clamp(
     Math.round(canvasHeight * 0.22),
     120,
     TEXT_OVERLAY_LIMITS.maxBoxSizePx,

@@ -1,5 +1,6 @@
 /** Browser-only, source-addressable Issue #75 benchmark. Not in the app graph. */
 
+import { requirePositiveSafeInteger } from '../domain/numeric'
 import {
   analyzeVideoScopes,
   VIDEO_SCOPE_HISTOGRAM_BINS,
@@ -147,19 +148,12 @@ function cpuOutputBytes(): number {
   ) * Uint16Array.BYTES_PER_ELEMENT
 }
 
-function positiveInteger(value: number, label: string): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${label} must be a positive safe integer`)
-  }
-  return value
-}
-
 export async function runVideoScopeWebGpuBenchmark(options: {
   readonly warmupIterations?: number
   readonly measuredIterations?: number
 } = {}): Promise<VideoScopeWebGpuBenchmarkArtifact> {
-  const warmupIterations = positiveInteger(options.warmupIterations ?? 10, 'warmupIterations')
-  const measuredIterations = positiveInteger(
+  const warmupIterations = requirePositiveSafeInteger(options.warmupIterations ?? 10, 'warmupIterations')
+  const measuredIterations = requirePositiveSafeInteger(
     options.measuredIterations ?? 60,
     'measuredIterations',
   )

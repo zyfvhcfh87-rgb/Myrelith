@@ -20,6 +20,7 @@ import {
   MAX_KEYFRAMES_PER_TRACK,
 } from './clipAnimation'
 import { cropInsetsValidationError } from './clipInspector'
+import { requirePositiveSafeInteger } from './numeric'
 import type {
   ClipAnimationTrack,
   ClipVisualSettings,
@@ -342,12 +343,6 @@ function validateGeneratedTracks(tracks: ClipAnimationTrack[]): ClipAnimationTra
   return tracks
 }
 
-function positiveDimension(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${label} must be a positive safe integer`)
-  }
-}
-
 function projectionValidationError(
   projection: TrackingSourceProjection | TrackingAnimationTarget,
 ): string | null {
@@ -497,8 +492,8 @@ export function trackingSamplesToAnimationTracks(
   if (samples.length < 2 || samples.length > MAX_KEYFRAMES_PER_TRACK) {
     throw new RangeError(`Tracking needs 2 to ${MAX_KEYFRAMES_PER_TRACK} mapped samples`)
   }
-  positiveDimension(mapping.target.width, 'Tracking target width')
-  positiveDimension(mapping.target.height, 'Tracking target height')
+  requirePositiveSafeInteger(mapping.target.width, 'Tracking target width')
+  requirePositiveSafeInteger(mapping.target.height, 'Tracking target height')
   const targetError = projectionValidationError(mapping.target)
   if (targetError) throw new RangeError(`Tracking target ${targetError}`)
   const baseError = transformProjectionValidationError(base)

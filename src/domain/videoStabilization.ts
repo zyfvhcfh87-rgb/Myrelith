@@ -26,6 +26,7 @@ import { isProceduralTitleClip } from './textOverlay'
 import { MAX_ANALYSIS_SAMPLES } from './analysisCache'
 import { errorMessage } from './errors'
 import { VIDEO_STABILIZATION_PROPERTIES } from './framingProperties'
+import { isPositiveSafeInteger } from './numeric'
 import type {
   Clip,
   ClipAnimationProperty,
@@ -111,10 +112,6 @@ export type VideoStabilizationPlanResult =
   | { readonly ok: true; readonly plan: VideoStabilizationPlan }
   | { readonly ok: false; readonly reason: string }
 
-function positiveSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
-}
-
 function finiteTransform(transform: Transform): boolean {
   return Object.values(transform).every(Number.isFinite)
 }
@@ -135,12 +132,12 @@ export function videoStabilizationAvailabilityReason(
   }
   if (
     !source
-    || !positiveSafeInteger(source.width)
-    || !positiveSafeInteger(source.height)
+    || !isPositiveSafeInteger(source.width)
+    || !isPositiveSafeInteger(source.height)
     || !Number.isSafeInteger(source.firstTimestampUs)
     || !isValidFrameRate(source.frameRate)
   ) return 'Stabilization needs a connected video source with exact dimensions and timing.'
-  if (!positiveSafeInteger(doc.width) || !positiveSafeInteger(doc.height)) {
+  if (!isPositiveSafeInteger(doc.width) || !isPositiveSafeInteger(doc.height)) {
     return 'Stabilization needs valid positive project dimensions.'
   }
   const visualError = clipVisualSettingsValidationError(clipVisualSettings(clip))
@@ -811,8 +808,8 @@ export function createVideoStabilizationPlan(
   if (!source) return { ok: false, reason: 'Stabilization source facts are missing.' }
   if (
     analysis.version !== VIDEO_STABILIZATION_RESULT_VERSION
-    || !positiveSafeInteger(analysis.width)
-    || !positiveSafeInteger(analysis.height)
+    || !isPositiveSafeInteger(analysis.width)
+    || !isPositiveSafeInteger(analysis.height)
     || analysis.samples.length < 2
     || analysis.samples[0]?.estimateFromPrevious !== null
     || analysis.samples.slice(1).some((sample, index) => (

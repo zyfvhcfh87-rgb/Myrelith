@@ -5,6 +5,8 @@ import { isLocalProjectBindingId } from './localProjectBinding'
 import { MAX_DOCUMENT_ID_CHARACTERS } from './projectLimits'
 import type { FrameRate } from './schema'
 import { audioFeatureKeyPreimage, type AudioFeatureIdentity } from './multicamAlignmentProvenance'
+import { isNonNegativeSafeInteger, isPositiveSafeInteger } from './numeric'
+import { gcd } from './time'
 
 export const ANALYSIS_CACHE_SCHEMA_VERSION = 2 as const
 // Keep the physical root: schema 1 motion files migrate without moving bytes.
@@ -123,38 +125,19 @@ const ANALYSIS_KIND_SET = new Set<AnalysisKind>([
   'box-tracking',
 ])
 
-function nonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-}
-
-function positiveSafeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
-}
-
 function boundedTimestamp(value: unknown): value is number {
   return typeof value === 'number'
     && Number.isSafeInteger(value)
     && Math.abs(value) <= MAX_TIMESTAMP
 }
 
-function greatestCommonDivisor(left: number, right: number): number {
-  let a = left
-  let b = right
-  while (b !== 0) {
-    const remainder = a % b
-    a = b
-    b = remainder
-  }
-  return a
-}
-
 function validRate(value: unknown): value is FrameRate {
   if (!isRecord(value) || !hasExactKeys(value, ['num', 'den'])) return false
-  return positiveSafeInteger(value.num)
+  return isPositiveSafeInteger(value.num)
     && value.num <= MAX_RATE_PART
-    && positiveSafeInteger(value.den)
+    && isPositiveSafeInteger(value.den)
     && value.den <= MAX_RATE_PART
-    && greatestCommonDivisor(value.num, value.den) === 1
+    && gcd(value.num, value.den) === 1
     && value.num / value.den <= MAX_FRAME_RATE
 }
 
@@ -164,8 +147,8 @@ function validFingerprint(value: unknown): value is AnalysisSourceFingerprint {
     && value.algorithm === 'sha256-sampled-v1'
     && isSha256Hex(value.digest)
     && isBoundedString(value.fileName, MAX_STRING_CHARACTERS)
-    && nonNegativeSafeInteger(value.size)
-    && nonNegativeSafeInteger(value.lastModified)
+    && isNonNegativeSafeInteger(value.size)
+    && isNonNegativeSafeInteger(value.lastModified)
     && value.lastModified <= MAX_TIMESTAMP
 }
 
@@ -182,17 +165,17 @@ function validSource(value: unknown): value is AnalysisSourceProvenance {
       'samplingIntervalFrames',
     ])
     && validFingerprint(value.fingerprint)
-    && nonNegativeSafeInteger(value.videoStreamIndex)
+    && isNonNegativeSafeInteger(value.videoStreamIndex)
     && value.videoStreamIndex <= 255
-    && positiveSafeInteger(value.width)
+    && isPositiveSafeInteger(value.width)
     && value.width <= MAX_DIMENSION
-    && positiveSafeInteger(value.height)
+    && isPositiveSafeInteger(value.height)
     && value.height <= MAX_DIMENSION
     && validRate(value.frameRate)
     && boundedTimestamp(value.sourceStartMicroseconds)
     && boundedTimestamp(value.sourceEndMicroseconds)
     && value.sourceEndMicroseconds > value.sourceStartMicroseconds
-    && positiveSafeInteger(value.samplingIntervalFrames)
+    && isPositiveSafeInteger(value.samplingIntervalFrames)
     && value.samplingIntervalFrames <= MAX_ANALYSIS_SAMPLES
 }
 
@@ -238,13 +221,13 @@ function validEntry(value: unknown): value is AnalysisCacheEntry {
     && typeof value.resultFileName === 'string'
     && RESULT_FILE_PATTERN.test(value.resultFileName)
     && value.resultFileName.startsWith(`${value.cacheKey}.`)
-    && positiveSafeInteger(value.resultBytes)
+    && isPositiveSafeInteger(value.resultBytes)
     && value.resultBytes <= MAX_ANALYSIS_RESULT_BYTES
-    && positiveSafeInteger(value.sampleCount)
+    && isPositiveSafeInteger(value.sampleCount)
     && value.sampleCount <= MAX_ANALYSIS_SAMPLES
-    && nonNegativeSafeInteger(value.createdAt)
+    && isNonNegativeSafeInteger(value.createdAt)
     && value.createdAt <= MAX_TIMESTAMP
-    && nonNegativeSafeInteger(value.lastUsedAt)
+    && isNonNegativeSafeInteger(value.lastUsedAt)
     && value.lastUsedAt <= MAX_TIMESTAMP
     && value.lastUsedAt >= value.createdAt
 }
@@ -263,10 +246,10 @@ function validAudioEntry(value: unknown): value is AudioFeatureCacheEntry {
   return isSha256Hex(cacheKey)
     && typeof resultFileName === 'string' && RESULT_FILE_PATTERN.test(resultFileName)
     && resultFileName.startsWith(`${cacheKey}.`)
-    && positiveSafeInteger(resultBytes) && resultBytes <= MAX_AUDIO_FEATURE_BYTES
+    && isPositiveSafeInteger(resultBytes) && resultBytes <= MAX_AUDIO_FEATURE_BYTES
     && resultBytes === (identity.binCount as number) * 4
-    && nonNegativeSafeInteger(createdAt) && createdAt <= MAX_TIMESTAMP
-    && nonNegativeSafeInteger(lastUsedAt) && lastUsedAt <= MAX_TIMESTAMP
+    && isNonNegativeSafeInteger(createdAt) && createdAt <= MAX_TIMESTAMP
+    && isNonNegativeSafeInteger(lastUsedAt) && lastUsedAt <= MAX_TIMESTAMP
     && lastUsedAt >= createdAt
 }
 

@@ -1,5 +1,7 @@
 /** Pure, bounded manual lens-correction model shared by authoring and renderers. */
 
+import { isFiniteInRange } from './numeric'
+
 export const LENS_CORRECTION_MODEL_VERSION = 1 as const
 export const LENS_CORRECTION_VALIDATION_GRID = 33
 export const LENS_REMAP_BACKEND_VERSION = 'webgl2-rgba8-manual-bilinear-v1'
@@ -126,14 +128,6 @@ export function sameManualLensCorrectionModel(
     && left.outputScale === right.outputScale
 }
 
-function finiteInRange(
-  value: number,
-  minimum: number,
-  maximum: number,
-): boolean {
-  return Number.isFinite(value) && value >= minimum && value <= maximum
-}
-
 interface DistortionResult extends NormalizedLensPoint {
   readonly dxdx: number
   readonly dxdy: number
@@ -179,39 +173,39 @@ function basicLensCorrectionValidationError(
   if (model.version !== LENS_CORRECTION_MODEL_VERSION) {
     return 'Unsupported manual lens-correction model version'
   }
-  if (!finiteInRange(model.centerX, 0, 1) || !finiteInRange(model.centerY, 0, 1)) {
+  if (!isFiniteInRange(model.centerX, 0, 1) || !isFiniteInRange(model.centerY, 0, 1)) {
     return 'Lens principal point must stay inside normalized source bounds'
   }
   if (
-    !finiteInRange(
+    !isFiniteInRange(
       model.focalX,
       MANUAL_LENS_CORRECTION_LIMITS.focalMinimum,
       MANUAL_LENS_CORRECTION_LIMITS.focalMaximum,
     )
-    || !finiteInRange(
+    || !isFiniteInRange(
       model.focalY,
       MANUAL_LENS_CORRECTION_LIMITS.focalMinimum,
       MANUAL_LENS_CORRECTION_LIMITS.focalMaximum,
     )
   ) return 'Lens focal fractions are outside the reviewed range'
   for (const coefficient of [model.k1, model.k2, model.k3]) {
-    if (!finiteInRange(
+    if (!isFiniteInRange(
       coefficient,
       MANUAL_LENS_CORRECTION_LIMITS.radialMinimum,
       MANUAL_LENS_CORRECTION_LIMITS.radialMaximum,
     )) return 'Lens radial coefficient is outside the reviewed range'
   }
   for (const coefficient of [model.p1, model.p2]) {
-    if (!finiteInRange(
+    if (!isFiniteInRange(
       coefficient,
       MANUAL_LENS_CORRECTION_LIMITS.tangentialMinimum,
       MANUAL_LENS_CORRECTION_LIMITS.tangentialMaximum,
     )) return 'Lens tangential coefficient is outside the reviewed range'
   }
-  if (!finiteInRange(model.strength, 0, 1)) {
+  if (!isFiniteInRange(model.strength, 0, 1)) {
     return 'Lens correction strength must be from 0 to 1'
   }
-  if (!finiteInRange(
+  if (!isFiniteInRange(
     model.outputScale,
     MANUAL_LENS_CORRECTION_LIMITS.outputScaleMinimum,
     MANUAL_LENS_CORRECTION_LIMITS.outputScaleMaximum,

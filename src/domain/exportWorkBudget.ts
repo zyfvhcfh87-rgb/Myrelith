@@ -1,4 +1,5 @@
 import type { ExportProfile } from './exportProfile'
+import { ceilDivide, isPositiveSafeInteger } from './numeric'
 import type { FrameRate } from './schema'
 
 export const MAX_EXPORT_DURATION_SECONDS = 24 * 60 * 60
@@ -13,23 +14,15 @@ export interface ExportWorkBudget {
   readonly reason: string | null
 }
 
-function positiveSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
-}
-
-function ceilDivide(numerator: bigint, denominator: bigint): bigint {
-  return (numerator + denominator - 1n) / denominator
-}
-
 export function exportWorkBudget(
   frameCount: number,
   frameRate: FrameRate,
   profile: Readonly<ExportProfile>,
 ): ExportWorkBudget {
   if (
-    !positiveSafeInteger(frameCount)
-    || !positiveSafeInteger(frameRate.num)
-    || !positiveSafeInteger(frameRate.den)
+    !isPositiveSafeInteger(frameCount)
+    || !isPositiveSafeInteger(frameRate.num)
+    || !isPositiveSafeInteger(frameRate.den)
   ) {
     return Object.freeze({
       allowed: false,

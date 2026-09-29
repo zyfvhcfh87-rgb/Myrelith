@@ -7,6 +7,7 @@ import {
   compareCaptionItems,
   normalizeCaptionText,
 } from './captions'
+import { ceilDivide } from './numeric'
 import type { CaptionItem, CaptionItemId, CaptionTrack, FrameRate } from './schema'
 import { rangeEnd } from './time'
 
@@ -58,10 +59,6 @@ function divideFloor(numerator: bigint, denominator: bigint): bigint {
   return numerator / denominator
 }
 
-function divideCeil(numerator: bigint, denominator: bigint): bigint {
-  return (numerator + denominator - 1n) / denominator
-}
-
 /** Import start timestamps toward negative infinity so the first covered frame survives. */
 export function captionStartMillisecondsToFrame(
   milliseconds: number,
@@ -80,7 +77,7 @@ export function captionEndMillisecondsToFrame(
   rate: FrameRate,
 ): number {
   assertFrameRate(rate)
-  return Number(divideCeil(
+  return Number(ceilDivide(
     BigInt(milliseconds) * BigInt(rate.num),
     1_000n * BigInt(rate.den),
   ))
@@ -89,7 +86,7 @@ export function captionEndMillisecondsToFrame(
 /** Export starts to the first millisecond that maps back to this exact frame. */
 export function captionStartFrameToMilliseconds(frame: number, rate: FrameRate): number {
   assertFrameRate(rate)
-  return Number(divideCeil(
+  return Number(ceilDivide(
     BigInt(frame) * 1_000n * BigInt(rate.den),
     BigInt(rate.num),
   ))

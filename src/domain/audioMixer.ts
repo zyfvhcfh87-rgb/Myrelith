@@ -15,6 +15,7 @@ import {
   MIN_CLIP_VOLUME,
   stereoBalanceGains,
 } from './clipInspector'
+import { isFiniteNumber } from './numeric'
 
 export const DEFAULT_TRACK_VOLUME = 1
 export const DEFAULT_TRACK_BALANCE = 0
@@ -76,10 +77,6 @@ export function masterAudioSettings(doc: TimelineDoc): MasterAudioSettings {
   }
 }
 
-function finite(value: number): boolean {
-  return typeof value === 'number' && Number.isFinite(value)
-}
-
 export function mixerGains(volume: number, balance: number): MixerGains {
   const [leftGain, rightGain] = stereoBalanceGains(balance)
   return { volume, balance, leftGain, rightGain }
@@ -99,7 +96,7 @@ export function masterMixerGains(doc: TimelineDoc): TimelineAudioMasterBus {
 }
 
 export function mixerVolumeValidationError(volume: number): string | null {
-  if (!finite(volume) || volume < MIN_CLIP_VOLUME || volume > MAX_CLIP_VOLUME) {
+  if (!isFiniteNumber(volume) || volume < MIN_CLIP_VOLUME || volume > MAX_CLIP_VOLUME) {
     return `volume must be a finite number from ${MIN_CLIP_VOLUME} to ${MAX_CLIP_VOLUME}`
   }
   return null
@@ -107,7 +104,7 @@ export function mixerVolumeValidationError(volume: number): string | null {
 
 export function mixerBalanceValidationError(balance: number): string | null {
   if (
-    !finite(balance)
+    !isFiniteNumber(balance)
     || balance < MIN_AUDIO_BALANCE
     || balance > MAX_AUDIO_BALANCE
   ) {

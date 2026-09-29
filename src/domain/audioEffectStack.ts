@@ -1,11 +1,12 @@
 /** Pure audio-effect descriptor registry, validation, resolution, and shared stereo-block DSP. */
 
 import type { AudioEffectDescriptor, EffectParamValue } from './schema'
-import { finiteInRange, numericLimitsError, type NumericParamLimits } from './effectBounds'
+import { numericLimitsError, type NumericParamLimits } from './effectBounds'
 import {
   createAudioEffectChainFromReady,
   type AudioEffectChain,
 } from './audioDsp'
+import { isFiniteInRange } from './numeric'
 
 export const PARAMETRIC_EQ_EFFECT_TYPE = 'builtin.eq' as const
 export const PARAMETRIC_EQ_EFFECT_VERSION = 1 as const
@@ -189,13 +190,13 @@ function validateEqBand(
   if (!isEqBandType(params[typeKey])) {
     return `${typeKey} must be peak, lowshelf, highshelf, lowpass, highpass, or notch`
   }
-  if (!finiteInRange(params[freqKey], EQ_BAND_FREQ_LIMITS.min, EQ_BAND_FREQ_LIMITS.max)) {
+  if (!isFiniteInRange(params[freqKey], EQ_BAND_FREQ_LIMITS.min, EQ_BAND_FREQ_LIMITS.max)) {
     return `${freqKey} must be between ${EQ_BAND_FREQ_LIMITS.min} and ${EQ_BAND_FREQ_LIMITS.max}`
   }
-  if (!finiteInRange(params[qKey], EQ_BAND_Q_LIMITS.min, EQ_BAND_Q_LIMITS.max)) {
+  if (!isFiniteInRange(params[qKey], EQ_BAND_Q_LIMITS.min, EQ_BAND_Q_LIMITS.max)) {
     return `${qKey} must be between ${EQ_BAND_Q_LIMITS.min} and ${EQ_BAND_Q_LIMITS.max}`
   }
-  if (!finiteInRange(params[gainKey], EQ_BAND_GAIN_LIMITS.min, EQ_BAND_GAIN_LIMITS.max)) {
+  if (!isFiniteInRange(params[gainKey], EQ_BAND_GAIN_LIMITS.min, EQ_BAND_GAIN_LIMITS.max)) {
     return `${gainKey} must be between ${EQ_BAND_GAIN_LIMITS.min} and ${EQ_BAND_GAIN_LIMITS.max}`
   }
   return null

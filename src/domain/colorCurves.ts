@@ -1,6 +1,6 @@
 /** Version-1 shape-preserving cubic RGB curves, independent of browser/UI APIs. */
 import { clampColorUnit, materializeChannels, type ChannelTables } from './colorChannels'
-import { finiteInRange } from './effectBounds'
+import { isFiniteInRange } from './numeric'
 import type { EffectParamValue } from './schema'
 
 export const COLOR_CURVES_TYPE = 'builtin.rgb-curves'
@@ -24,7 +24,7 @@ export function parseColorCurve(text: unknown): ColorCurve {
   if (!Array.isArray(value) || value.length < 2 || value.length > COLOR_CURVE_LIMITS.points) throw new RangeError('A curve needs 2–16 points.')
   let previous = -1
   for (const point of value) {
-    if (!Array.isArray(point) || point.length !== 2 || !finiteInRange(point[0], 0, 1) || !finiteInRange(point[1], 0, 1)) throw new TypeError('Curve points must contain finite x/y values from 0 to 1.')
+    if (!Array.isArray(point) || point.length !== 2 || !isFiniteInRange(point[0], 0, 1) || !isFiniteInRange(point[1], 0, 1)) throw new TypeError('Curve points must contain finite x/y values from 0 to 1.')
     if (previous >= 0 && point[0] - previous < COLOR_CURVE_LIMITS.minimumGap) throw new RangeError('Curve x values must increase by at least 1/4,096.')
     previous = point[0]
   }
@@ -36,7 +36,7 @@ export function colorCurvesParamsError(params: Readonly<Record<string, EffectPar
   for (const channel of COLOR_CURVE_CHANNELS) {
     try { parseColorCurve(params[channel] ?? DEFAULT_COLOR_CURVES[channel]) } catch (error) { return `${channel}: ${(error as Error).message}` }
   }
-  return params.strength === undefined || finiteInRange(params.strength, 0, 1) ? null : 'Curve strength must be between 0 and 1.'
+  return params.strength === undefined || isFiniteInRange(params.strength, 0, 1) ? null : 'Curve strength must be between 0 and 1.'
 }
 
 export function colorCurvesParams(params: Readonly<Record<string, EffectParamValue>>): ColorCurveParams {

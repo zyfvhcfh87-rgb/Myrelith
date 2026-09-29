@@ -1,5 +1,6 @@
 /** Pinned capture intent and live destination checks; no media or project mutation. */
 import { planMediaAssetPlacement, type MediaPlacementRejection } from './mediaPlacement'
+import { isNonNegativeSafeInteger } from './numeric'
 import type { FrameRate, TimelineDoc } from './schema'
 import { isValidFrameRate, rateEquals } from './time'
 
@@ -30,10 +31,6 @@ export type VoiceoverDestinationCheck =
   | { readonly status: 'valid' }
   | { readonly status: 'reject'; readonly reason: VoiceoverDestinationRejection }
 
-function nonNegativeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0
-}
-
 /** Unknown duration checks the insertion frame; recheck the full take after import. */
 export function checkVoiceoverDestination(
   pinned: VoiceoverDestination,
@@ -42,9 +39,9 @@ export function checkVoiceoverDestination(
 ): VoiceoverDestinationCheck {
   const reject = (reason: VoiceoverDestinationRejection): VoiceoverDestinationCheck => ({ status: 'reject', reason })
   if (!pinned.projectId || !pinned.sequenceId || !pinned.trackId || !live.projectId ||
-    !nonNegativeInteger(pinned.projectGeneration) || !nonNegativeInteger(live.projectGeneration) ||
-    !nonNegativeInteger(pinned.editRevision) || !nonNegativeInteger(live.editRevision) ||
-    !nonNegativeInteger(pinned.startFrame)) return reject('invalid-destination')
+    !isNonNegativeSafeInteger(pinned.projectGeneration) || !isNonNegativeSafeInteger(live.projectGeneration) ||
+    !isNonNegativeSafeInteger(pinned.editRevision) || !isNonNegativeSafeInteger(live.editRevision) ||
+    !isNonNegativeSafeInteger(pinned.startFrame)) return reject('invalid-destination')
   if (pinned.projectId !== live.projectId || pinned.projectGeneration !== live.projectGeneration) {
     return reject('stale-project')
   }

@@ -10,6 +10,7 @@
  * No browser APIs, no imports outside domain/ (ARCHITECTURE.md).
  */
 
+import { requirePositiveSafeInteger } from './numeric'
 import type { FrameRate, TimeRange } from './schema'
 
 /** Integer timebase used by WebCodecs and canonical media durations. */
@@ -301,12 +302,6 @@ export function secondsToFrames(seconds: number, rate: FrameRate): number {
   return Math.round((seconds * rate.num) / rate.den)
 }
 
-function assertPositiveSafeInteger(value: number, name: string): void {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${name} must be a positive safe integer`)
-  }
-}
-
 export interface AudioSampleDocument {
   readonly frameRate: FrameRate
   readonly audioSampleRate: number
@@ -325,7 +320,7 @@ export function audioSampleBoundary(
     throw new RangeError('Audio boundary frame must be a non-negative safe integer')
   }
   assertValidRate(doc.frameRate)
-  assertPositiveSafeInteger(doc.audioSampleRate, 'Audio sample rate')
+  requirePositiveSafeInteger(doc.audioSampleRate, 'Audio sample rate')
 
   return divideRoundNearest(
     BigInt(frame) * BigInt(doc.frameRate.den) * BigInt(doc.audioSampleRate),

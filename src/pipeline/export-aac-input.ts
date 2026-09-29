@@ -14,6 +14,7 @@ import {
   type EncodedPacket,
 } from 'mediabunny'
 import { EXPORT_AUDIO_BLOCK_SAMPLES, type MixedAudioBlock } from './export-audio'
+import { requireNonNegativeSafeInteger } from '../domain/numeric'
 
 export const AAC_ENCODER_STARTUP_SAMPLES = EXPORT_AUDIO_BLOCK_SAMPLES * 2
 
@@ -24,12 +25,6 @@ export interface AacInputChunk {
 }
 
 export type AacInputWriter = (chunk: AacInputChunk) => Promise<void>
-
-function assertSampleIndex(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError(`${label} must be a non-negative safe integer`)
-  }
-}
 
 export class AacInputAssembler {
   private readonly channelCount: 1 | 2
@@ -60,7 +55,7 @@ export class AacInputAssembler {
 
   async add(chunk: AacInputChunk, write: AacInputWriter): Promise<void> {
     if (this.flushed) throw new Error('AAC input assembler is flushed')
-    assertSampleIndex(chunk.startSample, 'AAC chunk start')
+    requireNonNegativeSafeInteger(chunk.startSample, 'AAC chunk start')
     if (!Number.isSafeInteger(chunk.sampleCount) || chunk.sampleCount <= 0) {
       throw new RangeError('AAC chunk size must be a positive safe integer')
     }

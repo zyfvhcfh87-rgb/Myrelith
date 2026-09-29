@@ -1,5 +1,6 @@
 /** Pure defaults and validation for Issue #34's static clip Inspector model. */
 
+import { isFiniteNumber } from './numeric'
 import type {
   Clip,
   ClipAudioSettings,
@@ -59,14 +60,10 @@ export function clipAudioSettings(clip: Clip): ClipAudioSettings {
   return clip.audio ?? defaultClipAudioSettings()
 }
 
-function finite(value: number): boolean {
-  return typeof value === 'number' && Number.isFinite(value)
-}
-
 export function cropInsetsValidationError(crop: CropInsets): string | null {
   for (const edge of ['left', 'right', 'top', 'bottom'] as const) {
     const value = crop[edge]
-    if (!finite(value) || value < 0 || value > MAX_CROP_SUM) {
+    if (!isFiniteNumber(value) || value < 0 || value > MAX_CROP_SUM) {
       return `crop.${edge} must be a finite number from 0 to ${MAX_CROP_SUM}`
     }
   }
@@ -102,7 +99,7 @@ export function clipAudioSettingsValidationError(
 ): string | null {
   if (typeof audio.enabled !== 'boolean') return 'enabled must be a boolean'
   if (
-    !finite(audio.balance)
+    !isFiniteNumber(audio.balance)
     || audio.balance < MIN_AUDIO_BALANCE
     || audio.balance > MAX_AUDIO_BALANCE
   ) {
@@ -128,7 +125,7 @@ export function clipAudioSettingsValidationError(
 export function transformScaleValidationError(transform: Transform): string | null {
   for (const key of ['scaleX', 'scaleY'] as const) {
     const value = transform[key]
-    if (!finite(value) || value < MIN_CLIP_SCALE || value > MAX_CLIP_SCALE) {
+    if (!isFiniteNumber(value) || value < MIN_CLIP_SCALE || value > MAX_CLIP_SCALE) {
       return `${key} must be a finite number from ${MIN_CLIP_SCALE} to ${MAX_CLIP_SCALE}`
     }
   }
@@ -161,7 +158,7 @@ export function migrateLegacyClipInspectorSettings(
 }
 
 function assertAudioBalance(balance: number): void {
-  if (!finite(balance) || balance < MIN_AUDIO_BALANCE || balance > MAX_AUDIO_BALANCE) {
+  if (!isFiniteNumber(balance) || balance < MIN_AUDIO_BALANCE || balance > MAX_AUDIO_BALANCE) {
     throw new RangeError(
       `Audio balance must be from ${MIN_AUDIO_BALANCE} to ${MAX_AUDIO_BALANCE}`,
     )

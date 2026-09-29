@@ -10,6 +10,7 @@ import type {
 } from './effectStack'
 import type { MaskPoint } from './maskPath'
 import { maskPixelWork, minimumSurfaceIndex, maximumSurfaceIndex, type MaskSurfaceBounds, type MaskPixelWork } from './maskPixelWork'
+import { clamp } from './numeric'
 
 export interface PixelEffectGeometry {
   readonly surfaceWidth: number
@@ -44,10 +45,6 @@ interface EllipseMaskGeometry {
   readonly radiusY: number
 }
 
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value))
-}
-
 function parseHexColor(color: string): readonly [number, number, number] {
   return [
     Number.parseInt(color.slice(1, 3), 16),
@@ -59,7 +56,7 @@ function parseHexColor(color: string): readonly [number, number, number] {
 function smoothKeyStrength(distance: number, tolerance: number, softness: number): number {
   if (distance <= tolerance) return 1
   if (softness === 0 || distance >= tolerance + softness) return 0
-  const amount = clamp01((distance - tolerance) / softness)
+  const amount = clamp((distance - tolerance) / softness, 0, 1)
   const smooth = amount * amount * (3 - 2 * amount)
   return 1 - smooth
 }
@@ -96,7 +93,7 @@ function distanceToSegment(
   const lengthSquared = dx * dx + dy * dy
   const amount = lengthSquared === 0
     ? 0
-    : clamp01(((x - start.x) * dx + (y - start.y) * dy) / lengthSquared)
+    : clamp(((x - start.x) * dx + (y - start.y) * dy) / lengthSquared, 0, 1)
   return Math.hypot(x - (start.x + dx * amount), y - (start.y + dy * amount))
 }
 
@@ -335,12 +332,12 @@ function ellipseInsideCoverage(
   if (metrics) {
     metrics.maskEllipseDistanceSolves = (metrics.maskEllipseDistanceSolves ?? 0) + 1
   }
-  return clamp01(ellipseUnsignedBoundaryDistance(
+  return clamp(ellipseUnsignedBoundaryDistance(
     rawOffsetX,
     rawOffsetY,
     ellipse.radiusX,
     ellipse.radiusY,
-  ) / featherPixels)
+  ) / featherPixels, 0, 1)
 }
 
 function applyBezierMask(
@@ -393,7 +390,7 @@ function applyBezierMask(
       : -1
     const insideCoverage = localIndex < 0 || inside[localIndex] === 0
       ? 0
-      : distances === null ? 1 : clamp01(distances[localIndex] / featherPixels)
+      : distances === null ? 1 : clamp(distances[localIndex] / featherPixels, 0, 1)
     const coverage = params.invert ? 1 - insideCoverage : insideCoverage
     const alphaIndex = index * 4 + 3
     rgba[alphaIndex] = Math.round(rgba[alphaIndex] * coverage)
@@ -454,7 +451,7 @@ function applyMask(
         )
         insideCoverage = featherPixels === 0
           ? (distance >= 0 ? 1 : 0)
-          : clamp01(distance / featherPixels)
+          : clamp(distance / featherPixels, 0, 1)
       }
       const coverage = params.invert ? 1 - insideCoverage : insideCoverage
       const alphaIndex = (surfaceY * geometry.surfaceWidth + surfaceX) * 4 + 3

@@ -6,6 +6,9 @@
  * committing product schema or UI ahead of the follow-up issues.
  */
 
+import { requireNonNegativeSafeInteger, requirePositiveSafeInteger } from './numeric'
+import { gcd } from './time'
+
 export const STRUCTURE_RESEARCH_MAX_SEQUENCE_DEPTH = 8
 export const STRUCTURE_RESEARCH_MAX_LEAF_REQUESTS = 4_096
 export const STRUCTURE_RESEARCH_MAX_MULTICAM_ANGLES = 8
@@ -189,21 +192,9 @@ function assertIdentifier(value: string, label: string): void {
   }
 }
 
-function assertSafeNonNegativeInteger(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError(`${label} must be a non-negative safe integer`)
-  }
-}
-
-function assertSafePositiveInteger(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${label} must be a positive safe integer`)
-  }
-}
-
 function frameRangeEnd(range: StructureResearchFrameRange, label: string): number {
-  assertSafeNonNegativeInteger(range.startFrame, `${label}.startFrame`)
-  assertSafePositiveInteger(range.durationFrames, `${label}.durationFrames`)
+  requireNonNegativeSafeInteger(range.startFrame, `${label}.startFrame`)
+  requirePositiveSafeInteger(range.durationFrames, `${label}.durationFrames`)
   const endFrame = range.startFrame + range.durationFrames
   if (!Number.isSafeInteger(endFrame)) {
     throw new RangeError(`${label} end must be a safe integer`)
@@ -226,29 +217,18 @@ function sameSequenceSettings(
     && left.audioSampleRate === right.audioSampleRate
 }
 
-function greatestCommonDivisor(left: number, right: number): number {
-  let a = left
-  let b = right
-  while (b !== 0) {
-    const remainder = a % b
-    a = b
-    b = remainder
-  }
-  return a
-}
-
 function validateSequenceSettings(
   settings: StructureResearchSequenceSettings,
   label: string,
 ): void {
-  assertSafePositiveInteger(settings.frameRate.num, `${label}.frameRate.num`)
-  assertSafePositiveInteger(settings.frameRate.den, `${label}.frameRate.den`)
-  if (greatestCommonDivisor(settings.frameRate.num, settings.frameRate.den) !== 1) {
+  requirePositiveSafeInteger(settings.frameRate.num, `${label}.frameRate.num`)
+  requirePositiveSafeInteger(settings.frameRate.den, `${label}.frameRate.den`)
+  if (gcd(settings.frameRate.num, settings.frameRate.den) !== 1) {
     throw new RangeError(`${label}.frameRate must be reduced`)
   }
-  assertSafePositiveInteger(settings.width, `${label}.width`)
-  assertSafePositiveInteger(settings.height, `${label}.height`)
-  assertSafePositiveInteger(settings.audioSampleRate, `${label}.audioSampleRate`)
+  requirePositiveSafeInteger(settings.width, `${label}.width`)
+  requirePositiveSafeInteger(settings.height, `${label}.height`)
+  requirePositiveSafeInteger(settings.audioSampleRate, `${label}.audioSampleRate`)
 }
 
 function sequenceMapFor(
@@ -264,7 +244,7 @@ function sequenceMapFor(
     if (sequenceMap.has(sequence.id)) {
       throw new RangeError(`duplicate sequence id "${sequence.id}"`)
     }
-    assertSafePositiveInteger(sequence.durationFrames, `sequence "${sequence.id}" durationFrames`)
+    requirePositiveSafeInteger(sequence.durationFrames, `sequence "${sequence.id}" durationFrames`)
     validateSequenceSettings(sequence.settings, `sequence "${sequence.id}" settings`)
     sequenceMap.set(sequence.id, sequence)
   }
@@ -320,7 +300,7 @@ export function analyzeStructureResearchSequenceGraph(
       if (endFrame > sequence.durationFrames) {
         throw new RangeError(`instance "${instance.id}" exceeds sequence "${sequence.id}"`)
       }
-      assertSafeNonNegativeInteger(
+      requireNonNegativeSafeInteger(
         instance.sourceStartFrame,
         `instance "${instance.id}" sourceStartFrame`,
       )
@@ -383,7 +363,7 @@ export function planStructureResearchNestedFrame(
   project: StructureResearchSequenceProject,
   frame: number,
 ): StructureResearchNestedFramePlan {
-  assertSafeNonNegativeInteger(frame, 'frame')
+  requireNonNegativeSafeInteger(frame, 'frame')
   const analysis = analyzeStructureResearchSequenceGraph(project)
   const sequenceMap = sequenceMapFor(project)
   const root = sequenceMap.get(project.rootSequenceId)
@@ -492,7 +472,7 @@ export function createStructureResearchAdjustmentPlanner(
       }
       previousEnd = endFrame
       if (item.kind === 'adjustment') {
-        assertSafePositiveInteger(item.effectCount, `adjustment "${item.id}" effectCount`)
+        requirePositiveSafeInteger(item.effectCount, `adjustment "${item.id}" effectCount`)
         if (item.effectCount > STRUCTURE_RESEARCH_MAX_ADJUSTMENT_EFFECTS) {
           throw new RangeError(
             `adjustment "${item.id}" exceeds ${STRUCTURE_RESEARCH_MAX_ADJUSTMENT_EFFECTS} effects`,
@@ -510,7 +490,7 @@ export function createStructureResearchAdjustmentPlanner(
 
   return Object.freeze({
     planFrame(frame: number): StructureResearchAdjustmentFramePlan {
-      assertSafeNonNegativeInteger(frame, 'frame')
+      requireNonNegativeSafeInteger(frame, 'frame')
       const operations: StructureResearchAdjustmentOperation[] = []
       let activeAdjustmentCount = 0
       let fullFramePassUpperBound = 0
@@ -562,7 +542,7 @@ function multicamSourceFrame(
 export function createStructureResearchMulticamPlanner(
   multicam: StructureResearchMulticam,
 ): StructureResearchMulticamPlanner {
-  assertSafePositiveInteger(multicam.durationFrames, 'multicam.durationFrames')
+  requirePositiveSafeInteger(multicam.durationFrames, 'multicam.durationFrames')
   if (
     multicam.angles.length < 2
     || multicam.angles.length > STRUCTURE_RESEARCH_MAX_MULTICAM_ANGLES
@@ -587,7 +567,7 @@ export function createStructureResearchMulticamPlanner(
     if (endFrame > multicam.durationFrames) {
       throw new RangeError(`angle "${angle.id}" exceeds multicam duration`)
     }
-    assertSafeNonNegativeInteger(angle.sourceStartFrame, `angle "${angle.id}" sourceStartFrame`)
+    requireNonNegativeSafeInteger(angle.sourceStartFrame, `angle "${angle.id}" sourceStartFrame`)
     const sourceEndFrame = angle.sourceStartFrame + angle.range.durationFrames
     if (!Number.isSafeInteger(sourceEndFrame)) {
       throw new RangeError(`angle "${angle.id}" source end must be a safe integer`)
@@ -602,7 +582,7 @@ export function createStructureResearchMulticamPlanner(
   }
   let previousFrame = -1
   const switches = multicam.switches.map((item, index) => {
-    assertSafeNonNegativeInteger(item.frame, `multicam switch ${index}.frame`)
+    requireNonNegativeSafeInteger(item.frame, `multicam switch ${index}.frame`)
     if (item.frame <= previousFrame || item.frame >= multicam.durationFrames) {
       throw new RangeError('multicam switches must be strictly increasing and in range')
     }
@@ -618,7 +598,7 @@ export function createStructureResearchMulticamPlanner(
 
   return Object.freeze({
     select(frame: number): StructureResearchMulticamSelection {
-      assertSafeNonNegativeInteger(frame, 'frame')
+      requireNonNegativeSafeInteger(frame, 'frame')
       if (frame >= multicam.durationFrames) throw new RangeError('frame falls outside multicam duration')
       let lower = 0
       let upper = switches.length

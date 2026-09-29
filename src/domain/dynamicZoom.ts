@@ -25,6 +25,7 @@ import {
   MIN_CLIP_SCALE,
   transformScaleValidationError,
 } from './clipInspector'
+import { isPositiveSafeInteger } from './numeric'
 import type {
   Clip,
   ClipAnimationEasing,
@@ -188,10 +189,6 @@ export function reverseDynamicZoomRequest(
   }
 }
 
-function positiveSafeDimension(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
-}
-
 function framingValidationError(
   framing: DynamicZoomFraming,
   label: string,
@@ -223,10 +220,10 @@ export function dynamicZoomAvailabilityReason(
   if (clip.timelineRange.durationFrames < MIN_DYNAMIC_ZOOM_DURATION_FRAMES) {
     return 'Dynamic zoom needs a clip with at least 2 frames.'
   }
-  if (!source || !positiveSafeDimension(source.width) || !positiveSafeDimension(source.height)) {
+  if (!source || !isPositiveSafeInteger(source.width) || !isPositiveSafeInteger(source.height)) {
     return 'Dynamic zoom needs known positive source dimensions. Relink or re-import this media first.'
   }
-  if (!positiveSafeDimension(doc.width) || !positiveSafeDimension(doc.height)) {
+  if (!isPositiveSafeInteger(doc.width) || !isPositiveSafeInteger(doc.height)) {
     return 'Dynamic zoom needs valid positive project dimensions.'
   }
   const visualError = clipVisualSettingsValidationError(clipVisualSettings(clip))

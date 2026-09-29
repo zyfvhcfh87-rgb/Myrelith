@@ -12,6 +12,7 @@ import type {
   MediaCompatibilityReason,
   MediaDecoderPath,
 } from '../domain/mediaCompatibility'
+import { isPositiveSafeInteger } from '../domain/numeric'
 import type { MediaAsset } from '../domain/schema'
 
 export type LocalDecoderId = 'prores' | 'ac3'
@@ -42,12 +43,6 @@ export interface LocalDecoderBudget {
   framesPerSecond?: number | null
   sampleRate?: number | null
   channels?: number | null
-}
-
-function isPositiveSafeInteger(value: unknown): value is number {
-  return typeof value === 'number'
-    && Number.isSafeInteger(value)
-    && value > 0
 }
 
 function conservativeFileBytes(

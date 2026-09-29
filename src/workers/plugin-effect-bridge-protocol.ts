@@ -2,6 +2,7 @@
 
 import { utf8ByteLength } from '../domain/documentMemory'
 import { hasExactKeys, isRecord } from '../domain/guards'
+import { isNonNegativeSafeInteger, isPositiveSafeInteger } from '../domain/numeric'
 import { PLUGIN_MANIFEST_LIMITS } from '../domain/pluginManifest'
 import type { PluginVideoEffectExecutionPlan } from '../domain/pluginVideoEffectStagePlan'
 
@@ -93,14 +94,6 @@ export interface PluginEffectBridgeHandler {
 }
 
 type UnknownRecord = Record<string, unknown>
-
-function isPositiveSafeInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value) && Number(value) > 0
-}
-
-function isNonNegativeSafeInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value) && Number(value) >= 0
-}
 
 function isArrayBuffer(value: unknown): value is ArrayBuffer {
   return value instanceof ArrayBuffer

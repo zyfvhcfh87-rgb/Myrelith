@@ -1,5 +1,7 @@
 /** Browser-free SDR color-correction reference math. */
 
+import { clampColorUnit } from './colorChannels'
+
 export interface ColorCorrectionParameters {
   readonly exposure: number
   readonly contrast: number
@@ -12,10 +14,6 @@ const LUMA_RED = 0.2126
 const LUMA_GREEN = 0.7152
 const LUMA_BLUE = 0.0722
 const GAINS_PER_CORRECTION = 6
-
-function clampUnit(value: number): number {
-  return Math.min(1, Math.max(0, value))
-}
 
 /**
  * Apply ordered corrections to unpremultiplied 8-bit, display-referred sRGB.
@@ -79,9 +77,9 @@ export function applyColorCorrectionsToRgba(
       green *= greenGain
       blue *= magentaGain
 
-      red = clampUnit(red)
-      green = clampUnit(green)
-      blue = clampUnit(blue)
+      red = clampColorUnit(red)
+      green = clampColorUnit(green)
+      blue = clampColorUnit(blue)
     }
 
     rgba[offset] = Math.round(red * 255)

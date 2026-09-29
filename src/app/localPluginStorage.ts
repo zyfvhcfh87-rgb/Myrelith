@@ -1,6 +1,7 @@
 /** Origin-local, transactional plugin package storage. Never import from project state. */
 
 import { hasExactKeys, isRecord, isSha256Hex } from '../domain/guards'
+import { isNonNegativeSafeInteger } from '../domain/numeric'
 import { PLUGIN_MANIFEST_LIMITS } from '../domain/pluginManifest'
 import { createCachedDatabase, requestInTransaction } from './indexedDbAccess'
 import { createKeyedSerialQueue } from './keyedSerialQueue'
@@ -146,10 +147,6 @@ function boundedString(value: unknown, min: number, max: number): value is strin
   return typeof value === 'string' && value.length >= min && value.length <= max
 }
 
-function timestamp(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-}
-
 function parseManagementGeneration(value: unknown): number {
   if (value === undefined) return 0
   if (!Number.isSafeInteger(value) || (value as number) < 0) {
@@ -175,7 +172,7 @@ function versionNumber(value: unknown): value is number {
 
 function parseTrust(value: unknown): PluginTrustDecision | null {
   if (!isRecord(value) || !hasExactKeys(value, TRUST_KEYS)) return null
-  if ((value.kind !== 'built-in' && value.kind !== 'user') || !timestamp(value.trustedAt)) {
+  if ((value.kind !== 'built-in' && value.kind !== 'user') || !isNonNegativeSafeInteger(value.trustedAt)) {
     return null
   }
   return Object.freeze({ kind: value.kind, trustedAt: value.trustedAt })
@@ -196,7 +193,7 @@ function parseGrant(value: unknown, record: {
     || !versionNumber(value.negotiatedVersion)
     || value.negotiatedVersion < value.minVersion
     || value.negotiatedVersion > value.maxVersion
-    || !timestamp(value.grantedAt)
+    || !isNonNegativeSafeInteger(value.grantedAt)
     || value.pluginId !== record.pluginId
     || value.signerFingerprint !== record.signerFingerprint
     || value.packageDigest !== record.packageDigest
@@ -221,7 +218,7 @@ function parseDiagnostic(value: unknown): PluginDiagnosticEvent | null {
   if (!isRecord(value) || !hasExactKeys(value, DIAGNOSTIC_KEYS)) return null
   if (typeof value.code !== 'string'
     || !DIAGNOSTIC_CODES.has(value.code as PluginDiagnosticCode)
-    || !timestamp(value.occurredAt)) return null
+    || !isNonNegativeSafeInteger(value.occurredAt)) return null
   return Object.freeze({
     code: value.code as PluginDiagnosticCode,
     occurredAt: value.occurredAt,
@@ -261,8 +258,8 @@ function parseRecord(value: unknown, copyArchive: boolean): InstalledPluginRecor
     || !Number.isSafeInteger(value.moduleByteLength)
     || (value.moduleByteLength as number) <= 0
     || (value.moduleByteLength as number) > PLUGIN_PACKAGE_LIMITS.maxExpandedEntryBytes
-    || !timestamp(value.installedAt)
-    || !timestamp(value.updatedAt)
+    || !isNonNegativeSafeInteger(value.installedAt)
+    || !isNonNegativeSafeInteger(value.updatedAt)
     || value.updatedAt < value.installedAt
     || typeof value.activationState !== 'string'
     || !ACTIVATION_STATES.has(value.activationState as PluginActivationState)

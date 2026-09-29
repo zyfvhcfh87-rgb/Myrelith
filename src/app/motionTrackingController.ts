@@ -43,6 +43,7 @@ import {
   validateInitialPointTrackingSelection,
   type TrackingBox,
 } from '../domain/motionTrackingResearch'
+import { isFiniteNumber } from '../domain/numeric'
 import type { Clip, ClipId, MediaAsset, TimelineDoc } from '../domain/schema'
 import { findClip, trackOfClip } from '../domain/selectors'
 import { clipSourceTimeMap } from '../domain/sourceTimeMap'
@@ -60,7 +61,6 @@ import {
 } from './motionAnalysisController'
 import { getMotionAnalysisController } from './motionAnalysisRuntime'
 import {
-  finite,
   jsonDigest,
   monotonicNow,
   releaseBytes,
@@ -103,7 +103,7 @@ function safeInteger(value: unknown): value is number {
 }
 
 function validConfidence(value: unknown): value is number {
-  return finite(value) && value >= 0 && value <= 1
+  return isFiniteNumber(value) && value >= 0 && value <= 1
 }
 
 function parseFailure(value: unknown): MotionTrackingAnalysisFailure | null | undefined {
@@ -173,16 +173,16 @@ export function parseMotionTrackingAnalysis(
       || candidate.sourceTimeTicks < 0
       || !safeInteger(candidate.localFrame)
       || candidate.localFrame < 0
-      || !finite(candidate.x)
-      || !finite(candidate.y)
+      || !isFiniteNumber(candidate.x)
+      || !isFiniteNumber(candidate.y)
       || candidate.x < 0
       || candidate.x >= value.width
       || candidate.y < 0
       || candidate.y >= value.height
       || !validConfidence(candidate.confidence)
       || (box && (
-        !finite(candidate.width)
-        || !finite(candidate.height)
+        !isFiniteNumber(candidate.width)
+        || !isFiniteNumber(candidate.height)
         || (candidate.width as number) <= 0
         || (candidate.height as number) <= 0
         || candidate.x + (candidate.width as number) > value.width

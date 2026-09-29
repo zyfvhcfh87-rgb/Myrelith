@@ -34,6 +34,7 @@ import {
 } from '../../domain/clipInspector'
 import { errorMessage } from '../../domain/errors'
 import { exportPresetById } from '../../domain/exportProfile'
+import { isNonNegativeSafeInteger } from '../../domain/numeric'
 import type { PortableAssetDescriptor } from '../../domain/projectFile'
 import type {
   Clip,
@@ -603,10 +604,6 @@ export function summarizeMemorySamples(samples: readonly number[]): {
       (sample, index) => (sample - plateauMiB[index]) * MEBIBYTE / KIBIBYTE,
     ),
   }
-}
-
-function isNonNegativeSafeInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value) && Number(value) >= 0
 }
 
 function validatedProcessMemorySample(

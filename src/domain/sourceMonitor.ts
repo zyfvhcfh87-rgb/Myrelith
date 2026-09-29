@@ -12,6 +12,7 @@ import {
   compatibilityAllowsTimelineUse,
   type MediaCompatibilityItem,
 } from './mediaCompatibility'
+import { isPositiveSafeInteger } from './numeric'
 import type {
   AssetId,
   AssetKind,
@@ -75,10 +76,6 @@ export interface MonitorPlaybackHandoff {
 export interface SourceMonitorOpenInput {
   readonly asset: MediaAsset | null
   readonly compatibility?: MediaCompatibilityItem
-}
-
-function isPositiveSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
 }
 
 function lastFrameOf(durationFrames: number): number {

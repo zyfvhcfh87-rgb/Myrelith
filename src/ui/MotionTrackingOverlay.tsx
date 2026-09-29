@@ -17,6 +17,7 @@ import { rangeEnd } from '../domain/time'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import type { MotionTrackingSelection } from '../domain/motionTracking'
+import { clamp } from '../domain/numeric'
 import { useMotionTrackingSelectionStore } from '../state/motionTrackingSelectionStore'
 import { useTransportStore } from '../state/transportStore'
 
@@ -162,10 +163,6 @@ function sourceFacts(
     width: descriptor.width,
     height: descriptor.height,
   }
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value))
 }
 
 function roundNorm(value: number): number {

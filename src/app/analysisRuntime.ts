@@ -14,10 +14,6 @@ export function releaseBytes(bytes: Uint8Array<ArrayBuffer>): void {
   if (bytes.buffer.byteLength > 0) structuredClone(null, { transfer: [bytes.buffer] })
 }
 
-export function finite(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
-}
-
 export function yieldToBrowser(): Promise<void> {
   const scheduler = (globalThis as {
     scheduler?: { yield?: () => Promise<void> }

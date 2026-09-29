@@ -60,6 +60,7 @@ import {
   rateEquals,
 } from './time'
 import type { SourceBoundsCatalog } from './crossfadePlan'
+import { isNonNegativeSafeInteger, isPositiveSafeInteger } from './numeric'
 import {
   applySequenceEdit as applyAcceptedSequenceEdit,
   tryRollSequence,
@@ -245,14 +246,6 @@ export type ThreePointDurationResult =
 
 function rejectPlan(reason: SequenceEditRejection): SequenceEditPlan {
   return { status: 'reject', reason }
-}
-
-function isNonNegativeSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0
-}
-
-function isPositiveSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value > 0
 }
 
 function firstUnlockedTrackId(

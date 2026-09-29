@@ -2,6 +2,7 @@ import type { FrameRate, MediaSourceBounds, SourceTimestampBounds } from '../sch
 import { LENS_CORRECTION_MODEL_VERSION, lensCorrectionValidationError, type LensCorrectionIntent, type ManualLensCorrectionModel } from '../lensCorrection';
 import { PROJECT_FILE_LIMITS, ProjectFileError } from './projectTypes';
 import { isPlainRecord } from '../guards';
+import { gcd } from '../time';
 
 export type JsonRecord = Record<string, unknown>
 
@@ -161,23 +162,12 @@ export function boundedArray(
   if (value.length > maximum) fail(path, `exceeds ${maximum} entries`)
 }
 
-export function greatestCommonDivisor(left: number, right: number): number {
-  let a = left
-  let b = right
-  while (b !== 0) {
-    const remainder = a % b
-    a = b
-    b = remainder
-  }
-  return a
-}
-
 export function validateFrameRate(value: unknown, path: string): asserts value is FrameRate {
   const candidate = record(value, path)
   exactKeys(candidate, ['num', 'den'], [], path)
   safeInteger(candidate.num, `${path}.num`, 1, PROJECT_FILE_LIMITS.maxRatePart)
   safeInteger(candidate.den, `${path}.den`, 1, PROJECT_FILE_LIMITS.maxRatePart)
-  if (greatestCommonDivisor(candidate.num, candidate.den) !== 1) {
+  if (gcd(candidate.num, candidate.den) !== 1) {
     fail(path, 'frame rate must be reduced to an exact rational')
   }
   if (candidate.num / candidate.den > PROJECT_FILE_LIMITS.maxFramesPerSecond) {

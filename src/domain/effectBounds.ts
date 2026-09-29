@@ -1,6 +1,7 @@
 /** Shared portable and live-edit bounds for durable effect descriptors. */
 
 import { isRecord } from './guards'
+import { isFiniteInRange } from './numeric'
 import type { EffectDescriptor, EffectParamValue, TimelineDoc } from './schema'
 import {
   MAX_DOCUMENT_ID_CHARACTERS,
@@ -29,11 +30,6 @@ const EFFECT_DESCRIPTOR_KEYS = Object.freeze([
 const EFFECT_DESCRIPTOR_KEY_SET = new Set<string>(EFFECT_DESCRIPTOR_KEYS)
 const UNSAFE_PARAM_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
 
-/** The one inclusive finite-number check behind every registered parameter limit. */
-export function finiteInRange(value: unknown, min: number, max: number): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
-}
-
 export type NumericParamLimits = Readonly<Record<string, { readonly min: number; readonly max: number }>>
 
 const NO_OPTIONAL_PARAMS: ReadonlySet<string> = new Set()
@@ -50,7 +46,7 @@ export function numericLimitsError(
   for (const [key, limit] of Object.entries(limits)) {
     const value = params[key]
     if (value === undefined && optional.has(key)) continue
-    if (!finiteInRange(value, limit.min, limit.max)) {
+    if (!isFiniteInRange(value, limit.min, limit.max)) {
       return `${key} must be between ${limit.min} and ${limit.max}`
     }
   }
