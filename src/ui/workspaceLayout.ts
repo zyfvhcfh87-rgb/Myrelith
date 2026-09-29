@@ -29,7 +29,8 @@ export const WORKSPACE_CHROME = Object.freeze({
   transportHeight: 48,
 })
 
-function clamp(value: number, min: number, max: number): number {
+/** Round to whole pixels, then clamp; shared with the resize handle. */
+export function roundAndClampPixels(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.round(value)))
 }
 
@@ -45,7 +46,7 @@ function fitSidePanels(
   if (!mediaVisible) {
     return {
       mediaWidth: 0,
-      inspectorWidth: clamp(
+      inspectorWidth: roundAndClampPixels(
         preference.inspectorWidth,
         Math.min(WORKSPACE_PANEL_LIMITS.inspector.min, capacity),
         Math.min(WORKSPACE_PANEL_LIMITS.inspector.max, capacity),
@@ -54,7 +55,7 @@ function fitSidePanels(
   }
   if (!inspectorVisible) {
     return {
-      mediaWidth: clamp(
+      mediaWidth: roundAndClampPixels(
         preference.mediaWidth,
         Math.min(WORKSPACE_PANEL_LIMITS.media.min, capacity),
         Math.min(WORKSPACE_PANEL_LIMITS.media.max, capacity),
@@ -118,7 +119,7 @@ export function fitWorkspaceLayout(
   )
   const timelineHeight = preference.timelineCollapsed
     ? 0
-    : clamp(
+    : roundAndClampPixels(
         preference.timelineHeight,
         Math.min(WORKSPACE_PANEL_LIMITS.timeline.min, timelineCapacity),
         Math.min(WORKSPACE_PANEL_LIMITS.timeline.max, timelineCapacity),

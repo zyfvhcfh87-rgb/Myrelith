@@ -104,6 +104,8 @@ import MediaCollectionsPanel, {
 } from './MediaCollectionsPanel'
 import MediaRelinkDialog from './MediaRelinkDialog'
 import { ProxyControls, ProxyStorageSummary } from './ProxyControls'
+import { formatBytes } from '../app/proxyController'
+import { formatFrameRate } from './frameRateLabel'
 import { useMediaPoolVirtualizer } from './useMediaPoolVirtualizer'
 import {
   localAccessChoiceDescription,
@@ -244,19 +246,8 @@ const DECODER_PATH_LABELS: Record<
   'local-ac3': 'Local fallback (AC-3/E-AC-3)',
 }
 
-function formatRate(rate: FrameRate): string {
-  const framesPerSecond = rate.num / rate.den
-  if (Number.isInteger(framesPerSecond)) return String(framesPerSecond)
-  return framesPerSecond.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
-}
-
 function formatSelectedFile(item: MediaCompatibilityItem): string {
-  const size = item.size >= 1024 * 1024
-    ? `${(item.size / (1024 * 1024)).toFixed(1)} MiB`
-    : item.size >= 1024
-      ? `${(item.size / 1024).toFixed(1)} KiB`
-      : `${item.size} B`
-  return `${item.declaredMimeType || 'Unknown file type'} · ${size}`
+  return `${item.declaredMimeType || 'Unknown file type'} · ${formatBytes(item.size)}`
 }
 
 function trackLabel(track: MediaTrackCompatibility): string {
@@ -268,7 +259,7 @@ function formatTrack(track: MediaTrackCompatibility): string {
   const parts: string[] = []
   if (track.kind === 'video') {
     if (track.width && track.height) parts.push(`${track.width}×${track.height}`)
-    if (track.frameRate) parts.push(`${formatRate(track.frameRate)} fps`)
+    if (track.frameRate) parts.push(`${formatFrameRate(track.frameRate)} fps`)
   } else {
     if (track.sampleRate) parts.push(`${track.sampleRate / 1_000} kHz`)
     if (track.channels) {
@@ -578,24 +569,14 @@ function PartialTrackImportDialog({
 }
 
 function MediaRelinkStatus() {
-  const phase = useProjectSessionStore(
-    (state) => state.activeMediaRelink.phase,
-  )
-  const scannedFileCount = useProjectSessionStore(
-    (state) => state.activeMediaRelink.scannedFileCount,
-  )
-  const processedFileCount = useProjectSessionStore(
-    (state) => state.activeMediaRelink.processedFileCount,
-  )
-  const connectedCount = useProjectSessionStore(
-    (state) => state.activeMediaRelink.connectedCount,
-  )
-  const skippedCount = useProjectSessionStore(
-    (state) => state.activeMediaRelink.skippedCount,
-  )
-  const errors = useProjectSessionStore(
-    (state) => state.activeMediaRelink.errors,
-  )
+  const {
+    phase,
+    scannedFileCount,
+    processedFileCount,
+    connectedCount,
+    skippedCount,
+    errors,
+  } = useProjectSessionStore((state) => state.activeMediaRelink)
 
   if (phase === 'idle') return null
 
@@ -864,7 +845,6 @@ const MediaPoolItemCard = memo(function MediaPoolItemCard({
       aria-posinset={position}
       aria-setsize={itemCount}
       aria-label={`${fileName}, ${connection}, ${metadata}`}
-      key={id}
       className="media-item"
       data-media-id={id}
       data-kind={kind}
@@ -1495,7 +1475,7 @@ export default function MediaPool() {
               <button
                 className="media-folder-relink"
                 type="button"
-                disabled={importBusy || relinkBusy}
+                disabled={busy}
                 onClick={() => void chooseActiveMediaFolder()}
               >
                 {localAccessChoiceLabel('Relink folder', 'remember')}
@@ -1521,7 +1501,7 @@ export default function MediaPool() {
                   type="file"
                   accept={MEDIA_FILE_INPUT_ACCEPT}
                   multiple
-                  disabled={importBusy || relinkBusy}
+                  disabled={busy}
                   ref={(input) => input?.setAttribute('webkitdirectory', '')}
                   onChange={(event) => {
                     const files = [...(event.target.files ?? [])]
@@ -1537,7 +1517,7 @@ export default function MediaPool() {
                 type="button"
                 aria-describedby="media-access-explanation"
                 title="Choose media and keep access for later sessions"
-                disabled={importBusy || relinkBusy}
+                disabled={busy}
                 onClick={() => void chooseMediaForImport()}
               >
                 <UploadSimple aria-hidden="true" size={14} weight="bold" />
@@ -1553,7 +1533,7 @@ export default function MediaPool() {
                   type="file"
                   accept={MEDIA_FILE_INPUT_ACCEPT}
                   multiple
-                  disabled={importBusy || relinkBusy}
+                  disabled={busy}
                   onChange={(event) => {
                     const files = [...(event.target.files ?? [])]
                     event.target.value = ''
@@ -1769,7 +1749,7 @@ export default function MediaPool() {
         <PartialTrackImportDialog
           item={validPartialReview.item}
           selection={validPartialReview.review.selection}
-          busy={importBusy || relinkBusy}
+          busy={busy}
           onCancel={() => closePartialReview(true)}
           onConfirm={() => {
             const { itemId, selection } = validPartialReview.review

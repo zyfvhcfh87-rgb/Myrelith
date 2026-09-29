@@ -1205,6 +1205,14 @@ describe('MediaPool presentation', () => {
     expect(removeMediaCompatibility).toHaveBeenCalledWith('asset-9')
   })
 
+  test('labels a provisional file above 1 GiB in GiB, not thousands of MiB', () => {
+    seedCompatibility(makeCompatibility({ size: 3 * 1024 ** 3 }))
+    render(<MediaPool />)
+
+    expect(screen.getByTitle('beach.mp4'))
+      .toHaveAttribute('aria-label', 'beach.mp4, provisional, video/mp4 · 3.00 GiB')
+  })
+
   test('shows detected container and every ready track diagnostic', () => {
     seedAsset(makeAsset())
     seedCompatibility(makeCompatibility({

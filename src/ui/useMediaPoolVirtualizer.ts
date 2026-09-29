@@ -33,7 +33,6 @@ export interface MediaPoolVirtualizer {
   readonly renderedItemIds: readonly string[]
   readonly visibleItemIds: readonly string[]
   readonly rowIndexByItemId: ReadonlyMap<string, number>
-  readonly measureRenderedRows: () => void
   readonly ensureRowVisible: (rowIndex: number) => void
   readonly scrollToStart: () => void
 }
@@ -277,13 +276,11 @@ export function useMediaPoolVirtualizer(
     renderedItemIds,
     visibleItemIds,
     rowIndexByItemId,
-    measureRenderedRows,
     ensureRowVisible,
     scrollToStart,
   }), [
     columnCount,
     ensureRowVisible,
-    measureRenderedRows,
     renderedItemIds,
     rowIndexByItemId,
     rows,

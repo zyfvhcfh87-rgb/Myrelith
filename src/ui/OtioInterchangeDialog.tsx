@@ -13,7 +13,7 @@ import {
   stageOtioImport,
   subscribeOtioInterchange,
 } from '../app/otioInterchangeController'
-import type { OtioImportPreview, OtioLossEntry } from '../domain/otioInterchange'
+import type { OtioImportPreview } from '../domain/otioInterchange'
 
 interface OtioInterchangeDialogProps {
   onClose: () => void
@@ -22,10 +22,6 @@ interface OtioInterchangeDialogProps {
 function closeInterchange(onClose: () => void): void {
   cancelOtioInterchange()
   onClose()
-}
-
-function lossList(preview: OtioImportPreview): OtioLossEntry[] {
-  return [...preview.losses]
 }
 
 export default function OtioInterchangeDialog({ onClose }: OtioInterchangeDialogProps) {
@@ -192,7 +188,7 @@ function ExportPreview({ preview }: { preview: OtioImportPreview }) {
 }
 
 function LossReport({ preview }: { preview: OtioImportPreview }) {
-  const losses = lossList(preview)
+  const losses = preview.losses
   if (losses.length === 0 && preview.omittedLosses === 0) {
     return <p className="otio-dialog-ok">No disclosed losses for the supported subset.</p>
   }
