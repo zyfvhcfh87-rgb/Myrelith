@@ -15,11 +15,18 @@ type ResultOf<T extends AvCaptureResult['type']> = Extract<AvCaptureResult, { ty
 export class AvCaptureBridge {
   private worker: Worker | null
   private nextId = 0
-  private readonly waiting = new Map<number, { resolve(result: AvCaptureResult): void; reject(cause: Error): void }>()
+  private readonly waiting = new Map<number, {
+    readonly type: AvCaptureResult['type']
+    resolve(result: AvCaptureResult): void
+    reject(cause: Error): void
+  }>()
   private recoveredId: string | null = null
   onProgress: ((progress: AvRecorderProgress) => void) | null = null
   onSelfStop: ((reason: Exclude<AvRecorderEnd, 'stopped'>) => void) | null = null
-  /** The worker died on its own (not `close()`); a recording in it is gone. */
+  /**
+   * The worker died on its own or broke the reply protocol (not `close()`);
+   * it has been terminated and a recording in it is gone.
+   */
   onCrash: (() => void) | null = null
 
   constructor(worker?: Worker) {
@@ -27,9 +34,11 @@ export class AvCaptureBridge {
     this.worker.onmessage = ({ data }: MessageEvent<AvCaptureWorkerMessage>) => this.receive(data)
     this.worker.onerror = (event) => {
       event.preventDefault?.()
-      this.failAll(new Error('The capture worker stopped unexpectedly'))
-      this.onCrash?.()
+      this.crash(new Error('The capture worker stopped unexpectedly'))
     }
+    // A reply that cannot be deserialized never reaches onmessage; without
+    // this its pending call would wait forever.
+    this.worker.onmessageerror = () => this.crash(new Error('A capture worker reply could not be read'))
   }
 
   get isClosed(): boolean { return this.worker === null }
@@ -38,6 +47,10 @@ export class AvCaptureBridge {
     if ('requestId' in message) {
       const pending = this.waiting.get(message.requestId)
       if (!pending) return
+      if (!('error' in message) && message.result?.type !== pending.type) {
+        this.crash(new Error('The capture worker returned the wrong result'))
+        return
+      }
       this.waiting.delete(message.requestId)
       if ('error' in message) {
         const error = new Error(message.error.message)
@@ -48,6 +61,12 @@ export class AvCaptureBridge {
     }
     if (message.type === 'progress') this.onProgress?.(message.progress)
     else if (message.type === 'self-stop') this.onSelfStop?.(message.reason)
+  }
+
+  private crash(cause: Error): void {
+    if (!this.worker) return
+    this.failAll(cause)
+    this.onCrash?.()
   }
 
   private failAll(cause: Error): void {
@@ -63,7 +82,7 @@ export class AvCaptureBridge {
     if (!worker) return Promise.reject(new Error('The capture worker is closed'))
     const requestId = ++this.nextId
     return new Promise<ResultOf<T>>((resolve, reject) => {
-      this.waiting.set(requestId, { resolve: (result) => resolve(result as ResultOf<T>), reject })
+      this.waiting.set(requestId, { type: request.type, resolve: (result) => resolve(result as ResultOf<T>), reject })
       try { worker.postMessage({ ...request, requestId }, transfer) }
       catch (cause) {
         this.waiting.delete(requestId)
