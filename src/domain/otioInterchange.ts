@@ -85,15 +85,10 @@ export interface OtioLossEntry {
   readonly detail: string
 }
 
+/** What the interchange dialog reports per sequence. */
 export interface OtioSequenceSummary {
-  readonly name: string
-  readonly videoTracks: number
-  readonly audioTracks: number
   readonly clips: number
-  readonly gaps: number
   readonly transitions: number
-  readonly markers: number
-  readonly offlineMedia: number
 }
 
 export interface OtioMediaSummary {
@@ -782,12 +777,11 @@ function importTrackChildren(
   assets: Map<string, AssetDraft>,
   log: LossLog,
   depth: number,
-): { clips: PlacedClip[]; transitions: Array<{ from: number; to: number; duration: number; path: string }>; gaps: number; markers: TimelineMarker[] } {
+): { clips: PlacedClip[]; transitions: Array<{ from: number; to: number; duration: number; path: string }>; markers: TimelineMarker[] } {
   const clips: PlacedClip[] = []
   const transitions: Array<{ from: number; to: number; duration: number; path: string }> = []
   const markers: TimelineMarker[] = []
   let cursor = 0
-  let gaps = 0
   let pending: { duration: number; path: string } | null = null
 
   const takePending = (nextClipIndex: number | null): void => {
@@ -846,7 +840,6 @@ function importTrackChildren(
       takePending(null)
       if (duration && duration > 0) {
         cursor += duration
-        gaps += 1
       }
       continue
     }
@@ -883,14 +876,12 @@ function importTrackChildren(
         addLoss(log, 'clip', childPath, 'Disabled clip was replaced with a gap')
         takePending(null)
         cursor += duration
-        gaps += 1
         continue
       }
       if (!asset) {
         addLoss(log, 'clip', childPath, 'Clip without supported media was replaced with a gap')
         takePending(null)
         cursor += duration
-        gaps += 1
         continue
       }
       const nextIndex = clips.length
@@ -915,7 +906,6 @@ function importTrackChildren(
       takePending(null)
       if (nestedDuration > 0) {
         cursor += nestedDuration
-        gaps += 1
       }
       continue
     }
@@ -923,7 +913,7 @@ function importTrackChildren(
     takePending(null)
   }
   takePending(null)
-  return { clips, transitions, gaps, markers }
+  return { clips, transitions, markers }
 }
 
 function shiftMarkers(
@@ -1022,7 +1012,6 @@ function importOneTimeline(
   ]
   const importedTracks: Track[] = []
   let totalClips = 0
-  let totalGaps = 0
   let totalTransitions = 0
   const stackChildren = childrenOf(tracksValue)
   for (let index = 0; index < stackChildren.length; index++) {
@@ -1094,7 +1083,6 @@ function importOneTimeline(
     }
     importedTracks.push(track)
     totalClips += track.clips.length
-    totalGaps += placed.gaps
     markers.push(...placed.markers)
     markers.push(...shiftMarkers(
       collectMarkers(trackValue, trackPath, settings.frameRate, 0, factory, log),
@@ -1137,14 +1125,8 @@ function importOneTimeline(
   }
   document.markers = [...markers].sort(compareTimelineMarkers)
   const summary: OtioSequenceSummary = {
-    name: document.name,
-    videoTracks: videos.length,
-    audioTracks: audios.length,
     clips: totalClips,
-    gaps: totalGaps,
     transitions: totalTransitions,
-    markers: document.markers.length,
-    offlineMedia: [...assets.values()].length,
   }
   return { document, summary }
 }
@@ -1236,16 +1218,17 @@ export function planOtioImport(
   if (sequences.length === 0) {
     throw new OtioInterchangeError('empty', 'The OTIO file did not contain an importable timeline')
   }
-  const descriptors = [...assets.values()].map((draft) => draft.descriptor)
+  const drafts = [...assets.values()]
+  const descriptors = drafts.map((draft) => draft.descriptor)
   const preview: OtioImportPreview = {
     schemaLabel: OTIO_COMPATIBILITY_LABEL,
     sequences: summaries,
-    media: descriptors.map((descriptor) => ({
+    media: drafts.map(({ descriptor, targetUrl }) => ({
       id: descriptor.id,
       fileName: descriptor.fileName,
       kind: descriptor.kind,
       offline: true,
-      targetUrl: [...assets.values()].find((draft) => draft.descriptor.id === descriptor.id)?.targetUrl ?? null,
+      targetUrl,
     })),
     losses: log.entries,
     omittedLosses: log.omitted,
@@ -1508,14 +1491,8 @@ export function serializeOtioExport(
   const preview: OtioImportPreview = {
     schemaLabel: OTIO_COMPATIBILITY_LABEL,
     sequences: project.sequences.map((sequence) => ({
-      name: sequence.name,
-      videoTracks: sequence.tracks.filter((track) => track.kind === 'video').length,
-      audioTracks: sequence.tracks.filter((track) => track.kind === 'audio').length,
       clips: sequence.tracks.reduce((sum, track) => sum + track.clips.length, 0),
-      gaps: 0,
       transitions: sequence.tracks.reduce((sum, track) => sum + track.transitions.length, 0),
-      markers: sequence.markers?.length ?? 0,
-      offlineMedia: 0,
     })),
     media: [...catalog.values()].map((descriptor) => ({
       id: descriptor.id,

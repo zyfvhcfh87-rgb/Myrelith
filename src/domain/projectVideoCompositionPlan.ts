@@ -16,7 +16,8 @@ import { sequenceById } from './projectSequences'
 import {
   MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME,
   analyzeNestedSequenceGraph,
-  sequenceInstances,
+  activeMulticamInstanceAt,
+  activeSequenceInstanceAt,
 } from './nestedSequences'
 import type { PluginVideoEffectContributionSnapshot } from './pluginVideoEffectStagePlan'
 import {
@@ -26,44 +27,9 @@ import {
   type VideoCompositionPlan,
   type VideoCompositionPlanner,
 } from './videoCompositionPlan'
-import { rangeEnd } from './time'
 import { createMulticamPlanner } from './multicam'
 import { defaultSourceTimeMap } from './sourceTimeMap'
 import { resolveBlendMode } from './blendModes'
-
-function activeInstanceAt(
-  document: TimelineDoc,
-  trackId: TrackId,
-  frame: number,
-) {
-  const track = document.tracks.find((candidate) => candidate.id === trackId)
-  if (!track) return null
-  for (const instance of sequenceInstances(track)) {
-    if (
-      instance.timelineRange.startFrame <= frame
-      && frame < rangeEnd(instance.timelineRange)
-    ) return instance
-    if (instance.timelineRange.startFrame > frame) break
-  }
-  return null
-}
-
-function activeMulticamAt(
-  document: TimelineDoc,
-  trackId: TrackId,
-  frame: number,
-): MulticamInstance | null {
-  const track = document.tracks.find((candidate) => candidate.id === trackId)
-  if (!track) return null
-  for (const instance of track.multicamInstances ?? []) {
-    if (
-      instance.timelineRange.startFrame <= frame
-      && frame < rangeEnd(instance.timelineRange)
-    ) return instance
-    if (instance.timelineRange.startFrame > frame) break
-  }
-  return null
-}
 
 function multicamClip(
   instance: MulticamInstance,
@@ -199,8 +165,8 @@ export function createProjectVideoCompositionPlanner(
           const finishInstanceTrack = () => {
             if (track.videoEffects?.length) items.push(Object.freeze({ kind: 'video-bus', target: 'track', trackId: track.id, sequenceId: sequence.id, frame: localFrame, instancePath, effects: snapshotVideoBusStack(track.videoEffects) }))
           }
-          const instance = activeInstanceAt(sequence, track.id, localFrame)
-          const multicamInstance = activeMulticamAt(sequence, track.id, localFrame)
+          const instance = activeSequenceInstanceAt(track, localFrame)
+          const multicamInstance = activeMulticamInstanceAt(track, localFrame)
           if (!instance && !multicamInstance) {
             items.push(...(byTrack.get(track.id) ?? []))
             continue

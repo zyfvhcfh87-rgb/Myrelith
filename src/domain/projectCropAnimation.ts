@@ -18,12 +18,7 @@ export function cropAnimationTracks(clip: Clip): CropAnimationCertificateRequest
   return tracks
 }
 
-/** The owning project is immutable. Each cached result binds the complete snapshot and ranges. */
-const admittedFrozenProjects = new WeakMap<SequenceProject, CropAnimationProjectCertificateResult>()
-
 export function certifyProjectCropAnimation(project: SequenceProject): CropAnimationProjectCertificateResult {
-  const cached = admittedFrozenProjects.get(project)
-  if (cached) return cached
   const requests: CropAnimationCertificateRequest[] = []
   for (const sequence of project.sequences) for (const track of sequence.tracks) {
     const ranges = new Map<Clip, { start: number; end: number }>()
@@ -56,20 +51,7 @@ export function certifyProjectCropAnimation(project: SequenceProject): CropAnima
       requests.push({ crop: clipVisualSettings(clip).crop, tracks: cropAnimationTracks(clip), startFrame: bounded(range.start), endFrame: bounded(range.end) })
     }
   }
-  const result = certifyCropAnimations(requests)
-  // Only deeply frozen owned graphs may be cached. Mutable parser/test inputs are
-  // rechecked; freezing the root alone is not treated as immutable geometry.
-  const frozen = Object.isFrozen(project) && Object.isFrozen(project.sequences)
-    && project.sequences.every((sequence) => Object.isFrozen(sequence) && Object.isFrozen(sequence.tracks)
-      && sequence.tracks.every((track) => Object.isFrozen(track) && Object.isFrozen(track.clips)
-        && Object.isFrozen(track.transitions) && track.transitions.every(Object.isFrozen)
-        && track.clips.every((clip) => Object.isFrozen(clip) && Object.isFrozen(clip.timelineRange)
-          && (clip.animation === undefined || (Object.isFrozen(clip.animation) && Object.isFrozen(clip.animation.tracks)
-            && clip.animation.tracks.every((lane) => Object.isFrozen(lane) && Object.isFrozen(lane.keyframes)
-              && lane.keyframes.every((key) => Object.isFrozen(key) && Object.isFrozen(key.easing)))))
-          && (clip.visual === undefined || (Object.isFrozen(clip.visual) && Object.isFrozen(clip.visual.crop))))))
-  if (frozen) admittedFrozenProjects.set(project, result)
-  return result
+  return certifyCropAnimations(requests)
 }
 
 export function projectCropAnimationError(project: SequenceProject): string | null {

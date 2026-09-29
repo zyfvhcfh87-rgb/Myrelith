@@ -13,6 +13,7 @@ import {
   invertSimilarityTransform,
   motionAnalysisRetainedBytes,
   motionHypothesisPairRanks,
+  similarityFromPathSample,
   validateGrayFrame,
   validateMotionAnalysisBudget,
   validateMotionFrameSequence,
@@ -24,7 +25,6 @@ import {
 import {
   evaluateStabilizationResearchGate,
   evaluateTrackingResearchGates,
-  researchFixtureIdentityIsExact,
   runMotionAnalysisResearch,
   trackingLossIsPrompt,
 } from './motionAnalysisResearch'
@@ -168,7 +168,8 @@ describe('motion analysis research', () => {
     )
     const point = { x: 17, y: 9 }
     expect(applySimilarityTransform(identity, point)).toEqual({ x: 17, y: 9 })
-    expect(researchFixtureIdentityIsExact()).toBe(true)
+    expect(JSON.stringify(similarityFromPathSample({ x: 0, y: 0, angleRadians: 0, logScale: 0 })))
+      .toBe(JSON.stringify(IDENTITY_SIMILARITY_TRANSFORM))
   })
 
   test('keeps strength zero unchanged and exposes increasing crop at full strength', () => {

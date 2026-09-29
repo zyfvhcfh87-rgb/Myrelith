@@ -85,13 +85,6 @@ function freezeFrameRate(num: number, den: number): Readonly<FrameRate> {
   return Object.freeze({ num, den })
 }
 
-export const PROJECT_RESOLUTION_TIERS = Object.freeze([
-  720,
-  1080,
-  1440,
-  2160,
-] as const)
-
 /** Reviewed canvas families and exact creation sizes, in UI display order. */
 export const PROJECT_ASPECT_RATIO_PRESETS = Object.freeze([
   freezeAspectRatioPreset(

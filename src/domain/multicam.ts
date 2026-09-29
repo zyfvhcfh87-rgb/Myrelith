@@ -364,15 +364,6 @@ function resolveMulticamSegments(
   return Object.freeze(result.map((segment) => Object.freeze(segment)))
 }
 
-/** One-shot convenience wrapper; hot paths compile and reuse a planner. */
-export function multicamAudioSegments(
-  definition: MulticamDefinition,
-  startFrame: number,
-  endFrame: number,
-): readonly MulticamAudioSegment[] {
-  return createMulticamPlanner(definition).audioSegments(startFrame, endFrame)
-}
-
 /** Insert or replace one exact video cut and canonicalize equal neighbours. */
 export function setMulticamCut(
   definition: MulticamDefinition,

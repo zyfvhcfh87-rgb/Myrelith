@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { applyOrderedPixelEffectsToRgba } from './effectPixels'
 import { createMaskEffect, DEFAULT_MASK_BEZIER_PATH, maskParams } from './effectStack'
 import {
-  cloneEffectPathAnimationTrack, effectPathAnimationTrackBoundsError, effectPathAnimationTracksBoundsError,
+  effectPathAnimationTrackBoundsError, effectPathAnimationTracksBoundsError,
   evaluatePreparedEffectPathAnimationTrack, maskPathAnimationRetentionError,
   maskPathAnimationSnapshotBudget, prepareEffectPathAnimationTrack,
   type EffectPathAnimationTrack, type MaskPathAnimationRetention, type MaskPathAnimationSnapshot,
@@ -41,18 +41,6 @@ describe('typed held path value authority', () => {
       expect(Object.isFrozen(prepared.keyframes)).toBe(true)
       expect(Object.isFrozen(prepared.keyframes[0])).toBe(true)
     }
-  })
-
-  test('clone preserves future values and absent source intent without sharing mutable keys', () => {
-    const authored = { ...track('mask', 2, 'future opaque'), valueVersion: 99 }
-    delete authored.keyframes[0].sourceTimeTicks
-    const before = JSON.stringify(authored), cloned = cloneEffectPathAnimationTrack(authored)
-    expect(cloned).toEqual(authored)
-    expect(Object.hasOwn(cloned.keyframes[0], 'sourceTimeTicks')).toBe(false)
-    cloned.keyframes[0].frame = -10
-    cloned.keyframes[0].value = 'changed'
-    expect(cloned.keyframes[0].easing).not.toBe(authored.keyframes[0].easing)
-    expect(JSON.stringify(authored)).toBe(before)
   })
 
   test('preserves unknown versions, dangling targets and malformed paths while visibly unavailable', () => {

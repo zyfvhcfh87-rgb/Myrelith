@@ -240,19 +240,11 @@ function projectPartialTrackImport(
 }
 
 /**
- * Turn a Limited probe into the exact single-kind asset explicitly offered to
- * the user. Returns null instead of accepting a hidden or stale choice.
+ * Turn a probe into the exact single-kind asset for a chosen partial import.
+ * A Limited probe must still offer that choice (null instead of accepting a
+ * hidden or stale one); a saved choice also reapplies when this browser can
+ * now decode both tracks.
  */
-export function acceptPartialTrackImport(
-  asset: MediaAsset,
-  report: MediaCompatibilityReport,
-  selection: PartialTrackImportSelection,
-): { asset: MediaAsset; compatibility: MediaCompatibilityReport } | null {
-  if (partialTrackImportOption(report) !== selection) return null
-  return projectPartialTrackImport(asset, report, selection)
-}
-
-/** Reapply a saved choice even when this browser can now decode both tracks. */
 export function reapplyPartialTrackImport(
   asset: MediaAsset,
   report: MediaCompatibilityReport,

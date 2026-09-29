@@ -88,13 +88,6 @@ export function effectPathAnimationTracksBoundsError(tracks: readonly EffectPath
   return collectionError(tracks, MASK_PATH_ANIMATION_LIMITS.tracksPerClip, requireSourceTicks)
 }
 
-/** Budget the complete candidate first; this bounded value hook does not own history. */
-export function cloneEffectPathAnimationTrack(track: EffectPathAnimationTrack): EffectPathAnimationTrack {
-  const error = effectPathAnimationTrackBoundsError(track)
-  if (error) throw new RangeError(error)
-  return { ...track, keyframes: track.keyframes.map((key) => ({ ...key, easing: { type: 'hold' } })) }
-}
-
 export type PreparedEffectPathAnimationTrack =
   | { readonly ok: true; readonly keyframes: readonly Readonly<Pick<EffectPathAnimationKeyframe, 'frame' | 'value'>>[] }
   | { readonly ok: false; readonly reason: string }

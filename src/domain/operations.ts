@@ -11,7 +11,6 @@ export {
   addCrossfadeWithSourceBounds,
   removeTransition,
   setCrossfadeDuration,
-  setCrossfadeDurationWithSourceBounds,
   setCrossfadeSettings,
   setCrossfadeSettingsWithSourceBounds,
 } from './operations/transitions'

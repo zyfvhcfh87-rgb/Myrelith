@@ -38,7 +38,6 @@ import {
   setClipVolume,
   setEffectEnabled,
   setCrossfadeDuration,
-  setCrossfadeDurationWithSourceBounds,
   setCrossfadeSettings,
   setCrossfadeSettingsWithSourceBounds,
   setMasterAudio,
@@ -1514,11 +1513,11 @@ describe('crossfade authoring', () => {
     expect(added).not.toBe(doc)
     const authored = transitionsOf(added)[0]
     expect(authored.durationFrames).toBe(7)
-    expect(setCrossfadeDurationWithSourceBounds(
+    expect(setCrossfadeSettingsWithSourceBounds(
       added,
       'V1',
       authored.id,
-      8,
+      { durationFrames: 8, audio: authored.audio },
       bounds,
     )).toBe(added)
 

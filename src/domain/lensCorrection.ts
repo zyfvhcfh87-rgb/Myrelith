@@ -276,20 +276,11 @@ export function lensCorrectionValidationError(
 }
 
 /**
- * Maps one output pixel to the distorted source sample coordinate. A renderer
- * may bilinearly sample this point; undefined edges remain explicit.
- */
-export function mapLensCorrectionPoint(
-  model: ManualLensCorrectionModel,
-  output: NormalizedLensPoint,
-): NormalizedLensPoint {
-  return createValidatedLensCorrectionMap(model).map(output)
-}
-
-/**
  * Validates one immutable model once for bounded per-pixel research hosts.
  * Every mapped point is still range-checked, but the fixed 33x33 model safety
- * grid is never repeated inside a frame loop.
+ * grid is never repeated inside a frame loop. `map` takes one output pixel to
+ * the distorted source sample coordinate; a renderer may bilinearly sample
+ * it, and undefined edges remain explicit.
  */
 export function createValidatedLensCorrectionMap(
   model: ManualLensCorrectionModel,

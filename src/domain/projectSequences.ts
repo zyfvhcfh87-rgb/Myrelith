@@ -34,7 +34,7 @@ import {
 } from './projectLimits'
 import { proceduralTextAssetId, isProceduralTitleClip } from './textOverlay'
 import { SEQUENCE_PROJECT_LIMITS } from './sequenceProjectLimits'
-import { analyzeNestedSequenceGraph } from './nestedSequences'
+import { analyzeNestedSequenceGraph, sequenceById, sequenceSettingsEqual } from './nestedSequences'
 import {
   multicamDefinitionValidationError,
   multicamLinkedPairValidationError,
@@ -151,29 +151,9 @@ function validGeneratedId(value: string): boolean {
     && value.length <= MAX_DOCUMENT_ID_CHARACTERS
 }
 
-function exactFrameRateEqual(
-  left: TimelineDoc['frameRate'],
-  right: TimelineDoc['frameRate'],
-): boolean {
-  return left.num * right.den === right.num * left.den
-}
-
-export function sequenceSettingsEqual(
-  left: TimelineDoc,
-  right: TimelineDoc,
-): boolean {
-  return left.width === right.width
-    && left.height === right.height
-    && left.audioSampleRate === right.audioSampleRate
-    && exactFrameRateEqual(left.frameRate, right.frameRate)
-}
-
-export function sequenceById(
-  project: SequenceProject,
-  sequenceId: string,
-): TimelineDoc | null {
-  return project.sequences.find((sequence) => sequence.id === sequenceId) ?? null
-}
+// Owned by the graph validator below this module (a runtime import back here
+// would be a cycle); re-exported so project callers keep one entry point.
+export { sequenceById, sequenceSettingsEqual }
 
 export function rootSequence(project: SequenceProject): TimelineDoc {
   const root = sequenceById(project, project.rootSequenceId)
@@ -408,26 +388,14 @@ export function sequenceProjectWithinEditBudget(
     || project.sequences.some((sequence) => videoBusStacks(sequence).some((effects) => videoBusStackBoundsError(effects) !== null) || sequence.tracks.some((track) => track.kind !== 'video' && (track.videoEffects?.length ?? 0) > 0))
     || !sequenceProjectIdsAreUnique(project)
   ) return false
+  // The graph analysis also admits every multicam instance's definition and
+  // covered source range.
   try {
     analyzeNestedSequenceGraph(project)
   } catch {
     return false
   }
   const counts = collectCounts(project)
-  const multicams = new Map(
-    (project.multicams ?? []).map((definition) => [definition.id, definition]),
-  )
-  if (project.sequences.some((sequence) => sequence.tracks.some((track) => (
-    (track.multicamInstances ?? []).some((instance) => {
-      const definition = multicams.get(instance.multicamId)
-      return !definition
-        || !Number.isSafeInteger(
-          instance.sourceStartFrame + instance.timelineRange.durationFrames,
-        )
-        || instance.sourceStartFrame + instance.timelineRange.durationFrames
-          > definition.durationFrames
-    })
-  )))) return false
   return counts.multicamDefinitions <= SEQUENCE_PROJECT_LIMITS.maxMulticamDefinitions
     && counts.multicamAngles <= SEQUENCE_PROJECT_LIMITS.maxTotalMulticamAngles
     && counts.multicamSwitches <= SEQUENCE_PROJECT_LIMITS.maxTotalMulticamSwitches

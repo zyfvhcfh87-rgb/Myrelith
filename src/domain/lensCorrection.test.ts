@@ -4,16 +4,13 @@ import {
   DEFAULT_MANUAL_LENS_CORRECTION,
   lensCorrectionCoverage,
   lensCorrectionValidationError,
-  mapLensCorrectionPoint,
 } from './lensCorrection'
 
 describe('manual lens correction model', () => {
   test('keeps the neutral model byte-geometry neutral', () => {
     expect(lensCorrectionValidationError(DEFAULT_MANUAL_LENS_CORRECTION)).toBeNull()
-    const mapped = mapLensCorrectionPoint(
-      DEFAULT_MANUAL_LENS_CORRECTION,
-      { x: 0.17, y: 0.83 },
-    )
+    const mapped = createValidatedLensCorrectionMap(DEFAULT_MANUAL_LENS_CORRECTION)
+      .map({ x: 0.17, y: 0.83 })
     expect(mapped.x).toBeCloseTo(0.17, 12)
     expect(mapped.y).toBeCloseTo(0.83, 12)
     expect(lensCorrectionCoverage(DEFAULT_MANUAL_LENS_CORRECTION)).toMatchObject({
@@ -50,7 +47,7 @@ describe('manual lens correction model', () => {
       outputScale: 1.2,
     }
     const mapper = createValidatedLensCorrectionMap(authored)
-    const expected = mapLensCorrectionPoint(authored, { x: 0.2, y: 0.8 })
+    const expected = createValidatedLensCorrectionMap(authored).map({ x: 0.2, y: 0.8 })
     authored.k1 = 0
 
     expect(mapper.map({ x: 0.2, y: 0.8 })).toEqual(expected)

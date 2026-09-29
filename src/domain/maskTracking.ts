@@ -13,6 +13,7 @@ import type { Clip, ClipAnimation, EffectAnimationTrack, TimelineDoc } from './s
 import { clipSourceTimeMap, sourceTicksAtTimelineOffset } from './sourceTimeMap'
 import { rangeEnd } from './time'
 import { isProceduralTitleClip } from './textOverlay'
+import { locateClip } from './operations/operationInternals'
 
 export const MASK_TRACKING_POSITION_PARAMETERS = ['x', 'y'] as const
 export const MASK_TRACKING_BOX_PARAMETERS = ['x', 'y', 'width', 'height'] as const
@@ -109,8 +110,9 @@ export function maskTrackingAnimation(doc: TimelineDoc, clip: Clip, plan: MaskTr
 /** Also used by the independent operation; unsupported competing intent is never replaced. */
 export function maskTrackingTarget(doc: TimelineDoc, target: MaskTrackingTarget, globalFrame: number) {
   if (target.kind !== 'mask-effect') throw new Error('Choose a mask-effect attachment.')
-  const track = doc.tracks.find((item) => item.clips.some((clip) => clip.id === target.clipId))
-  const clip = track?.clips.find((item) => item.id === target.clipId)
+  const location = locateClip(doc, target.clipId)
+  const track = location?.track
+  const clip = location?.clip
   if (!clip || !track || track.kind !== 'video' || isProceduralTitleClip(clip)) throw new Error('Choose a media clip on a video track for the mask attachment.')
   if (track.locked || track.hidden) throw new Error('Show and unlock the target video track before attaching tracking.')
   if (!Number.isSafeInteger(globalFrame) || globalFrame < clip.timelineRange.startFrame || globalFrame >= rangeEnd(clip.timelineRange)) throw new Error('The target must cover the exact selection frame.')

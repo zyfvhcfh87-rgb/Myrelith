@@ -1,17 +1,15 @@
-/** Pure graph validation and exact-frame expansion for live sequence refs. */
+/** Pure graph validation and lane lookups for live sequence refs. */
 
 import type {
-  Clip,
+  MulticamDefinition,
   MulticamInstance,
   SequenceInstance,
-  SequenceInstanceId,
   TimelineDoc,
+  TimeRange,
   Track,
-  TrackId,
   TrackKind,
 } from './schema'
 import type { SequenceProject } from './projectSequences'
-import { audibleTracks, docDurationFrames } from './selectors'
 import { rangeEnd } from './time'
 
 export const MAX_NESTED_SEQUENCE_DEPTH = 8
@@ -26,37 +24,6 @@ export interface NestedSequenceGraphAnalysis {
   readonly topologicalOrder: readonly string[]
 }
 
-export interface NestedSequenceClipLeaf {
-  readonly kind: 'clip'
-  readonly sequenceId: string
-  readonly trackId: TrackId
-  readonly clipId: string
-  readonly frame: number
-  readonly instancePath: readonly SequenceInstanceId[]
-}
-
-export interface NestedSequenceMulticamLeaf {
-  readonly kind: 'multicam'
-  readonly sequenceId: string
-  readonly trackId: TrackId
-  readonly instanceId: string
-  readonly frame: number
-  readonly instancePath: readonly SequenceInstanceId[]
-}
-
-export type NestedSequenceLeaf =
-  | NestedSequenceClipLeaf
-  | NestedSequenceMulticamLeaf
-
-export interface NestedSequenceFrameExpansion {
-  readonly rootSequenceId: string
-  readonly rootFrame: number
-  readonly mediaKind: TrackKind
-  readonly leaves: readonly NestedSequenceLeaf[]
-  readonly visitedSequenceInstances: number
-  readonly maxDepth: number
-}
-
 export function sequenceInstances(track: Track): readonly SequenceInstance[] {
   return track.sequenceInstances ?? []
 }
@@ -65,14 +32,38 @@ export function multicamInstances(track: Track): readonly MulticamInstance[] {
   return track.multicamInstances ?? []
 }
 
-function sequenceById(
+/** The start-sorted lane item covering `frame`, or null. */
+function activeLaneItemAt<T extends { readonly timelineRange: TimeRange }>(
+  items: readonly T[],
+  frame: number,
+): T | null {
+  for (const item of items) {
+    if (
+      item.timelineRange.startFrame <= frame
+      && frame < rangeEnd(item.timelineRange)
+    ) return item
+    if (item.timelineRange.startFrame > frame) break
+  }
+  return null
+}
+
+export function activeSequenceInstanceAt(track: Track, frame: number): SequenceInstance | null {
+  return activeLaneItemAt(sequenceInstances(track), frame)
+}
+
+export function activeMulticamInstanceAt(track: Track, frame: number): MulticamInstance | null {
+  return activeLaneItemAt(multicamInstances(track), frame)
+}
+
+export function sequenceById(
   project: SequenceProject,
   sequenceId: string,
 ): TimelineDoc | null {
   return project.sequences.find((sequence) => sequence.id === sequenceId) ?? null
 }
 
-function sequenceSettingsEqual(left: TimelineDoc, right: TimelineDoc): boolean {
+/** Nesting and project membership require identical canvas, audio rate, and exact frame rate. */
+export function sequenceSettingsEqual(left: TimelineDoc, right: TimelineDoc): boolean {
   return left.width === right.width
     && left.height === right.height
     && left.audioSampleRate === right.audioSampleRate
@@ -121,6 +112,7 @@ function validateTrackInstances(
   ids: Set<string>,
 ): number {
   const instances = sequenceInstances(track)
+  if (instances.length === 0) return 0
   let previousEnd = -1
   const occupied = [
     ...track.clips.map((item) => item.timelineRange),
@@ -163,18 +155,19 @@ function validateTrackInstances(
 }
 
 function validateTrackMulticams(
-  project: SequenceProject,
+  definitions: ReadonlyMap<string, MulticamDefinition>,
   track: Track,
   ids: Set<string>,
 ): void {
-  const definitions = new Map((project.multicams ?? []).map((item) => [item.id, item]))
+  const instances = multicamInstances(track)
+  if (instances.length === 0) return
   let previousEnd = -1
   const occupied = [
     ...track.clips.map((item) => item.timelineRange),
     ...(track.adjustments ?? []).map((item) => item.timelineRange),
     ...sequenceInstances(track).map((item) => item.timelineRange),
   ]
-  for (const instance of multicamInstances(track)) {
+  for (const instance of instances) {
     assertIdentifier(instance.id, 'multicam instance id')
     if (ids.has(instance.id)) {
       throw new RangeError(`duplicate timeline item id "${instance.id}"`)
@@ -210,11 +203,12 @@ export function analyzeNestedSequenceGraph(
     throw new RangeError(`missing root sequence "${project.rootSequenceId}"`)
   }
   const instanceIds = new Set<string>()
+  const multicamDefinitions = new Map((project.multicams ?? []).map((item) => [item.id, item]))
   let referenceCount = 0
   for (const sequence of project.sequences) {
     for (const track of sequence.tracks) {
       referenceCount += validateTrackInstances(project, sequence, track, instanceIds)
-      validateTrackMulticams(project, track, instanceIds)
+      validateTrackMulticams(multicamDefinitions, track, instanceIds)
     }
   }
 
@@ -304,135 +298,6 @@ export function analyzeNestedSequenceGraph(
   })
 }
 
-function activeInstanceAt(track: Track, frame: number): SequenceInstance | null {
-  for (const instance of sequenceInstances(track)) {
-    if (
-      instance.timelineRange.startFrame <= frame
-      && frame < rangeEnd(instance.timelineRange)
-    ) return instance
-    if (instance.timelineRange.startFrame > frame) break
-  }
-  return null
-}
-
-function activeClipAt(track: Track, frame: number): Clip | null {
-  for (const clip of track.clips) {
-    if (clip.timelineRange.startFrame <= frame && frame < rangeEnd(clip.timelineRange)) {
-      return clip
-    }
-    if (clip.timelineRange.startFrame > frame) break
-  }
-  return null
-}
-
-function activeMulticamAt(track: Track, frame: number): MulticamInstance | null {
-  for (const instance of multicamInstances(track)) {
-    if (
-      instance.timelineRange.startFrame <= frame
-      && frame < rangeEnd(instance.timelineRange)
-    ) return instance
-    if (instance.timelineRange.startFrame > frame) break
-  }
-  return null
-}
-
 function tracksOfKind(sequence: TimelineDoc, mediaKind: TrackKind): readonly Track[] {
   return sequence.tracks.filter((track) => track.kind === mediaKind)
-}
-
-function tracksForKind(sequence: TimelineDoc, mediaKind: TrackKind): readonly Track[] {
-  if (mediaKind === 'video') {
-    return sequence.tracks.filter((track) => track.kind === 'video' && !track.hidden)
-  }
-  return audibleTracks(sequence)
-}
-
-/** Expand one exact frame to ordinary media leaves without acquiring resources. */
-export function expandNestedSequenceFrame(
-  project: SequenceProject,
-  rootSequenceId: string,
-  frame: number,
-  mediaKind: TrackKind,
-): NestedSequenceFrameExpansion {
-  analyzeNestedSequenceGraph(project)
-  if (!Number.isSafeInteger(frame) || frame < 0) {
-    throw new RangeError('nested sequence frame must be a non-negative safe integer')
-  }
-  const root = sequenceById(project, rootSequenceId)
-  if (!root) throw new RangeError(`missing root sequence "${rootSequenceId}"`)
-  if (frame >= docDurationFrames(root)) {
-    throw new RangeError('frame falls outside the requested sequence')
-  }
-  const leaves: NestedSequenceLeaf[] = []
-  let visitedSequenceInstances = 0
-  let maxDepth = 1
-
-  const expand = (
-    sequence: TimelineDoc,
-    localFrame: number,
-    instancePath: readonly SequenceInstanceId[],
-    depth: number,
-  ): void => {
-    maxDepth = Math.max(maxDepth, depth)
-    for (const track of tracksForKind(sequence, mediaKind)) {
-      const nested = activeInstanceAt(track, localFrame)
-      if (nested) {
-        visitedSequenceInstances++
-        const child = sequenceById(project, nested.sequenceId)
-        if (!child) throw new RangeError(`missing sequence "${nested.sequenceId}"`)
-        expand(
-          child,
-          nested.sourceStartFrame
-            + localFrame
-            - nested.timelineRange.startFrame,
-          [...instancePath, nested.id],
-          depth + 1,
-        )
-        continue
-      }
-      const multicam = activeMulticamAt(track, localFrame)
-      if (multicam) {
-        if (leaves.length >= MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME) {
-          throw new RangeError(
-            `nested frame exceeds ${MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME} leaf requests`,
-          )
-        }
-        leaves.push(Object.freeze({
-          kind: 'multicam',
-          sequenceId: sequence.id,
-          trackId: track.id,
-          instanceId: multicam.id,
-          frame: multicam.sourceStartFrame
-            + localFrame
-            - multicam.timelineRange.startFrame,
-          instancePath: Object.freeze([...instancePath]),
-        }))
-        continue
-      }
-      const clip = activeClipAt(track, localFrame)
-      if (!clip) continue
-      if (leaves.length >= MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME) {
-        throw new RangeError(
-          `nested frame exceeds ${MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME} leaf requests`,
-        )
-      }
-      leaves.push(Object.freeze({
-        kind: 'clip',
-        sequenceId: sequence.id,
-        trackId: track.id,
-        clipId: clip.id,
-        frame: localFrame,
-        instancePath: Object.freeze([...instancePath]),
-      }))
-    }
-  }
-  expand(root, frame, [], 1)
-  return Object.freeze({
-    rootSequenceId,
-    rootFrame: frame,
-    mediaKind,
-    leaves: Object.freeze(leaves),
-    visitedSequenceInstances,
-    maxDepth,
-  })
 }

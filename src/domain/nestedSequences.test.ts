@@ -12,8 +12,8 @@ import {
   MAX_NESTED_SEQUENCE_DEPTH,
   MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME,
   analyzeNestedSequenceGraph,
-  expandNestedSequenceFrame,
 } from './nestedSequences'
+import { createProjectVideoCompositionPlanner } from './projectVideoCompositionPlan'
 
 function clip(id: string, startFrame = 0, durationFrames = 20): Clip {
   return {
@@ -121,14 +121,18 @@ describe('nested sequence graph seam', () => {
       reachableSequenceCount: 3,
       maxDepth: 3,
     })
-    expect(expandNestedSequenceFrame(value, 'root', 25, 'video').leaves).toEqual([{
-      kind: 'clip',
-      sequenceId: 'leaf',
+    const leaves = createProjectVideoCompositionPlanner(value, 'root', new Map())
+      .planFrame(25).items.filter((item) => item.kind === 'clip')
+    expect(leaves).toHaveLength(1)
+    expect(leaves[0]).toMatchObject({
       trackId: 'leaf-video',
-      clipId: 'leaf-clip',
       frame: 13,
-      instancePath: ['root-to-child', 'child-to-leaf'],
-    }])
+      request: {
+        clip: { id: 'leaf-clip' },
+        sourceFrame: 1,
+        requestKey: JSON.stringify(['root-to-child', 'child-to-leaf', 'leaf-clip']),
+      },
+    })
   })
 
   test('rejects missing references and dormant cycles before planning', () => {

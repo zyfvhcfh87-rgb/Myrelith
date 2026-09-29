@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import type { MulticamDefinition } from './schema'
 import {
   createMulticamPlanner,
-  multicamAudioSegments,
   rollMulticamCut,
   setMulticamCut,
 } from './multicam'
@@ -94,7 +93,7 @@ describe('multicam definition planner seam', () => {
       video: { angleId: 'wide', sourceFrame: 305 },
       audio: { angleId: 'wide', sourceFrame: 305 },
     })
-    expect(multicamAudioSegments(value, 25, 115)).toEqual([
+    expect(createMulticamPlanner(value).audioSegments(25, 115)).toEqual([
       {
         angleId: 'wide',
         assetId: 'asset-wide',
