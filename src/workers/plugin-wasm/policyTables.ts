@@ -133,12 +133,9 @@ export const PLUGIN_WASM_OPCODE_TABLE_ARTIFACTS: Readonly<Record<
   }),
 })
 
-// SHA-256 of the stable canonical JSON form returned by serializePluginWasmOpcodeTable().
+// SHA-256 of each table's canonical JSON form,
+// JSON.stringify(PLUGIN_WASM_OPCODE_TABLE_ARTIFACTS[profileId]).
 export const PLUGIN_WASM_OPCODE_TABLE_DIGESTS: Readonly<Record<PluginWasmProfileId, string>> = Object.freeze({
   'myrelith-wasm-render-general-v1': 'sha256:0592d2aca9fb8f8ea053a8ae023ffb6fee296fd196f54760b3f7ac8fb04e400d',
   'myrelith-wasm-migration-integer-v1': 'sha256:50665e937691ad0ed3dc8890d8b8defd773343872d1f77636906fcd218acc744',
 })
-
-export function serializePluginWasmOpcodeTable(profileId: PluginWasmProfileId): string {
-  return JSON.stringify(PLUGIN_WASM_OPCODE_TABLE_ARTIFACTS[profileId])
-}

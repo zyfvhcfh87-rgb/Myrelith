@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  PLUGIN_EFFECT_BRIDGE_LIMITS,
   PLUGIN_EFFECT_BRIDGE_PROTOCOL_VERSION,
   isPluginEffectBridgeHostMessage,
   isPluginEffectBridgeWorkerMessage,
@@ -103,6 +104,24 @@ describe('plugin effect bridge protocol', () => {
       ...applyMessage(),
       execution: { ...execution(), canonicalParameterJson: '' },
     })).toBe(false)
+  })
+
+  test('bounds canonical parameters by UTF-8 bytes, counting a lone surrogate as three', () => {
+    const limit = PLUGIN_EFFECT_BRIDGE_LIMITS.maxCanonicalParameterBytes
+    // '{"s":"' + '"}' is 8 bytes; a lone surrogate encodes as U+FFFD (3 bytes).
+    const remaining = limit - 8 - 3
+    const payload = '\ud800' + 'µ'.repeat(Math.floor(remaining / 2)) + 'a'.repeat(remaining % 2)
+    const atLimit = `{"s":"${payload}"}`
+    expect(new TextEncoder().encode(atLimit).byteLength).toBe(limit)
+    const withParameters = (canonicalParameterJson: string) => ({
+      ...applyMessage(),
+      execution: { ...execution(), canonicalParameterJson },
+    })
+
+    expect(isPluginEffectBridgeWorkerMessage(withParameters(atLimit))).toBe(true)
+    expect(isPluginEffectBridgeWorkerMessage(
+      withParameters(`{"s":"${payload}a"}`),
+    )).toBe(false)
   })
 
   test('zeroes only an attached owned buffer', () => {

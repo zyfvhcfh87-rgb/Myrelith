@@ -4,7 +4,11 @@ import {
   parsePluginWasmModule,
   type PluginWasmModuleExpectations,
 } from './moduleParser'
-import { PLUGIN_WASM_OPCODE_TABLE_DIGESTS } from './policyTables'
+import { sha256Hex } from '../../test/plugins/bytes'
+import {
+  PLUGIN_WASM_OPCODE_TABLE_ARTIFACTS,
+  PLUGIN_WASM_OPCODE_TABLE_DIGESTS,
+} from './policyTables'
 
 const MINIMAL_RENDER_MODULE_HEX = '0061736d01000000010f01600a7f7f7f7f7f7f7f7f7f7f017f021701086d7972656c697468066d656d6f727902018202820203020100071b01176d7972656c6974685f6566666563745f6669787475726500000a0601040041000b'
 
@@ -485,6 +489,14 @@ describe('plugin WebAssembly module policy', () => {
       renderEntrypoints: ['myrelith_effect_fixture'],
       migrationEntrypoints: [],
     })).toThrow('WebAssembly combined declaration charge exceeds 32768.')
+  })
+
+  test('pins each opcode-table digest to the table\'s canonical JSON form', async () => {
+    for (const [profileId, artifact] of Object.entries(PLUGIN_WASM_OPCODE_TABLE_ARTIFACTS)) {
+      const canonical = new TextEncoder().encode(JSON.stringify(artifact))
+      expect(`sha256:${await sha256Hex(canonical)}`)
+        .toBe(PLUGIN_WASM_OPCODE_TABLE_DIGESTS[profileId as keyof typeof PLUGIN_WASM_OPCODE_TABLE_DIGESTS])
+    }
   })
 
   test('binds the selected profile to its exact opcode-table digest', () => {

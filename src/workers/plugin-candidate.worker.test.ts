@@ -1,7 +1,6 @@
-import { describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { PLUGIN_WASM_BINARY_POLICY_VERSION } from '../domain/pluginWasmPolicy'
 import {
-  createPluginCandidateCore,
   createPluginCandidateWorkerSource,
   installPluginCandidateWorker,
 } from './plugin-candidate.worker'
@@ -62,137 +61,165 @@ function expectations(): PluginWasmModuleExpectations {
   }
 }
 
-describe('plugin candidate worker core', () => {
+function policyParser() {
+  return createPluginWasmPolicyParser({
+    binaryPolicyVersion: PLUGIN_WASM_BINARY_POLICY_VERSION,
+    opcodeTables: PLUGIN_WASM_OPCODE_TABLE_ARTIFACTS,
+    opcodeTableDigests: PLUGIN_WASM_OPCODE_TABLE_DIGESTS,
+  })
+}
+
+/** The shipped installer on a fake scope, connected over a real MessageChannel. */
+function connectedCandidate(parse: ReturnType<typeof policyParser> = policyParser()) {
+  const scope = {
+    onmessage: null as ((event: MessageEvent<unknown>) => void) | null,
+    close: vi.fn(),
+  }
+  installPluginCandidateWorker(scope, parse, {
+    marker: 'test',
+    protocolVersion: 1,
+    parameterPointer: 0x01000000,
+    pixelPointer: 0x01010000,
+    ioPageBytes: 65_536,
+  })
+  const channel = new MessageChannel()
+  scope.onmessage?.({
+    data: { protocolVersion: 1, kind: 'connect', generation: 7, port: channel.port2 },
+  } as MessageEvent<unknown>)
+  const activate = (moduleBytes: Uint8Array): Promise<Record<string, unknown>> => (
+    new Promise((resolve) => {
+      channel.port1.onmessage = (event): void => resolve(event.data as Record<string, unknown>)
+      channel.port1.start()
+      channel.port1.postMessage({
+        protocolVersion: 1,
+        kind: 'activate',
+        generation: 7,
+        requestId: 1,
+        moduleBytes: moduleBytes.buffer,
+        expectations: {
+          ...expectations(),
+          opcodeTableDigest: PLUGIN_WASM_OPCODE_TABLE_DIGESTS['myrelith-wasm-render-general-v1'],
+        },
+      }, [moduleBytes.buffer])
+    })
+  )
+  return {
+    scope,
+    activate,
+    dispose: () => {
+      channel.port1.close()
+      channel.port2.close()
+    },
+  }
+}
+
+function spyOnEngine() {
+  return {
+    validate: vi.spyOn(WebAssembly, 'validate'),
+    compile: vi.spyOn(WebAssembly, 'compile'),
+    instantiate: vi.spyOn(WebAssembly, 'instantiate'),
+  }
+}
+
+function activationFailure(message: string) {
+  return {
+    kind: 'failure',
+    generation: 7,
+    requestId: 1,
+    failure: { code: 'activation-failed', message, terminal: true },
+  }
+}
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+describe('plugin candidate worker', () => {
   test('rejects malformed bytes before every WebAssembly engine API', async () => {
-    const engine = {
-      validate: vi.fn(() => true),
-      compile: vi.fn(),
-      createMemory: vi.fn(),
-      instantiate: vi.fn(),
+    const engine = spyOnEngine()
+    const candidate = connectedCandidate()
+    try {
+      await expect(candidate.activate(Uint8Array.of(0)))
+        .resolves.toMatchObject(activationFailure('Unexpected end of WebAssembly bytes.'))
+      expect(engine.validate).not.toHaveBeenCalled()
+      expect(engine.compile).not.toHaveBeenCalled()
+      expect(engine.instantiate).not.toHaveBeenCalled()
+      expect(candidate.scope.close).toHaveBeenCalledOnce()
+    } finally {
+      candidate.dispose()
     }
-    const core = createPluginCandidateCore(engine)
-
-    await expect(core.activate({
-      moduleBytes: Uint8Array.of(0),
-      expectations: expectations(),
-    })).rejects.toThrow('Unexpected end of WebAssembly bytes.')
-
-    expect(engine.validate).not.toHaveBeenCalled()
-    expect(engine.compile).not.toHaveBeenCalled()
-    expect(engine.createMemory).not.toHaveBeenCalled()
-    expect(engine.instantiate).not.toHaveBeenCalled()
   })
 
   test('rejects 8,193 defined functions before every WebAssembly engine API', async () => {
-    const engine = {
-      validate: vi.fn(() => true),
-      compile: vi.fn(),
-      createMemory: vi.fn(),
-      instantiate: vi.fn(),
+    const engine = spyOnEngine()
+    const candidate = connectedCandidate()
+    try {
+      await expect(candidate.activate(moduleWithDefinedFunctions(8_193)))
+        .resolves.toMatchObject(activationFailure('WebAssembly function count exceeds 8192.'))
+      expect(engine.validate).not.toHaveBeenCalled()
+      expect(engine.compile).not.toHaveBeenCalled()
+      expect(engine.instantiate).not.toHaveBeenCalled()
+    } finally {
+      candidate.dispose()
     }
-
-    await expect(createPluginCandidateCore(engine).activate({
-      moduleBytes: moduleWithDefinedFunctions(8_193),
-      expectations: expectations(),
-    })).rejects.toThrow('WebAssembly function count exceeds 8192.')
-
-    expect(engine.validate).not.toHaveBeenCalled()
-    expect(engine.compile).not.toHaveBeenCalled()
-    expect(engine.createMemory).not.toHaveBeenCalled()
-    expect(engine.instantiate).not.toHaveBeenCalled()
   })
 
   test('promotes a parsed candidate only after the complete engine sequence', async () => {
-    const order: string[] = []
-    const module = { kind: 'module' }
-    const memory = { kind: 'memory' }
-    const instance = { kind: 'instance' }
-    const engine = {
-      validate: vi.fn(() => {
-        order.push('validate')
-        return true
-      }),
-      compile: vi.fn(async () => {
-        order.push('compile')
-        return module
-      }),
-      createMemory: vi.fn(() => {
-        order.push('memory')
-        return memory
-      }),
-      instantiate: vi.fn(async () => {
-        order.push('instantiate')
-        return instance
-      }),
+    const engine = spyOnEngine()
+    const candidate = connectedCandidate()
+    try {
+      await expect(candidate.activate(hexBytes(MINIMAL_RENDER_MODULE_HEX))).resolves.toMatchObject({
+        kind: 'ready',
+        facts: {
+          definedFunctionCount: 1,
+          exportedFunctions: ['myrelith_effect_fixture'],
+        },
+      })
+      const [validated] = engine.validate.mock.invocationCallOrder
+      const [compiled] = engine.compile.mock.invocationCallOrder
+      const [instantiated] = engine.instantiate.mock.invocationCallOrder
+      expect(validated).toBeLessThan(compiled)
+      expect(compiled).toBeLessThan(instantiated)
+      const imports = engine.instantiate.mock.calls[0]![1] as {
+        myrelith: { memory: WebAssembly.Memory }
+      }
+      expect(imports.myrelith.memory).toBeInstanceOf(WebAssembly.Memory)
+      expect(imports.myrelith.memory.buffer.byteLength).toBe(258 * 65_536)
+    } finally {
+      candidate.dispose()
     }
-    const moduleBytes = hexBytes(MINIMAL_RENDER_MODULE_HEX)
-
-    await expect(createPluginCandidateCore(engine).activate({
-      moduleBytes,
-      expectations: expectations(),
-    })).resolves.toMatchObject({
-      module,
-      memory,
-      instance,
-      facts: {
-        definedFunctionCount: 1,
-        exportedFunctions: ['myrelith_effect_fixture'],
-      },
-    })
-
-    expect(order).toEqual(['validate', 'compile', 'memory', 'instantiate'])
-    expect(engine.validate).toHaveBeenCalledTimes(1)
-    expect(engine.compile).toHaveBeenCalledTimes(1)
-    expect(engine.createMemory).toHaveBeenCalledWith({ initial: 258, maximum: 258 })
-    expect(engine.instantiate).toHaveBeenCalledWith(module, { myrelith: { memory } })
   })
 
   test('uses one candidate-owned byte snapshot for policy and every engine phase', async () => {
-    const validBytes = hexBytes(MINIMAL_RENDER_MODULE_HEX)
-    const substitutedBytes = hexBytes('0061736d01000000')
-    let reads = 0
-    const engine = {
-      validate: vi.fn((_moduleBytes: Uint8Array) => true),
-      compile: vi.fn(async (_moduleBytes: Uint8Array) => ({ kind: 'module' })),
-      createMemory: vi.fn(() => ({ kind: 'memory' })),
-      instantiate: vi.fn(async () => ({ kind: 'instance' })),
+    const engine = spyOnEngine()
+    const parse = vi.fn(policyParser())
+    const candidate = connectedCandidate(parse)
+    try {
+      await expect(candidate.activate(hexBytes(MINIMAL_RENDER_MODULE_HEX)))
+        .resolves.toMatchObject({ kind: 'ready' })
+      const parsedBytes = parse.mock.calls[0]![0]
+      expect(engine.validate.mock.calls[0]![0]).toBe(parsedBytes)
+      expect(engine.compile.mock.calls[0]![0]).toBe(parsedBytes)
+      // The snapshot is cleared once activation settles.
+      expect(parsedBytes.every((byte) => byte === 0)).toBe(true)
+    } finally {
+      candidate.dispose()
     }
-
-    await expect(createPluginCandidateCore(engine).activate({
-      get moduleBytes() {
-        reads++
-        return reads === 1 ? validBytes : substitutedBytes
-      },
-      expectations: expectations(),
-    })).resolves.toMatchObject({
-      facts: { exportedFunctions: ['myrelith_effect_fixture'] },
-    })
-
-    const validatedBytes = engine.validate.mock.calls[0]![0]
-    const compiledBytes = engine.compile.mock.calls[0]![0]
-    expect(reads).toBe(1)
-    expect(validatedBytes).toBe(compiledBytes)
-    expect(validatedBytes).not.toBe(validBytes)
-    expect(validatedBytes.every((byte) => byte === 0)).toBe(true)
-    expect(validBytes).toEqual(hexBytes(MINIMAL_RENDER_MODULE_HEX))
   })
 
   test('stops activation when engine validation rejects policy-valid bytes', async () => {
-    const engine = {
-      validate: vi.fn(() => false),
-      compile: vi.fn(async () => ({ kind: 'module' })),
-      createMemory: vi.fn(() => ({ kind: 'memory' })),
-      instantiate: vi.fn(async () => ({ kind: 'instance' })),
+    const engine = spyOnEngine()
+    engine.validate.mockReturnValue(false)
+    const candidate = connectedCandidate()
+    try {
+      await expect(candidate.activate(hexBytes(MINIMAL_RENDER_MODULE_HEX)))
+        .resolves.toMatchObject(activationFailure('Policy-valid module failed engine validation.'))
+      expect(engine.compile).not.toHaveBeenCalled()
+      expect(engine.instantiate).not.toHaveBeenCalled()
+      expect(candidate.scope.close).toHaveBeenCalledOnce()
+    } finally {
+      candidate.dispose()
     }
-
-    await expect(createPluginCandidateCore(engine).activate({
-      moduleBytes: hexBytes(MINIMAL_RENDER_MODULE_HEX),
-      expectations: expectations(),
-    })).rejects.toThrow('The policy-valid WebAssembly module failed engine validation.')
-
-    expect(engine.compile).not.toHaveBeenCalled()
-    expect(engine.createMemory).not.toHaveBeenCalled()
-    expect(engine.instantiate).not.toHaveBeenCalled()
   })
 
   test('emits self-contained blob-worker source with the production marker', () => {

@@ -1,5 +1,6 @@
 /** Typed, bounded RPC between the render worker and its main-thread effect host. */
 
+import { utf8ByteLength } from '../domain/documentMemory'
 import { PLUGIN_MANIFEST_LIMITS } from '../domain/pluginManifest'
 import type { PluginVideoEffectExecutionPlan } from '../domain/pluginVideoEffectStagePlan'
 
@@ -114,10 +115,6 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
 function isArrayBuffer(value: unknown): value is ArrayBuffer {
   return value instanceof ArrayBuffer
     || Object.prototype.toString.call(value) === '[object ArrayBuffer]'
-}
-
-function utf8ByteLength(value: string): number {
-  return new TextEncoder().encode(value).byteLength
 }
 
 function isExecutionPlan(value: unknown): value is PluginVideoEffectExecutionPlan {

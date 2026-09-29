@@ -5,7 +5,6 @@ import {
   utf8Bytes,
 } from './bytes'
 
-export const ISSUE77_MEMORY_PAGE_BYTES = 65_536
 export const ISSUE77_MEMORY_PAGES = 258
 export const ISSUE77_PARAMETER_POINTER = 0x0100_0000
 export const ISSUE77_PIXEL_POINTER = 0x0101_0000

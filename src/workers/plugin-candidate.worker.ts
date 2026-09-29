@@ -1,6 +1,5 @@
 import {
   createPluginWasmPolicyParser,
-  parsePluginWasmModule,
   type PluginWasmModuleExpectations,
   type PluginWasmModuleFacts,
 } from './plugin-wasm/moduleParser'
@@ -16,54 +15,6 @@ import {
 } from './plugin-runtime-protocol'
 
 export const PLUGIN_CANDIDATE_WORKER_MARKER = 'MYRELITH_PLUGIN_CANDIDATE_WORKER_V1'
-
-export interface PluginCandidateEngine {
-  validate(bytes: Uint8Array): boolean
-  compile(bytes: Uint8Array): Promise<unknown>
-  createMemory(descriptor: { readonly initial: number; readonly maximum: number }): unknown
-  instantiate(
-    module: unknown,
-    imports: { readonly myrelith: { readonly memory: unknown } },
-  ): Promise<unknown>
-}
-
-export interface PluginCandidateActivationInput {
-  readonly moduleBytes: Uint8Array
-  readonly expectations: PluginWasmModuleExpectations
-}
-
-export interface PluginCandidateActivation {
-  readonly facts: PluginWasmModuleFacts
-  readonly module: unknown
-  readonly memory: unknown
-  readonly instance: unknown
-}
-
-/** Candidate-only core. The parent must still own its non-resetting activation deadline. */
-export function createPluginCandidateCore(engine: PluginCandidateEngine): {
-  activate(input: PluginCandidateActivationInput): Promise<PluginCandidateActivation>
-} {
-  return {
-    async activate(input): Promise<PluginCandidateActivation> {
-      const moduleBytes = Uint8Array.from(input.moduleBytes)
-      try {
-        const facts = parsePluginWasmModule(moduleBytes, input.expectations)
-        if (!engine.validate(moduleBytes)) {
-          throw new Error('The policy-valid WebAssembly module failed engine validation.')
-        }
-        const module = await engine.compile(moduleBytes)
-        const memory = engine.createMemory({
-          initial: facts.importedMemory.minimumPages,
-          maximum: facts.importedMemory.maximumPages,
-        })
-        const instance = await engine.instantiate(module, { myrelith: { memory } })
-        return Object.freeze({ facts, module, memory, instance })
-      } finally {
-        moduleBytes.fill(0)
-      }
-    },
-  }
-}
 
 interface PluginCandidateWorkerScope {
   onmessage: ((event: MessageEvent<unknown>) => void) | null
@@ -83,7 +34,11 @@ type EmbeddedPluginWasmParser = (
   expectations: PluginWasmModuleExpectations,
 ) => PluginWasmModuleFacts
 
-/** Self-contained candidate installer; serialized into the host-authored blob worker. */
+/**
+ * Self-contained candidate installer; serialized into the host-authored blob
+ * worker, so it may reference only its parameters and realm globals. The
+ * parent still owns the non-resetting activation deadline.
+ */
 export function installPluginCandidateWorker(
   scope: PluginCandidateWorkerScope,
   parse: EmbeddedPluginWasmParser,
