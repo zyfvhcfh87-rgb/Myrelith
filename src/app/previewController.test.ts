@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { LocalDecoderBudget } from '../codecs/mediaCodecFallbacks'
 import type { PortableAssetDescriptor } from '../domain/projectFile'
 import type { SourceBoundsCatalog } from '../domain/crossfadePlan'
+import type { ProxyCacheEntry } from '../domain/proxyCache'
 import {
   createProjectVideoCompositionPlanner,
 } from '../domain/projectVideoCompositionPlan'
@@ -45,6 +46,7 @@ import {
 } from '../engine/render-bridge'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
+import { useProxyStore, type ProxyAssetState } from '../state/proxyStore'
 import { usePreviewStatusStore } from '../state/previewStatusStore'
 import { usePreviewQualityStore } from '../state/previewQualityStore'
 import { useTransportStore } from '../state/transportStore'
@@ -1574,6 +1576,49 @@ describe('previewController', () => {
     await nextFrame()
 
     expect(bridge.rendered).toEqual([{ frame: 0, mode: 'seek' }])
+  })
+
+  test('rebuilds planning only for media and proxy facts Program reads', async () => {
+    const { deps } = makeDeps()
+    initPreview(canvasEl(), deps)
+    const asset = seedAsset({ id: 'clip' })
+    await flush()
+    const createPlanner = vi.spyOn(deps, 'createVisualPlanner')
+    try {
+      // Thumbnails and compatibility reports never feed Program planning.
+      useMediaStore.setState({ visuals: new Map(), compatibility: new Map() })
+      expect(createPlanner).not.toHaveBeenCalled()
+
+      // Generation progress republishes the item once per encoded frame.
+      const generating: ProxyAssetState = {
+        assetId: asset.id,
+        phase: 'generating',
+        progress: 0,
+        detail: 'Generating proxy… 0%',
+        canGenerate: false,
+        originalAvailable: true,
+        entry: null,
+      }
+      useProxyStore.getState().setAsset(generating)
+      useProxyStore.getState().setAsset({ ...generating, progress: 0.5, detail: 'Generating proxy… 50%' })
+      expect(createPlanner).not.toHaveBeenCalled()
+
+      const entry = { cacheKey: 'proxy-clip', durationMicroseconds: 2_000_000 } as ProxyCacheEntry
+      const ready: ProxyAssetState = { ...generating, phase: 'ready', progress: 1, entry }
+      useProxyStore.getState().setAsset(ready)
+      expect(createPlanner).toHaveBeenCalledTimes(1)
+      useProxyStore.getState().setAsset({ ...ready, detail: 'Proxy ready' })
+      expect(createPlanner).toHaveBeenCalledTimes(1)
+      useProxyStore.getState().setAsset({ ...ready, phase: 'error' })
+      expect(createPlanner).toHaveBeenCalledTimes(2)
+      useProxyStore.getState().removeAsset(asset.id)
+      expect(createPlanner).toHaveBeenCalledTimes(3)
+
+      useMediaStore.getState().removeAsset(asset.id)
+      expect(createPlanner).toHaveBeenCalledTimes(4)
+    } finally {
+      useProxyStore.getState().reset()
+    }
   })
 
   test('removing an asset releases its worker source', async () => {
