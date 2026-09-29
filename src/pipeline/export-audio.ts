@@ -110,6 +110,23 @@ export function scaleExportSampleIndex(
 }
 
 /**
+ * scaleExportSampleIndex for an already-validated non-negative index and
+ * rates: exact Number math while the product is a safe integer (the remainder
+ * of two safe integers is exact), BigInt only beyond that.
+ */
+function scaleValidatedSampleIndex(
+  sample: number,
+  fromRate: number,
+  toRate: number,
+): number {
+  const product = sample * toRate
+  if (product > Number.MAX_SAFE_INTEGER) {
+    return scaleExportSampleIndex(sample, fromRate, toRate)
+  }
+  return (product - (product % fromRate)) / fromRate
+}
+
+/**
  * Trailing 96 kHz mix samples held for the next 2:1 downsample block.
  * Oldest sample first. Bounded by the anti-alias FIR length minus one; the
  * last sample is the unpaired leftover when the exclusive end is odd.
@@ -244,8 +261,12 @@ export function resampleMixedAudioBlock(
   const historyLeft = carry === null ? null : carry.left
   const historyRight = carry === null ? null : carry.right
   for (let index = 0; index < sampleCount; index++) {
-    const sourceIndex = scaleExportSampleIndex(startSample + index, toRate, fromRate)
-      - block.startSample
+    // 2:1 needs no division: floor(2n * toRate / toRate) is exactly 2n.
+    const sourceIndex = (
+      halfRate
+        ? 2 * (startSample + index)
+        : scaleValidatedSampleIndex(startSample + index, toRate, fromRate)
+    ) - block.startSample
     if (halfRate && sourceIndex + 1 < block.sampleCount) {
       let accL = 0
       let accR = 0
@@ -314,6 +335,11 @@ interface ActiveReader {
   reader: ExportAudioClipReader
 }
 
+interface DecodedClipBlock {
+  channels: readonly [Float32Array, Float32Array]
+  plan: SampleAudioClipPlan
+}
+
 interface SampleAudioEnvelope extends TimelineAudioEnvelope {
   startSample: number
   endSample: number
@@ -358,6 +384,73 @@ async function closeReaders(
     }
   }
   if (failure !== undefined) throw failure
+}
+
+interface FrameInterval {
+  readonly timelineStartFrame: number
+  readonly timelineEndFrame: number
+}
+
+export interface SequentialIntervalIndex<T> {
+  activeAt(frame: number): readonly T[]
+}
+
+/**
+ * Items whose [start, end) frame interval contains each visited frame, in
+ * their original order. Frames must be visited in increasing order: one
+ * cursor over start-sorted items admits new intervals and expired ones drop
+ * out, so each frame costs O(active) instead of a scan of every item.
+ */
+export function createSequentialIntervalIndex<T extends FrameInterval>(
+  items: readonly T[],
+): SequentialIntervalIndex<T> {
+  const byStart = items
+    .map((item, order) => ({ item, order }))
+    .sort((left, right) =>
+      left.item.timelineStartFrame - right.item.timelineStartFrame
+      || left.order - right.order,
+    )
+  let cursor = 0
+  let lastFrame = -Infinity
+  const active: { item: T; order: number }[] = []
+  let activeItems: readonly T[] = []
+  return {
+    activeAt(frame) {
+      if (!(frame >= lastFrame)) {
+        throw new RangeError('Interval frames must be visited in increasing order')
+      }
+      lastFrame = frame
+      let kept = 0
+      for (const entry of active) {
+        if (frame < entry.item.timelineEndFrame) active[kept++] = entry
+      }
+      let changed = kept !== active.length
+      active.length = kept
+      while (
+        cursor < byStart.length
+        && byStart[cursor]!.item.timelineStartFrame <= frame
+      ) {
+        const entry = byStart[cursor++]!
+        if (frame >= entry.item.timelineEndFrame) continue
+        let at = active.length
+        while (at > 0 && active[at - 1]!.order > entry.order) at--
+        active.splice(at, 0, entry)
+        changed = true
+      }
+      if (changed) activeItems = active.map((entry) => entry.item)
+      return activeItems
+    },
+  }
+}
+
+function plansIncludeClip(
+  plans: readonly SampleAudioClipPlan[],
+  clipId: ClipId,
+): boolean {
+  for (const plan of plans) {
+    if (plan.clipId === clipId) return true
+  }
+  return false
 }
 
 function assertStretchSessionLimit(plans: readonly SampleAudioClipPlan[]): void {
@@ -487,6 +580,7 @@ export class TimelineAudioMixer {
   private readonly source: ExportAudioMediaSource
   private readonly durationFrames: number
   private readonly mixPlans: SampleAudioClipPlan[]
+  private readonly audiblePlans: SequentialIntervalIndex<SampleAudioClipPlan>
   private readonly trackOrder: readonly TimelineAudioTrackBus[]
   private readonly master: TimelineAudioMasterBus
   private readonly readers = new Map<ClipId, ActiveReader>()
@@ -551,6 +645,11 @@ export class TimelineAudioMixer {
         })),
       }))
     assertStretchSessionLimit(this.mixPlans)
+    this.audiblePlans = createSequentialIntervalIndex(
+      this.mixPlans.filter((plan) =>
+        !(isRampedAudioClipPlan(plan) && plan.ramp.silent),
+      ),
+    )
     this.hasAudio = projectMixPlan
       ? mixPlan.clips.length > 0 || mixPlan.mutedClips.length > 0
       : doc.tracks.some(
@@ -561,23 +660,21 @@ export class TimelineAudioMixer {
     audioSampleBoundary(this.durationFrames, doc)
   }
 
-  private activePlans(frame: number): SampleAudioClipPlan[] {
-    return this.mixPlans.filter((plan) =>
-      plan.timelineStartFrame <= frame
-      && frame < plan.timelineEndFrame,
-    ).filter((plan) =>
-      !(isRampedAudioClipPlan(plan) && plan.ramp.silent),
-    )
+  private stretchedReaderCount(): number {
+    let count = 0
+    for (const active of this.readers.values()) {
+      if (isTimeStretchedAudioClipPlan(active.plan)) count++
+    }
+    return count
   }
 
   private async reconcileReaders(
     plans: readonly SampleAudioClipPlan[],
   ): Promise<void> {
     throwIfAudioAborted(this.signal)
-    const wanted = new Set(plans.map((plan) => plan.clipId))
     const stale: ExportAudioClipReader[] = []
     for (const [clipId, active] of this.readers) {
-      if (wanted.has(clipId)) continue
+      if (plansIncludeClip(plans, clipId)) continue
       this.readers.delete(clipId)
       this.clipChains.delete(clipId)
       stale.push(active.reader)
@@ -589,9 +686,7 @@ export class TimelineAudioMixer {
       if (this.readers.has(plan.clipId)) continue
       if (
         isTimeStretchedAudioClipPlan(plan)
-        && [...this.readers.values()].filter((active) =>
-          isTimeStretchedAudioClipPlan(active.plan)
-        ).length >= AUDIO_STRETCH_MAX_SESSIONS
+        && this.stretchedReaderCount() >= AUDIO_STRETCH_MAX_SESSIONS
       ) {
         throw new Error(
           `Export supports at most ${AUDIO_STRETCH_MAX_SESSIONS} concurrent audio stretch sessions`,
@@ -728,7 +823,7 @@ export class TimelineAudioMixer {
       throw new TypeError('Audio block writer must be a function')
     }
 
-    const plans = this.activePlans(docFrame)
+    const plans = this.audiblePlans.activeAt(docFrame)
     await this.reconcileReaders(plans)
     throwIfAudioAborted(this.signal)
 
@@ -756,15 +851,11 @@ export class TimelineAudioMixer {
         }),
       )
       throwIfAudioAborted(this.signal)
-      const failed = settled.find(
-        (entry): entry is PromiseRejectedResult =>
-          entry.status === 'rejected',
-      )
-      if (failed) throw failed.reason
-      const decoded = settled.map((entry) => {
+      const decoded: DecodedClipBlock[] = []
+      for (const entry of settled) {
         if (entry.status === 'rejected') throw entry.reason
-        return entry.value
-      })
+        decoded.push(entry.value)
+      }
 
       const left = new Float32Array(sampleCount)
       const right = new Float32Array(sampleCount)
@@ -826,10 +917,8 @@ export class TimelineAudioMixer {
           mix.left[i] *= track.volume * track.leftGain
           mix.right[i] *= track.volume * track.rightGain
         }
-        const trackChain = this.trackChains.get(trackId)
-          ?? createAudioEffectChain(track.audioEffects, this.doc.audioSampleRate)
-        this.trackChains.set(trackId, trackChain)
-        trackChain.process(mix.left, mix.right)
+        // The constructor creates one chain for every planned track.
+        this.trackChains.get(trackId)!.process(mix.left, mix.right)
         if (track.parentTrackId) {
           let parentMix = byTrack.get(track.parentTrackId)
           if (!parentMix) {

@@ -23,8 +23,10 @@ import { createNoiseGateEffect } from '../domain/audioEffectStack'
 import { createTimelineAudioMixPlan } from '../domain/audioMixPlan'
 import {
   audioSampleBoundary,
+  createSequentialIntervalIndex,
   EXPORT_AUDIO_BLOCK_SAMPLES,
   resampleMixedAudioBlock,
+  scaleExportSampleIndex,
   TimelineAudioMixer,
   type ExportAudioClipRequest,
   type ExportAudioClipReader,
@@ -1574,6 +1576,41 @@ describe('export encoder-rate resampling', () => {
       .toEqual([...whole.encoded.channels[0]])
   })
 
+  test('picks the same containing source sample as exact BigInt scaling', () => {
+    const blockSamples = 1_023
+    const indexed = Float32Array.from({ length: blockSamples }, (_, index) => index)
+    const cases: readonly (readonly [number, number, number])[] = [
+      [48_000, 44_100, 0],
+      [44_100, 48_000, 7_777],
+      [96_000, 44_100, 123_456_789_011],
+      [88_200, 48_000, 3_203],
+      // Products past 2^53 take the BigInt fallback.
+      [96_000, 44_100, Number.MAX_SAFE_INTEGER - 5_000],
+      [44_100, 48_000, Math.floor(Number.MAX_SAFE_INTEGER / 48_000) * 44_100],
+    ]
+    for (const [fromRate, toRate, startSample] of cases) {
+      const block: MixedAudioBlock = {
+        startSample,
+        sampleCount: blockSamples,
+        channels: [indexed, indexed],
+      }
+      const { encoded } = resampleMixedAudioBlock(block, fromRate, toRate)
+      const expectedStart = scaleExportSampleIndex(startSample, fromRate, toRate)
+      expect(encoded.startSample).toBe(expectedStart)
+      expect(encoded.sampleCount).toBeGreaterThan(0)
+      for (let index = 0; index < encoded.sampleCount; index++) {
+        const sourceIndex = scaleExportSampleIndex(
+          expectedStart + index,
+          toRate,
+          fromRate,
+        ) - startSample
+        expect(encoded.channels[0][index]).toBe(
+          Math.max(0, Math.min(blockSamples - 1, sourceIndex)),
+        )
+      }
+    }
+  })
+
   test('preserves passband tones and attenuates 40 kHz content that would alias', () => {
     const sampleCount = 9_600
     const passband = resampleMixedAudioBlock(
@@ -1593,3 +1630,49 @@ describe('export encoder-rate resampling', () => {
       .toBeLessThan(rms(passband.encoded.channels[0], settle) / 20)
   })
 })
+
+describe('createSequentialIntervalIndex', () => {
+  test('matches a full filter of every interval at each frame, in input order', () => {
+    let seed = 11
+    const random = (limit: number): number => {
+      seed = (seed * 16_807) % 2_147_483_647
+      return seed % limit
+    }
+    for (let round = 0; round < 20; round++) {
+      const items = Array.from({ length: 1 + random(25) }, (_, id) => {
+        const timelineStartFrame = random(60)
+        return {
+          id,
+          timelineStartFrame,
+          // Includes empty and inverted intervals, which are never active.
+          timelineEndFrame: timelineStartFrame + random(20) - 2,
+        }
+      })
+      const index = createSequentialIntervalIndex(items)
+      let previous: readonly (typeof items)[number][] | null = null
+      for (let frame = 0; frame < 90; frame++) {
+        const expected = items.filter((item) =>
+          item.timelineStartFrame <= frame && frame < item.timelineEndFrame,
+        )
+        const active = index.activeAt(frame)
+        expect(active).toEqual(expected)
+        // A retried frame sees the same answer.
+        expect(index.activeAt(frame)).toBe(active)
+        if (previous && previous.length === active.length
+          && previous.every((item, at) => item === active[at])) {
+          expect(active).toBe(previous)
+        }
+        previous = active
+      }
+    }
+  })
+
+  test('rejects frames visited out of order', () => {
+    const index = createSequentialIntervalIndex([
+      { timelineStartFrame: 0, timelineEndFrame: 2 },
+    ])
+    index.activeAt(1)
+    expect(() => index.activeAt(0)).toThrow(/increasing order/)
+  })
+})
+
