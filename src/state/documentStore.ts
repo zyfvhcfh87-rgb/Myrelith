@@ -1,9 +1,9 @@
-import { captionProjectIntentError, captionRetentionError, type CaptionIntentOwner } from '../domain/captionIntentBudget'
+import { captionProjectIntentError, captionRetentionError, type CaptionIntentOwner, type CaptionUsageCache } from '../domain/captionIntentBudget'
 import { captionDocumentValidationError } from '../domain/captions'
 import type { TitleBudgetOwner } from '../domain/titleBudgets'
 import type { TitleElementIntent } from '../domain/titleElements'
 import { retainedEffectPreviewDocuments } from './transportStore'
-import { animationRetentionError } from '../domain/animationProjectBudget'
+import { animationRetentionError, type AnimationProjectionCache } from '../domain/animationProjectBudget'
 import type { EffectPathAnimationTrack } from '../domain/maskPathAnimation'
 import { COLOR_LUT_LIMITS } from '../domain/colorLut'
 import { createTitleElementIdAllocator } from '../domain/titleOwnership'
@@ -732,18 +732,43 @@ function commit(
     next,
   )
   if (project === state.project || projectCommitError(state, project)) return state
+  return pushProject(state, project, { doc: next })
+}
+
+/**
+ * Push an admitted project: the outgoing project joins `past` and redo
+ * clears. Callers have already checked it with projectCommitError.
+ */
+function pushProject(
+  state: DocumentState,
+  project: SequenceProject,
+  active: Partial<Pick<DocumentState, 'activeSequenceId' | 'doc'>> = activeSequenceFor(project, state.activeSequenceId),
+): Partial<DocumentState> {
   return {
     project,
-    doc: next,
+    ...active,
     past: [...state.past, state.project].slice(-HISTORY_LIMIT),
     future: [],
   }
 }
 
+/**
+ * Retention usage of the snapshots this store holds as current/past/future.
+ * The store never mutates a held snapshot, so an entry stays valid for that
+ * object's lifetime; the domain helpers always measure a candidate afresh.
+ * Without it every edit re-measured all ~100 history snapshots.
+ */
+const heldCaptionUsage: CaptionUsageCache = new WeakMap()
+const heldAnimationProjections: AnimationProjectionCache = { paths: new WeakMap(), titles: new WeakMap() }
+
 function projectCommitError(state: DocumentState, project: SequenceProject): string | null {
-  const captionError = captionRetentionError(state, project)
+  const captionError = captionRetentionError(state, project, [], heldCaptionUsage)
   if (captionError) return captionError
-  const animationError = animationRetentionError({ ...state, retainedTitlePreviewDocuments: retainedEffectPreviewDocuments() }, project)
+  const animationError = animationRetentionError(
+    { ...state, retainedTitlePreviewDocuments: retainedEffectPreviewDocuments() },
+    project,
+    heldAnimationProjections,
+  )
   if (animationError) return animationError
   if (!state.project.colorLuts?.length && !project.colorLuts?.length && !state.retainedClipboardColorLuts.length) {
     return newColorLutReferenceError(state.project, project)
@@ -779,19 +804,7 @@ function admitProject(
 ): Partial<DocumentState> | DocumentState | null {
   if (project === state.project) return state
   if (projectCommitError(state, project)) return null
-  return {
-    project,
-    ...activeSequenceFor(project, preferredActiveId),
-    past: [...state.past, state.project].slice(-HISTORY_LIMIT),
-    future: [],
-  }
-}
-
-function commitProject(
-  state: DocumentState,
-  project: SequenceProject,
-): Partial<DocumentState> | DocumentState {
-  return admitProject(state, project) ?? state
+  return pushProject(state, project, activeSequenceFor(project, preferredActiveId))
 }
 
 function randomSequenceId(
@@ -813,7 +826,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
     let error: string | null = null
     set((state) => {
       // Old owner copies remain charged until replacement is admitted.
-      error = captionRetentionError(state, undefined, owners)
+      error = captionRetentionError(state, undefined, owners, heldCaptionUsage)
       return error ? state : { retainedCaptionOwners: { ...state.retainedCaptionOwners, [ownerId]: owners } }
     })
     return error
@@ -836,7 +849,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       if (next === expectedProject) return state
       if (!sequenceProjectWithinEditBudget(next)) { error = 'The animation edit exceeds project limits.'; return state }
       error = projectCommitError(state, next)
-      return error ? state : commitProject(state, next)
+      return error ? state : pushProject(state, next)
     })
     return error
   },
@@ -846,7 +859,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       if (state.project !== expectedProject || state.projectGeneration !== generation) { error = 'The project changed. Reopen the editing controls.'; return state }
       if (!sequenceProjectWithinEditBudget(next)) { error = 'The edit exceeds project limits.'; return state }
       error = projectCommitError(state, next)
-      return error ? state : commitProject(state, next)
+      return error || next === state.project ? state : pushProject(state, next)
     })
     return error
   },
@@ -910,10 +923,13 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       if (state.project !== expectedProject || state.projectGeneration !== generation || state.activeSequenceId !== sequenceId || doc.id !== sequenceId) {
         error = 'The project changed. Start the mask edit again.'; return state
       }
+      // replaceProjectSequence returns a changed candidate only within the edit budget.
       const candidate = replaceProjectSequence(state.project, sequenceId, doc)
-      if ((doc !== state.doc && candidate === state.project) || !sequenceProjectWithinEditBudget(candidate)) { error = 'The mask edit exceeds project limits.'; return state }
+      if (candidate === state.project && (doc !== state.doc || !sequenceProjectWithinEditBudget(candidate))) {
+        error = 'The mask edit exceeds project limits.'; return state
+      }
       error = projectCommitError(state, candidate)
-      return error ? state : commit(state, doc)
+      return error || candidate === state.project ? state : pushProject(state, candidate, { doc })
     })
     return error
   },
@@ -928,7 +944,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
       const result = editVideoBus(state.project, target, command, randomSequenceId)
       if (!result.ok) { error = result.reason; return state }
       error = projectCommitError(state, result.project)
-      return error ? state : commitProject(state, result.project)
+      return error || result.project === state.project ? state : pushProject(state, result.project)
     })
     return error
   },
@@ -945,7 +961,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
         : resetClipAttributes(state.project, sequenceId, command.targetIds, command.groups, command.selectedEffectIds)
       if (!result.ok) { error = result.reason; return state }
       error = projectCommitError(state, result.project)
-      return error ? state : commitProject(state, result.project)
+      return error || result.project === state.project ? state : pushProject(state, result.project)
     })
     return error
   },
@@ -1801,7 +1817,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   undo: () =>
     set((state) => {
       const previous = state.past[state.past.length - 1]
-      if (!previous || captionRetentionError(state)
+      if (!previous || captionRetentionError(state, undefined, [], heldCaptionUsage)
         || previous.sequences.some((sequence) => captionDocumentValidationError(sequence))) return state
       return {
         project: previous,
@@ -1814,7 +1830,7 @@ export const useDocumentStore = create<DocumentState>()((set) => ({
   redo: () =>
     set((state) => {
       const next = state.future[0]
-      if (!next || captionRetentionError(state)
+      if (!next || captionRetentionError(state, undefined, [], heldCaptionUsage)
         || next.sequences.some((sequence) => captionDocumentValidationError(sequence))) return state
       return {
         project: next,

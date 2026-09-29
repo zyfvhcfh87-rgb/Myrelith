@@ -34,24 +34,47 @@ export interface AnimationRetentionState {
   readonly retainedTitleClipboardKeys: readonly object[]
 }
 
+/**
+ * Per-snapshot projections kept by the caller. Only an owner that never
+ * mutates its held snapshots (the document store's current/past/future) may
+ * supply one; a project candidate is always projected afresh. Reusing a
+ * projection only lets the budgets skip an identical snapshot; totals match.
+ */
+export interface AnimationProjectionCache {
+  readonly paths: WeakMap<SequenceProject, MaskPathAnimationSnapshot>
+  readonly titles: WeakMap<SequenceProject, readonly TitleBudgetOwner[]>
+}
+
+function heldProjection<T>(cache: WeakMap<SequenceProject, T> | undefined, project: SequenceProject, build: (project: SequenceProject) => T): T {
+  let projection = cache?.get(project)
+  if (projection === undefined) {
+    projection = build(project)
+    cache?.set(project, projection)
+  }
+  return projection
+}
+
 export function animationRetentionError(
   state: AnimationRetentionState,
   candidate: SequenceProject | MaskPathAnimationSnapshot,
+  held?: AnimationProjectionCache,
 ): string | null {
+  const paths = (project: SequenceProject) => heldProjection(held?.paths, project, projectPathAnimationSnapshot)
+  const titles = (project: SequenceProject) => heldProjection(held?.titles, project, projectTitleAnimationOwners)
   const pathError = maskPathAnimationRetentionError({
     candidate: 'sequences' in candidate ? projectPathAnimationSnapshot(candidate) : candidate,
-    current: projectPathAnimationSnapshot(state.project),
-    past: state.past.map(projectPathAnimationSnapshot),
-    future: state.future.map(projectPathAnimationSnapshot),
+    current: paths(state.project),
+    past: state.past.map(paths),
+    future: state.future.map(paths),
     attributeClipboard: { tracks: state.retainedAttributePathTracks },
     keyClipboard: { tracks: state.retainedKeyPathTracks },
   })
   if (pathError) return pathError
   const result = retainedTitleDataBudget({
     previews: state.retainedTitlePreviewDocuments?.map((document) => projectTitleAnimationOwners({ sequences: [document] })),
-    candidate: projectTitleAnimationOwners('sequences' in candidate ? candidate : state.project),
-    current: projectTitleAnimationOwners(state.project),
-    past: state.past.map(projectTitleAnimationOwners), future: state.future.map(projectTitleAnimationOwners),
+    candidate: 'sequences' in candidate ? projectTitleAnimationOwners(candidate) : titles(state.project),
+    current: titles(state.project),
+    past: state.past.map(titles), future: state.future.map(titles),
     clipboards: { titles: state.retainedTitleClipboardOwners, elements: state.retainedTitleClipboardElements, keys: state.retainedTitleClipboardKeys },
   })
   return result.ok ? null : result.reason

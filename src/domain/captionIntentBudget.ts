@@ -28,13 +28,23 @@ export interface CaptionRetentionState {
   /** Each app owner registers every snapshot/preview/clipboard occurrence it holds. */
   readonly retainedCaptionOwners: Readonly<Record<string, readonly CaptionIntentOwner[]>>
 }
+/**
+ * Per-snapshot descriptor bytes kept by the caller. Only an owner that never
+ * mutates its held snapshots (the document store's current/past/future) may
+ * supply one; the admission candidate is always measured afresh.
+ */
+export type CaptionUsageCache = WeakMap<SequenceProject, number>
 export function captionRetentionError(state: CaptionRetentionState, candidate?: SequenceProject,
-  additional: readonly CaptionIntentOwner[] = []): string | null {
+  additional: readonly CaptionIntentOwner[] = [], heldUsage?: CaptionUsageCache): string | null {
   try {
     let retained = bytes(additional)
     for (const project of [...(candidate ? [candidate] : []), state.project, ...state.past, ...state.future]) {
-      const owners = captionIntentOwners(project)
-      const usage = bytes(owners)
+      const cache = project === candidate ? undefined : heldUsage
+      let usage = cache?.get(project)
+      if (usage === undefined) {
+        usage = bytes(captionIntentOwners(project))
+        cache?.set(project, usage)
+      }
       if (usage > CAPTION_INTENT_LIMITS.maxProjectIntentBytes) return 'Caption style and origin exceed the 2 MiB project limit'
       retained += usage
     }
