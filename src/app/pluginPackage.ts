@@ -1,3 +1,4 @@
+import { bytesToHex } from '../domain/bytes'
 import { isSha256Hex } from '../domain/guards'
 import {
   PLUGIN_MANIFEST_LIMITS,
@@ -626,10 +627,6 @@ function base64urlDecode(value: string, expectedLength: number, path: string): U
     fail('signature-invalid', `${path} is not a canonical ${expectedLength}-byte base64url value.`)
   }
   return bytes
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function ownedBuffer(bytes: Uint8Array): ArrayBuffer {

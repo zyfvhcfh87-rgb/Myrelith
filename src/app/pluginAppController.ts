@@ -1,5 +1,6 @@
 /** Persistent app-owned plugin root. React receives data; capabilities stay private. */
 
+import { bytesToHex } from '../domain/bytes'
 import type { PluginVideoEffectContributionSnapshot } from '../domain/pluginVideoEffectStagePlan'
 import type {
   PluginEffectBridgeHandler,
@@ -575,7 +576,7 @@ function defaultReviewToken(): string {
   }
   const bytes = new Uint8Array(16)
   globalThis.crypto.getRandomValues(bytes)
-  return `plugin-review-${[...bytes].map((value) => value.toString(16).padStart(2, '0')).join('')}`
+  return `plugin-review-${bytesToHex(bytes)}`
 }
 
 function browserSafetyStorage(): PluginSafetyStorage {

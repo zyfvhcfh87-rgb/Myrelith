@@ -20,6 +20,7 @@ import {
   refineVideoDecoderBudget,
   type LocalDecoderBudget,
 } from '../codecs/mediaCodecFallbacks'
+import { bytesToHex } from '../domain/bytes'
 import { errorMessage, throwIfAborted, truncateText } from '../domain/errors'
 import type {
   MediaCompatibilityReport,
@@ -191,9 +192,7 @@ function serializeInternalCodecId(
     return truncateText(String(value), MAX_DIAGNOSTIC_TOKEN_CHARACTERS)
   }
   const shown = value.subarray(0, 64)
-  const hex = Array.from(shown, (byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
-  return `0x${hex}${value.length > shown.length ? '…' : ''}`
+  return `0x${bytesToHex(shown)}${value.length > shown.length ? '…' : ''}`
 }
 
 function emptyTrack(

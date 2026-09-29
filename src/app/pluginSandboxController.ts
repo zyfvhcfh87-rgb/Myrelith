@@ -14,6 +14,7 @@ import type {
   PluginWasmModuleFacts,
 } from '../workers/plugin-wasm/moduleParser'
 import type { PluginRuntimeLifecycleObserver } from './pluginRuntimeLifecycleObserver'
+import { bytesToHex } from '../domain/bytes'
 import { hasExactKeys, isRecord } from '../domain/guards'
 
 export const PLUGIN_SANDBOX_BROKER_MARKER = 'MYRELITH_PLUGIN_SANDBOX_BROKER_V1'
@@ -233,7 +234,7 @@ function isArrayBuffer(value: unknown): value is ArrayBuffer {
 function randomNonce(): string {
   const bytes = new Uint8Array(24)
   globalThis.crypto.getRandomValues(bytes)
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  return bytesToHex(bytes)
 }
 
 function escapedScriptValue(value: string): string {

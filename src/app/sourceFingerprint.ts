@@ -1,13 +1,7 @@
+import { bytesToHex } from '../domain/bytes'
 import type { MediaAsset } from '../domain/schema'
 
 const FINGERPRINT_SAMPLE_BYTES = 64 * 1024
-
-function bytesToHex(bytes: ArrayBuffer): string {
-  return Array.from(
-    new Uint8Array(bytes),
-    (byte) => byte.toString(16).padStart(2, '0'),
-  ).join('')
-}
 
 export async function sha256Hex(bytes: BufferSource): Promise<string> {
   if (!globalThis.crypto?.subtle) throw new Error('SHA-256 is unavailable in this browser')

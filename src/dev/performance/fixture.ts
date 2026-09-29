@@ -1,3 +1,4 @@
+import { bytesToHex } from '../../domain/bytes'
 import { defaultClipAnimation } from '../../domain/clipAnimation'
 import {
   defaultClipAudioSettings,
@@ -420,11 +421,7 @@ export async function fingerprintPerformanceFixture(
       connectedAudioAssetIds: fixture.connectedAudioAssetIds,
     },
   }))
-  const digest = await crypto.subtle.digest('SHA-256', bytes)
-  const hex = Array.from(new Uint8Array(digest), (value) => (
-    value.toString(16).padStart(2, '0')
-  )).join('')
-  return `sha256:${hex}`
+  return `sha256:${bytesToHex(await crypto.subtle.digest('SHA-256', bytes))}`
 }
 
 /** Connected visual and procedural contributors that must paint at one fixture frame. */

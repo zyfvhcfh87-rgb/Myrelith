@@ -1,5 +1,6 @@
 /** Browser-only, source-addressable Issue #75 benchmark. Not in the app graph. */
 
+import { bytesToHex } from '../domain/bytes'
 import { requirePositiveSafeInteger } from '../domain/numeric'
 import {
   analyzeVideoScopes,
@@ -116,10 +117,7 @@ function createFixture(): Uint8ClampedArray {
 async function sha256(bytes: Uint8ClampedArray): Promise<string> {
   const copy = new Uint8Array(bytes.byteLength)
   copy.set(bytes)
-  const digest = await crypto.subtle.digest('SHA-256', copy.buffer)
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
+  return bytesToHex(await crypto.subtle.digest('SHA-256', copy.buffer))
 }
 
 function quantile(sorted: readonly number[], fraction: number): number {

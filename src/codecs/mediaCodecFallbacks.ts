@@ -7,6 +7,7 @@
  * chunks; no decoder code is downloaded from a third party at runtime.
  */
 
+import { bytesToHex } from '../domain/bytes'
 import { abortError, errorMessage, throwIfAborted } from '../domain/errors'
 import type {
   MediaCompatibilityReason,
@@ -362,11 +363,7 @@ async function decoderCapabilityCacheKey(
 
     const subtle = globalThis.crypto?.subtle
     if (!subtle) return null
-    const digest = new Uint8Array(await subtle.digest('SHA-256', material))
-    const fingerprint = Array.from(
-      digest,
-      (byte) => byte.toString(16).padStart(2, '0'),
-    ).join('')
+    const fingerprint = bytesToHex(await subtle.digest('SHA-256', material))
     return [
       target.boundary,
       target.trackKind,

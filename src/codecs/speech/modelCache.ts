@@ -1,8 +1,9 @@
 /** Exact origin-local model transaction; caller owns acquisition cancellation. */
+import { bytesToHex } from '../../domain/bytes'
 import { SPEECH_MODEL, SPEECH_CACHE_PREFIX, SPEECH_REGISTRY, speechModelHeaders, validSpeechCacheName } from '../../domain/speechModel'
 export interface InstalledSpeechModel { name: string; manifestDigest: string; bundleId: string; revision: string; bytes: number }
 const registryKey = () => new URL('speech-model-registry-v1', location.origin).href
-export const hashSpeechBytes = async (bytes: ArrayBuffer): Promise<string> => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('')
+export const hashSpeechBytes = async (bytes: ArrayBuffer): Promise<string> => bytesToHex(await crypto.subtle.digest('SHA-256', bytes))
 /** One fixed allocation; forged headers cannot expand the read or chunk-object count. */
 export async function readBoundedSpeechResponse(response: Response, limit: number, exact = true,
   signal?: AbortSignal, progress: (fraction: number) => void = () => {}): Promise<ArrayBuffer> {
