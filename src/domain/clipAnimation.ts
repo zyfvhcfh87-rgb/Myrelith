@@ -39,7 +39,7 @@ import { resolveEffectPathAnimation } from './effectPathAnimationResolution'
 import {
   animationEasingValidationError,
   cloneAnimationEasing,
-  evaluateAnimationTrack,
+  evaluateValidatedAnimationTrack,
   keyframesValidationError,
   MAX_ANIMATED_FINITE_MAGNITUDE,
   MAX_KEYFRAME_FRAME,
@@ -384,6 +384,7 @@ function applyAnimatedValues(
   }
 }
 
+/** Tracks must belong to an animation accepted by clipAnimationValidationError. */
 function applyAnimatedEffectValues(
   clip: Clip,
   tracks: readonly EffectAnimationTrack[],
@@ -407,7 +408,7 @@ function applyAnimatedEffectValues(
       if (track.keyframes.some((keyframe) => (
         keyframe.value < spec.min || keyframe.value > spec.max
       ))) continue
-      const value = evaluateAnimationTrack(track, localFrame, fallback)
+      const value = evaluateValidatedAnimationTrack(track, localFrame, fallback)
       if (value < spec.min || value > spec.max || value === fallback) continue
       params[track.parameter] = value
       changed = true
@@ -438,7 +439,7 @@ export function resolveClipAnimationAtFrame(clip: Clip, timelineFrame: number): 
     const fallback = readClipAnimationProperty(clip, track.property)
     values.set(
       track.property,
-      evaluateAnimationTrack(track, localFrame, fallback),
+      evaluateValidatedAnimationTrack(track, localFrame, fallback),
     )
   }
   const resolved = applyAnimatedEffectValues(

@@ -72,6 +72,20 @@ describe('audio DSP processors', () => {
     expect(rms(left, 4_096)).toBeLessThan(0.6)
   })
 
+  test('compressor below threshold applies exactly the makeup gain', () => {
+    const compressor = createCompressorEffect('comp')
+    compressor.params.thresholdDb = 0
+    compressor.params.kneeDb = 0
+    compressor.params.makeupDb = 4.5
+    const left = sine(2_048, 700, 0.4)
+    const right = sine(2_048, 300, 0.2)
+    const expectedL = Array.from(left, (sample) => Math.fround(sample * 10 ** (4.5 / 20)))
+    const expectedR = Array.from(right, (sample) => Math.fround(sample * 10 ** (4.5 / 20)))
+    createAudioEffectChainFromReady([compressor], SAMPLE_RATE).process(left, right)
+    expect(Array.from(left)).toEqual(expectedL)
+    expect(Array.from(right)).toEqual(expectedR)
+  })
+
   test('limiter at -6 dB never lets a transient cross the ceiling', () => {
     const limiter = createLimiterEffect('lim')
     limiter.params.ceilingDb = -6

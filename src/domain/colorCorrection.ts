@@ -11,6 +11,7 @@ export interface ColorCorrectionParameters {
 const LUMA_RED = 0.2126
 const LUMA_GREEN = 0.7152
 const LUMA_BLUE = 0.0722
+const GAINS_PER_CORRECTION = 6
 
 function clampUnit(value: number): number {
   return Math.min(1, Math.max(0, value))
@@ -33,34 +34,47 @@ export function applyColorCorrectionsToRgba(
   }
   if (corrections.length === 0) return
 
+  // Every gain depends only on its descriptor: evaluate each once, not per pixel.
+  const gains = new Float64Array(corrections.length * GAINS_PER_CORRECTION)
+  for (let index = 0; index < corrections.length; index++) {
+    const correction = corrections[index]
+    const base = index * GAINS_PER_CORRECTION
+    gains[base] = 2 ** correction.exposure
+    gains[base + 1] = 1 + correction.contrast
+    gains[base + 2] = 1 + correction.saturation
+    gains[base + 3] = 2 ** (correction.temperature * 0.5)
+    gains[base + 4] = 2 ** (correction.tint * 0.125)
+    gains[base + 5] = 2 ** (-correction.tint * 0.25)
+  }
+
   for (let offset = 0; offset < rgba.length; offset += 4) {
     let red = rgba[offset] / 255
     let green = rgba[offset + 1] / 255
     let blue = rgba[offset + 2] / 255
 
-    for (const correction of corrections) {
-      const exposureGain = 2 ** correction.exposure
+    for (let base = 0; base < gains.length; base += GAINS_PER_CORRECTION) {
+      const exposureGain = gains[base]
       red *= exposureGain
       green *= exposureGain
       blue *= exposureGain
 
-      const contrastGain = 1 + correction.contrast
+      const contrastGain = gains[base + 1]
       red = (red - 0.5) * contrastGain + 0.5
       green = (green - 0.5) * contrastGain + 0.5
       blue = (blue - 0.5) * contrastGain + 0.5
 
       const luma = red * LUMA_RED + green * LUMA_GREEN + blue * LUMA_BLUE
-      const saturationGain = 1 + correction.saturation
+      const saturationGain = gains[base + 2]
       red = luma + (red - luma) * saturationGain
       green = luma + (green - luma) * saturationGain
       blue = luma + (blue - luma) * saturationGain
 
-      const warmGain = 2 ** (correction.temperature * 0.5)
+      const warmGain = gains[base + 3]
       red *= warmGain
       blue /= warmGain
 
-      const magentaGain = 2 ** (correction.tint * 0.125)
-      const greenGain = 2 ** (-correction.tint * 0.25)
+      const magentaGain = gains[base + 4]
+      const greenGain = gains[base + 5]
       red *= magentaGain
       green *= greenGain
       blue *= magentaGain

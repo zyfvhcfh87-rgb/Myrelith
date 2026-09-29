@@ -22,9 +22,9 @@ import {
   clipAnimationValidationError,
   cloneAnimationEasing,
   documentAnimationKeyframeGrowthAllowed,
-  evaluateAnimationTrack,
   MAX_KEYFRAME_FRAME,
 } from './clipAnimation'
+import { evaluateValidatedAnimationTrack } from './scalarAnimation'
 import {
   cloneEffectDescriptor,
   effectAnimationParameterSpec,
@@ -908,7 +908,7 @@ export function resolveAdjustmentAtFrame(
   const localFrame = timelineFrame - item.timelineRange.startFrame
   const opacityTrack = item.animation.tracks[0]
   const opacity = opacityTrack && (opacityTrack.propertyVersion ?? 1) === 1
-    ? evaluateAnimationTrack(opacityTrack, localFrame, item.opacity)
+    ? evaluateValidatedAnimationTrack(opacityTrack, localFrame, item.opacity)
     : item.opacity
   let effects: EffectDescriptor[] | null = null
   for (let index = 0; index < item.effects.length; index++) {
@@ -923,7 +923,7 @@ export function resolveAdjustmentAtFrame(
       const spec = effectAnimationParameterSpec(effect, track.parameter)
       const fallback = params[track.parameter]
       if (!spec || typeof fallback !== 'number') continue
-      const value = evaluateAnimationTrack(track, localFrame, fallback)
+      const value = evaluateValidatedAnimationTrack(track, localFrame, fallback)
       if (value < spec.min || value > spec.max || value === fallback) continue
       params[track.parameter] = value
       changed = true

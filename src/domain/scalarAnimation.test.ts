@@ -8,6 +8,8 @@ import {
   evaluateAnimationTrackAtBoundaryPosition,
   evaluateValidatedAnimationTrackAtBoundaryPosition,
 } from './clipAnimation'
+import { CLIP_SCALAR_PROPERTY_SPECS } from './clipAnimationProperties'
+import { evaluateValidatedAnimationTrack, MAX_ANIMATED_FINITE_MAGNITUDE } from './scalarAnimation'
 import type { ClipAnimationEasing, ClipAnimationKeyframe } from './schema'
 
 interface BaselineFixture {
@@ -42,6 +44,7 @@ describe('scalar animation immutable baseline', () => {
       const track = baseline.tracks[sample.trackIndex]
       const label = `track ${sample.trackIndex} at ${sample.frame}`
       expect(bits(evaluateAnimationTrack(track, sample.frame, baseline.fallback)), label).toBe(sample.integer)
+      expect(bits(evaluateValidatedAnimationTrack(track, sample.frame, baseline.fallback)), label).toBe(sample.integer)
       expect(bits(evaluateAnimationTrackAtBoundaryPosition(track, sample.frame, baseline.fallback)), label)
         .toBe(sample.boundary)
       expect(bits(evaluateValidatedAnimationTrackAtBoundaryPosition(track, sample.frame, baseline.fallback)), label)
@@ -53,6 +56,7 @@ describe('scalar animation immutable baseline', () => {
     const track = baseline.tracks[0]
     for (const frame of [Number.NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1, 0.5]) {
       expect(evaluateAnimationTrack(track, frame, baseline.fallback)).toBe(baseline.fallback)
+      expect(evaluateValidatedAnimationTrack(track, frame, baseline.fallback)).toBe(baseline.fallback)
     }
     for (const frame of [Number.NaN, Infinity, -Infinity]) {
       expect(evaluateAnimationTrackAtBoundaryPosition(track, frame, baseline.fallback)).toBe(baseline.fallback)
@@ -69,6 +73,14 @@ describe('scalar animation immutable baseline', () => {
     for (const candidate of invalid) {
       expect(evaluateAnimationTrack(candidate, 0, baseline.fallback)).toBe(baseline.fallback)
       expect(evaluateAnimationTrackAtBoundaryPosition(candidate, 0.5, baseline.fallback)).toBe(baseline.fallback)
+    }
+  })
+
+  test('validated clip scalar bounds imply the finite bound evaluateAnimationTrack re-checks', () => {
+    // resolveClipAnimationAtFrame skips that per-evaluation check after validating.
+    for (const spec of Object.values(CLIP_SCALAR_PROPERTY_SPECS)) {
+      expect(spec.min, spec.property).toBeGreaterThanOrEqual(-MAX_ANIMATED_FINITE_MAGNITUDE)
+      expect(spec.max, spec.property).toBeLessThanOrEqual(MAX_ANIMATED_FINITE_MAGNITUDE)
     }
   })
 })
