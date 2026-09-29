@@ -234,6 +234,53 @@ describe('sequence-instance edit seam', () => {
     expect(duplicated.project.sequences[0].tracks[1].sequenceInstances).toHaveLength(3)
   })
 
+  test('split skips taken and just-allocated ids and shares one fresh link group', () => {
+    const root = sequence('root', [
+      track('V1', 'video', [instance('video', 'child', 10, 20, 3, 'pair')]),
+      track('A1', 'audio', [instance('audio', 'child', 10, 20, 3, 'pair')]),
+    ])
+    const initial = project(root, sequence('child'))
+    const offered = ['pair', 'fresh-group', 'audio', 'right-video', 'right-video', 'right-audio']
+    const requests: string[] = []
+    const split = applySequenceInstanceEdit(initial, 'root', {
+      kind: 'split',
+      instanceId: 'video',
+      frame: 20,
+    }, (kind) => {
+      requests.push(kind)
+      return offered.shift() ?? 'exhausted'
+    })
+
+    expect(split.failure).toBeNull()
+    expect(requests).toEqual([
+      'link-group', 'link-group',
+      'sequence-instance', 'sequence-instance', 'sequence-instance', 'sequence-instance',
+    ])
+    expect(split.project.sequences[0].tracks.map((item) => (
+      item.sequenceInstances?.map(({ id, linkGroupId }) => ({ id, linkGroupId }))
+    ))).toEqual([
+      [{ id: 'video', linkGroupId: 'pair' }, { id: 'right-video', linkGroupId: 'fresh-group' }],
+      [{ id: 'audio', linkGroupId: 'pair' }, { id: 'right-audio', linkGroupId: 'fresh-group' }],
+    ])
+  })
+
+  test('duplicating onto an existing instance is a collision', () => {
+    const root = sequence('root', [track('V1', 'video', [
+      instance('first', 'child', 0, 10, 0),
+      instance('second', 'child', 20, 10, 0),
+    ])])
+    const initial = project(root, sequence('child'))
+
+    const result = applySequenceInstanceEdit(initial, 'root', {
+      kind: 'duplicate',
+      instanceId: 'first',
+      startFrame: 15,
+    }, factory())
+
+    expect(result.failure).toBe('collision')
+    expect(result.project).toBe(initial)
+  })
+
   test('rejects a collision without changing the project', () => {
     const child = sequence('child')
     const root = sequence('root', [track('V1', 'video', [

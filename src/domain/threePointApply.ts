@@ -603,10 +603,6 @@ function applyReplace(
   return current
 }
 
-function trackStream(kind: 'video' | 'audio'): 'video' | 'audio' {
-  return kind === 'audio' ? 'audio' : 'video'
-}
-
 function rollPair(
   doc: TimelineDoc,
   leftId: string,
@@ -627,7 +623,7 @@ function rollPair(
   const rightNewDur = right.timelineRange.durationFrames - deltaFrames
   if (leftNewDur < 1 || rightNewDur < 1) return null
 
-  const stream = trackStream(leftLoc.track.kind)
+  const stream = leftLoc.track.kind
   const growing = deltaFrames > 0
     ? sourceHandleHeadroomFrames({
         clip: left,

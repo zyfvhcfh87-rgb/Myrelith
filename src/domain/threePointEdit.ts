@@ -42,11 +42,13 @@ import { trackKindAcceptsAssetKind } from './mediaPlacement'
 import type { SourceMonitorSession } from './sourceMonitor'
 import type {
   AssetId,
+  Clip,
   ClipId,
   FrameRate,
   MediaAsset,
   TimeRange,
   TimelineDoc,
+  Track,
   TrackId,
 } from './schema'
 import { findClip, trackOfClip } from './selectors'
@@ -528,6 +530,22 @@ function validateTarget(
   return null
 }
 
+/** The first other member of a clip's link group, with its owning track. */
+function linkedPartner(
+  doc: TimelineDoc,
+  clip: Clip,
+): { readonly clip: Clip; readonly track: Track } | null {
+  const groupId = clip.linkGroupId
+  if (!groupId) return null
+  for (const track of doc.tracks) {
+    const partner = track.clips.find((candidate) => (
+      candidate.linkGroupId === groupId && candidate.id !== clip.id
+    ))
+    if (partner) return { clip: partner, track }
+  }
+  return null
+}
+
 function planInsertOrOverwrite(input: SequenceEditInput): SequenceEditPlan {
   const sourceError = sourceReady(
     input.asset,
@@ -536,7 +554,7 @@ function planInsertOrOverwrite(input: SequenceEditInput): SequenceEditPlan {
   )
   if (sourceError) return rejectPlan(sourceError)
   const asset = input.asset!
-  const session = input.sourceSession
+  const session = input.sourceSession!
   if (!input.patchVideo && !input.patchAudio) return rejectPlan('no-patch')
 
   const wantsVideo = input.patchVideo && (
@@ -561,10 +579,10 @@ function planInsertOrOverwrite(input: SequenceEditInput): SequenceEditPlan {
   }
 
   const duration = resolveThreePointDuration({
-    sourceInFrame: session?.inFrame ?? null,
-    sourceOutExclusive: session?.outFrameExclusive ?? null,
-    sourceDurationFrames: session?.source.durationFrames ?? asset.durationFrames,
-    sourceRate: session?.source.rate ?? input.doc.frameRate,
+    sourceInFrame: session.inFrame,
+    sourceOutExclusive: session.outFrameExclusive,
+    sourceDurationFrames: session.source.durationFrames,
+    sourceRate: session.source.rate,
     documentRate: input.doc.frameRate,
     assetDurationFrames: asset.durationFrames,
     timelineInFrame: input.timelineInFrame,
@@ -604,29 +622,24 @@ function planLiftOrExtract(input: SequenceEditInput): SequenceEditPlan {
     if (error) return rejectPlan(error)
     trackIds.push(input.audioTargetTrackId)
   }
-  if (trackIds.length === 0) {
-    return rejectPlan(
-      input.kind === 'lift' || input.kind === 'extract'
-        ? 'missing-video-target'
-        : 'no-patch',
-    )
-  }
+  if (trackIds.length === 0) return rejectPlan('missing-video-target')
 
-  for (const trackId of trackIds) {
-    const track = input.doc.tracks.find((candidate) => candidate.id === trackId)
-    if (!track) return rejectPlan('missing-track')
+  // Targeted tracks were validated unlocked above, so any locked clip in a
+  // targeted clip's group is necessarily one of its partners.
+  const lockedGroups = new Set<string>()
+  for (const track of input.doc.tracks) {
+    if (!track.locked) continue
     for (const clip of track.clips) {
-      if (!clip.linkGroupId) continue
-      const partners = input.doc.tracks.flatMap((candidate) => (
-        candidate.clips.filter((member) => (
-          member.linkGroupId === clip.linkGroupId && member.id !== clip.id
-        )).map((member) => ({
-          clip: member,
-          track: candidate,
-        }))
-      ))
-      for (const partner of partners) {
-        if (partner.track.locked) return rejectPlan('linked-participant-locked')
+      if (clip.linkGroupId) lockedGroups.add(clip.linkGroupId)
+    }
+  }
+  if (lockedGroups.size > 0) {
+    for (const track of input.doc.tracks) {
+      if (!trackIds.includes(track.id)) continue
+      for (const clip of track.clips) {
+        if (clip.linkGroupId && lockedGroups.has(clip.linkGroupId)) {
+          return rejectPlan('linked-participant-locked')
+        }
       }
     }
   }
@@ -681,7 +694,7 @@ function planReplace(input: SequenceEditInput): SequenceEditPlan {
   )
   if (sourceError) return rejectPlan(sourceError)
   const asset = input.asset!
-  const session = input.sourceSession
+  const session = input.sourceSession!
   if (!input.patchVideo && !input.patchAudio) return rejectPlan('no-patch')
 
   const target = replaceTargets(input)
@@ -698,10 +711,10 @@ function planReplace(input: SequenceEditInput): SequenceEditPlan {
   }
 
   const duration = resolveThreePointDuration({
-    sourceInFrame: session?.inFrame ?? null,
-    sourceOutExclusive: session?.outFrameExclusive ?? null,
-    sourceDurationFrames: session?.source.durationFrames ?? asset.durationFrames,
-    sourceRate: session?.source.rate ?? input.doc.frameRate,
+    sourceInFrame: session.inFrame,
+    sourceOutExclusive: session.outFrameExclusive,
+    sourceDurationFrames: session.source.durationFrames,
+    sourceRate: session.source.rate,
     documentRate: input.doc.frameRate,
     assetDurationFrames: asset.durationFrames,
     timelineInFrame: null,
@@ -711,8 +724,8 @@ function planReplace(input: SequenceEditInput): SequenceEditPlan {
   if (duration.status === 'reject') return rejectPlan(duration.reason)
 
   const clipDuration = primary.timelineRange.durationFrames
-  const sourceExplicitBoth = session?.inFrame !== null
-    && session?.outFrameExclusive !== null
+  const sourceExplicitBoth = session.inFrame !== null
+    && session.outFrameExclusive !== null
   if (sourceExplicitBoth && duration.sourceRange.durationFrames !== clipDuration) {
     return rejectPlan('duration-mismatch')
   }
@@ -723,25 +736,18 @@ function planReplace(input: SequenceEditInput): SequenceEditPlan {
 
   const clipIds = [primaryId]
   let unlinkSurvivors = false
+  const partner = linkedPartner(input.doc, primary)
   if (primary.linkGroupId && input.patchVideo && input.patchAudio && asset.hasAudio) {
-    const partner = input.doc.tracks.flatMap((track) => track.clips)
-      .find((clip) => clip.linkGroupId === primary.linkGroupId && clip.id !== primaryId)
     if (partner) {
-      const partnerTrack = trackOfClip(input.doc, partner.id)
-      if (partnerTrack?.locked) return rejectPlan('linked-participant-locked')
-      if (partner.timelineRange.durationFrames !== clipDuration) {
+      if (partner.track.locked) return rejectPlan('linked-participant-locked')
+      if (partner.clip.timelineRange.durationFrames !== clipDuration) {
         return rejectPlan('duration-mismatch')
       }
-      clipIds.push(partner.id)
+      clipIds.push(partner.clip.id)
     }
   } else if (primary.linkGroupId) {
     unlinkSurvivors = true
-    const partner = input.doc.tracks.flatMap((track) => track.clips)
-      .find((clip) => clip.linkGroupId === primary.linkGroupId && clip.id !== primaryId)
-    if (partner) {
-      const partnerTrack = trackOfClip(input.doc, partner.id)
-      if (partnerTrack?.locked) return rejectPlan('linked-participant-locked')
-    }
+    if (partner?.track.locked) return rejectPlan('linked-participant-locked')
   }
 
   return {
@@ -794,12 +800,9 @@ function planRoll(input: SequenceEditInput): SequenceEditPlan {
   }
   if (!pair) {
     for (const trackId of targeted) {
-      const error = validateTarget(input.doc, trackId, (
-        input.doc.tracks.find((track) => track.id === trackId)?.kind ?? 'video'
-      ))
-      if (error) return rejectPlan(error)
       const track = input.doc.tracks.find((candidate) => candidate.id === trackId)
-      if (!track) continue
+      if (!track) return rejectPlan('missing-track')
+      if (track.locked) return rejectPlan('locked-track')
       for (let index = 0; index < track.clips.length - 1; index++) {
         const left = track.clips[index]!
         const right = track.clips[index + 1]!
@@ -829,22 +832,19 @@ function planRoll(input: SequenceEditInput): SequenceEditPlan {
 
   const pairs: (readonly [ClipId, ClipId])[] = [pair]
   if (left.linkGroupId && right.linkGroupId) {
-    const leftPartner = input.doc.tracks.flatMap((track) => track.clips)
-      .find((clip) => clip.linkGroupId === left.linkGroupId && clip.id !== left.id)
-    const rightPartner = input.doc.tracks.flatMap((track) => track.clips)
-      .find((clip) => clip.linkGroupId === right.linkGroupId && clip.id !== right.id)
+    const leftPartner = linkedPartner(input.doc, left)
+    const rightPartner = linkedPartner(input.doc, right)
     if (leftPartner && rightPartner) {
-      const partnerTrack = trackOfClip(input.doc, leftPartner.id)
-      const otherTrack = trackOfClip(input.doc, rightPartner.id)
-      if (partnerTrack?.locked || otherTrack?.locked) {
+      if (leftPartner.track.locked || rightPartner.track.locked) {
         return rejectPlan('linked-participant-locked')
       }
-      if (rangeEnd(leftPartner.timelineRange) !== rightPartner.timelineRange.startFrame
-        || rangeEnd(leftPartner.timelineRange) !== input.playheadFrame
+      const seam = rangeEnd(leftPartner.clip.timelineRange)
+      if (seam !== rightPartner.clip.timelineRange.startFrame
+        || seam !== input.playheadFrame
       ) {
         return rejectPlan('roll-seam-invalid')
       }
-      pairs.push([leftPartner.id, rightPartner.id])
+      pairs.push([leftPartner.clip.id, rightPartner.clip.id])
     } else if (leftPartner || rightPartner) {
       return rejectPlan('roll-seam-invalid')
     }

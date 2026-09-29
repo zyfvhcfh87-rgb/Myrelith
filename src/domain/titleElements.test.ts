@@ -2,9 +2,8 @@ import { describe, expect, test } from 'vitest'
 import { defaultClipTransform, defaultClipVisualSettings } from './clipInspector'
 import { defaultTextProps, TEXT_FONT_FAMILIES } from './textOverlay'
 import {
-  applyTitleAnimationValues, readTitleAnimationProperty, readTitleDefinition, readTitleElement,
-  resolveTitleFont, titleAnimationPropertySpec, titleDefinitionValidationError, titleElementValidationError,
-  titleFontValidationError, TITLE_ANIMATION_PROPERTIES,
+  applyTitleAnimationValues, readTitleDefinition, readTitleElement,
+  resolveTitleFont, titleAnimationPropertySpec, TITLE_ANIMATION_PROPERTIES,
   type TitleElement, type TitleShapeElementV1, type TitleTextElementV1,
 } from './titleElements'
 
@@ -22,6 +21,18 @@ function shapeElement(kind: TitleShapeElementV1['kind'] = 'rectangle'): TitleSha
     transform: defaultClipTransform(), visual: defaultClipVisualSettings(), opacity: 1,
     shape: { boxWidthPx: 320, boxHeightPx: 120, fillColor: '#abc8', outlineEnabled: true, outlineColor: '#001122ff', outlineWidthPx: 2 },
   }
+}
+function titleElementValidationError(value: unknown): string | null {
+  const result = readTitleElement(value)
+  return result.status === 'invalid' ? result.reason : null
+}
+function titleDefinitionValidationError(value: unknown): string | null {
+  const result = readTitleDefinition(value)
+  return result.status === 'invalid' ? result.reason : null
+}
+/** Font intent is only read inside an otherwise valid text element. */
+function titleFontValidationError(font: unknown): string | null {
+  return titleElementValidationError({ ...textElement(), font })
 }
 function value(property: string, amount: number, propertyVersion = 1) {
   return { property, value: amount, propertyVersion }
@@ -169,8 +180,8 @@ describe('title scalar adapters for the unified animation authority', () => {
     expect(TITLE_ANIMATION_PROPERTIES).toHaveLength(13)
     const element = textElement()
     const changed: TitleTextElementV1 = { ...element, transform: { ...element.transform, x: 77.125 }, text: { ...element.text, fontSizePx: 123.456 } }
-    expect(readTitleAnimationProperty(changed, 1, 'position-x')).toEqual({ status: 'available', value: 77.125 })
-    expect(readTitleAnimationProperty(changed, 1, 'font-size')).toEqual({ status: 'available', value: 123.456 })
+    expect(titleAnimationPropertySpec(changed, 1, 'position-x')).toMatchObject({ status: 'available', fallback: 77.125 })
+    expect(titleAnimationPropertySpec(changed, 1, 'font-size')).toMatchObject({ status: 'available', fallback: 123.456 })
     expect(titleAnimationPropertySpec(changed, 2, 'position-x')).toEqual({ status: 'unavailable', reason: 'unsupported-property-version' })
     expect(titleAnimationPropertySpec(changed, 1, 'transform.x')).toEqual({ status: 'unavailable', reason: 'unknown-property' })
     expect(titleAnimationPropertySpec(shapeElement(), 1, 'font-size')).toEqual({ status: 'unavailable', reason: 'ineligible-element-kind' })

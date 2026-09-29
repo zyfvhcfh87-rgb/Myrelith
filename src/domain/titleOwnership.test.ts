@@ -14,6 +14,8 @@ import { resolveClipAnimationAtFrame } from './clipAnimation'
 import { updateClipVisual } from './operations/visual'
 import { setClipKeyframe } from './operations/animation'
 import { SOURCE_TIME_TICKS_PER_FRAME } from './sourceTimeMap'
+import { defaultTitleElement } from './titleEditing'
+import { freeze } from 'immer'
 
 function wire(project: ReturnType<typeof legacyTitleProject>): string {
   return serializeProjectFile(createProjectFileSnapshot(project, []))
@@ -132,5 +134,24 @@ describe('schema23 title ownership', () => {
     expect(duplicated.failure).toBeNull()
     expect(duplicated.project).not.toBe(project)
     expect(() => wire(duplicated.project)).not.toThrow()
+  })
+
+  test('usage reads supported and opaque future elements the same, mutable or frozen', () => {
+    const canvas = { width: 1920, height: 1080 }
+    const text = defaultTitleElement('text', 'usage-text', canvas)
+    if (text.kind !== 'text') throw new Error('Expected a text element')
+    const shape = defaultTitleElement('rectangle', 'usage-shape', canvas)
+    // A future element header that reuses a current kind stays opaque intent.
+    const future = { id: 'usage-future', version: 2, kind: 'text', name: 'Future', enabled: true, payload: ['abc', { note: 'de' }] }
+    const title = { version: 1 as const, elements: [text, shape, future] }
+    const expected = {
+      elements: 3,
+      textCharacters: text.text.content.length + 'usage-future'.length + 'text'.length + 'Future'.length + 'abc'.length + 'de'.length,
+      elementIds: ['usage-text', 'usage-shape', 'usage-future'],
+    }
+    expect(titleDefinitionUsage(title)).toEqual(expected)
+    const frozen = freeze(structuredClone(title), true)
+    expect(titleDefinitionUsage(frozen)).toEqual(expected)
+    expect(titleDefinitionUsage(frozen)).toEqual(expected)
   })
 })

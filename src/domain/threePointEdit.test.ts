@@ -399,6 +399,52 @@ describe('planSequenceEdit rejections', () => {
       timelineOutExclusive: 90,
     }))).toEqual({ status: 'reject', reason: 'duration-mismatch' })
   })
+
+  test('a linked partner on a locked track rejects lift, replace, and roll', () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [
+        makeClip('left', 0, 40, 0, 'g1'),
+        makeClip('right', 40, 40, 40, 'g2'),
+      ]),
+      makeTrack('A1', 'audio', [
+        makeClip('leftA', 0, 40, 0, 'g1'),
+        makeClip('rightA', 40, 40, 40, 'g2'),
+      ], true),
+    ])
+    const onV1 = { doc, videoTargetTrackId: 'V1', audioTargetTrackId: null }
+    const locked = { status: 'reject', reason: 'linked-participant-locked' }
+    expect(planSequenceEdit(input({
+      ...onV1, kind: 'lift', timelineInFrame: 60, timelineOutExclusive: 70,
+    }))).toEqual(locked)
+    expect(planSequenceEdit(input({
+      ...onV1, kind: 'replace', selectedClipId: 'left',
+    }))).toEqual(locked)
+    expect(planSequenceEdit(input({
+      ...onV1, kind: 'roll', playheadFrame: 40, rollDeltaFrames: 5,
+      sourceBoundsCatalog: boundsCatalog(['asset-existing']),
+    }))).toEqual(locked)
+  })
+
+  test('a locked unrelated link group does not block lift', () => {
+    const doc = makeDoc([
+      makeTrack('V1', 'video', [makeClip('video', 0, 40, 0, 'g1')]),
+      makeTrack('A1', 'audio', [makeClip('audio', 0, 40, 0, 'g1')]),
+      makeTrack('VL', 'video', [makeClip('lockedVideo', 0, 40, 0, 'g2')], true),
+      makeTrack('AL', 'audio', [makeClip('lockedAudio', 0, 40, 0, 'g2')], true),
+    ])
+    expect(planSequenceEdit(input({
+      kind: 'lift', doc, videoTargetTrackId: 'V1', audioTargetTrackId: 'A1',
+      timelineInFrame: 10, timelineOutExclusive: 20,
+    }))).toMatchObject({ status: 'ok', kind: 'lift', trackIds: ['V1', 'A1'] })
+  })
+
+  test('roll targets must still exist and be unlocked', () => {
+    const roll = { kind: 'roll' as const, playheadFrame: 100, rollDeltaFrames: 5, audioTargetTrackId: null }
+    expect(planSequenceEdit(input({ ...roll, videoTargetTrackId: 'gone' })))
+      .toEqual({ status: 'reject', reason: 'missing-track' })
+    expect(planSequenceEdit(input({ ...roll, videoTargetTrackId: 'VL' })))
+      .toEqual({ status: 'reject', reason: 'locked-track' })
+  })
 })
 
 describe('insert', () => {

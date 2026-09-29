@@ -1,7 +1,6 @@
 /** Pure, project-atomic editing for live sequence instances. */
 
 import type {
-  Clip,
   SequenceInstance,
   SequenceInstanceId,
   TimeRange,
@@ -20,7 +19,8 @@ import {
 import { defaultMasterAudio } from './audioMixer'
 import { MAX_PROJECT_NAME_CHARACTERS } from './projectLimits'
 import { MAX_NESTED_SEQUENCE_LEAVES_PER_FRAME } from './nestedSequences'
-import { rangeEnd } from './time'
+import { rangeEnd, rangeOverlap } from './time'
+import { locateClip, type ClipLocation } from './operations/operationInternals'
 
 export type SequenceInstanceEditCommand =
   | {
@@ -91,11 +91,6 @@ export interface CreateCompoundSequenceResult {
   readonly failure: CreateCompoundSequenceFailure | null
 }
 
-interface LocatedClip {
-  readonly track: Track
-  readonly clip: Clip
-}
-
 function collectAllIds(project: SequenceProject): Set<string> {
   const ids = new Set<string>([project.id])
   for (const definition of project.multicams ?? []) {
@@ -155,14 +150,6 @@ function allocateUniqueId(
   return null
 }
 
-function locateClip(document: TimelineDoc, clipId: string): LocatedClip | null {
-  for (const track of document.tracks) {
-    const clip = track.clips.find((candidate) => candidate.id === clipId)
-    if (clip) return { track, clip }
-  }
-  return null
-}
-
 function rejectedCompound(
   project: SequenceProject,
   failure: CreateCompoundSequenceFailure,
@@ -216,21 +203,17 @@ function validRange(range: TimeRange, sourceStartFrame: number): boolean {
     && Number.isSafeInteger(sourceEnd)
 }
 
-function overlaps(left: TimeRange, right: TimeRange): boolean {
-  return left.startFrame < rangeEnd(right) && right.startFrame < rangeEnd(left)
-}
-
 function collides(track: Track, candidate: SequenceInstance): boolean {
-  return track.clips.some((item) => overlaps(item.timelineRange, candidate.timelineRange))
+  return track.clips.some((item) => rangeOverlap(item.timelineRange, candidate.timelineRange))
     || (track.adjustments ?? []).some((item) => (
-      overlaps(item.timelineRange, candidate.timelineRange)
+      rangeOverlap(item.timelineRange, candidate.timelineRange)
     ))
     || (track.sequenceInstances ?? []).some((item) => (
       item.id !== candidate.id
-      && overlaps(item.timelineRange, candidate.timelineRange)
+      && rangeOverlap(item.timelineRange, candidate.timelineRange)
     ))
     || (track.multicamInstances ?? []).some((item) => (
-      overlaps(item.timelineRange, candidate.timelineRange)
+      rangeOverlap(item.timelineRange, candidate.timelineRange)
     ))
 }
 
@@ -275,57 +258,6 @@ function rejected(
   return { project, instanceId: null, failure }
 }
 
-function generatedId(
-  project: SequenceProject,
-  factory: SequenceIdFactory,
-  sourceId: string,
-  reserved: Set<string>,
-): string | null {
-  const used = new Set<string>(reserved)
-  for (const sequence of project.sequences) {
-    for (const track of sequence.tracks) {
-      for (const clip of track.clips) used.add(clip.id)
-      for (const instance of track.sequenceInstances ?? []) used.add(instance.id)
-      for (const instance of track.multicamInstances ?? []) used.add(instance.id)
-      for (const adjustment of track.adjustments ?? []) used.add(adjustment.id)
-    }
-  }
-  for (let attempt = 0; attempt < 32; attempt++) {
-    const id = factory('sequence-instance', sourceId)
-    if (id.length > 0 && id.length <= 256 && !used.has(id)) {
-      reserved.add(id)
-      return id
-    }
-  }
-  return null
-}
-
-function generatedLinkGroupId(
-  project: SequenceProject,
-  factory: SequenceIdFactory,
-  sourceId: string,
-): string | null {
-  const used = new Set<string>()
-  for (const sequence of project.sequences) {
-    for (const track of sequence.tracks) {
-      for (const clip of track.clips) {
-        if (clip.linkGroupId) used.add(clip.linkGroupId)
-      }
-      for (const instance of track.sequenceInstances ?? []) {
-        if (instance.linkGroupId) used.add(instance.linkGroupId)
-      }
-      for (const instance of track.multicamInstances ?? []) {
-        if (instance.linkGroupId) used.add(instance.linkGroupId)
-      }
-    }
-  }
-  for (let attempt = 0; attempt < 32; attempt++) {
-    const id = factory('link-group', sourceId)
-    if (id.length > 0 && id.length <= 256 && !used.has(id)) return id
-  }
-  return null
-}
-
 /** A shared child picture cannot retain separate enclosing video-track buses. */
 export function compoundVideoBusScopeError(parent: TimelineDoc, selectedClipIds: readonly string[]): string | null {
   const selected = new Set(selectedClipIds)
@@ -355,7 +287,7 @@ export function createCompoundSequenceFromClips(
     return rejectedCompound(project, 'selection-limit')
   }
   const selected = new Set(selection)
-  const located: LocatedClip[] = []
+  const located: ClipLocation[] = []
   for (const clipId of selection) {
     const value = locateClip(parent, clipId)
     if (!value) return rejectedCompound(project, 'clip-not-found')
@@ -382,13 +314,13 @@ export function createCompoundSequenceFromClips(
   for (const track of parent.tracks) {
     if (!selectedTracks.has(track.id)) continue
     if (track.clips.some((clip) => (
-      !selected.has(clip.id) && overlaps(clip.timelineRange, range)
+      !selected.has(clip.id) && rangeOverlap(clip.timelineRange, range)
     )) || (track.adjustments ?? []).some((item) => (
-      overlaps(item.timelineRange, range)
+      rangeOverlap(item.timelineRange, range)
     )) || (track.sequenceInstances ?? []).some((item) => (
-      overlaps(item.timelineRange, range)
+      rangeOverlap(item.timelineRange, range)
     )) || (track.multicamInstances ?? []).some((item) => (
-      overlaps(item.timelineRange, range)
+      rangeOverlap(item.timelineRange, range)
     ))) return rejectedCompound(project, 'selection-not-bounded')
     if (track.transitions.some((transition) => (
       selected.has(transition.fromClipId) !== selected.has(transition.toClipId)
@@ -535,7 +467,6 @@ export function applySequenceInstanceEdit(
   if (members.some((member) => member.track.locked)) {
     return rejected(project, 'track-locked')
   }
-  const memberIds = new Set(members.map((member) => member.instance.id))
   const byTrack = new Map<string, SequenceInstance[]>()
   for (const member of members) {
     if (!byTrack.has(member.track.id)) {
@@ -596,9 +527,9 @@ export function applySequenceInstanceEdit(
     if (offset <= 0 || offset >= located.instance.timelineRange.durationFrames) {
       return rejected(project, 'invalid-range')
     }
-    const ids = new Set<string>()
+    const used = collectAllIds(project)
     const nextLinkGroupId = members.length > 1
-      ? generatedLinkGroupId(project, factory, located.instance.linkGroupId ?? located.instance.id)
+      ? allocateUniqueId(used, factory, 'link-group', located.instance.linkGroupId ?? located.instance.id)
       : null
     if (members.length > 1 && !nextLinkGroupId) {
       return rejected(project, 'id-generation-failed')
@@ -607,7 +538,7 @@ export function applySequenceInstanceEdit(
       if (offset >= member.instance.timelineRange.durationFrames) {
         return rejected(project, 'invalid-range')
       }
-      const rightId = generatedId(project, factory, member.instance.id, ids)
+      const rightId = allocateUniqueId(used, factory, 'sequence-instance', member.instance.id)
       if (!rightId) return rejected(project, 'id-generation-failed')
       const left = {
         ...member.instance,
@@ -630,15 +561,15 @@ export function applySequenceInstanceEdit(
     }
   } else {
     const delta = command.startFrame - located.instance.timelineRange.startFrame
-    const ids = new Set<string>()
+    const used = collectAllIds(project)
     const nextLinkGroupId = members.length > 1
-      ? generatedLinkGroupId(project, factory, located.instance.linkGroupId ?? located.instance.id)
+      ? allocateUniqueId(used, factory, 'link-group', located.instance.linkGroupId ?? located.instance.id)
       : null
     if (members.length > 1 && !nextLinkGroupId) {
       return rejected(project, 'id-generation-failed')
     }
     for (const member of members) {
-      const id = generatedId(project, factory, member.instance.id, ids)
+      const id = allocateUniqueId(used, factory, 'sequence-instance', member.instance.id)
       if (!id) return rejected(project, 'id-generation-failed')
       const duplicate = {
         ...member.instance,
@@ -658,25 +589,23 @@ export function applySequenceInstanceEdit(
   }
 
   const next = withTrackInstances(document, byTrack)
+  // Edited tracks are re-sorted by start and every duration is positive, so
+  // checking each instance against the other items plus its sorted neighbour
+  // finds every overlap.
   for (const track of next.tracks) {
-    for (const instance of track.sequenceInstances ?? []) {
-      if (memberIds.has(instance.id)) continue
-      const editedTrack = byTrack.has(track.id)
-      if (editedTrack && collides(track, instance)) return rejected(project, 'collision')
-    }
     const instances = track.sequenceInstances ?? []
     for (let index = 0; index < instances.length; index++) {
       const candidate = instances[index]
-      if (track.clips.some((item) => overlaps(item.timelineRange, candidate.timelineRange))) {
+      if (track.clips.some((item) => rangeOverlap(item.timelineRange, candidate.timelineRange))) {
         return rejected(project, 'collision')
       }
       if ((track.adjustments ?? []).some((item) => (
-        overlaps(item.timelineRange, candidate.timelineRange)
+        rangeOverlap(item.timelineRange, candidate.timelineRange)
       ))) return rejected(project, 'collision')
       if ((track.multicamInstances ?? []).some((item) => (
-        overlaps(item.timelineRange, candidate.timelineRange)
+        rangeOverlap(item.timelineRange, candidate.timelineRange)
       ))) return rejected(project, 'collision')
-      if (index > 0 && overlaps(instances[index - 1].timelineRange, candidate.timelineRange)) {
+      if (index > 0 && rangeOverlap(instances[index - 1].timelineRange, candidate.timelineRange)) {
         return rejected(project, 'collision')
       }
     }
