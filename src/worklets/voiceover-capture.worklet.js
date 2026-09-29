@@ -106,8 +106,25 @@ class VoiceoverCaptureProcessor extends AudioWorkletProcessor {
     const blockStart = currentFrame
     const blockEnd = blockStart + length
     if (this.nextCaptureFrame === null && blockStart > this.startFrame) {
-      this.fail('Recording missed its start sample frame', blockStart)
-      return false
+      // A skip over the anchor by an already-running processor is the same
+      // render hiccup handled mid-take: pad from the anchor and report it.
+      // A first-ever render past the anchor means setup was too late.
+      const gap = blockStart - this.startFrame
+      if (this.lastRenderEnd === null || this.lastRenderEnd > this.startFrame || gap > MAX_RENDER_GAP_FRAMES) {
+        this.fail('Recording missed its start sample frame', blockStart)
+        return false
+      }
+      this.port.postMessage({ type: 'started', atFrame: this.startFrame })
+      const padTo = Math.min(blockStart, this.stopFrame)
+      for (let frame = this.startFrame; frame < padTo; frame++) {
+        if (!this.push(frame, 0)) return false
+      }
+      this.port.postMessage({ type: 'gap', atFrame: this.startFrame, frames: padTo - this.startFrame })
+      if (this.stopFrame <= blockStart) {
+        this.lastRenderEnd = blockEnd
+        this.finish()
+        return false
+      }
     }
     if (this.nextCaptureFrame !== null &&
       this.lastRenderEnd !== null && blockStart !== this.lastRenderEnd) {

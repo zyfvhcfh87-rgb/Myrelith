@@ -71,6 +71,8 @@ interface Active {
   finalized: boolean
   draftMayExist: boolean
   keepTask: Promise<void> | null
+  /** Screen + microphone: the microphone request started in the same click. */
+  microphoneRequest: Promise<MediaStream> | null
   preparing: Promise<void> | null
   cleanup: Promise<void>
   releaseLock: (() => void) | null
@@ -151,7 +153,7 @@ export class AvCaptureOwner {
     const begun = beginAvCaptureSession(this.active?.state ?? null, id, options.mode, this.deps.projectContext())
     if (!begun) return { status: 'rejected', reason: 'A recording is already active.' }
     const active: Active = { state: begun.state, options, streams: [], videoTrack: null, audioTrack: null,
-      bridge: null, recording: false, finalized: false, draftMayExist: false, keepTask: null, preparing: null, cleanup: Promise.resolve(),
+      bridge: null, recording: false, finalized: false, draftMayExist: false, keepTask: null, microphoneRequest: null, preparing: null, cleanup: Promise.resolve(),
       releaseLock: null, keepCancelled: false, keepImportPending: false, status: { ...EMPTY_STATUS } }
     this.active = active
     this.publish()
@@ -161,6 +163,15 @@ export class AvCaptureOwner {
         ? this.deps.requestCamera(options.cameraId ?? null, options.cameraMicrophoneId ?? null)
         : this.deps.requestDisplay(options.screenAudio === 'display')
     } catch (cause) { request = Promise.reject(cause) }
+    // Screen + microphone: both browser requests start inside the click, so
+    // neither depends on activation surviving the other's prompt.
+    if (options.mode === 'screen' && options.screenAudio === 'microphone') {
+      let microphone: Promise<MediaStream>
+      try { microphone = this.deps.requestMicrophone(options.screenMicrophoneId ?? null) }
+      catch (cause) { microphone = Promise.reject(cause) }
+      active.microphoneRequest = microphone
+      void microphone.catch(() => {})
+    }
     this.watch(request.then((stream) => this.granted(active, stream), (cause) => this.denied(active, cause)))
     return { status: 'started', sessionId: id }
   }
@@ -191,11 +202,12 @@ export class AvCaptureOwner {
 
   private async granted(active: Active, stream: MediaStream): Promise<void> {
     active.streams.push(stream)
-    if (!this.live(active, 'requesting', 0)) { stopStreams(active.streams); return }
+    if (!this.live(active, 'requesting', 0)) { stopStreams(active.streams); this.discardMicrophone(active); return }
     const video = stream.getVideoTracks()[0] ?? null
     let audio = stream.getAudioTracks()[0] ?? null
     if (!video || video.readyState !== 'live') {
       stopStreams(active.streams)
+      this.discardMicrophone(active)
       active.status.diagnostic = 'The browser returned no live video.'
       await this.dispatch(active, { sessionId: active.state.sessionId, operation: 0, kind: 'failed', reason: 'device-unavailable' })
       return
@@ -208,7 +220,9 @@ export class AvCaptureOwner {
       if (options.screenAudio === 'microphone') {
         for (const extra of stream.getAudioTracks()) extra.stop()
         try {
-          const microphone = await this.deps.requestMicrophone(options.screenMicrophoneId ?? null)
+          const microphone = await active.microphoneRequest!
+          active.microphoneRequest = null
+          if (!this.live(active, 'requesting', 0)) { stopStreams([...active.streams, microphone]); return }
           active.streams.push(microphone)
           audio = microphone.getAudioTracks()[0] ?? null
         } catch (cause) {
@@ -235,7 +249,15 @@ export class AvCaptureOwner {
     await this.dispatch(active, { sessionId: active.state.sessionId, operation: 0, kind: 'permission-granted' })
   }
 
+  /** A microphone requested alongside the screen but not used is stopped when it arrives. */
+  private discardMicrophone(active: Active): void {
+    const request = active.microphoneRequest
+    active.microphoneRequest = null
+    void request?.then((stream) => stopStreams([stream]), () => {})
+  }
+
   private async denied(active: Active, cause: unknown): Promise<void> {
+    this.discardMicrophone(active)
     if (!this.live(active, 'requesting', 0)) return
     active.status.diagnostic = message(cause)
     await this.dispatch(active, { sessionId: active.state.sessionId, operation: 0, kind: 'failed',

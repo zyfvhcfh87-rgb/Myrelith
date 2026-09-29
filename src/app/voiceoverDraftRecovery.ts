@@ -27,6 +27,8 @@ import { projectMediaAssetIds } from '../domain/projectSequences'
 import { useDocumentStore } from '../state/documentStore'
 import { useMediaStore } from '../state/mediaStore'
 import { useVoiceoverCaptureStore } from '../state/voiceoverCaptureStore'
+import { useAvCaptureStore } from '../state/avCaptureStore'
+import { avCaptureSessionIsTerminal } from '../domain/avCaptureSession'
 import { VoiceoverWavBridge } from './voiceoverWavBridge'
 import type {
   LocalMediaFileHandle,
@@ -82,6 +84,8 @@ export interface VoiceoverDraftRecoveryDeps {
   rememberHandle?(projectBindingId: string, assetId: string, handle: LocalMediaFileHandle): Promise<void>
   /** File names of every current-project media descriptor (online or offline). */
   projectAssetFileNames?(): readonly string[]
+  /** The camera/screen session id while it still owns its draft (not kept/cancelled/failed). */
+  liveCaptureId?(): string | null
   /** Draft ids whose capture-session Web Lock is held in any tab of this origin. */
   heldDraftLockIds?(): Promise<readonly string[]>
 }
@@ -183,9 +187,14 @@ export class VoiceoverDraftRecovery {
   }
 
   private liveSessionIds(): string[] {
+    const ids: string[] = []
     const session = this.deps.liveSession()
-    if (session && voiceoverSessionOwnsDraft(session)) return [session.sessionId]
-    return []
+    if (session && voiceoverSessionOwnsDraft(session)) ids.push(session.sessionId)
+    // A camera/screen take in review has closed its file; protect it here
+    // too, not only through the cross-tab lock.
+    const capture = this.deps.liveCaptureId?.()
+    if (capture) ids.push(capture)
+    return ids
   }
 
   private async references(): Promise<VoiceoverDraftReference[]> {
@@ -459,6 +468,10 @@ export function getVoiceoverDraftRecovery(): VoiceoverDraftRecovery {
     },
     importMedia: (file, handle) => importMediaFromHandle(file, handle),
     liveSession: () => useVoiceoverCaptureStore.getState().session,
+    liveCaptureId: () => {
+      const capture = useAvCaptureStore.getState().session
+      return capture && !avCaptureSessionIsTerminal(capture) ? capture.sessionId : null
+    },
     disconnectAsset: (assetId) => useMediaStore.getState().disconnectAsset(assetId),
     rememberHandle: (binding, assetId, handle) => localMediaHandleRegistry.remember(binding, assetId, handle),
     projectAssetFileNames: () => [...useMediaStore.getState().descriptors.values()]

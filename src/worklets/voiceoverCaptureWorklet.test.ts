@@ -144,4 +144,18 @@ describe('voiceover capture worklet', () => {
     expect(batches.map((m) => m.startFrame)).toEqual(batches.map((_, index) => index * 8_192))
     expect(batches.every((m) => m.peak === 16_384 / 32_768)).toBe(true)
   })
+
+  test('a render skip over the anchor pads from the exact start frame instead of failing', () => {
+    const w = loadProcessor({ startFrame: 1_000 })
+    w.render(640) // running before the anchor: block [640, 768)
+    w.render(1_152) // the render clock jumped from 768 over the anchor to 1,152
+    w.stop(1_408)
+    w.render(1_280)
+    expect(w.posted.find((m) => m.type === 'started')).toEqual({ type: 'started', atFrame: 1_000 })
+    expect(w.posted.find((m) => m.type === 'gap')).toEqual({ type: 'gap', atFrame: 1_000, frames: 152 })
+    const pcm = w.samples()
+    expect(pcm).toHaveLength(408)
+    expect(pcm.slice(0, 152).every((value) => value === 0)).toBe(true)
+    expect(pcm.slice(152).every((value) => value === 16_384)).toBe(true)
+  })
 })

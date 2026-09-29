@@ -129,6 +129,7 @@ interface HarnessOptions {
   rememberFailure?: boolean
   /** Camera/screen `.mp4` drafts in the separate captures directory. */
   captures?: VoiceoverDraftInfo[]
+  liveCaptureId?: string
 }
 
 function harness(options: HarnessOptions) {
@@ -186,6 +187,7 @@ function harness(options: HarnessOptions) {
         } as VoiceoverSession,
     disconnectAsset: vi.fn(),
     heldDraftLockIds: async () => options.lockedIds ?? [],
+    liveCaptureId: () => options.liveCaptureId ?? null,
     createCaptureStore: () => {
       const writer = createFakeWriter(captureDirectory)
       // A capture's file keeps its `.mp4` name.
@@ -697,5 +699,15 @@ describe('voiceover draft recovery', () => {
     expect(h.directory.entries.has('voiceover_a')).toBe(true)
     const after = await h.recovery.survey()
     expect(after.drafts.find((entry) => entry.id === 'capture_a')?.state).toBe('kept')
+  })
+
+  it('a camera/screen take still in review is live without relying on the lock', async () => {
+    const h = harness({ drafts: [], sessionPhase: null, liveCaptureId: 'capture_review',
+      captures: [{ id: 'capture_review', sizeBytes: 4096, hasJournal: true, fileName: 'capture_review.mp4' }] })
+    const survey = await h.recovery.survey()
+    expect(survey.drafts[0]?.state).toBe('live')
+    expect(await h.recovery.discardDraft('capture_review')).toMatchObject({ status: 'rejected' })
+    expect(await h.recovery.recoverDraft('capture_review')).toMatchObject({ status: 'rejected' })
+    expect(h.captureDirectory.entries.has('capture_review')).toBe(true)
   })
 })

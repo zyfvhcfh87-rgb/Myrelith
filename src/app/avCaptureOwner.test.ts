@@ -203,7 +203,11 @@ describe('camera/screen capture owner', () => {
 
   test('screen with microphone: display audio is dropped, the chosen microphone is recorded', async () => {
     const h = harness({ audioInDisplay: true })
-    await h.recording('screen', { screenAudio: 'microphone', screenMicrophoneId: 'usb' })
+    const started = h.owner.start({ mode: 'screen', screenAudio: 'microphone', screenMicrophoneId: 'usb' })
+    // Both browser requests begin synchronously inside the click.
+    expect(h.calls).toEqual(['display:false', 'mic:usb'])
+    expect(started.status).toBe('started')
+    await h.owner.whenIdle()
     expect(h.calls.slice(0, 3)).toEqual(['display:false', 'mic:usb', 'start:42:audio'])
     expect(h.audio.stops).toBe(1)
     expect(h.owner.status.audioLabel).toBe('USB mic')
@@ -258,5 +262,16 @@ describe('camera/screen capture owner', () => {
     await teardown
     expect(h.owner.status.session).toMatchObject({ phase: 'kept', assetId: 'asset-1' })
     expect(h.deps.rememberOriginal).toHaveBeenCalledWith('asset-1', expect.anything(), 'binding:p')
+  })
+
+  test('a declined screen chooser stops the microphone that was requested with it', async () => {
+    const mic = new FakeTrack('audio', 'USB mic')
+    const h = harness({ media: Promise.reject(new DOMException('Permission dismissed', 'NotAllowedError')) })
+    h.deps.requestMicrophone = () => Promise.resolve(stream(mic))
+    h.owner.start({ mode: 'screen', screenAudio: 'microphone' })
+    await h.owner.whenIdle()
+    await Promise.resolve()
+    expect(h.owner.status.session).toMatchObject({ phase: 'failed', failure: 'permission-dismissed' })
+    expect(mic.readyState).toBe('ended')
   })
 })
